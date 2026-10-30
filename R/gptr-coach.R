@@ -27,9 +27,10 @@
 #'
 #' @param ... What you would give the harness: the prompt, your objects, and any [peter()]
 #'   arguments such as `mode`, `model`, `budget` or `tools`. They apply to every run of this call
-#'   and are not kept in the result; `budget` also caps each coach session. Each run is one
-#'   unattended session, so `parallel`, `choices`, `levels`, `threshold`, `min_confidence`,
-#'   `uncertain`, `background`, `.run`, `.stdin` and `envir` are refused.
+#'   and are not kept in the result; `budget`, else the starting harness's, also caps each coach
+#'   session and the judge. Each run is one unattended session, so `parallel`, `choices`,
+#'   `levels`, `threshold`, `min_confidence`, `uncertain`, `background`, `.run`, `.stdin` and
+#'   `envir` are refused.
 #' @param harness The harness to start from: `peter` or a harness.
 #' @param check `NULL` or your own test of a good result: a function of `r`, a list with `text`,
 #'   `status`, `value` and `objects` of the final run, that returns `TRUE` or `FALSE`. It runs in
@@ -50,10 +51,12 @@
 #'   your starting harness. Either way it has a new id and a record (`h$record`: each run's
 #'   outcome, turns, tokens, cost, highest risk and unmet requirements, and the decision with its
 #'   reason; no data from your runs). `h$report` holds the full report, with every answer, value,
-#'   transcript and coach reply, in this R session only.
+#'   transcript and coach reply, in this R session only. A call replayed from its document block
+#'   returns the recorded coaching with an empty record; the block's `## Decision:` line holds the
+#'   decision.
 #' @examples
 #' # A run that is wrong unless its note says how to treat missing values, and a coach that
-#' # writes that note (both scripted; this starts 7 R processes and takes over 5 seconds)
+#' # writes that note (both scripted; this starts 7 R processes and takes several seconds)
 #' solver = gptr_fake_provider(function(request) {
 #'   if (length(request$last_results)) return("Done.")
 #'   fix = grepl("na.rm", paste(unlist(request$system), collapse = " "), fixed = TRUE)
@@ -74,11 +77,14 @@
 gptr_coach = function(..., harness = peter, check = NULL, coach = NULL, k = 1L,
                       strategy = "parallel", focus = c("procedure", "domain"),
                       surface = c("note", "skills", "review", "rules")) {
+  # this frame holds the dots, so it makes no closure and runs no `for` loop (rule R3)
   session_control_check("gptr_coach")
   caller = parent.frame()
   sc = sys.call()
   nf = sys.nframe()
   start = harness_spec(harness)
+  # a skill name taken since the harness was made is refused before anything starts
+  coaching_validate(start$coaching)
   e = substitute(coach)
   coach = if (ident_force_needed(e, "model", caller)) ident_value(coach, "model", e) else
     resolve_identifier(e, "model", caller)
@@ -94,10 +100,7 @@ gptr_coach = function(..., harness = peter, check = NULL, coach = NULL, k = 1L,
   on.exit(call_release(call), add = TRUE)
   call$start_hash = coaching_hash(start$coaching)
   run_model = task$args$model %||% start$args$model
-  # replay mode lets every model of the call answer, as replay_guard() lets peter()'s
-  call$offline = all(vapply(list(run_model, coach %||% run_model), function(m) {
-    isTRUE(tryCatch(replay_guard(m, mode = "replay"), gptr_error = function(e) FALSE))
-  }, NA))
+  call$offline = coach_offline(run_model) && coach_offline(coach %||% run_model)
   d = if (ext_service_has("doc.coach")) ext_service_get("doc.coach")(call) else list()
   if (identical(d$action, "replay")) return(d$harness)
   n = c(run = k * (2L + length(focus)), coach = k * (1L + length(focus)), judge = k > 1L)
@@ -117,13 +120,17 @@ gptr_coach = function(..., harness = peter, check = NULL, coach = NULL, k = 1L,
   args = task$args[setdiff(names(task$args), c("prompt", "model"))]
   coach_args_check(args, start)
   models = coach_models(run_model, coach)
+  path = tempfile("gptr-coach-", fileext = ".rds")
+  on.exit(unlink(path), add = TRUE)
+  task$file = coach_objects_write(path, task$objects, caller, ...)
   # the judge's labels are shuffled by a seed drawn from the call, never from R's RNG
   x = list(start = start, task = task, args = args, models = models, check = check, focus = focus,
            surface = surface, n = n, k = k, strategy = strategy,
-           seed = paste(call$start_hash, task$prompt))
+           seed = paste(call$start_hash, task$prompt),
+           budget = args$budget %||% start$args$budget)
   child_job_check(coach_job_run(x, "start", start))
   child_job_check(coach_job(x, "coach", "", surface, start$coaching))
-  for (m in unique(list(models$run, models$coach))) coach_egress(m)
+  lapply(unique(list(models$run, models$coach)), coach_egress)
   gptr_inform(paste0("gptr_coach() starts ", count, ", each in its own R process."), "notice")
   coach_plan_notice(models$kinds, n)
   if (is.null(coach) && k == 1L) {
@@ -230,37 +237,57 @@ coach_check_args = function(focus, surface) {
 }
 
 #' The task of a gptr_coach() call, split as peter() captures its call: the prompt (`template`
-#' when written as a literal, interpolated as peter interpolates it), the context objects by
-#' their labels, and peter() arguments (named dots that are peter() formals) resolved in `caller`
+#' when written as a literal, interpolated as peter interpolates it), the context objects (their
+#' dot, binding site and label, read only when coach_objects_write() writes them), and peter()
+#' arguments (named dots that are peter() formals) resolved as harness_resolve_args() resolves
+#' them. This frame holds the dots, so it makes no closure, loops with `while` (a compiled `for`
+#' loop that calls a function keeps the frame and its dots) and reads a symbol by name (rule R3).
 #' @noRd
 coach_task = function(sc, caller, ...) {
   n = ...length()
   exprs = as.list(substitute(list(...)))[-1L]
   nms = ...names() %||% rep("", n)
   nms[is.na(nms)] = ""
-  pa = nzchar(nms) & nms %in% harness_formals()
-  # an identifier resolves in `caller`, as peter() resolves it; any other argument is its own
-  # promise's value, as peter() reads it, so dots a wrapper passes on keep their frames
-  given = exprs[pa]
-  ids = c("model", "mode", "skills", "plugins", "extensions", "tools", "agents")
-  for (j in which(!names(given) %in% ids)) given[j] = list(...elt(which(pa)[j]))
-  args = do.call(harness_resolve_args, c(list(caller), given), envir = caller)
+  formal = setdiff(names(formals(peter)), "...")
+  pa = nzchar(nms) & nms %in% formal
+  if (anyDuplicated(nms[pa])) {
+    gptr_abort(paste0("`", nms[pa][anyDuplicated(nms[pa])], "` is given more than once."),
+               "invalid_argument", arg = "...", expected = "each argument once")
+  }
+  # a value comes from its own promise, so dots a wrapper passes on keep their frames
+  args = list()
+  k = 1L
+  while (k <= n) {
+    e = exprs[[k]]
+    if (pa[k]) {
+      args[nms[k]] = list(if (identical(nms[k], "agents")) {
+        resolve_agents(e, caller)
+      } else if (!nms[k] %in% harness_idents) {
+        ...elt(k)
+      } else if (ident_force_needed(e, nms[k], caller)) {
+        ident_value(...elt(k), nms[k], e)
+      } else {
+        resolve_identifier(e, nms[k], caller)
+      })
+    }
+    k = k + 1L
+  }
   keep = which(!pa)
   a = as.list(sc)[-1L]
   an = names(a) %||% rep("", length(a))
-  own = c(harness_formals(), setdiff(names(formals(gptr_coach)), "..."))
+  own = c(formal, setdiff(names(formals(gptr_coach)), "..."))
   sites = dot_sites(as.call(c(list(sc[[1L]]), a[!(nzchar(an) & an %in% own)])), length(keep))
   facts = vector("list", length(keep))
-  vals = vector("list", length(keep))
   kinds = character(length(keep))
-  for (j in seq_along(keep)) {
-    vals[j] = list(...elt(keep[j]))
-    facts[[j]] = dot_facts(vals[[j]])
+  j = 1L
+  while (j <= length(keep)) {
+    facts[[j]] = dot_facts(if (is.na(sites[j])) ...elt(keep[j]) else dot_get(sites[j], caller))
     kinds[j] = if (!is.na(sites[j])) "symbol" else if (dot_is_literal(exprs[[keep[j]]])) {
       "literal"
     } else {
       "value"
     }
+    j = j + 1L
   }
   sel = select_prompt(nms[keep], facts, kinds, !is.null(args$prompt))
   prompt = args$prompt %||% if (!is.na(sel$prompt)) facts[[sel$prompt]]$text
@@ -280,10 +307,44 @@ coach_task = function(sc, caller, ...) {
   }
   labels = dot_labels(exprs[keep], nms[keep])
   addrs = rep(NA_character_, length(keep))
-  for (j in which(!is.na(sites))) addrs[j] = binding_address(sites[j], caller)
-  objects = stats::setNames(vals[sel$context], labels[sel$context])
+  j = 1L
+  while (j <= length(keep)) {
+    if (!is.na(sites[j])) addrs[j] = binding_address(sites[j], caller)
+    j = j + 1L
+  }
+  objects = list(dot = keep[sel$context], site = sites[sel$context], label = labels[sel$context])
   list(prompt = prompt, template = template, interp = interp, objects = objects, args = args,
        items = gateway_context_items(sel$context, kinds, sites, labels, facts, addrs))
+}
+
+#' Writes the task's objects to `path` once, as the named list every run reads, each read by name
+#' or through ...elt() into a list cleared before this returns, so the call keeps no reference to
+#' them (rules R1, R3, R6); an object that cannot cross processes is refused. Returns `path`.
+#' @noRd
+coach_objects_write = function(path, objects, caller, ...) {
+  out = stats::setNames(vector("list", length(objects$dot)), objects$label)
+  on.exit(for (j in seq_along(out)) out[j] = list(NULL), add = TRUE)
+  j = 1L
+  while (j <= length(out)) {
+    v = if (is.na(objects$site[j])) ...elt(objects$dot[j]) else dot_get(objects$site[j], caller)
+    if (!is.null(v)) out[[j]] = v
+    j = j + 1L
+  }
+  bad = names(out)[vapply(out, worker_unserialisable, NA)]
+  if (length(bad)) {
+    gptr_abort(paste0("`", bad[[1L]], "` cannot be sent to a coaching run: it holds an external ",
+                      "pointer or a connection."),
+               "invalid_argument", arg = bad[[1L]], expected = "objects that can cross processes")
+  }
+  save_rds(out, path, refhook = worker_refhook)
+  path
+}
+
+#' Can a model answer offline? Replay mode lets every model of the call answer, as replay_guard()
+#' lets peter()'s
+#' @noRd
+coach_offline = function(model) {
+  isTRUE(tryCatch(replay_guard(model, mode = "replay"), gptr_error = function(e) FALSE))
 }
 
 #' The run and coach models, each checked by coach_model_kind() and replay_guard() (08 section
@@ -308,10 +369,12 @@ coach_models = function(run, coach) {
 
 #' Refuses the task's peter() arguments that a run, one unattended session in another R process,
 #' cannot use, and checks the rest as peter() does before anything starts: values through
-#' gateway_args(), tool names through prompt_tools_check() unless an extension, a plugin or an
-#' MCP server of the run's own session could add the tool
+#' gateway_args() (with the starting harness's budget), tool names through prompt_tools_check()
+#' once the settings plugins and extension files are synced, as a session start syncs them,
+#' unless an extension, a plugin or an MCP server of the run's own session could add the tool
 #' @noRd
 coach_args_check = function(args, start) {
+  plugins_sync()
   no = intersect(c(".run", "background", ".stdin", "envir", "parallel", "choices", "levels",
                    "threshold", "min_confidence", "uncertain"), c(names(start$args), names(args)))
   if (length(no)) {
@@ -319,8 +382,8 @@ coach_args_check = function(args, start) {
                       "process, so it does not take `", no[[1L]], " =`."), "invalid_argument",
                arg = no[[1L]], expected = "peter() arguments of one unattended session")
   }
-  gateway_args(NULL, NULL, NULL, 0.5, NULL, NULL, FALSE, args$budget, args$replay,
-               args$.opts %||% list(), TRUE, FALSE)
+  gateway_args(NULL, NULL, NULL, 0.5, NULL, NULL, FALSE, args$budget %||% start$args$budget,
+               args$replay, args$.opts %||% list(), TRUE, FALSE)
   tools = gateway_list(ident_combine(list(start$args$tools, args$tools)))
   adds = c(start$args[c("extensions", "plugins")], args[c("extensions", "plugins")])
   if (all(vapply(tools, is.character, NA)) && all(vapply(adds, is.null, NA))) {
@@ -366,21 +429,21 @@ coach_plan_notice = function(kinds, n) {
 
 # ---- the loop (08 section 3.4) -------------------------------------------------------------------
 
-#' A run job: the task with spec `spec`, read in the safe `direction`
+#' A run job: the task with spec `spec`, its objects in the call's file, read in the safe
+#' `direction`
 #' @noRd
 coach_job_run = function(x, id, spec, direction = "final") {
-  list(id = id, role = "run", spec = spec, prompt = x$task$prompt,
-       objects = if (length(x$task$objects)) x$task$objects, args = x$args,
-       model = x$models$run, direction = direction)
+  list(id = id, role = "run", spec = spec, prompt = x$task$prompt, file = x$task$file,
+       args = x$args, model = x$models$run, direction = direction)
 }
 
-#' A coach job: `prompt` for the coach model, with the reply schema, the call's budget, the parts
-#' it may change, the base coaching its reply is read over and, for a composer, the rules it may
-#' keep (read in its child by coach_child_reply())
+#' A coach job: `prompt` for the coach model, with the reply schema, the call's budget (else the
+#' starting harness's), the parts it may change, the base coaching its reply is read over and, for
+#' a composer, the rules it may keep (read in its child by coach_child_reply())
 #' @noRd
 coach_job = function(x, id, prompt, surface, base, rules = NULL) {
   list(id = id, role = "coach", prompt = prompt, model = x$models$coach, schema = coach_schema(),
-       budget = x$args$budget, surface = surface, base = base, rules_allowed = rules)
+       budget = x$budget, surface = surface, base = base, rules_allowed = rules)
 }
 
 #' The judge's job: a tool-less coach session that answers with one of `labels`
@@ -389,7 +452,7 @@ coach_job_judge = function(x, prompt, labels) {
   label = list(type = "string", enum = as.list(labels))
   list(id = "judge", role = "judge", prompt = prompt, model = x$models$coach,
        schema = list(type = "object", properties = list(label = label), required = list("label")),
-       budget = x$args$budget)
+       budget = x$budget)
 }
 
 #' A harness spec with other coaching and its own id, for a probe or a final run
@@ -631,7 +694,9 @@ coach_passes = function(final, starts, check) {
 
 #' Charges the usage rows of a stage's results, each checked by usage_rows_check() (a result is
 #' untrusted) and each request once, to the session of the run this call is part of, else to the
-#' session-less log, so gptr_usage() shows what coaching spent (08 section 3.3)
+#' session-less log, so gptr_usage() shows what coaching spent (08 section 3.3). Rows charged to a
+#' run's session stay in memory: a row of another process's session has no durable form in this
+#' session's store (usage_add_durable() takes its own rows only), so a resumed session lacks them.
 #' @noRd
 coach_charge = function(res) {
   ok = function(u) tryCatch(usage_rows_check(u, "usage"), gptr_error = function(e) NULL)

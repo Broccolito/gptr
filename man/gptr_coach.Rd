@@ -18,9 +18,10 @@ gptr_coach(
 \arguments{
 \item{...}{What you would give the harness: the prompt, your objects, and any \code{\link[=peter]{peter()}}
 arguments such as \code{mode}, \code{model}, \code{budget} or \code{tools}. They apply to every run of this call
-and are not kept in the result; \code{budget} also caps each coach session. Each run is one
-unattended session, so \code{parallel}, \code{choices}, \code{levels}, \code{threshold}, \code{min_confidence},
-\code{uncertain}, \code{background}, \code{.run}, \code{.stdin} and \code{envir} are refused.}
+and are not kept in the result; \code{budget}, else the starting harness's, also caps each coach
+session and the judge. Each run is one unattended session, so \code{parallel}, \code{choices},
+\code{levels}, \code{threshold}, \code{min_confidence}, \code{uncertain}, \code{background}, \code{.run}, \code{.stdin} and
+\code{envir} are refused.}
 
 \item{harness}{The harness to start from: \code{peter} or a harness.}
 
@@ -50,7 +51,9 @@ A harness: your starting harness with the new coaching when it was kept, otherwi
 your starting harness. Either way it has a new id and a record (\code{h$record}: each run's
 outcome, turns, tokens, cost, highest risk and unmet requirements, and the decision with its
 reason; no data from your runs). \code{h$report} holds the full report, with every answer, value,
-transcript and coach reply, in this R session only.
+transcript and coach reply, in this R session only. A call replayed from its document block
+returns the recorded coaching with an empty record; the block's \verb{## Decision:} line holds the
+decision.
 }
 \description{
 \code{gptr_coach()} improves the \emph{coaching} of a harness (the note, skills, review and rules that
@@ -76,7 +79,7 @@ no model, no key and no process.
 }
 \examples{
 # A run that is wrong unless its note says how to treat missing values, and a coach that
-# writes that note (both scripted; this starts 7 R processes and takes over 5 seconds)
+# writes that note (both scripted; this starts 7 R processes and takes several seconds)
 solver = gptr_fake_provider(function(request) {
   if (length(request$last_results)) return("Done.")
   fix = grepl("na.rm", paste(unlist(request$system), collapse = " "), fixed = TRUE)

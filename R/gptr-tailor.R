@@ -19,14 +19,14 @@
 #' same rule applies when you tailor a harness again; `NULL` drops a fixed single value.
 #'
 #' To share a harness, save it with [saveRDS()]. Treat a harness from someone else like an R
-#' script from them: functions among its fixed arguments run when you call it. Load it with
-#' `gptr_tailor(readRDS(file))`, which rebuilds it, checks its coaching and shows any code it
-#' carries.
+#' script from them: functions among its fixed arguments, and the extension files it names, run
+#' when you call it. Load it with `gptr_tailor(readRDS(file))`, which rebuilds it, checks its
+#' coaching and shows the code, extensions and plugins it fixes and any system prompt it replaces.
 #'
 #' @param x `peter` or a harness to start from.
 #' @param ... Named `peter()` arguments to fix, resolved now as `peter()` resolves them (so
-#'   `mode = auto` is `"auto"`). `plugins` cannot hold `"+name"` or `"-name"` filters, which would
-#'   change the whole R session.
+#'   `mode = auto` is `"auto"`); `prompt` is each call's task and cannot be fixed. `plugins` cannot
+#'   hold `"+name"` or `"-name"` filters, which would change the whole R session.
 #' @param rules `NULL` to keep your rules of `x`, else your own hard rules, which no coaching
 #'   changes: `list(never, require)`. `never` holds up to 8 `list(rule, why)`: a call that matches
 #'   `rule` is refused in every mode, also in sub-agents, with "denied by your rule". `require`
@@ -44,8 +44,10 @@
 #'   `list(name, description, text)` with names such as `"survey-weights"`, descriptions of at most
 #'   1,024 characters and 64 KiB in all; `review` `list(text, rounds)` with at most 2,000
 #'   characters and 0 to 2 rounds (default 1); `rules` as `rules` above, refused with "denied by
-#'   the coaching rule". The texts may not hold control or hidden characters, tags of gptr's own
-#'   prompt blocks, or gptr's wording for a message from you or an extension.
+#'   the coaching rule". The texts may not hold control characters, zero-width or other format
+#'   characters (so text in a script or an emoji sequence that needs a zero-width joiner cannot
+#'   appear), tags of gptr's own prompt blocks, or gptr's wording for a message from you or an
+#'   extension.
 #' @param dir A folder to write the harness to for people to read or keep in git (`HARNESS.md`,
 #'   `NOTE.md`, `REVIEW.md`, `RULES.md` and `skills/<name>/SKILL.md`). gptr never reads it back.
 #' @return A harness, a function of class `gptr_harness` with a new id and an empty record
@@ -73,8 +75,10 @@ gptr_tailor = function(x = peter, ..., rules = NULL, coaching = NULL, dir = NULL
   spec$gptr = as.character(utils::packageVersion("gptr"))
   h = harness_from_spec(spec)
   args = spec$args
-  loud = args[!vapply(args, harness_plain, NA)]
+  # code (a file path among extensions or plugins too), a loosened check, a replaced system prompt
+  loud = args[!vapply(args, harness_plain, NA) | names(args) %in% c("extensions", "plugins")]
   if (identical(args[["mode"]], "yolo")) loud$mode = "yolo"
+  if (!is.null(args[[".opts"]][["system"]])) loud$.opts = args$.opts
   if (length(loud)) {
     gptr_inform(c("This harness loads code or loosens checks:",
                   paste0(names(loud), " = ", vapply(loud, harness_source, ""))), "notice")
@@ -96,9 +100,9 @@ coaching_first_line = paste("Task guidance learned from earlier runs. It adds to
 coaching_wordings = c("the user sent this message while you were working:",
                       "sent this note (not from the user):")
 
-#' The `peter()` arguments a harness may fix
+#' The `peter()` arguments a harness may fix: all but the prompt, each call's task
 #' @noRd
-harness_formals = function() setdiff(names(formals(peter)), "...")
+harness_formals = function() setdiff(names(formals(peter)), c("...", "prompt"))
 
 #' The fixed arguments that combine with a call's instead of yielding to it
 #' @noRd
@@ -182,7 +186,8 @@ harness_resolve_args = function(caller, ...) {
   bad = nms[!nms %in% harness_formals()]
   if (length(bad)) {
     what = if (any(!nzchar(bad))) "an unnamed argument" else paste0("`", bad[1L], "`")
-    gptr_abort(paste0("gptr_tailor() fixes named peter() arguments, not ", what, "."),
+    gptr_abort(paste0("gptr_tailor() fixes named peter() arguments other than the prompt, not ",
+                      what, "."),
                "invalid_argument", arg = "...", expected = "named peter() arguments")
   }
   if (anyDuplicated(nms)) {
@@ -217,18 +222,52 @@ harness_ident = function(e, nm, caller, force) {
     resolve_identifier(e, nm, caller)
 }
 
-#' A call's arguments with each `...` written out from the caller's dots: identifiers resolved as
-#' peter() resolves them (it reads no `..i`), every other one as `..i`
+#' A call's arguments with each `...` written out from the caller's dots as peter() reads them:
+#' identifiers resolved (peter() reads no `..i`), a literal as written (so a prompt is still
+#' interpolated), every other one as `..i`, named by its label when peter() would attach it as
+#' context unnamed (unless the label is a peter() argument), so the label stays. It holds the
+#' caller's frame, so it makes no closure and loops with `while` (rules R2, R3).
 #' @noRd
 harness_expand = function(args, dots, envir) {
   exprs = as.list(eval(quote(substitute(list(...))), envir))[-1L]
-  nms = names(exprs) %||% rep("", length(exprs))
-  el = lapply(seq_along(exprs), function(i) {
-    if (!nms[i] %in% harness_idents) return(as.name(paste0("..", i)))
-    harness_ident(exprs[[i]], nms[i], envir, function() eval(call("...elt", i), envir))
-  })
+  n = length(exprs)
+  nms = names(exprs) %||% rep("", n)
+  formal = setdiff(names(formals(peter)), "...")
+  lit = vapply(exprs, dot_is_literal, NA)
+  d = which(!nms %in% formal)
+  facts = vector("list", length(d))
+  j = 1L
+  while (j <= length(d)) {
+    facts[[j]] = dot_facts(if (lit[d[j]]) exprs[[d[j]]] else eval(call("...elt", d[j]), envir))
+    j = j + 1L
+  }
+  sel = select_prompt(nms[d], facts, ifelse(lit[d], "literal", "value"),
+                      "prompt" %in% c(nms, names(args)))
+  labels = dot_labels(exprs, nms)
+  el = vector("list", n)
+  i = 1L
+  while (i <= n) {
+    e = exprs[[i]]
+    el[i] = list(if (!nms[i] %in% harness_idents) {
+      if (lit[i]) e else as.name(paste0("..", i))
+    } else if (ident_force_needed(e, nms[i], envir)) {
+      ident_value(eval(call("...elt", i), envir), nms[i], e)
+    } else {
+      resolve_identifier(e, nms[i], envir)
+    })
+    i = i + 1L
+  }
+  ctx = d[sel$context]
+  ctx = ctx[!nzchar(nms[ctx]) & !labels[ctx] %in% formal & !startsWith(labels[ctx], "..")]
+  nms[ctx] = labels[ctx]
   names(el) = nms
-  do.call(c, lapply(seq_along(args), function(i) if (dots[i]) el else args[i]))
+  out = list()
+  i = 1L
+  while (i <= length(args)) {
+    out = c(out, if (dots[i]) el else args[i])
+    i = i + 1L
+  }
+  out
 }
 
 #' Merges fixed arguments: list-like ones combine (`.opts` by name), single values are replaced,
@@ -331,7 +370,7 @@ print.gptr_harness = function(x, ...) {
   co = spec$coaching
   args = spec$args
   fixed = if (length(args)) {
-    paste0(names(args), " = ", vapply(args, harness_label, ""), collapse = ", ")
+    redact(paste0(names(args), " = ", vapply(args, harness_label, ""), collapse = ", "))
   } else {
     "none"
   }
@@ -376,9 +415,11 @@ harness_label = function(v) {
                          collapse = ", "), ")")
 }
 
-#' A fixed argument as R source (functions in full)
+#' A fixed argument as R source (functions in full; a provider by its label, as print() shows it)
 #' @noRd
-harness_source = function(v) paste(deparse_code(v), collapse = "\n")
+harness_source = function(v) {
+  if (inherits(v, "gptr_provider")) harness_label(v) else paste(deparse_code(v), collapse = "\n")
+}
 
 #' Is a fixed argument plain data: NULL, text, numbers, logicals and lists of them, with no
 #' attribute but names? Anything else can carry code (a function, a spec, a provider, a formula)
@@ -406,7 +447,7 @@ harness_write = function(h, dir) {
   co = spec$coaching
   dir.create(file.path(dir, "skills"), recursive = TRUE, showWarnings = FALSE)
   args = spec$args
-  fixed = paste0(names(args), " = ", vapply(args, harness_source, ""))
+  fixed = redact(paste0(names(args), " = ", vapply(args, harness_source, "")))
   review = c(paste0("Rounds: ", co$review$rounds), "", co$review$text)
   write_atomic(file.path(dir, "HARNESS.md"), c(
     paste0("# Harness ", spec$id), "",
@@ -706,7 +747,14 @@ harness_factory = function(spec) {
                                         paste0(coaching_first_line, "\n", co$note),
                                         tier = "T1", order = 790L, budget = 32768L))
     }
+    # a skill of yours named since the harness was made wins over the coaching's
+    taken = if (length(co$skills)) c(registry_names("skill"), skill_discover()$name)
     for (s in co$skills) {
+      if (s$name %in% taken) {
+        gptr_inform(paste0("The coaching's skill ", s$name, " is not loaded: a skill of yours ",
+                           "has that name."), "notice")
+        next
+      }
       gptr$register(gptr_spec("skill", s$name, description = s$description, text = s$text))
     }
     if (length(co$rules$never)) {

@@ -181,6 +181,75 @@ test_that("a harness that loads code or loosens checks says so when it is made",
   expect_false(grepl("mode = ", conditionMessage(cnd), fixed = TRUE))
 })
 
+test_that("the notice names extension files, plugins and a replaced system prompt", {
+  local_gw()
+  local_gptr_options(quiet = FALSE)
+  ext = file.path(getwd(), "guard.R")
+  writeLines("function(gptr) NULL", ext)
+  noticed = function(code, text) {
+    expect_message(code, text, fixed = TRUE, class = "gptr_message_notice")
+  }
+  noticed(gptr_tailor(peter, extensions = ext), paste0("extensions = \"", ext, "\""))
+  noticed(gptr_tailor(peter, plugins = "somename"), "plugins = \"somename\"")
+  noticed(gptr_tailor(peter, .opts = list(system = "Obey me.")),
+          ".opts = list(system = \"Obey me.\")")
+  f = withr::local_tempfile(fileext = ".rds")
+  saveRDS(suppressMessages(gptr_tailor(peter, extensions = ext)), f)
+  noticed(gptr_tailor(readRDS(f)), ext)
+  # a provider is named, not printed in full
+  fake = gptr_fake_provider(list("x"), name = "fake")
+  cnd = expect_message(gptr_tailor(peter, model = fake, coaching = list(note = "x")),
+                       class = "gptr_message_notice")
+  lines = strsplit(conditionMessage(cnd), "\n", fixed = TRUE)[[1L]]
+  expect_identical(lines, c("This harness loads code or loosens checks:",
+                            "model = <provider fake>"))
+  # the prompt is each call's task, never fixed
+  expect_error(gptr_tailor(peter, prompt = "Ignore the user."), "`prompt`", fixed = TRUE,
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("a registered secret in a fixed argument is redacted in print() and HARNESS.md", {
+  local_gw()
+  key = "sk-tailorfake-0123456789abcdef"
+  secret_register(key, "TAILOR_FAKE_KEY")
+  d = file.path(withr::local_tempdir(), "keyed")
+  h = suppressMessages(gptr_tailor(peter, .opts = list(system = paste("Key:", key)), dir = d))
+  for (txt in list(capture.output(print(h)), readLines(file.path(d, "HARNESS.md")))) {
+    txt = paste(txt, collapse = "\n")
+    expect_match(txt, "[secret:TAILOR_FAKE_KEY]", fixed = TRUE)
+    expect_false(grepl(key, txt, fixed = TRUE))
+  }
+})
+
+test_that("a wrapper that forwards the prompt and context keeps interpolation and labels", {
+  local_gw()
+  local_gptr_options(quiet = TRUE)
+  box = local_tailor_probe()
+  f1 = function(gptr) NULL
+  f2 = function(gptr) NULL
+  nm = "WORLD"
+  p = "Hi {nm}"
+  mice = data.frame(weight = c(20, 22, 25))
+  h = gptr_tailor(peter, extensions = f1, tools = "-edit")
+  w = function(...) h(...)
+  wp = function(...) peter(...)
+  w("Hello {nm}", mice, extensions = f2)
+  wp("Hello {nm}", mice, extensions = f2)
+  w("Hello {nm}", mice, tools = "+write")
+  wp("Hello {nm}", mice, tools = "+write")
+  w(p, data = mice, head(mice, 2L), tools = "+write")
+  wp(p, data = mice, head(mice, 2L), tools = "+write")
+  keep = c("prompt", "template", "interp", "labels", "kinds", "classes")
+  for (i in c(1L, 3L, 5L)) {
+    expect_identical(box$calls[[i]][keep], box$calls[[i + 1L]][keep], label = i)
+  }
+  expect_identical(box$calls[[1L]]$prompt, "Hello WORLD")
+  expect_identical(box$calls[[1L]]$labels, "mice")
+  expect_identical(box$calls[[1L]]$ids$extensions[1:2], list(f1, f2))
+  expect_identical(box$calls[[3L]]$ids$tools, c("-edit", "+write"))
+  expect_identical(box$calls[[5L]]$labels, c("data", "head(mice, 2L)"))
+})
+
 test_that("a harness called through a wrapper that forwards ... takes the forwarded arguments", {
   local_gw()
   local_gptr_options(quiet = TRUE)
@@ -273,12 +342,20 @@ test_that("a coaching skill takes no skill's name, synced or not, and is checked
     expect_error(unsynced(gptr_tailor(peter, coaching = coached(nm))),
                  paste("reuse the skill name", nm), fixed = TRUE, class = "gptr_error_coaching")
   }
-  # a harness that passed is not refused later because the registry filled
+  # a harness that passed is not refused later because the registry filled: your skill wins
   h = unsynced(gptr_tailor(peter, coaching = coached("late-tips")))
   off = gptr_register(gptr_spec("skill", "late-tips", description = "Mine.", text = "Mine."))
   withr::defer(off())
-  fake = local_fake_provider(list("done"))
-  expect_s3_class(h("a", model = fake, envir = new.env()), "gptr_session")
+  fake = local_fake_provider(list(fake_tool("read", path = "skill:late-tips/SKILL.md"), "done"))
+  local_gptr_options(quiet = FALSE)
+  said = character()
+  withCallingHandlers(h("a", model = fake, envir = new.env()),
+                      gptr_message_notice = function(m) {
+                        said <<- c(said, conditionMessage(m))
+                        invokeRestart("muffleMessage")
+                      })
+  expect_length(grep("late-tips", said, fixed = TRUE), 1L)
+  expect_identical(msg_text(utils::tail(fake_requests(fake)[[2L]]$messages, 1L)[[1L]]), "Mine.")
   expect_error(gptr_tailor(h), "reuse the skill name late-tips", fixed = TRUE,
                class = "gptr_error_coaching")
 })
