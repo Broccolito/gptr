@@ -250,7 +250,10 @@ skill_discover = function(scope = "all") {
 #' A skill is a directory containing `SKILL.md` with a YAML `description` and optional `name`.
 #' Its body is read on demand, or preloaded with `peter(skills = "name")`.
 #' `disable-model-invocation: true` hides it from automatic catalog selection, while explicit
-#' preloading remains available. `allowed-tools` is metadata, not a permission rule.
+#' preloading remains available. `allowed-tools` is metadata, not a permission rule. An extension
+#' or a harness can also register a skill with
+#' `gptr_spec("skill", name, description = "...", text = "...")`; such a skill has no files, so
+#' `gptr_skills()`, which reads skill files, does not list it.
 #'
 #' @param scope One of `"all"`, `"project"`, `"user"` or `"packages"`.
 #' @return `gptr_skills()`: a `gptr_skills` data frame with columns `name`, `description`,
