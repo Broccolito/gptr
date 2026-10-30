@@ -34,7 +34,7 @@ input), historical (a dated record, kept as written), code (a script or helper) 
 | `style.R` | `gptr_style()`: `styler::tidyverse_style()` that keeps `=` assignment and the native pipe. | code |
 | `PAUSED_HANDOFF_2026-10-15.md`, `RESUME_PROMPT_2026-10-15.md`, `PAUSED_STATE_2026-10-15.json` | The 2026-10-15 pause set: handoff, resume prompt and machine-readable state. | stale |
 
-### Plan (`plan/`, 30 files)
+### Plan (`plan/`, 31 files)
 
 Implementation plans, one per subsystem, in writing-plans format (test-driven tasks with complete
 code).
@@ -47,8 +47,9 @@ code).
 | `P26-console-agent-fixes.md` | Fixes for the interactive defects in issues #10-#20, then Tasks 12-37 (2026-10-16). Complete per `progress/P26.md`; some maintainer checks stay open. | historical |
 | `P27-windows-coverage.md` | Proof that every Windows function runs on hosted Windows CI (2026-10-19). Merged in PR #51. | historical |
 | `P28-console-codex.md` | The Codex-style `peter()` console: steering, the composer and live row, trigger-only completion, the output vocabulary (D-242..D-245; 2026-10-21, Tasks 1-92). Merged in PR #78. | historical |
+| `P29-gptr-coach.md` | Coached harnesses: `gptr_tailor()` and `gptr_coach()` (D-273..D-290; 2026-10-28, Tasks 1-11). Merged into PR #93. | historical |
 
-### Spec (`spec/`, 11 files)
+### Spec (`spec/`, 12 files)
 
 Requirements and design.
 
@@ -59,20 +60,21 @@ Requirements and design.
 | `02-north-star-examples.md` | Target user experience: the north-star examples the architecture must enable. | reference |
 | `03-architecture.md` | The definitive architecture. Read first. | current |
 | `04-interface-contract.md` | The definitive interface contract; section 15 (IC-32..IC-73) and IC-74 win over earlier sections. Read first. | current |
-| `05-plan-decomposition.md` | Maps plans P01-P28 to milestones, dependencies and R-file counts. | current |
+| `05-plan-decomposition.md` | Maps plans P01-P29 to milestones, dependencies and R-file counts. | current |
 | `06-review-resolution.md` | The 2026-09-30 adversarial review: verdicts on 144 issues, mapped to IC decisions. | historical |
 | `07-local-ollama.md` | Accepted 2026-10-03 amendment IC-74: Ollama chat and Clef/Clef Flash decision models. | current |
+| `08-recursive-peter.md` | The design of P29: harnesses, coaching and `gptr_coach()`, with its safety rules and honest limits; its contract is 04 section 15.11 (IC-83..IC-89). | current |
 | `proposals/` | The three competing architectures the design was synthesised from (P-A, P-B, P-C). | stale |
 
-### Progress (`progress/`, 53 files)
+### Progress (`progress/`, 54 files)
 
 Task evidence written during implementation: what ran, what passed, and the commit.
 
 | Path | Holds | Status |
 |---|---|---|
-| `P01.md`..`P26.md`, `P28.md` | One log per plan: task evidence and plan acceptance. P27 is recorded in `HANDOFF.md` and `PROGRESS.md`. | historical |
-| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-36, PERF-1 and PERF-2, and the hosted-CI rounds from CI-15 on. | current |
-| `open-findings.md` | Every finding open on PR #93 when the maintainer paused its review rounds (2026-10-28), by area, with severity, regression, evidence and the proposed fix: the input of the comprehensive review before the CRAN submission. | current |
+| `P01.md`..`P26.md`, `P28.md`, `P29.md` | One log per plan: task evidence and plan acceptance. P27 is recorded in `HANDOFF.md` and `PROGRESS.md`. | historical |
+| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-48 (FIX-37..FIX-48 the comprehensive fix pass), PERF-1 and PERF-2, and the hosted-CI rounds from CI-15 on. | current |
+| `open-findings.md` | Every finding open on PR #93 when the maintainer paused its review rounds (2026-10-28), by area, with severity, regression, evidence and the proposed fix: the input of the comprehensive review before the CRAN submission, closed against its fix pass (FIX-37..FIX-48): each row's status, the rows the pass closed and the rows it added. | current |
 | `infra.md` | Hosted CI, tooling and Linux portability: rounds CI-1 to CI-20. | historical |
 | `simplicity-plan.md`, `simplicity.md` | The D-135 simplicity pass and `peter()` rename: the execution plan, then one section per package. | historical |
 | `rename-inventory.md`, `rename/rename.py` | The D-135 rename survey and the mechanical rename script. | historical |
@@ -189,7 +191,7 @@ Nothing below is moved or deleted; archiving is the maintainer's decision.
    pass. Then came a cross-plan consolidation pass (machine index, five consistency checkers,
    per-plan fixes) and a final gate. Final state of that pass: 25 plans, 307 tasks, 0 error-level
    cross-plan findings, 0 parse errors, 0 lints. The tools are in
-   `research/assets/consolidation-tools/`; re-run them after editing a plan. P26 to P28 were
+   `research/assets/consolidation-tools/`; re-run them after editing a plan. P26 to P29 were
    written after that pass.
 
 ## Local models amendment

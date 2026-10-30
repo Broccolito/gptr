@@ -7245,6 +7245,9 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `ui_escape()`, and the switch still reads only the reason's `uses undone ` prefix. Green:
   `^doc-replay$` PASS 1068 in UTF-8 and under `LC_ALL=C LANG=C`. The checks are in FIX-33's review
   round 6 recheck bullet. D-264 and 04 section 15.3 IC-49 say so.
+- Status 2026-10-30 (FIX-48, ledger V6T-2): control characters inside the model's own code, in a
+  string or a comment, are kept, since the code must run as written, so a raw ESC or BEL there
+  reaches the transcript; the Not changed lists above leave this out.
 
 ## FIX-30 - A live re-ask of a console transcript keeps each turn's model and mode (2026-10-26, #93)
 - Why: the maintainer's request of 2026-10-26, split out of issue #85 to keep #85 small.
@@ -7986,6 +7989,10 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
     problems; `spelling::spell_check_package()` clean. Cost, recorded: code that reads a secret,
     starts a process and names a network program in any string (a `message()` that says `curl`) asks
     in yolo.
+- Status 2026-10-30 (FIX-48, ledger L-6): wider than this entry said, a `Sys.getenv()` whose name
+  the code computes counts as a secret read for the network question even for an ordinary variable:
+  `v = 'PATH'; Sys.getenv(v)` beside `system('echo hi')` and the string `'install curl first'` is
+  level 4 and asks in auto too (3 on `3cd3b146`).
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #93)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
@@ -9838,12 +9845,12 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
 
 ## Task CI-105 - Contributor PR #92 and its wording across the repository (2026-10-28, #94)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
-  `13a917ff`, is merged into `main` as is, with a merge commit. It changes only DESCRIPTION (the
-  Title "Language Model Agents in Live 'R' Sessions", D-270, and a Description that opens "Runs
-  language model agents in an existing 'R' session"), README.Rmd and README.md (rewritten and
-  arranged by task: Installation, Connect a model, Run an analysis, Record and replay an analysis,
-  Return typed decisions, Learn more, Why Peter?, Upgrading from gptr 0.7.0, Installation
-  troubleshooting, License and acknowledgments) and the three one-line Title checks
+  `13a917ff`, is merged into `main` as is, with a merge commit (`880e7ea4`). It changes only
+  DESCRIPTION (the Title "Language Model Agents in Live 'R' Sessions", D-270, and a Description that
+  opens "Runs language model agents in an existing 'R' session"), README.Rmd and README.md
+  (rewritten and arranged by task: Installation, Connect a model, Run an analysis, Record and replay
+  an analysis, Return typed decisions, Learn more, Why Peter?, Upgrading from gptr 0.7.0,
+  Installation troubleshooting, License and acknowledgments) and the three one-line Title checks
   (`description_problems()` in `dev/release/lib.R`, the `dcf_of()` fixture of
   `dev/release/tests/test-description.R`, test-zzz.R). The maintainer asked that his changes be
   "proportionally propagated to all of the other elements in the repository that those changes
@@ -9951,3 +9958,1055 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   `?peter` name sentences over (2), as for the summaries above.
 - Deviations: D-270. Open: whether the system-one and script-as-history guides take his link texts
   as titles is the maintainer's call.
+
+## FIX-37 - The comprehensive fix pass: the permission classifier and paths (2026-10-29, #93)
+- The pass: one comprehensive review of `claude/v1-fixes` at `f690afc7` (15 lenses, each finding
+  checked by a verifier; refuted ones dropped) planned 168 items, F-1..F-168, in nine file sets,
+  with 67 decisions, DEC-1..DEC-67, on the calls the maintainer had deferred: the maintainer's rule
+  was to recommend, implement and record them. Twelve lanes fixed their items test first, one commit
+  per item, on branches `claude/v1-fix7-<lane>`; a second agent verified each lane's head, and the
+  lane repaired what it found. The integration merged every lane with `--no-ff`
+  (`0f2677fe`..`1851579c`) and then committed the halves one lane had left to another, the one
+  regeneration and three test fixes the merged CI needed; CI on `4cf922a4` is green. Records:
+  FIX-37..FIX-48, one per lane (FIX-48 the records lane's own), CI-106 (the tests and CI lane and
+  the post-merge test fixes), D-291..D-300 (D-291 the gateway refreeze, D-292..D-300 the decisions);
+  the ledger `progress/open-findings.md` is closed against them. Each item below gives its F id,
+  severity, the review findings it closes, its commits and its test; the red and green runs (UTF-8,
+  `LC_ALL=C LANG=C` and the installed package) are in the lane reports.
+- This entry is the gate lane (`claude/v1-fix7-gate`, head `b7e8d441`, merged as `0f2677fe`):
+  F-1..F-25, `R/perm-classify.R`, `R/perm-gate.R`, `R/perm-rules.R`, `R/eval-guard.R`,
+  `R/utils-paths.R` and `inst/extdata/risk-functions.csv`.
+- F-1 (high; secrets-1; `3db4f5bc`): `risk_secret_scan()` returned no findings on any error of
+  `secret_scan()`, so a parse-valid form that made the scan throw (`quote(Sys.getenv(x = ))`) in
+  front of a real secret read and a network send dropped every secret finding of the block, and auto
+  and yolo ran it. It now returns none only for text that does not parse; a scan that fails on code
+  that parses gives one guarded finding (rule `secret_scan_failed`) at level 4, not the plan's 3,
+  since yolo asks only for level 4 or a flow. The throw itself is F-26 (FIX-38). Tests:
+  test-perm-classify.R "a secret scan that fails on code that parses is a guarded level 4 (D-295)";
+  test-perm-gate.R "a secret scan that fails asks a person in auto and yolo (D-295)".
+- F-2 (medium; gate-1, L-4; `18a51657`): `bquote(.(unlink('~', recursive = TRUE)))` and
+  `substitute(a, list(a = ...))` run their argument when called, but the classifier capped them at
+  level 2 as quoting and the evaluator's guard skipped `bquote()`. `bquote` is no longer a quoting
+  function in either, and `substitute()`'s `env` is walked without the quote cap, so these read 4
+  and the guard refuses `bquote(.(q()))` and `eval(bquote(q()))`. Tests: test-perm-classify.R "what
+  bquote(), substitute()'s env and a formula lambda run is code (review F-2, F-3)";
+  test-eval-guard.R "what bquote() and a formula lambda run is guarded".
+- F-3 (medium; gate-2; `18a51657`): a one-sided formula (`~ .x`) in a function slot read as a
+  computed function, a false level 3 on tidyverse code, and its body was capped at 2. It is read as
+  a lambda with a function-body scope, in the guard too, and a number in a function slot is an
+  extractor; two-sided model formulas stay data. Tests: as F-2.
+- F-4 (medium; gate-5; `cea3cf68`, `39750e1f`): `sh:` deny rules missed upper-case program names.
+  Globs match with `(?i)` on macOS and Windows, and `?gptr_permissions` says a glob matches the
+  command as written, so options before a subcommand (`git -C dir push`) are not matched (DEC-2,
+  D-294). Test: test-perm-rules.R "sh: globs match in any case where file names do (D-294)".
+- F-5 (medium; crosscut-1; `83d6445a`): `gptr_jobs(kill = TRUE)` read as a read, so model code
+  stopped every gptr job in manual and plan mode unasked. A literal `kill = TRUE` is level 4
+  `control` and a computed one level 3 `dynamic`. Tests: test-perm-classify.R "gptr_jobs(kill =
+  TRUE) stops every job: level 4 control (review F-5)"; test-perm-gate.R "model code that stops
+  every gptr job asks or is refused (review F-5)".
+- F-6 (medium; R6-GATE-5, R6-REG-3; `f40681b4`, repaired in `b29cccdd`): `setwd(here::here())` and
+  the save-and-restore idiom read 4 and asked in auto and yolo. `here::here()` of literal parts
+  folds to the project, a computed directory R moves back to reads 3, and relative paths after a
+  move are read where R is (D-293). The verifier found the first version keyed the saved name on the
+  name alone, in walk order, so `d = Sys.getenv('X'); local({ d = getwd() }); setwd(d)` and five
+  more forms read 3 and ran unasked in auto. The repair makes a saved name scope-local (`known`'s
+  attribute `saved`: `local()` restores it, a function body starts with none) and never saved when
+  the code binds it any other way anywhere (another value, a loop variable, a formal, a replacement,
+  from `risk_bound()`'s new `other` before the walk; `<<-`, `assign()`, `list2env()`, an assignment
+  inside `eval()`, `evalq()`, `with()` or `within()`, a masked `setwd` or `getwd`, from the walk).
+  The verifier's six forms and eight more scope, branch and loop forms went from 3 to 4; the plan's
+  branch and loop idioms read 3. Test: test-perm-classify.R "here(), a restored directory and paths
+  after a move are read (review F-6)" (14 rows added in the repair, 13 red on `ae28219b`).
+- F-7 (medium; V6G-1; `39564271`): a name that `assign()` or `list2env()` binds in an enclosing
+  environment from inside `local()` read as local, so `setwd(d)` after it read 2. It counts outside,
+  as `<<-` does, also inside `eval()`, `evalq()`, `with()` and `within()`. Test:
+  test-perm-classify.R "a name assign(), list2env() or eval() binds in local() is one outside it
+  (review F-7)".
+- F-8 (low; gate-3; `07e71049`): a relative `cd` was joined to the project root, not to the folder
+  the line moved to last; it is joined to the last one. The union of folders for later commands
+  stays (DEC-1, D-294). Test: test-perm-classify.R "a relative cd moves from the directory the line
+  moved to last (D-294)".
+- F-9 (low; gate-4; `2a52b6ef`, `0dcfff0a`): `file.remove(list.files('~', full.names = TRUE))` and
+  `for (f in c('/tmp/a')) unlink(f)` read 3 and ran in auto. A `for` variable takes the folded
+  values of its sequence, and listings of a literal folder name a file in it (DEC-6, amends D-211,
+  D-293). Test: test-perm-classify.R "a for loop over a vector and a listing of a folder are read as
+  its files (D-293)".
+- F-10 (low; L-1; `51f5ea3a`): in a project inside a protected folder, such as `.claude/worktrees`,
+  every path was protected; a path inside the project is classed by its part below the root (DEC-5,
+  D-292). Test: test-utils-paths.R "a project in a protected folder classes a path by its part below
+  the root (D-292)".
+- F-11 (low; gate-6; `5924dfcf`): an `[a]lways` answer stored a rule recomputed without the session
+  environment; it classifies with the environment the question used. Test: test-perm-gate.R "an
+  [a]lways answer reads the call where the question did (review F-11)".
+- F-12 (low; gate-7; `a9f2598e`): `tryCatch()` without handlers read its `expr` and `finally` as
+  computed handler functions; the named-argument fallback applies only when R could not match the
+  call. Test: test-perm-classify.R "tryCatch() without handlers calls none of its arguments (review
+  F-12)".
+- F-13 (low; gate-8; `ea03f663`): the shell tokenizer was quadratic in a word's length, so a long
+  quoted literal held the session for seconds to minutes; it records start indexes and joins each
+  word once. Test: test-perm-classify.R "a long quoted word is read in time linear in its length
+  (review F-13)".
+- F-14 (low; gate-9; `cb7345cc`): `trace()` can rewrite gptr's own functions but read 2; its row is
+  level 4 `control` ("rewrites package code"), as `assignInNamespace()`'s is. Test: the IC-53
+  control test of test-perm-classify.R (the `trace` rows).
+- F-15 (low; V6G-N4; `6859367b`): working-directory candidates doubled with each branched `setwd()`,
+  so the classifier's time doubled per line (167 s at 18 lines). A directory with more than 64
+  candidates is one the code computes, level 4 (D-293). Test: test-perm-classify.R "more directories
+  than a reading follows are one the code computes (D-293)".
+- F-16 (low; V6G-N1; `a7b82c14`): `withr::with_dir()` and `xfun::in_dir()` left the tracked
+  directory unknown, so a later relative `setwd()` read 4; the walk restores it after their
+  arguments (DEC-8, D-293). Test: test-perm-classify.R "with_dir() and in_dir() leave R where it was
+  (D-293)".
+- F-17 (low; V6G-N2, V6G-N3, gate-11; `c9aff049`, repaired in `b7e8d441`): `risk_python()` read
+  comments, strings and docstrings as code (`print('call os.chdir(d) first')` read 4). The rules
+  read the code without comments, and a `chdir(` only outside strings. The verifier found that a `#`
+  inside a triple-quoted string or after an escaped quote (`'it\'s # y'`) then hid the rest of the
+  line, so a network, dynamic or delete call after it read 1; the repair reads code holding a
+  triple-quoted string whole, with its comments, and the comment strip honours backslash escapes.
+  D-061's literal scan stays (DEC-4, D-294). Test: test-perm-classify.R "Python comments and a
+  chdir( in a string are no code (D-294)" (six rows added in the repair, red on `ae28219b`).
+- F-18 (low; W6-1; `92479e65`): a package call's named arguments were matched only while its
+  namespace was loaded (`fs::link_create(p = <outside>, n = 'lnk')` read 2 with fs not loaded); an
+  argument named in part is matched by partial name, not by hand-written formals as the plan
+  proposed (D-293). Test: test-perm-classify.R "an argument named in part is read while its
+  namespace is not loaded (review F-18)".
+- F-19 (low; L-5; `4add158d`): a move's source was not read as a delete; `file.rename()`,
+  `fs::file_move()`, `os.rename()` and `shutil.move()` delete their source, as `mv` already did
+  (DEC-9, D-293). Test: test-perm-classify.R "a move deletes its source in R, Python and the shell
+  alike (D-293)".
+- F-20 (low; L-3; `1afe488f`, `39750e1f`): a computed command in `pipe()`, `processx::run()` or
+  `data.table::fread(cmd =)` escaped `sh:` rules; auto and yolo refuse it, as a computed `system()`
+  (DEC-7, D-293). Test: test-perm-gate.R "only auto and yolo refuse a computed command; a literal
+  one is gated as before".
+- F-21 (low; V6S-2; `a719a783`): the risk object kept a registered key in `attr(flagged, "hidden")`,
+  which redaction does not reach; `risk_new()` drops it and `dirs`. Test: test-perm-gate.R "a risk
+  keeps no copy of the text a command does not run (review F-21)".
+- F-22 (low; V6S-3; `cea3cf68`, `39750e1f`): documented: `?gptr_permissions` says a tool-name rule
+  names a tool the model calls, not a `peter$` member, served or not (DEC-11, D-294; 04 IC-57). No
+  test (help text).
+- F-23 (nit; V6G-N5; `0f683269`): `do.call()` evaluates the `quote()` elements of a list written
+  out, which the classifier and the guard read as quoted; both unwrap them when `quote` is not
+  `TRUE`. Tests: test-perm-classify.R and test-eval-guard.R "do.call() runs the quoted elements of a
+  list written out (review F-23)".
+- F-24 (nit; V6S-5; `95fe458b`): the round 6 loop test of test-perm-gate.R gains
+  `peter$sh(cmd, env = 'HOME')`.
+- F-25 (nit; V6S-6; `5bd4b6ad`): test-perm-classify.R "a registered name that does not look secret
+  is a secret read in a command (F-25)".
+- Integration: `ebb1335a` (`path_norm_one()` of a UTF-8 name in a C locale, F-97's half in this
+  lane's file; FIX-43) and `1244a358` (`?gptr_security` follows F-6, F-17 and F-20: `pipe()`,
+  `processx::run()` and `fread(cmd =)` with a computed command are refused in auto and yolo;
+  `here::here()` of literal parts is read in the project; a computed directory R moves back from is
+  level 3, a plain saved `owd` only in its scope and for a name bound no other way, while
+  `setwd(owd)` to another computed directory stays 4; Python with a triple-quoted string is read
+  with its comments).
+- Ledger rows closed: V6G-1 (F-7), R6-REG-3 and R6-GATE-5 (F-6), V6G-N1 (F-16), V6G-N2 and V6G-N3
+  (F-17; the `getcwd()` idiom documented by F-88), V6G-N4 (F-15), L-1 (F-10), L-3's `pipe()`,
+  `processx::run()` and `fread(cmd =)` (F-20), L-4's `eval(bquote(q()))` (F-2), V6G-N5 (F-23), W6-1
+  (F-18), L-5 (F-19), V6S-2 (F-21), V6S-3 (F-22), V6S-5 (F-24), V6S-6 (F-25).
+- Deviations: D-292, D-293, D-294, D-295 (F-1). Open: `assign()` or `list2env()` rebinding a saved
+  name inside a loop after the read is seen in walk order only (F-6); F-58's classifier half
+  (FIX-41, D-297) is a gate item no lane took; the gate writer's out-of-scope note on empty path
+  components in `risk_glob_paths()`, reported without detail, is a ledger row to triage.
+
+## FIX-38 - Secrets: empty arguments, environment dumps, command lines, auth.json (2026-10-29, #93)
+- The secrets lane of the comprehensive fix pass (FIX-37's first bullet; `claude/v1-fix7-secrets`,
+  head `0e6a9d7b`, merged as `afa45c18`): F-26..F-29, `R/auth-secrets.R` and the secret tests.
+- F-26 (high; secrets-1, secrets-5; `531554be`): `secret_scan()` threw on a parse-valid empty
+  argument of `Sys.getenv()` (`Sys.getenv(x = )`, `Sys.getenv(, 'a')`, with `base::` and inside
+  `quote()`): its branch bound the empty symbol and then evaluated it. `risk_secret_scan()`
+  swallowed the error, so a real read beside it ran unasked in auto, and `artifact_static_check()`
+  failed `peter$app()` with R's raw error. An empty `x` counts as missing, as R reads it: every
+  variable, an environment dump, guarded. A fuzz of about 40 call heads by 12 empty-argument forms,
+  bare, in `quote()` and assigned, went from 48 throws to 0. F-1 (FIX-37) is the independent
+  fail-closed half. Tests: test-auth-secrets.R "an empty argument is read as R reads it and never
+  stops the scan (FIX-37)"; test-secrets-e2e.R "auto refuses a secret read beside an empty argument
+  or of auth.json (FIX-37)".
+- F-27 (medium; secrets-2; `23fa7a5e`): `ps::ps_environ()` and `ps::ps_environ_raw()` return every
+  variable of a process, a launch-time key not yet registered included, but read as nothing: level
+  1, no guard, no source, no taint, so yolo sent such a value over the network with no question. A
+  call or a reference of either is an environment dump (`scan_environ_funs`): level 3, guarded, a
+  source and a taint. Tests: test-auth-secrets.R "ps::ps_environ() and ps_environ_raw() are
+  environment dumps (FIX-37)"; the `ps_environ` row of test-secrets-e2e.R "yolo asks before a
+  command line's or ps_environ()'s secret is sent (FIX-37)".
+- F-28 (medium; V6S-1; `7cad20a8`): a secret read inside a command line (`system('echo $KEY')`,
+  `processx::run('sh', c('-c', 'echo $KEY'))`, `peter$sh(c('cat', '.env'))`) was no source for the
+  secret-to-network question, so with `curl::curl_fetch_memory()` or `download.file()` after it yolo
+  ran it unasked, also split over two `r` calls, though `?gptr_security` promised a question in
+  every mode. When the code starts a process, its strings are read with `risk_env_name_re`: a
+  registered name in any case is `secret_env_registered`, and each word `scan_env_file()` matches a
+  `secret_file`, both sources that taint their names (DEC-14, D-295). The pattern also reads
+  `$env:NAME`, `%NAME%` and Python's `os.environ` and `getenv()`, the reading the guard already
+  applies to command lines. Tests: test-auth-secrets.R "a command line that reads a registered
+  secret or a .env file is a source (FIX-37)"; test-secrets-e2e.R "yolo asks before a command line's
+  or ps_environ()'s secret is sent (FIX-37)" (three one-call sends and a two-call split, answered n,
+  4 questions).
+- F-29 (low; secrets-3; `0e6a9d7b`): gptr's credential store was read unguarded in auto through a
+  computed path (`readLines(file.path(tools::R_user_dir('gptr', 'config'), 'auth.json'))`), so a
+  stored key not yet registered reached R unredacted. `scan_env_file()` also matches a file named
+  `auth.json`, so the read is guarded in `secret_scan()` and `risk_secret_guard()` and asks in auto;
+  `~/.codex/auth.json` too (G6 5.4 case 17 changes from `FALSE` to `TRUE`). Other secret files keep
+  level 3 without the guard (DEC-12, D-295). Tests: test-auth-secrets.R "gptr's credential store is
+  a guarded read, through a computed path too (FIX-37)"; the `auth.json` row of the auto test of
+  test-secrets-e2e.R.
+- Gate decisions with a registered fake key, before and after: `ps_environ` read in auto allow to
+  `ask_human`; with `req_perform()` in yolo allow to `ask_human`; `system('echo $KEY')` with
+  `curl_fetch_memory()` in yolo allow to `ask_human`; `peter$sh(cat .env)` with `download.file()` in
+  yolo allow to `ask_human`; the computed `auth.json` read in auto allow to `ask_human`;
+  `quote(Sys.getenv(x = ))` before `Sys.getenv('KEY')` in auto allow to `ask_human`.
+- Integration: `1244a358` names `ps::ps_environ()` among the environment dumps and `auth.json`
+  (gptr's credential store) among the guarded reads in `?gptr_security` (F-88).
+- Ledger rows closed: V6S-1 (F-28). Deviations: D-295. Open: none.
+
+## FIX-39 - Console: the paste and Ctrl-C tests, terminal reads, dogfood leftovers (2026-10-29, #93)
+- The console lane of the comprehensive fix pass (FIX-37's first bullet; `claude/v1-fix7-console`,
+  head `7fa0d343`, merged as `e2b87be3`): F-30..F-33.
+- F-30 (medium; L-72; `c2dd1ca2`; CI-106): the two FIX-28 pty paste tests of test-console-typing.R
+  picked the fake model's answer by request index and answered "second" to the request the steer was
+  meant to miss; on a loaded runner the Enter sent as soon as the draft showed was read before the
+  run's step boundary, so the steer rode that request as an operator relay and
+  `REQ 1 [one/two/three]` never printed (Ubuntu oldrel-1 at `0c61c453` and `f690afc7`). Both fakes
+  answer any request carrying an operator message with `REQ <n> [<text>]` before the index branches;
+  `delay = 4` stays. The reviewer's index-keyed logging copy failed 3 of 4 runs, the content-keyed
+  copy passed 4 of 4. Tests: test-console-typing.R "a terminal: a paste during an r call is one
+  draft; no marker shows (FIX-28)", "a terminal: after r code reads through readline a paste is one
+  draft (FIX-28)".
+- F-31 (low, plausible; suite-7; `c2dd1ca2`; CI-106): the `TERM=dumb` Ctrl-C test streamed about 400
+  characters every 0.1 s, about 5 s, and sent SIGINT after 0.5 s, so on a slow machine the stream
+  could end before "Paused". The fake's gap is 0.5 s, about 25 s in all; the test aborts, so it
+  never waits that out. Test: test-console-typing.R "TERM=dumb: a line being typed at Ctrl-C is
+  kept, never the menu's (visual round 2)".
+- F-32 (low; console-3; `0f70e19b`; DEC-17): in a T console, `r` code that reads the terminal
+  through `readline()` or `menu()` inside another function shows only the read's prompt; text
+  printed before it shows when the code returns, the typed answer is not echoed, and Ctrl-C at that
+  read aborts the answer instead of pausing it. Documented, no code change (echo during `r` would
+  echo type-ahead into the output, IC-76): the sentence is in `?peter`'s paragraph on typing while
+  peter works, in its roxygen source `R/console-repl.R`. No test (help text; the writer's scratch
+  pty run).
+- F-33 (nit; console-4; `0f70e19b`): `dev/dogfood/p28-console.R`'s `run_scenario()` registers
+  `on.exit(tmux(d, 'kill-server'), add = TRUE)` right after `new-session`, so a scenario error no
+  longer leaves the private tmux server and the R under test running, unreachable once R removed its
+  socket (the L-51 kind of leftover).
+- Verification: the verifier found the lane had committed `man/peter.Rd`, which the plan leaves to
+  the one regeneration (F-143); `7fa0d343` restores the base page without rewriting history, and the
+  integration regenerated it (`20ff7bb3`, FIX-48).
+- Lane runs: 3663 and 3478 passes in the repair's UTF-8, C and installed `console-typing` runs
+  (about 25 minutes on a loaded machine).
+- Ledger rows closed: L-72 (F-30); L-65 gains console-3's case (F-32). Deviations: none. Open: the
+  terminal reads above (L-65).
+
+## FIX-40 - Transcripts: harness export, gptr:: blocks, member costs, sidecars (2026-10-29, #93)
+- The transcripts lane of the comprehensive fix pass (FIX-37's first bullet;
+  `claude/v1-fix7-transcripts`, head `b5fbb66d`, merged as `d55130b6`): F-34..F-48, the `doc-`
+  files.
+- F-34 (medium; transcripts-1; `33432ec7`): `gptr_export()` refused every document that defines a
+  harness (`h = gptr_tailor(peter)`, a transcript's `h_<id> = gptr_tailor(peter, coaching = ...)`)
+  as "unresolved Peter references". A top-level `<name> = gptr_tailor(...)` statement is ordinary
+  code; any other statement naming a head is still refused, as `?gptr_export` says. Test:
+  test-doc-export.R "a harness definition exports as ordinary code, in a script and in a
+  transcript".
+- F-35 (low; transcripts-4, R2-C9, P29-R2; `33432ec7`): `gptr_export()` and `gptr_blocks()` compared
+  a block's `harness=` header with itself, so a coached block whose call was changed to `peter(`
+  read fresh while replay stopped `stale_block`. `doc_head_harness()` passes the header's harness
+  only when its name equals the owning call's head, else none (empty coaching), in export, in
+  `gptr_blocks()` for R, Rmd and qmd and in notebooks; a call of another harness name also compares
+  against none. Tests: test-doc-export.R "a coached harness's block called by peter() is stale for
+  gptr_export()"; test-doc-blocks.R "gptr_blocks() reads a coached harness's block called by peter()
+  as stale".
+- F-36 (low; transcripts-3; `10c24dcc`): a transcript's harness definition and its
+  `# gptr: h_<id> needs ...` flag line, written after a direct R line, fell inside that line's
+  section, so an undo switched the definition off and `source()` stopped at the harness turn.
+  `doc_re_entry` lists both lines. Test: test-doc-replay.R "a harness definition after a direct R
+  line is not part of that line's section".
+- F-37 (low; transcripts-5; `428a9ff2`): one non-UTF-8 byte in a recorded script made every call
+  nested without a word, so each ran live again unrecorded. `doc_locate()` says once per document
+  "The calls in <file> run live and are not recorded: <error>" (not for the IDE finder). Test:
+  test-doc-locate.R "a script that is not valid UTF-8 says once that its calls run live,
+  unrecorded".
+- F-38 (low; transcripts-6; `e9444f07`): S2 answers were keyed by the path relative to the working
+  directory's project and kept in its workspace, so replay from another directory lost `$text`.
+  `doc_s2_home()` keys and keeps them by the document's own project; a document in no workspace
+  keeps the earlier key, and keys do not change when the working directory is in the document's
+  project. Test: test-doc-replay.R "S2 answers are keyed and kept by the document's project,
+  wherever replay runs".
+- F-39 (low; transcripts-8; `b2bb2e17`): recorded fork, team and coach blocks called
+  `gptr_resume()`, `gptr_tailor()` and `peter` unqualified, so a script that calls gptr only through
+  `gptr::` could not replay. Fork and team blocks write `gptr::gptr_resume(block = ...)`, coach
+  blocks `<name> = gptr::gptr_tailor(<start>, ...)` with `gptr::peter` for peter; blocks written
+  before still read. Every new coach block changes its look. Tests: test-doc-blocks.R "a gptr::-only
+  script records gptr::gptr_resume() and replays without gptr attached"; test-doc-coach.R "a coach
+  block replays in a script that calls gptr only through gptr::".
+- F-40 (low; crosscut-2; `33432ec7`): `gptr_export(format =)` was the only `match.arg()` in `R/`:
+  base errors and silent partial matching (`"p"` meant `"peter"`). It uses `check_choice()`, exact,
+  `gptr_error_invalid_argument`. Test: test-doc-export.R "gptr_export() takes `format` exactly and
+  names a non-literal argument it refuses".
+- F-41 (low; live-7; `7c6762ac`): team and fan-out block headers had no `tokens=` or `cost=`, so
+  `gptr_blocks()` listed `NA`; they write their members' sums by the rule turn blocks use
+  (`doc_usage_add()`, `doc_usage_header()`). Test: test-doc-blocks.R "a team block has one line per
+  child, child overlays and export assignments" (extended).
+- F-42 (low; live-3; `e9444f07`): without a workspace `gptr_cache()` neither counted nor cleared the
+  in-memory System 1 cache; `info` counts it and `clear` removes it and returns the count. It resets
+  `the$s1_cache` directly, since calling `s1_cache_swap()` from `doc-replay.R` is an L4 cross-area
+  call the layering test refuses. Test: test-doc-replay.R "without .gptr/, gptr_cache() counts and
+  clears the System 1 answers in memory".
+- F-43 (low; transcripts-7, transcripts decision 1; `b5fbb66d`, `36badf5c`; DEC-19, DEC-20):
+  documented: `?gptr_doc` and `?gptr_source` say only blank lines may separate a call's statement
+  from its blocks (otherwise the call is asked again and the orphaned block's code still runs), and
+  that regenerating a turn leaves later turns' blocks as they are. The lane advised re-asking a
+  dependent turn with `replay = "record"`; under it a fresh block replays (`doc_decide()`), so the
+  integration's `36badf5c` names `replay = "live"` on that call, as the script-as-history guide does
+  (D-300). No test (help text).
+- F-44 (low; V6T-1; `10c24dcc`): a name holding `) ` ended a direct R line's `uses undone` reason
+  early, and the rest read as forged keys (`created=zz`) that switched off an unrelated line.
+  `doc_direct_switch()` writes `)` in those names as `<U+0029>`. Test: test-doc-replay.R "a name
+  holding ') ' in a direct R line's header switches off no other line (V6T-1)".
+- F-45 (low; L-69; `428a9ff2`; DEC-23): a console turn whose prompt interpolates (`{nm}`) got a
+  block without `args=`, so it read fresh but stopped under replay; the values are at hand at record
+  time, so `doc_console_site()` takes the `args=` hash, and the transcript replays with no request.
+  Test: test-doc-replay.R "a console prompt with {name} records its args= hash and replays (L-69)".
+- F-46 (nit; L-60, transcripts-9; `b5fbb66d`; DEC-22): documented: `?gptr_source`'s `model` applies
+  to every `peter()` or harness call the file asks again; `gptr_coach()`, team and fan-out calls
+  keep their models (D-300). No test (help text).
+- F-47 (nit; live-6; `33432ec7`; DEC-21): what raw export admits is unchanged; the refusal names the
+  first non-literal named argument, also through a pipe ("mixed or non-literal Peter expressions
+  (argument `agents`)"), and `?gptr_export` says every named argument must be one literal. Test:
+  test-doc-export.R "gptr_export() takes `format` exactly and names a non-literal argument it
+  refuses" (`agents =`, `budget =`, `envir =`, `.opts =` and a pipeline).
+- F-48 (nit; transcripts-2, R2-U9, P29-R2; `f71509e1`): a sidecar written by an earlier build, whose
+  anchors lack `head`, was silently ignored and export then refused until it was deleted by hand;
+  `doc_sidecar_decode()` accepts an anchor with or without `head`. Test: test-doc-io.R "a sidecar
+  whose anchors have no `head`, as an earlier build wrote it, is applied".
+- Lane runs: `^doc-` 3221 passes at `f690afc7`; 3293 (UTF-8) and 3291 (C) passes, 0 failures, at the
+  lane's head; the six changed files against the installed package 2889 and 2887 passes.
+- Integration: `1a49eebd` (F-96's rewind count in `doc-replay.R`, FIX-43), `36badf5c` (F-43), and in
+  `ee4d16a4` the tailor-and-coach guide's coach block and `route_fanout_run()`'s note write `gptr::`
+  calls (F-39; FIX-47).
+- Ledger rows closed: V6T-1 (F-44), L-69 (F-45), L-60 kept by decision (F-46, D-300). Deviations:
+  D-300 (F-43, F-46). Open: none.
+
+## FIX-41 - Coaching children: results, the Codex hook, the fence; F-58 held back (2026-10-29, #93)
+- The harness-child lane of the comprehensive fix pass (FIX-37's first bullet;
+  `claude/v1-fix7-harness-child`, head `d3bef645`, merged as `02e7dd98`): F-49, F-50, F-54, F-58,
+  F-59, F-65..F-69, F-74 and F-76, `R/gptr-child.R`, `R/cli-codex.R` and `inst/gptr/codex_hook.R`.
+- F-49 (high; cran-1, suite-2; `f651e7e1`; CI-106): on Windows the CRAN-listed test "a confined exec
+  is ephemeral, read-only, without Codex's own tools, and hooked" called the real
+  `pcli_is_windows()`, built the unquoted cmd line and expected the POSIX one, so the CRAN-mode job
+  and two shards failed. It mocks `pcli_is_windows = FALSE`, as its sibling tests do; the Windows
+  jobs on `4cf922a4` pass.
+- F-50 (medium; suite-3, harness-3; `158f0473`; DEC-66): `plain_summary()` printed a whole value
+  before clipping it to 2,000 characters, and `print()` of a long list takes quadratic time, so a
+  long list stalled a coaching child for minutes. It prints under `options(max.print = 200L)`,
+  restored on exit; test-gptr-child.R went from about 195 s to 53 s. Test: test-gptr-child.R "a long
+  list's summary prints only what it keeps".
+- F-54 (medium; R2-C1, R2-C2, P29-4.1-fence-names; `6b99b561`; DEC-30): the fence denied ordinary
+  code that only named `in_dir`, `local_dir`, `with_dir` or `setwd`. A folder changer's name is a
+  move only where R calls it, where `do.call()`, `match.fun()` or `get()` names it, or where the
+  classifier reads it passed on as a value that leaves the project or goes to a folder the code
+  computes; `Set-Location` folds case on every OS (D-297, amends D-284 and IC-86). Test:
+  test-gptr-child.R "the fence reads a folder changer's name as a move only where R calls it".
+- F-58 (low; harness-1; DEC-24): not fixed in this pass. In auto a coaching run can write outside
+  its scratch folder, or move its working folder, through code with a computed path or name.
+  `6879ea8d` denied `dynamic` rows and `file_write` or `file_delete` rows of `path_class` `unknown`
+  in `child_fence_why()`, and the verifier found that it broke its own acceptance check:
+  `write.csv(mtcars, 'out.csv')`, `write.csv2()`, `readr::write_csv()` and `data.table::fwrite()` to
+  a literal path were refused ("it writes only to paths gptr can read"), because the classifier
+  reads a `...`-matched path from every unnamed argument and keeps the worst (test-gptr-child.R
+  failed at its two `write.csv` allow lines). The fix is in `R/perm-classify.R`, which the gate lane
+  owned, so `d3bef645` reverts `6879ea8d` (code and tests) without rewriting history. The lane
+  checked the combination on the gate head `a719a783`: with the classifier half of its cross-lane
+  diff (a named path argument that went unmatched marks `one`; computed candidates drop when some
+  are read; a level tie keeps the worse class), 13 of 13 intended allows held (`write.csv`,
+  `write.csv2`, `readr::write_csv`, `data.table::fwrite`, `write.table`, `saveRDS`, `ggsave`, `png`,
+  `purrr::map(~)`, `across(~)`, `tryCatch(finally =)`) and 7 of 7 intended denials (writes through
+  `file.path(d, ...)`, `readr::write_csv(df, out)`, `file.remove('a', f)`, `do.call(paste0(...))`).
+  `Filter(Negate(is.null), l)`, `sapply(l, Negate(is.na))`, `fun = mean; fun(1:3)`,
+  `match.fun('mean')(1:3)` and `do.call(f, list(1))` keep a `dynamic` row and would be refused, as
+  DEC-24 decides for functions the code computes (D-297).
+- F-59 (low; harness-2, R2-U11; `dad1e9c9`; DEC-27): Codex runs its hooks through its shell,
+  PowerShell on Windows, which reports the hook's deny status 2 as 1, a failed hook that does not
+  block. The hook prints Codex's `PreToolUse` decision `deny` with its reason on stdout and exits 0,
+  which no shell changes, and keeps its log line; the Windows refusal and comments name PowerShell
+  or cmd.exe, and the Windows test runs the hook through `powershell.exe` (D-297, IC-88). Tests:
+  test-cli-codex.R "the Codex hook writes its start line and lets a run use only gptr's tools", "the
+  hook command in the argv runs through the shell, logs its start, denies a tool".
+- F-65 (low; R2-U1; `4ba49c5b`): when the value used up the reader's node budget, `objects` became a
+  summary and `child_read()` refused the whole result; `child_result_new()` orders `objects` before
+  `value`, so only the value can become a summary. Test: test-gptr-child.R "a value that uses up the
+  reader's count leaves the objects a list".
+- F-66 (low; R2-U2; `e5553df9`, `4cf692e1`): a forged refusals table with a nested column made
+  `child_merge()` fail inside `child_exit()`, and `gptr_coach()` hung; the result is read and merged
+  inside one `tryCatch()`, and a merge error ends the job with an error result. Test:
+  test-gptr-child.R "a result the parent cannot merge ends its job with an error, and the slot moves
+  on".
+- F-67 (low; R2-U3, R2-U4, R2-U7; `24352217`): the plain transport refused or silently changed
+  values it cannot carry exactly. `plain_exact()` sends as its printed summary any value the plain
+  keys cannot rebuild exactly (dimnames, ordered or NA-level factors, data frames with their own row
+  names, NA names, bytes or invalid text), and a POSIXct keeps an absent `tzone`; a base-R row
+  subset (`d[d$x > 2, ]`) travels as its summary, a tibble as a plain data frame. Test:
+  test-gptr-child.R "a value the reader cannot rebuild exactly travels as its summary, never
+  refused" (UTF-8 and C).
+- F-68 (low; R2-U5; `48a045b7`): two objects whose labels collide were bound under one name in the
+  child; `child_bind()` renames a repeated label (`Xx`). Test: test-gptr-child.R "two objects under
+  one label are bound under two names".
+- F-69 (low; R2-U6; `22b073b8`): the 64 MiB fallback ran only after the whole result encoded, so a
+  value over R's string limit lost the result; a result that cannot be encoded falls back to the
+  same summary result. Test: test-gptr-child.R "a run's result R cannot encode keeps all but its
+  value and objects" (the over-2 GiB case by a mock).
+- F-74 (low; L-34; `fdbe802c`; DEC-67, CI-106): test-cli-codex.R bounded wall time with 2x headroom;
+  the joined-agents test uses 6 s agents and a bound of 0.8 x 4 x 6 = 19.2 s. Test: test-cli-codex.R
+  "a fake CLI joins two inline agents and two workers on one reactor (INFRA-16)".
+- F-76 (nit; harness-7; `c0e0100a`): `child_files()` dropped the text of a large UTF-8 file when the
+  200,000-byte read ended inside a character; it drops up to three trailing bytes until the text is
+  valid UTF-8, and a NUL byte still means no text. Test: test-gptr-child.R "a large UTF-8 file keeps
+  its text when the read stops inside a character" (UTF-8 and C).
+- Lane runs: `^(gptr-child|cli-|doc-coach)` 1971 (UTF-8) and 1961 (C) passes; test-gptr-child.R
+  against the installed package 244.
+- Ledger rows closed: none of the ledger's (the P29 review rows R2-C1, R2-C2, R2-U1..R2-U7 and
+  R2-U11 are this lane's). Deviations: D-297. Open: F-58 (D-297's steps to land it); F-59's
+  PowerShell test has not run on a Windows host with Codex (a release step).
+
+## FIX-42 - Coaching calls: data written once, child secrets, wrappers, the notice (2026-10-29, #93)
+- The harness-coach lane of the comprehensive fix pass (FIX-37's first bullet;
+  `claude/v1-fix7-harness-coach`, head `67f3d83a`, merged as `816deebe`): F-51..F-53, F-55..F-57,
+  F-60..F-64, F-70..F-73 and F-75, in `f2c37d1f` (`R/gptr-coach.R` and four small places of
+  `R/gptr-child.R`) and `67f3d83a` (`R/gptr-tailor.R`).
+- F-51 (medium; suite-4; `f2c37d1f`; DEC-31): `gptr_coach()` left the caller's object referenced, so
+  the next in-place edit copied it (REF 1 to 11), against the copy-safety rule IC-41 names for every
+  gateway entry point. The holders were lists of the values (`coach_task()`'s values and objects,
+  `child_job_check()`'s `c()` per job), the `vapply()` closure in `gptr_coach()`'s frame that holds
+  the dots and, in the installed byte-compiled package only, compiled `for` loops that call
+  functions in frames holding the dots: they keep the frame, so a forwarded promise stays forced.
+  `coach_task()` keeps only each object's dot, site and label; `coach_objects_write()` reads each
+  value by name or `...elt()` into one list, refuses objects that cannot be serialised, writes one
+  RDS file that every run reads (job field `file`, not `objects_file`, which `job$objects` would
+  match in part) and clears the list in place; those frames make no closure and loop with `while`.
+  The data is serialised once per call instead of once per run. No limit to record in IC-41.
+  Evidence for 03 section 6.4's rule R3: a compiled `for` loop whose body calls a closure, in a
+  frame holding `...`, keeps that frame after return; the same code with `while`, or uncompiled,
+  does not. Tests: test-copy-gateway.R "no copy of big after gptr_coach('Count big.', big)", direct
+  and through a wrapper (real child processes), under `load_all()` and against the installed
+  package; 40 MB probes went from one copy to none.
+- F-52 (medium; suite-5; `f2c37d1f`; CI-106): "coaching spend reaches gptr_usage(), each request
+  once" compared global totals that drop when R collects earlier tests' sessions, and failed the
+  connections lane; it mocks `live_all()` to an empty list before the first reading, and the
+  usage-log check still pins the six rows.
+- F-53 (medium; secrets-4; `f2c37d1f`, integration `c9a60b0c`; DEC-13): coaching children started
+  with an empty vault, so a registered secret inside the shipped data reached each child's model
+  raw. The lane shipped every redacting vault entry, active, in the spec; the integration found that
+  this put provider keys in each child's spec file, against IC-70, and let a child resolve a
+  credential its environment was not given, so `c9a60b0c` sends only the values the jobs and their
+  objects file hold (`secrets_held()`, the one scan the worker uses too), registered inactive
+  (D-295). Test: test-gptr-coach.R "a registered secret in a run's objects reaches its child's model
+  redacted (D-295)" (a real child whose fake model logs its requests holds `[secret:COACH_FAKE_KEY]`
+  and no raw key); `c9a60b0c`'s "a coaching child is sent only the registered secrets its jobs hold
+  (D-295, IC-70)" (an unrelated registered key does not travel, and a coach job holding none gets
+  none).
+- F-55 (medium; R2-C4, P29-4.1-args-check; `f2c37d1f`): `coach_args_check()` refused tools and
+  presets from settings plugins or user extension files until a session had synced them; it calls
+  `plugins_sync()` first, as a session start does. Test: test-gptr-coach.R "a tool of a user
+  extension file is known before any session synced it".
+- F-56 (medium; R2-C7; `67f3d83a`): a harness called through a wrapper whose dots combine with fixed
+  list-like arguments sent the literal `{name}` prompt and the label `..2`. `harness_expand()`
+  writes a literal dot as written (the prompt is still interpolated in the caller, as plain
+  `peter()` through a wrapper does) and names a context dot by `peter()`'s label, not when that
+  label is a `peter()` formal or a `..i` fallback; it holds the caller's frame, so it loops with
+  `while` and makes no closure. Tests: test-gptr-tailor.R "a wrapper that forwards the prompt and
+  context keeps interpolation and labels"; copy rows for a harness called directly and through a
+  combining wrapper in test-copy-gateway.R.
+- F-57 (medium; R2-C8, P29-4.1-text-paths; `67f3d83a`; DEC-26): the load notice did not show
+  `extensions` or `plugins` given as text, although a file path there is R code sourced on every
+  call; it always lists them (D-297, amends D-289). Test: test-gptr-tailor.R "the notice names
+  extension files, plugins and a replaced system prompt".
+- F-60 (low; harness-5; `67f3d83a`; DEC-26): a shared harness could fix `prompt`, demoting the
+  person's prompt to a context object, or `.opts$system`. `harness_formals()` leaves `prompt` out,
+  so it is refused when a harness is made and when a loaded spec is checked, while `coach_task()`
+  uses `peter()`'s own formals and `gptr_coach(prompt = ...)` still works; a fixed `.opts` holding
+  `system` is in the notice (D-297). Test: as F-57 (`gptr_tailor(peter, prompt = ...)` is
+  `gptr_error_invalid_argument` naming `prompt`).
+- F-61 (low; harness-4; `67f3d83a`): `print()` and `HARNESS.md` showed a registered secret held in a
+  fixed argument; the fixed-argument lines pass through `redact()`. Test: test-gptr-tailor.R "a
+  registered secret in a fixed argument is redacted in print() and HARNESS.md".
+- F-62 (low; harness-6; `f2c37d1f`): a budget fixed in the starting harness capped the runs only;
+  coach and judge jobs take `args$budget %||% start$args$budget`, which `coach_args_check()` also
+  validates. Test: test-gptr-coach.R "a budget fixed in the starting harness also caps the coaches
+  and the judge".
+- F-63 (low; R2-C5, P29-4.1-wrapper; `f2c37d1f`): identifier arguments passed through a wrapper of
+  `gptr_coach()` resolved in the wrapper's frame; `coach_task()` resolves them itself, with
+  `harness_resolve_args()`'s duplicate check, and forces an identifier through `...elt(k)`, its own
+  promise. Test: test-gptr-coach.R "peter() arguments are taken from their own frames when
+  gptr_coach() is wrapped".
+- F-64 (low; R2-C6, P29-4.1-spend; `f2c37d1f`; DEC-29): coaching spend charged inside a run is kept
+  in memory and lost on resume. DEC-29 asked to persist it with `usage_add_durable()`, which cannot
+  take these rows: it accepts only rows the receiving session owns (`usage_own_check()`, "Invalid
+  durable usage identity"), and `rebuild_usage()` has no entry for another process's rows. So the
+  limit is stated, in `coach_charge()`'s comment, 04 IC-84 and 08 section 3.3. No test (verified by
+  hand that `usage_add_durable()` refuses a child's row).
+- F-70 (low; R2-U8; `f2c37d1f`, `67f3d83a`): a coaching skill shadowed a skill the person registered
+  after the harness was made, and `gptr_coach()` then failed late with a misleading error.
+  `harness_factory()` skips such a coaching skill with one notice (the person's skill wins), and
+  `gptr_coach()` checks the starting coaching (`coaching_validate()`) before any process starts.
+  Tests: test-gptr-coach.R "a coaching skill whose name you took since is refused before any process
+  starts"; test-gptr-tailor.R "a coaching skill takes no skill's name..." (now one notice and the
+  person's skill text).
+- F-71 (low; R2-U10, userdocs-13, P29-4.1-hidden-chars; `67f3d83a`; DEC-25): documented:
+  `?gptr_tailor`'s `coaching` says no control, zero-width or other format characters, so a script or
+  emoji sequence that needs a joiner cannot appear (D-297). No test (the refusal tests unchanged).
+- F-72 (low; crosscut-10; `67f3d83a`): the `gptr_tailor()` example printed a 20-line notice holding
+  a deparsed provider; `harness_source()` shows a `gptr_provider` as `<provider id>`, in
+  `HARNESS.md` too. Test: the test-gptr-tailor.R notice test (exactly "This harness loads code or
+  loosens checks:" and "model = <provider fake>").
+- F-73 (low; userdocs-5; `f2c37d1f`): `?gptr_coach` promised a record from a replayed call;
+  `@return` says a replayed call returns the recorded coaching with an empty record, and the block's
+  `## Decision:` line holds the decision. No test (help text).
+- F-75 (nit; userdocs-1, cran-5, suite-10, crosscut-9, P29-4.5-example-limit; `f2c37d1f`; DEC-56):
+  the example comment says it starts 7 R processes and takes several seconds; `check-examples.R`
+  exempts it from its 5 s limit (F-136, CI-106) and `cran-comments.md` states its time (F-142).
+- Integration: `c9a60b0c` (F-53); `ee4d16a4` (the tailor-and-coach guide: a harness fixes every
+  `peter()` argument but the prompt, a fixed budget caps runs, coaches and the judge, the notice
+  shows plugins and a replaced system prompt; FIX-47).
+- Ledger rows closed: none of the ledger's (the P29 rows R2-C4..R2-C8, R2-U8, R2-U10 and the P29-4.1
+  items are this lane's). Deviations: D-295 (F-53), D-297 (F-57, F-60, F-71). Open: coaching spend
+  inside a run is not in the session file (F-64); an inline function forwarded through a wrapper
+  (`(function(...) peter(...))('x', big, extensions = function(gptr) NULL)`) keeps the wrapper's
+  frame and copies `big` on the next edit, for `peter()` and a harness alike (`resolve_identifier()`
+  evaluates in an `ident_mask()` whose parent is that frame); `worker_ship_objects()` reads with
+  `mget()`, whose list keeps the caller's objects referenced (rule R6), so a worker's objects are
+  copied on the next edit: two copy-safety rows for the ledger.
+
+## FIX-43 - Runtime: the supervisor, output caps, checkpoint scope, !code output (2026-10-29, #93)
+- The core-runtime lane of the comprehensive fix pass (FIX-37's first bullet;
+  `claude/v1-fix7-core-runtime`, head `c8b3928d`, merged as `5f1c788f`): F-77..F-80, F-93..F-98,
+  F-124, F-130 and F-132.
+- F-77 (high; runtime-1; `9bb91144`; DEC-34): rewinding the turn that made the session's first
+  supervised spawn closed processx's two supervisor FIFOs, so every later supervised spawn failed
+  with "invalid connection" until R restarted. `ckpt_cons()` leaves out FIFO connections named
+  `tempdir()/supervisor_std*`, and keeps closing the person's own. Test: test-ckpt-objects.R
+  "rewinding the turn that first started the process supervisor leaves it working".
+- F-78 (medium; runtime-2; `b5e37da7`): `clean_terminal()`'s `gsub('[^\n\r]*\r')` was quadratic and
+  froze R, uninterruptibly, on one line of about 5.5 MB or more; each line holding a CR is split on
+  CR and keeps its last frame, with no regex (a 1e7-character line in 0.05 to 0.2 s). Test:
+  test-utils-text.R "clean_terminal() is linear on one long line".
+- F-79 (medium; runtime-3; `f71e1794`, `ac8df375`; DEC-32): child output was captured with no size
+  cap; 150 MB cost 2.2 GB of memory. `proc_run()` and `bridge_run()` kill the tree at 64 MiB per
+  stream and keep the head and tail with a status line (D-298). Tests: test-proc-spawn.R "proc_run()
+  output past 64 MiB keeps its head and tail and a status line"; test-bridge-sh.R "peter$sh() output
+  past 64 MiB ends with the status line". On hosted Windows the first failed: text-mode output
+  arrives with CRLF line ends, which `proc_run()` keeps for its caller (`cf4570d8`, CI-106).
+- F-80 (medium; runtime-4; `cf4bc4cf`, `b16f8059`, `c8b3928d`; DEC-33): the checkpoint baseline
+  copied `.env`, `.Renviron` and key files into gzip blobs that the secret guard and `gptr_scrub()`
+  do not cover; `protected` and `control` paths are never stored (D-298; `?gptr_rewind`,
+  `?gptr_security`). The verifier found an expectation for a `.claude/worktrees` project that tested
+  F-10's classification, which only passes with the gate lane; `c8b3928d` removed it, since the
+  gate's D-292 test covers it. Test: test-ckpt-files.R "protected and control files are never
+  stored; their rows have no pre-image" (`.env`, `.Renviron` and `.ssh/id_rsa`).
+- F-93 (low; console-1; `137d00c9`, `71f74795`; DEC-16): the person's own `!code` output was held
+  until each top-level expression ended and cut at the console width while R printed at width 100;
+  it prints as R prints it, and only the agent's `r` tool keeps the margin (D-296, amends D-245).
+  Integration `ed1095e2`: `repl_passthrough()`'s note says the same. Tests: test-eval-core.R "the
+  person's own code prints as R does, the agent's in the console margin (D-296)"; the `!code` tests
+  of test-console-repl.R.
+- F-94 (low; console-2; `c82c28eb`, `5d2b1c68`): in a T console, keys typed while in-process `r`
+  code ran were lost when Ctrl-C paused it; `tty_call()` adds `noflsh` to the console's `stty` set,
+  as a D console's modes keep them. Integration `216ca99e`: test-console-typing.R's fake `stty`
+  expects `noflsh` (seven expectations failed without it). Tests: test-utils-options.R "a T
+  console's modes keep what is typed at SIGINT, as a D console's do"; test-console-input.R
+  `keys_mode`.
+- F-95 (low; runtime-5; `cf4bc4cf`): the blob store was resolved from the working directory, so a
+  rewind after `setwd()` found no stored copy; `ckpt_store_root(root)` is anchored to the tracker's
+  root. Test: test-ckpt-files.R "a rewind after setwd() uses the store of the session's project".
+- F-96 (low; runtime-6; `e45da9bb`): `gptr_rewind()` read a successful line as a failure when a name
+  held "failed" or "conflict"; a line counts as failed only when `: ` is followed directly by
+  `not `, `conflict` or `failed`, and a failed artifact relaunch reads "not relaunched (current
+  version n)". Integration `1a49eebd`: the transcript's `# /rewind:` note (`doc_on_session_tree()`)
+  uses the same rule, and test-doc-replay.R's report takes real `<item>: <action>` lines. Tests:
+  test-ckpt-rewind.R "names holding 'failed' or 'conflict' do not make a full rewind partial"; the
+  undo test of test-artifact-app.R.
+- F-97 (low; runtime-7; `cf4bc4cf`, `ac8df375`, `b16f8059`, integration `ebb1335a`): file
+  checkpoints failed for non-ASCII names in a C locale. `ckpt-files.R` passes paths to base file
+  functions and `path_class()` through `fs_path()`, and `path_norm_one()` (`R/utils-paths.R`, the
+  gate lane's file) takes `fs_path(path)` and returns `as_utf8(out)`, so `path_inside()`,
+  `path_rel()` and `path_class()` take such a name. Tests: test-ckpt-files.R "a file with a UTF-8
+  name is captured and restored in a C locale"; test-utils-paths.R's `ebb1335a` case.
+- F-98 (low; runtime-8; `aa8acaea`): documented: `?gptr_options` says `gptr.r_timeout` stops R code
+  that is computing, not `Sys.sleep()` or `system()` in a non-interactive R. No test (help text).
+- F-124 (nit; runtime-12; `cf4bc4cf`): documented: `?gptr_rewind` says directories are not tracked,
+  so a rewind leaves the empty directories a turn created. No test (help text).
+- F-130 (nit; runtime-11; `b875f048`, `19ff6a5e`): each owned-browser launch left two raw Chrome log
+  files in `tempdir()`; `release()` removes them once the browser has settled. Tests:
+  test-artifact-app.R "closing the owned browser leaves none of its log files";
+  test-artifact-browser-launch.R.
+- F-132 (nit; providers decision 1; `aa8acaea`; DEC-41): documented: the idle timeout stays 90 s,
+  and `?gptr_options` suggests `options(gptr.idle_timeout = 300)` for high-effort reasoning on
+  OpenAI or Google (D-300). No test (help text).
+- Lane runs: a scratch merge with the gate lane's diff, 0 failures over the lane's, `perm-` and gate
+  regexes in UTF-8 (10868 passes) and C (10752).
+- Ledger rows closed: none of the ledger's. Deviations: D-296, D-298 (F-79, F-80), D-300 (F-132).
+  Open: the checkpoint baseline's classing cost, 0.31 ms a path (5,000 files: `path_class()` 1.57 s
+  of 2.16 s, of which `path_class_key()`'s per-path `grepl()` calls are 0.96 s, against 0.017 s for
+  the same patterns over the whole vector), which a vectorised `path_class_key()` would remove.
+
+## FIX-44 - Extensions and MCP: plugins, trust, merging; the security pages (2026-10-29, #93)
+- The core-ext lane of the comprehensive fix pass (FIX-37's first bullet; `claude/v1-fix7-core-ext`,
+  head `fe4fa4f3`, merged as `09b627b5`): F-81..F-83, F-87..F-90, F-107..F-120 and F-123, in
+  `68293d01` (MCP), `6ecaaa3b` (extensions), `09c90f90` (settings), `cd41c94c` (help pages) and
+  `fe4fa4f3` (the repair).
+- F-81 (medium; extensions-1; `68293d01`): MCP servers from a `peter(plugins =)` plugin failed with
+  "No MCP server named X is configured" whenever a call did not already hold a connection; the
+  tool's `execute()` passes `ctx$session`, and `mcp_invoke()` hands it to `mcp_conn_get()`. Test:
+  test-mcp-namespace.R "a session plugin's MCP server is reached by a call that connects (F-81)".
+- F-82 (medium; extensions-2; `68293d01`): `gptr_mcp_add()` and `gptr_mcp_remove()` at project scope
+  rewrote the trust-gated `.gptr/mcp.json` without fingerprinting it again, so the project lapsed
+  and the new server read untrusted; `mcp_file_update()` takes `trust_holds()` before its locked
+  write and calls `trust_carry()`, as `settings_write()` does. `helper-arch.R`'s
+  `arch_contract_edges()` admits the two L4 to L6 edges (D-299, IC-52). Test: test-mcp-config.R
+  "gptr's own project mcp.json writes keep the project trusted (F-82)"; test-arch-layers.R.
+- F-83 (medium; extensions-3; `68293d01`; DEC-45): other applications' project MCP files
+  (`.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.pi/mcp.json`) were
+  outside the trust fingerprint, so a pulled change kept trust and a project with only `.mcp.json`
+  was never asked about; they are trust-gated, and `?gptr_trust` names them (D-299). Test:
+  test-mcp-config.R "the MCP files of other harnesses in a project are trust-gated (F-83)".
+- F-87 (medium; suite-6, cran-6; `68293d01`; CI-106): the progress re-arm test left 400 ms between a
+  600 ms server step and a 1 s idle timeout; it uses `timeout = 3`, eight steps of 600 ms and 4000
+  ms steps for the call without progress. Test: test-mcp-client.R "progress re-arms the idle timer;
+  without progress a call times out and is cancelled".
+- F-88 (low; gate-10, gate-11, V6S-4, V6G-1, V6G-N3, gate-4, records decision 2, crosscut decisions
+  2 and 3; `cd41c94c`; DEC-3, DEC-4, DEC-6, DEC-51, DEC-52, DEC-63): `?gptr_security` states the
+  limits this pass keeps: `glue` and `cli` template braces are not read; a command line in a quoted
+  string reads as one the code runs (`system("echo 'rm -rf /'")` reads 4); a function with no row
+  (`gptr_step()`, `gptr_wait()`) reads level 1, and `gptr_export()` from model code is refused at
+  run time; a `.env` read through `lapply()` or from a copy is not a secret read; a name assigned
+  with `<<-` or `assign()` counts outside a function or `local()`; Python's `getcwd()` restore idiom
+  asks; a deleter handed to `lapply()`, `Map()` or `purrr::walk()` reads its paths as computed
+  (level 3); a worker's result is read with `readRDS()` (a risk before R 4.4; exports are R objects
+  by design); plan mode can still use the network (`gptr_models(refresh = TRUE)`,
+  `gptr_providers(check =, check_login =)`) (D-294, D-300). No test (help text; `tools::checkRd`
+  clean).
+- F-89 (low; userdocs-2; `cd41c94c`): `?gptr_egress` listed only what a `peter()` request contains;
+  a bullet says what each coach receives (the task, the current coaching and, per run, its answer, a
+  summary of its value and objects, its written files' text and its transcript, up to 50,000
+  characters each), that the judge gets the task and the final runs' deliverables, and that the
+  coach model can differ. No test (help text).
+- F-90 (low; userdocs-3; `cd41c94c`): `?gptr_security` said nothing about coaching and claimed that
+  Codex's shell runs in every mode; "Sub-agents, workers and child processes" says `gptr_coach()`
+  sessions are unattended R processes of your account, not a sandbox, fenced, with Codex's own shell
+  off (the Codex sentence says "Elsewhere"), and "Data at rest" says a recorded coach block keeps
+  the coaching it chose, which can quote data values. No test (help text).
+- F-107 (low; extensions-4; `68293d01`): a cached-era connection read any -32602 answer to
+  `tools/call` as a stale era, made a fresh handshake and sent the call twice; `mcp_request()`
+  leaves `tools/call` out of the stale-era retry. Test: test-mcp-client.R "an ordinary tools/call
+  error is not read as a stale era (F-107)".
+- F-108 (low; extensions-5; `68293d01`): one listed tool without a name broke `mcp_signature()`,
+  `gptr_mcp(tools = TRUE)` and the `<mcp>` section for the cache's 24 hours; `mcp_tools()` drops
+  such entries with a `builtin:mcp` diagnostic. Test: test-mcp-client.R "a listed tool without a
+  name is dropped with a diagnostic (F-108)".
+- F-109 (low; extensions-6; `68293d01`, repaired in `fe4fa4f3`): foreign servers that differed only
+  in env, headers or cwd were merged and shared one cache key; the merge compares transport,
+  command, args, url, env, headers and cwd, and the cache key adds env and cwd (stdio) or headers
+  (HTTP) when present (D-299). The verifier found that an empty `env` or `headers` object
+  (`"env": {}`, as `claude mcp add` writes it) then kept a copy apart (`cursor_a`, `cursor_h`,
+  `also_in` empty): `mcp_map_chr(list())` is `character(0)`, so the fingerprint differed; the repair
+  fingerprints only fields of nonzero length, as `mcp_cache_key()` already ignored them. Tests:
+  test-mcp-config.R "foreign servers that differ only in env, headers or cwd stay apart (F-109)",
+  "an empty env or headers object is the same server as none (F-109)".
+- F-110 (low; extensions-7; `68293d01`): renaming a collision to `<harness>_<name>` could collide
+  again and lose the third server; renames add `_2`, `_3` until unique. Test: test-mcp-config.R
+  "colliding foreign names are made unique; no entry is lost (F-110)".
+- F-111 (low; extensions-8; `68293d01`): an untrusted project's entry took the name of the user's
+  own server; in an untrusted project every project source ranks after every user source, gptr's
+  own-file shadowing applies only between its two files, and an untrusted copy of a user's server
+  merges into the user's startable entry (D-299). Test: test-mcp-config.R "an untrusted project's
+  servers never take a user server's name (F-111)" and the foreign-config tests' expectations.
+- F-112 (low; extensions-9; `68293d01`): a tool whose schema changed kept its old `peter$mcp` member
+  for the life of the process; `mcp_spec_ensure()` rebuilds the member when its tool changed. Test:
+  test-mcp-namespace.R "a member follows its tool's schema after a refresh (F-112)".
+- F-113 (low; extensions-10; `6ecaaa3b`; DEC-44): a user skill and a settings plugin's skill of one
+  name tied at rank 3, so `gptr_skills()` showed the user's while the prompt served the plugin's;
+  settings plugins enable and list at rank 5 (D-299). Test: test-ext-plugins.R "a user skill wins
+  over a settings plugin's skill of the same name (F-113)".
+- F-114 (low; extensions-11; `6ecaaa3b`; DEC-47): an extension file that failed to load was never
+  retried, even after `gptr_reload()`; it keeps only the loaded entries, and `?gptr_reload` says a
+  failed file loads again at the next session start (D-299). Test: test-ext-load.R "gptr_reload()
+  retries an extension file that failed to load (F-114)".
+- F-115 (low; extensions-12; `09c90f90`): nested values of object settings were not validated
+  (`budget = list(cost = 'cheap')` failed the next run as an internal error); the budget, skills,
+  mcp, subagents, plot, doc and cache records name their fields' types, and
+  `settings_check_object()` validates the present ones, naming the field (`budget.cost`). Test:
+  test-gptr-config.R "object settings check the values of their known fields (F-115)".
+- F-116 (low; extensions-13; `68293d01`): the TOML reader appended per character, so long strings
+  were quadratic (40 KB in 2.3 s, 100 KB in 14 s); basic and multi-line basic strings paste each run
+  once (0.07 s and 0.19 s). Test: test-mcp-config.R "long TOML strings are read in linear time
+  (F-116)".
+- F-117 (low; extensions-14; `68293d01`): a stdio server's literal env value under a secret-like
+  name was not registered as a secret, unlike the same value in an HTTP header; any such value of 8
+  or more characters is. Test: test-mcp-client.R "a literal env value under a secret-like name is
+  registered (F-117)".
+- F-118 (low; extensions-15; `6ecaaa3b`; DEC-46): a relative `plugins` entry was resolved against
+  R's working directory; `./` and `../` entries are joined to the project root, as `skills.paths`
+  entries are (`?gptr_config`; D-299). Test: test-ext-plugins.R "a relative plugins entry is found
+  from the project root (F-118)".
+- F-119 (low; extensions-16; `68293d01`): a live MCP connection outlived the configuration it was
+  built from; `mcp_conn_get()` reuses one only when its spec equals the registry's current one, and
+  a removed server errors. Test: test-mcp-config.R "a live connection follows its server's
+  configuration (F-119)".
+- F-120 (low; crosscut-3; `6ecaaa3b`): `gptr_registry('')` and `gptr_spec('', name)` failed with
+  base R's "invalid first argument"; `kind_get()` requires a non-empty string and signals
+  `gptr_error_unknown_kind`. Test: two expectations in test-ext-specs.R "gptr_spec() builds a
+  classed spec carrying api_version".
+- F-123 (low; userdocs-9; `cd41c94c`): no reference page said a skill can be registered as text;
+  `?gptr_skills` says `gptr_spec("skill", name, description =, text =)` registers one without files,
+  which `gptr_skills()` does not list. No test (help text).
+- Lane runs: 3854 expectations in each locale after the repair (3895 with `arch-layers` in the
+  writer's run).
+- Integration: `1244a358` adds the gate's and the secrets lane's readings to `?gptr_security`;
+  `ee4d16a4`'s NEWS says a project's MCP servers, also in other applications' project files, start
+  only in a trusted project (F-83).
+- Ledger rows closed: V6S-4 (F-88, documented). Deviations: D-294 (F-88's forms), D-299, D-300
+  (F-88's decisions). Open: none.
+
+## FIX-45 - Sessions and the agent loop: worker secrets, locks, compaction (2026-10-29, #93)
+- The core-agent lane of the comprehensive fix pass (FIX-37's first bullet;
+  `claude/v1-fix7-core-agent`, head `4cf96c11`, merged as `0623015f`): F-84..F-86, F-91,
+  F-102..F-106, F-121, F-122, F-127, F-128, F-131 and F-134.
+- F-84 (medium; agent-1; `41849ec9`; DEC-37): grep of one named file had no size cap, so a file over
+  R's 2^31-1 string limit failed `readChar()`, counted as binary and answered "No matches found"
+  with no notice; `grep_candidates()` applies the directory branch's 20 MB cap to a single named
+  file, so the skipped-file note appears. No streaming search. Test: test-tool-search.R "a skipped
+  file over 20 MB is reported ..." (a 21 MB sparse file searched alone; red before the fix).
+- F-85 (medium; live-1; `f4e98ed7`; DEC-48): documented: `?gptr_parallel` said members evaluate in
+  their own environment, but a member without `envir =` runs in the caller's, shared with the other
+  members, so same-name assignments overwrite each other; the help says so and its example members
+  pass `envir = new.env()`, the default unchanged. Test: test-subagent-team.R "gptr_parallel()
+  members share the caller's environment unless given envir =".
+- F-86 (medium; secrets-4; `991414dc`, integration `c9a60b0c`; DEC-13): a registered secret inside
+  an object shipped to a worker reached the child's model raw, since the child's vault was empty.
+  The worker spec carries, as `secrets`, the parent's registered secrets whose values occur in the
+  shipped objects (serialised with the worker refhook and searched), and `worker_main()` registers
+  them inactive before its session starts; the field is left out when nothing matches. Shipping
+  every registered value, as DEC-13 said, would put keys in `spec.rds`, which IC-70 forbids
+  (test-secrets-e2e.R "worker spec and result files and worker output carry no key" failed with that
+  version). `c9a60b0c` moves the scan to `secrets_held()`, which coaching children use too (D-295).
+  Test: test-subagent-worker.R "a registered secret in a shipped object reaches the worker's model
+  redacted" (a real worker; its fake answered "raw" before, "redacted" after; only `CFG_TOKEN`
+  travels).
+- F-91 (low; live-2; `dd4bbeaa`, integration `7a7d66ea`): after the first threshold compaction the
+  next waited for 20% of the window, so `compact_at = 20000` on a 1e6-token window let the context
+  grow to 64k and more; it waits for 20% of the threshold (D-298). An offline probe with 3000-word
+  answers over 20 turns compacted once before, and after at turns 7, 13 and 19 with `tokens_before`
+  24421, 24520 and 24536. test-prompt-compact.R's known-window expectation moved from 47000 to 7300.
+  On the no-Suggests CI lane the test compacted once in ten turns, since the turn of each compaction
+  depends on the system prompt's size, which differs with the packages installed; `7a7d66ea` runs up
+  to 30 turns for the second compaction, which the old wait still misses (CI-106). Test:
+  test-compaction-acceptance.R "compact_at bounds the context after the first compaction on a large
+  window".
+- F-102 (low; agent-2; `dc0dd1fa`; DEC-39): a backward wall-clock step during a request made
+  `seconds` negative, and `usage_row()` failed the run, losing the billed answer; durations are
+  clamped with `max(0, ...)` in `run_response()`, `run_abort_usage()`, `compact_charge()` and
+  `s1_log_usage()`. Test: test-agent-run.R "a backward clock step during a request keeps the answer
+  with seconds 0".
+- F-103 (low; agent-3; `dc0dd1fa`; DEC-40): bare status numbers in `retryable_pattern` matched
+  inside other numbers, so a definitive 400 quoting `max_tokens 1500` was retried twice; they are
+  one alternative anchored by digit boundaries,
+  `(?<![0-9])(?:429|500|502|503|504|520|524)(?![0-9])`. Test: test-agent-run.R "status numbers in an
+  error text match only as whole numbers" (a status-400 fake makes 1 request, 3 before).
+- F-104 (low; agent-4; `7fea5e2d`, integration `0a3a6cd2` and `541ca003`; DEC-38): an idle attached
+  session touches its pid file only while a run is live, so after 24 h idle a second process could
+  resume it without `split_brain`. `lock_is_live()` treats a holder its pid and creation time prove
+  alive as live whatever its heartbeat's age; the 24 h age applies only to a holder that cannot be
+  checked (D-298, amends IC-59). `ckpt_foreign_lock()` still skipped a pid file older than 24 h, so
+  `ckpt_gc()` could delete blobs a live idle holder references; `0a3a6cd2` applied the rule there
+  and `541ca003` writes it with the L0 helpers `proc_pid_valid()` and `proc_identity()`, since
+  `ckpt-files.R` (L4) may not call P06's lock helpers (the layering test failed). Tests:
+  test-session-live.R "a live holder keeps its lock after 24 h idle; an unverifiable one does not";
+  test-ckpt-files.R "pruning in one process keeps the blobs another live process's session
+  references" (extended).
+- F-105 (low; agent-5; `124d7fc4`): `gptr_sessions()` read only the first and last 64 KiB of a
+  session file, so a long `AGENTS.md` or a turn of many tool calls left the title or the turns `NA`;
+  `session_file_summary()` widens each window (64 KiB, 256 KiB, 1 MiB, 4 MiB) until it holds a user
+  line, and a cut header widens too. Test: test-session-store.R "gptr_sessions() finds the title and
+  turns past the first and last 64 KiB".
+- F-106 (low; agent-6; `1f1f68d7`): the checkpoint's `<files>` took an edit's `path` only, missing
+  the files a patch envelope names; `extract_state()` takes them from the result's `details$files`.
+  Test: test-prompt-compact.R "the files a patch envelope changes are the checkpoint's modified
+  files".
+- F-121 (low; live-4; `39e87b62`; DEC-49): documented: `?gptr_usage` says that on claude-cli models,
+  billed to a Claude plan, the dollar figures are the CLI's API-equivalent estimate, not a charge,
+  and that cost limits use them (D-300). No test (help text).
+- F-122 (low; live-5; `f4e98ed7`): documented: `?gptr_parallel` says its members are nested calls
+  that record nothing, so a history document holding one cannot replay or export it, while
+  `agents =` and `parallel =` make a recorded team. No test (help text).
+- F-127 (nit; agent-7; `7a17cf2c`): a worker member's team heading named its proxy model
+  `worker/worker`; `session_child_reports()` uses the model the child's `gptr.subagent` entry names,
+  as the console's start line does (D-188). Test: test-session-object.R "a worker member's team
+  heading names the model it calls".
+- F-128 (nit; crosscut-4; `fb34fc3c`, `4cf96c11`): `header$mode` matched `header$model` in part in
+  `replay_mark()`, and `op$move` matched `move_to` in `patch_apply()` (warnings under
+  `warnPartialMatchDollar`, also for an update without a move); both read by exact name. Tests:
+  test-session-object.R "replay_mark() reads the header's mode by its exact name"; test-tool-edit.R
+  "a patch update, with or without a move, reads no field by a partial name".
+- F-131 (nit; userdocs-11; `17be4ed4`): `?peter` and the Ollama local-only refusal spelled
+  "acknowledgement" in an en-US package; both say "acknowledgment", and the `inst/WORDLIST` entry is
+  gone (`spelling::spell_check_package()` clean).
+- F-134 (nit; live-8; `124d7fc4`): `gptr_sessions()` listed a live session that stopped on its
+  budget as interrupted, from the file's tail; a live row takes its status from the live session.
+  Test: test-session-store.R "gptr_sessions() shows a live session's own status, such as budget".
+- Lane runs: 8970 passes in each locale over the lane's files.
+- Ledger rows closed: none of the ledger's. Deviations: D-295 (F-86), D-298 (F-91, F-104), D-300
+  (F-121). Open: internal error texts in `R/proc-spawn.R` and `R/http-reactor.R` still say
+  "acknowledgement" (tests match them; not user documentation, and the spell check is clean).
+
+## FIX-46 - Providers: stream ends, stream ids, cache writes, retry delay (2026-10-29, #93)
+- The core-prov lane of the comprehensive fix pass (FIX-37's first bullet;
+  `claude/v1-fix7-core-prov`, head `1883c702`, merged as `a768e72b`): F-92, F-99..F-101, F-125,
+  F-126, F-129 and F-133.
+- F-92 (low; L-34, L-48; `1883c702`; DEC-67, CI-106): three absolute wall-clock bounds had under 5x
+  headroom. test-http-sse.R's INFRA-23 guard allows 5 s of CPU, as the other linear-time guards do,
+  retitled "in linear time (INFRA-23)" (0.24 s locally, 1.34 s on macOS CI); test-subagent-team.R
+  "gptr_parallel() members run concurrently, max_active at a time" compares the three members'
+  request start times (a range under 2 s; with `max_active = 1` the range is 5.05 s and fails) in
+  place of a 5 s team wall time; test-proc-windows-backpressure.R's cold stdin-writer controls keep
+  the 2 s bound only for outcome `timeout` and get 20 s otherwise (the plan named the `blocked`
+  case, but the echo case with outcome `timeout` needs 2 s, and the `io` cases, where CI-88 saw the
+  saturation timeouts, need the room). No `skip_on_ci()`.
+- F-99 (low; providers-1; `295664b3`): completions' `on_tool()` looked a call up by stream index and
+  never compared ids, so a server that numbers every call 0 merged `call_b`'s arguments into
+  `call_a`; a delta whose non-empty id differs from the block's opens or finds its own block. Test:
+  test-provider-openai-completions.R "two tool calls that share a stream index but not an id stay
+  two calls".
+- F-100 (low; providers-2; `af5b34b2`): with an unwritable `cache/s1` a classifier call sent its
+  requests and then aborted in the cache write, losing the answers and the usage row; the cache,
+  salt and `.gitignore` writes are best effort. A salt that cannot be stored still serves the one
+  call, not the plan's `""`, so no record is ever keyed unsalted (IC-70). Test: test-s1-cache.R "an
+  unwritable cache keeps the answers and the usage row of the call" (skips on Windows and where a
+  0555 folder stays writable).
+- F-101 (low; providers-3; `8366c603`): a 200 reply to a stream request that was no event stream (a
+  gateway's JSON error, a whole completion, a portal page) reached no normaliser, so every adapter
+  ended with a network-class "stream ended" error, lost the server's text and re-sent twice.
+  `stream_http()` counts the SSE units it pushes and keeps the body's first 200 bytes, and
+  `stream_sse_end()` ends a body that held no event and is not only keep-alive comments with a
+  provider-class condition (status 200) quoting them, which is not retried. Test:
+  test-provider-registry.R "a 200 reply that is not an event stream ends with its text and is not
+  retried".
+- F-125 (nit; providers-4; `8366c603`): the splitter's flushed tail, an event cut before its blank
+  line, ended as a provider parse error that is not retried, while a stream cut between events ended
+  as a retryable network failure; the tail is pushed only when its data parses as JSON, else the
+  normaliser's `finish()` ends the stream as cut. Test: test-provider-anthropic.R "a stream cut
+  inside its last event ends as a retryable network failure".
+- F-126 (nit; providers-5; `b80199b2`): `options(gptr.max_retry_delay = Inf)` raised
+  `gptr_error_invalid_argument` at the first failure classification; the `.Machine$double.xmax` cap
+  is dropped, so `Inf` waits out any `retry-after`, and two tests that rejected `Inf` accept it.
+  Test: test-http-retry.R "retry limits and attempt counters reject malformed configuration".
+- F-129 (nit; crosscut-11; `a470eb79`): `gptr_providers()` and `gptr_models(provider = 'worker')`
+  listed `builtin:subagents`' `worker/worker` proxy as a ready route; `provider_internal()` names
+  such providers and both listings leave them out. Test: test-provider-registry.R "the sub-agent
+  worker proxy is listed neither as a provider nor as a model".
+- F-133 (nit; providers decision 2; `04d7241c`; DEC-42): the Mistral profile sent
+  `max_completion_tokens`; it sends `max_tokens`, as Mistral's reference documents. The untested
+  chat-completions routes are not advertised and the compat table is not widened. Test:
+  test-provider-registry.R "the Mistral profile sends max_tokens, as Mistral's reference documents".
+- Ledger rows closed: L-34 and L-48 (F-92, with F-74 in FIX-41). Deviations: none. Open: none.
+
+## FIX-47 - The cheat sheet, the guides, the README and NEWS follow the pass (2026-10-29, #93)
+- The docs lane of the comprehensive fix pass (FIX-37's first bullet; `claude/v1-fix7-docs`, head
+  `22590aa9`, merged as `1851579c`): F-141 and F-144..F-150; F-142 and F-143 are FIX-48's.
+- F-141 (medium; P29-handoff 4.4, userdocs-8, L-26; `5c2e319b`, `7a66ff3d`; DEC-58): the cheat sheet
+  printed 3 pages at a 7.2 pt body, and the committed PDF had no tailor, coach or harness text. It
+  prints 2 pages at an 8 pt body with one type system (body, `h2` and `dt code` in ratio, the SVG
+  text scaled through one `--fig` variable), every column ending 2 to 8 px above the page's bottom
+  edge (at 8.1 pt the console column overflows by 20 px). About a quarter of the text is cut, every
+  function family kept; every claim was checked against the help pages (`context = "none"` names
+  what it leaves out, `gptr_blocks()` lists its statuses), and the untested chat-completions routes
+  are no longer listed (DEC-42). Test: dev/release/tests/test-pkgdown.R checks that the PDF carries
+  each of the sheet's https links (2 failures on the old PDF); 2 PDF pages, no element too wide, and
+  no horizontal overflow at 375, 1000 and 1500 px in light and dark.
+- F-144 (low; live-1, live-3, live-4, live-5, userdocs-5, transcripts-7, transcripts decision 1,
+  providers decision 1, R6-REG-3; `22590aa9`, integration `ee4d16a4` and `ee8a9322`): the guides
+  follow this pass's code and help changes. teams-and-background: members get `envir = new.env()`, a
+  member without it shares the caller's environment, and `gptr_parallel()` records nothing while
+  `agents =` and `parallel =` do (F-85, F-122; the gptr-orchestration skill's example too, a file no
+  lane owned); system-one: without `.gptr/` the cache is held in memory for the R session (F-42);
+  language-models: claude-cli's dollar figures are API-equivalent estimates a cost budget counts
+  (F-121), and high-effort reasoning may need `options(gptr.idle_timeout = 300)` (F-132);
+  tailor-and-coach: a replayed coaching call has an empty `$record` and the decision is the block's
+  `## Decision:` line (F-73); script-as-history: only blank lines may separate a call from its
+  block, and a later turn is re-asked with `replay = "live"` on that call (F-43); NEWS: `setwd()` or
+  `withr::local_dir()` to a computed directory still asks in auto and yolo, while `here::here()` of
+  literal parts and `with_dir()` do not (F-6). `ee4d16a4`: the guide's coach block writes
+  `gptr::gptr_tailor()` (F-39), a harness fixes every `peter()` argument but the prompt, a fixed
+  budget caps runs, coaches and the judge, and the load notice shows plugins and a replaced system
+  prompt (F-57, F-60, F-62); NEWS names the trust-gated MCP files (F-83). `ee8a9322`:
+  `inst/WORDLIST` takes "cli" (`?gptr_security`, F-88) and "subcommand" (`?gptr_permissions`, F-22),
+  which the release spell check flagged after the merges. Test: `precompute.R` knits the 15 guides
+  with 0 problems; `check-files.R` news, readme and pkgdown 0 problems; the spell check clean.
+- F-145 (low; PV-4(a); `22590aa9`; DEC-54): the README links two guides by Gianmarco Bellucci's
+  names, which the vignettes did not use; their titles, `VignetteIndexEntry` lines and 19 link texts
+  in 13 sources read "Typed decisions" and "Record, replay and export", file names and URLs
+  unchanged. Test: no old link text left in `vignettes/` or `README.Rmd`; `check-files.R` pkgdown
+  and readme pass.
+- F-146 (low; userdocs-4; `22590aa9`; DEC-18): documented: `/retry` after `/undo` resends a turn's
+  `!` notes only when that turn is the latest message sent, as NEWS and the console guide now say.
+  No code or test.
+- F-147 (low; userdocs-6; `596e838b`): the README's coaching example says first that a
+  `gptr_coach()` call runs the task several times (4 runs and 3 coach sessions by default) and takes
+  minutes. Test: `precompute.R --readme`.
+- F-148 (nit; PV-1; `22590aa9`): token-efficiency takes getting-started's sentence: the model
+  receives size-limited descriptions, previews and tool output that may include data values, while
+  its R tool computes on the object.
+- F-149 (nit; L-61; `22590aa9`; DEC-55): nine NEWS 1.0.0 bullets compared with unreleased builds;
+  they state the 1.0.0 behaviour, the two 0.7.0 comparisons and the hint for a GitHub development
+  build's `.gptr/settings.json` kept. Test: `check-files.R` news; the release test-news.R.
+- F-150 (nit; userdocs-10; `8312e818`): the shiny-bslib and high-performance-r skills cited
+  unshipped research reports in their metadata; the two blocks are gone. Test:
+  test-skill-discover.R, test-subagent-backends.R and test-artifact-app.R pass (883 tests in UTF-8,
+  C and installed).
+- Ledger rows closed: PV-4 (a) (F-145), PV-1 (F-148), L-61 (F-149), and L-26's cheat sheet PDF
+  (F-141). Deviations: none. Open: none.
+
+## FIX-48 - Records, the one regeneration and cran-comments of the fix pass (2026-10-30, #93)
+- The records lane of the comprehensive fix pass (FIX-37's first bullet), last after the merges:
+  F-142, F-143 and F-151..F-168, on `4cf922a4` (`dev/`, `cran-comments.md` and the regenerated
+  files).
+- F-143 (medium; P29-handoff 4.5): the one regeneration after every file set merged. `man/peter.Rd`
+  gained F-32's sentence at the integration (`20ff7bb3`); `dev/ci/isolated-check.R document` then
+  leaves `man/` and `NAMESPACE` as they are; `dev/release/precompute.R` knitted the 15 guides with 0
+  problems, seven changing only in output lines (session and harness ids, dates, token counts,
+  object sizes; `ddd84502`), and `precompute.R --readme` renders `README.md` unchanged.
+  `pkgdown/assets/cheatsheet.html` changed after its PDF was printed (`7a66ff3d`, five blank lines
+  inside panels), so `dev/release/cheatsheet-pdf.R` printed it again: 2 pages, the text
+  `pdftotext -layout` reads identical to the last print. `check-docs.R`, `check-files.R all` and
+  `check-examples.R` (61 pages, the slowest `gptr_coach` at 4.36 s, exempt) report 0 problems.
+- F-142 (medium; R6-CRAN-3, L-40; DEC-56, DEC-60, DEC-61): `cran-comments.md` was stale on every
+  measured number. It now gives the CRAN-mode check of this head (local macOS,
+  `R CMD check --as-cran` under `env -i` with `NOT_CRAN` unset and CRAN's timing thresholds: Status
+  OK with no NOTE in 144 s, `testthat.R` [20s/20s], FAIL 0 SKIP 954 PASS 3466, both manuals) and of
+  CI on `4cf922a4` (Ubuntu R-devel [33s/33s], its check 256 s of 480; Windows release 92 s, its
+  check 494 s of 600), "all but 12" of the R files (covr over the 35-file list at `f690afc7`), the
+  installed size by platform (8.0 Mb on macOS, 7.7 Mb on Ubuntu R-devel, 7.6 Mb on Windows: R 5.7 to
+  6.1 Mb, doc 1.3 to 1.4 Mb), R 4.2's NOTE with its job's 11.1 Mb (that job, like every full-suite
+  job, keeps the package source, `R_KEEP_PKG_SOURCE=yes`), and the `gptr_coach` example's time
+  (about 4 s idle, up to 8 s loaded, exempt from the local 5 s gate as `--as-cran` exempts
+  `\donttest{}`). win-builder, R-hub and the reverse-dependency date stay with the release steps:
+  they must run on the final tarball (DEC-61).
+- F-151 (medium; records-1): `dev/HANDOFF.md` and `dev/PROGRESS.md` name P29 (`gptr_tailor()` and
+  `gptr_coach()`, D-273..D-290) and this pass (FIX-37..FIX-48, CI-106, D-291..D-300), with the open
+  items and the release steps.
+- F-152 (medium; records-2): the plan checks failed at the index step: 04 section 14.1 listed P29's
+  two exports, which no `@export` block of the prose plan carries, and 05 had no P29. 14.1 says in
+  one sentence that P29 adds `gptr_tailor` and `gptr_coach` (section 15.11), and 05 has P29 in its
+  chain and table (3 R files). `dev/ci/check-plans.py` passes with no error finding (the counts are
+  in Checks below).
+- F-153 (medium; records-3, P29-handoff 4.2): the gateway refreeze is D-291, with the text of the
+  P29 handoff's section 4.2 in 04 IC-85 and IC-52 and a sentence in 04 section 9.3, 03 section 6.19
+  and 08 section 3.1; the `tools = "-write"` edge is documented (DEC-28).
+- F-154 (medium): this entry, FIX-37..FIX-47, CI-106 and D-291..D-300; every F id of the plan is
+  named in one of them.
+- F-155 (medium): `progress/open-findings.md` is closed: every row fixed (with its F id), kept by a
+  decision (its D id) or open (why), with the rows this review adds.
+- F-156 (medium; cran-2, crosscut-8, userdocs-7, L-27..L-33, L-71; DEC-59): HANDOFF's Remaining
+  lists the release steps in order: the final checks, CI and PR #93's text, the live re-runs, the
+  merge and the pkgdown deploy (the README links `articles/tailor-and-coach.html`, a 404 until
+  then), the hosted checks and cran-comments on the final tarball, `main`'s CI, the cleanup, the
+  maintainer's checkout, the submission, the report.
+- F-157 (low): the contract follows the code: 04 IC-52 (trust-gated MCP files,
+  gptr's own MCP writes, the refreeze), IC-57 (tool-name rules and `peter$` members), IC-59 and
+  section 11.4 (lock age), IC-83 (the notice, `prompt`), IC-84 (the budget, the order, the F-64
+  limit), IC-86 (the job's `file`, `secrets`, the fence's folder rule), IC-88 (the hook's JSON
+  decision), the compaction floor row, sections 2.2 (the `model_refused` row), 7.18, 10.1 and 11.9
+  (MCP merging, plugin ranks, cache keys), IC-70 (the worker's `secrets`, the System 1 cache writes)
+  and the `helper-arch.R` row; 03 sections 6.8.1 (loops, listings, moves, restored directories,
+  `here::here()`, the computed-command refusal), 6.11, 6.16 and 6.19; 08 sections 3.1, 3.3, 3.5 and
+  3.7; plan P29's interfaces 2 and 8; and `Amended by` lines in D-211, D-245, D-262, D-284 and
+  D-289, as the conventions keep superseded entries. IC-41 needs no change, since F-51 found no
+  inherent holder. F-58 being held, IC-86 and 08 limit 4 do not say the fence refuses computed paths
+  or functions.
+- F-158 (low; records-4, R2-U12, P29-4.5-example-limit): 08's "Not yet verified" Codex items are
+  marked verified (D-274, D-276); D-283's "(live, pending)" is gone; 00-index gives the live counts;
+  `progress/P29.md` names `pcli_codex_coach_check()`, its example time and exemption, its check, and
+  an Open line (P29h deferred; the live tests to be run again after this pass).
+- F-159 (low; records-5): `dev/README.md` lists P29's plan, spec 08 and `progress/P29.md`, with 31,
+  12 and 54 files.
+- F-160 (low; records-6, crosscut-6; DEC-53): 04 section 6's title, IC-01 and section 10.9 carry no
+  export count (NAMESPACE is the one count); `gptr_export` is in 03 section 4.4 and 04 section 6.4.
+- F-161 (low; records-7; DEC-63): 08's "Separate items for the maintainer": the control-variable
+  item is marked fixed (FIX-36, D-272) with its current cite, and the worker's `readRDS()` is a
+  ledger row, documented in `?gptr_security` (F-88, D-300).
+- F-162 (low; crosscut-7): 04 section 2.2 gains `doc_export`, `io` and `state_restore` and the
+  warnings `state_restore` and `cli_sandbox`.
+- F-163 (low; L-6): FIX-32 and D-267 say that a computed-name `Sys.getenv()` counts as a secret read
+  and asks in auto.
+- F-164 (nit; records-8, L-26): D-281's fence list and D-279's count are edited in place, D-270's
+  and D-271's `- Why:` lines are folded into Rule, and CI-105 names #92's merge `880e7ea4`; the long
+  #93 entries stay (DEC-64).
+- F-165 (nit; providers-6; DEC-43): 08 section 3.3 says every chat model request goes through
+  `provider_stream()`, and that System 1 classifier calls do not (D-300).
+- F-166 (nit; V6T-2): FIX-29 and D-264 say that control characters inside the model's own code reach
+  the transcript.
+- F-167 (nit; V6C-4, V6C-5): D-264's Tests line names test-console-repl.R's round 6 lone-CR test;
+  V6C-5 needs no action.
+- F-168 (nit; PV-4(b); DEC-57): not done. CLAUDE.md and AGENTS.md are the maintainer's: DEC-57
+  records that only the maintainer aligns their line 3 and the Peter rationale with Gianmarco
+  Bellucci's wording, and an agent's request does not authorise an edit there. The text is in the
+  ledger row.
+- Checks, on the records commits: `testthat::test_dir("dev/release/tests")` with `NOT_CRAN=true`, 14
+  files, 64 tests, FAIL 0 SKIP 0 PASS 300; `spelling::spell_check_package()` "No spelling errors
+  found."; `dev/ci/check-plans.py` passes, 29 plans, 1444 blocks, no error finding (info 838, warn
+  462: four more than before the records, names of this pass's code that 04 now gives and no plan
+  defines, as for P29's prose plan), 770 R blocks with 0 problems, no lints; `check-files.R all` and
+  `check-files.R cran-comments` 0 problems. On the edited `dev/*.md` files the docs-cleanup `fmt.py`
+  changes no line this pass wrote (the files that were not fmt-clean stay so elsewhere) and
+  `lintfmt.py` reports no finding on them, its counts at or below the base's. No R or test file
+  changed.
+- Deviations: D-291, D-300. Open: F-168 (the maintainer's).
+
+## Task CI-106 - CI time limits, the example limit, plan checks, three CI fixes (2026-10-30, #93)
+- The tests-ci lane of the comprehensive fix pass (FIX-37's first bullet; `claude/v1-fix7-tests-ci`,
+  head `5f0f18b1`, merged as `ce074126`): F-135..F-140, with the three test fixes the merged head's
+  CI needed and the test-only items of other lanes.
+- F-135 (high; suite-1, L-46; `8db39c66`; DEC-66): P29's test files added about 540 s to the serial
+  CI lanes: run 40957198857 cancelled the Ubuntu no-Suggests and `LC_ALL=C` lanes at their 45-minute
+  limit, connections reached its 60, and macOS used 56.5 of its 60 minutes. Following CI-96,
+  R-CMD-check.yaml gives no-Suggests and C-locale 60 minutes and connections and macOS 75, and
+  test-zzz.R's "the hosted jobs have time for the whole suite (CI-19)" pins all four (4 expectations
+  red before, 149 of 149 after). Parallel workers stay off for these lanes (CI-97). F-50 (FIX-41)
+  removed about 400 of the 540 s. On `4cf922a4` the lanes took 46.0 (no-Suggests), 42.5 (C locale),
+  61.2 (connections) and 54.7 (macOS) minutes.
+- F-136 (low; userdocs-1, cran-5, suite-10, crosscut-9, P29-4.5-example-limit; `644918d7`; DEC-56):
+  `check-examples.R` held `gptr_coach`'s `\donttest{}` example (4 s idle, 6 to 8 s loaded) to its 5
+  s limit, which `R CMD check --as-cran` does not apply to it; `ex_run_all()` skips the limit for
+  `rel_donttest_pages()`, and the 120 s process timeout stays. Test:
+  dev/release/tests/test-examples.R adds a slow page, still reported, and a `\donttest{}` page named
+  `gptr_coach`, not (68 of 68 with test-docs).
+- F-137 (low, plausible; runtime-9; `4babf2b7`): the memory sampler of
+  `helper-proc-backpressure.R`'s `bp_run()` waited only 50 ms for proof that a process was dead
+  after `ps_memory_info()` failed; on macOS an exiting process denies its memory until it is a
+  zombie (30 to 38 ms at load 13, longer under load), so test-proc-rscript-native.R could stop with
+  "Could not measure owned process memory". The backoff runs to 1 s (1, 5, 10, 25, 50, 100, 250, 500
+  and 1000 ms). Test: `dev/ci/check-bp-memory-death.R` pins the schedule (19 checks; 3 red before);
+  test-proc-rscript-native.R passed 3 of 3 under a 16-process busy loop at loads of 130 to 165.
+- F-138 (nit; crosscut-5; `a42d4d1d`; DEC-50): `R/zzz.R`'s `imports_used()`, P01 scaffolding that
+  kept R CMD check from reporting unused Imports before later plans used them, was never called; it
+  and its test are deleted, and `tools:::.check_packages_used()` on the installed package reports
+  nothing. P01's plan still describes it, as that plan's history.
+- F-139 (nit; L-54; `b3313117`): run without the development library, the plan index reported
+  thousands of false undefined-function errors; `dev/ci/check-plans.py` first stops with "testthat
+  must be on the R library path (R_LIBS_USER); no plan checks ran", and `.gitignore` ignores
+  `__pycache__/`. Test: `python3 -I -B dev/ci/test-check-plans.py`, 8 tests.
+- F-140 (nit; userdocs-12; `5f0f18b1`; DEC-53): `dev/release/check-docs.R`'s header said "63
+  exports"; the number is dropped, NAMESPACE being the one count.
+- After the merges, the first CI runs on the integrated head failed three tests, each fixed test
+  first: `cf4570d8` (test-proc-spawn.R "proc_run() output past 64 MiB keeps its head and tail and a
+  status line", F-79: on hosted Windows text-mode output arrives with CRLF line ends, which
+  `proc_run()` keeps, so `startsWith()` and `endsWith()` read it with LF; the commit message names
+  F-98 by mistake); `7a7d66ea` (test-compaction-acceptance.R, F-91: the no-Suggests lane compacted
+  once in ten turns, so the test runs up to 30 turns for the second compaction); `4cf922a4`
+  (test-console-typing.R "a terminal: a question waits a second after the last key; `yes` is no
+  answer (D-243)": with a 10- to 13-character draft the typed word fits the 80-column row and ` END`
+  wraps below a redrawn live row, and the connections lane, with the supervisor off and slower,
+  failed it every run; the test joins the answer's indented rows, split at line ends and carriage
+  returns, and expects the whole relay).
+- The test-only items of other lanes: F-30 and F-31 (FIX-39), F-49 and F-74 (FIX-41), F-52 (FIX-42),
+  F-87 (FIX-44), F-92 (FIX-46).
+- Green: CI on `4cf922a4`, R-CMD-check.yaml (run 41080141377) and Windows-check.yaml (run
+  41080141232), every job passed; the CRAN-mode jobs' checks took 256 s (Ubuntu R-devel, 480 s
+  budget) and 494 s (Windows release, 600 s).
+- Ledger rows closed: L-46 (F-135), L-54 (F-139); L-34, L-48 and L-72 with FIX-39, FIX-41 and
+  FIX-46. Deviations: none. Open: the four serial lanes run 42 to 61 minutes; the maintainer asked
+  for every CI job to end within 20 minutes, which CI-107, a CI redesign by another agent, takes up.

@@ -774,7 +774,7 @@ live session over loopback Streamable HTTP (127.0.0.1, random port, 192-bit bear
 permission gate; httpuv, later and openssl in Suggests) and returns a handle with `$url`, `$token_env`,
 `$config` (client snippets) and `$stop()`.
 
-**Documents and artifacts** (5)
+**Documents and artifacts** (6)
 
 ```r
 gptr_doc(path = NULL, format = NULL, sync = FALSE)
@@ -783,15 +783,18 @@ gptr_source(file, replay = getOption("gptr.replay", "auto"), envir = parent.fram
 gptr_blocks(file)
 gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tmp"))
 gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)
+gptr_export(file, to, format = c("r", "peter"))
 ```
 
-`gptr_doc()` binds a document to the process (explicit consent to write it: its own calls and console calls record
-there, a call in another document needs that document's consent, D-249), shows the binding, or (`sync = TRUE`)
-applies pending blocks of a notebook that was open while recording [IC-45, IC-50].
-`gptr_source()` regenerates stale or live blocks without executing the old block, which base `source()`
-cannot do [14 §4.4.2]. `gptr_blocks()` lists blocks (id, prompt hash, fresh/stale/user-edited/undone, model,
-date, tokens, cost). `gptr_artifacts()` without `id` is a data frame; with `id` it returns a `gptr_artifact`
-handle, opening (`open = TRUE`), relaunching a `version`, or stopping (`stop = TRUE`) it.
+`gptr_doc()` binds a document to the process (explicit consent to write it: its own calls and
+console calls record there, a call in another document needs that document's consent, D-249), shows
+the binding, or (`sync = TRUE`) applies pending blocks of a notebook that was open while recording
+[IC-45, IC-50]. `gptr_source()` regenerates stale or live blocks without executing the old block,
+which base `source()` cannot do [14 section 4.4.2]. `gptr_blocks()` lists blocks (id, prompt hash,
+fresh/stale/user-edited/undone, model, date, tokens, cost). `gptr_artifacts()` without `id` is a
+data frame; with `id` it returns a `gptr_artifact` handle, opening (`open = TRUE`), relaunching a
+`version`, or stopping (`stop = TRUE`) it. `gptr_export()` writes a deterministic copy of a recorded
+document, its blocks' R (`"r"`) or its Peter statements (`"peter"`) (04 section 6.4; D-258).
 
 **Session SDK** (14)
 
@@ -899,7 +902,7 @@ gptr_backend(name, start, poll = NULL, cancel, capabilities = list())
 | Gateway | 1 | `peter` |
 | Setup and status | 10 | `gptr_init`, `gptr_config`, `gptr_env`, `gptr_trust`, `gptr_login`, `gptr_logout`, `gptr_providers`, `gptr_models`, `gptr_permissions`, `gptr_scrub` |
 | Discovery and MCP | 7 | `gptr_skills`, `gptr_agents`, `gptr_plugins`, `gptr_mcp`, `gptr_mcp_add`, `gptr_mcp_remove`, `gptr_mcp_serve` |
-| Documents and artifacts | 5 | `gptr_doc`, `gptr_source`, `gptr_blocks`, `gptr_cache`, `gptr_artifacts` |
+| Documents and artifacts | 6 | `gptr_doc`, `gptr_source`, `gptr_blocks`, `gptr_cache`, `gptr_artifacts`, `gptr_export` |
 | Session SDK | 14 | `gptr_step`, `gptr_wait`, `gptr_steer`, `gptr_cancel`, `gptr_fork`, `gptr_on`, `gptr_parallel`, `gptr_sessions`, `gptr_resume`, `gptr_last`, `gptr_jobs`, `gptr_usage`, `gptr_rewind`, `gptr_checkpoints` |
 | Agent-side | 7 | `gptr_return`, `gptr_describe`, `gptr_prob`, `gptr_risk`, `gptr_prompt`, `gptr_redact`, `gptr_preimage` |
 | Extension API | 8 | `gptr_api`, `gptr_register`, `gptr_registry`, `gptr_reload`, `gptr_check`, `gptr_fake_provider`, `gptr_tool_result`, `gptr_spec` |
@@ -1471,95 +1474,114 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 | 4 | critical: `q()` (denied in every mode and never asked, below), deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], `setwd()`, `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()` to a directory outside the project and `tempdir()` or one the code computes (`session`), a link to a path outside the project (`file.symlink()`, `file.link()`, `Sys.junction()`, `fs::link_create()`, `ln`) [D-262], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
 
 `r` is classified per flagged call by `gptr_risk()` (tables in `inst/extdata/risk-functions.csv` and
-`risk-commands.csv`, extendable by additive `risk_rule` records; a shipped risky-package list (targets, usethis,
-devtools, renv, pak, remotes, fs, gert, git2r, gh, googledrive, pins, `aws.*`, `paws.*`, DBI write verbs, httr/
-httr2/curl request performers) is at least level 2 [18 §2.5 and §7 item 1; IC-54]); gptr's own exports that change
-harness state (`gptr_config`, `gptr_permissions`, `gptr_trust`, `gptr_register`, `gptr_on`, `gptr_mcp_add`, ...)
-are level 4 `control` and also check `run_current()` [IC-53], as are `Sys.setenv()`/`Sys.unsetenv()`,
-`withr::local_envvar()`/`withr::with_envvar()` and a Python `os.environ` write of a variable a registered provider
-reads (its `auth` names and `compat$base_url_env`, so `AWS_REGION` for Bedrock, the `bedrock-converse` key pair, and
-the names the `cli-claude` and `cli-codex` child environments keep, such as `CODEX_HOME`), `GPTR_*`, `*_BASE_URL`,
-R's startup variables or a variable that moves the user config directory or the home
-(`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any letter case, those four R functions
-with a name the classifier cannot read (also the names passed to one handed to `lapply()`, `Map()`, `do.call()` or
-another function the classifier knows calls it, such as `sapply()` or `purrr::map()`; `do.call()` of a `list()` or `c()`
-of base R written out and `rlang::exec()`, of a function written out the code does not bind, are read as the call they
-make), a Python write whose name (a subscript, the first argument of `putenv()`, `unsetenv()`, `pop()`) is not a plain
-string literal (Python code is read as Python joins a line ending in a backslash outside a comment and a parenthesised
-`os.environ`), `readRenviron()` and `dotenv::load_dot_env()` [D-272]; writes
-to control-plane paths (`.gptr/settings*.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `agents/`, the
-user config directory, `.Rprofile`, `Makevars`, git hooks) are level 4 and to instruction files (`AGENTS.md`,
-`CLAUDE.md`, `vignette.Rmd`, skills, prompts) level 3 [IC-54]; `peter$sh/script/bg` by the command classifier;
-`peter$py`/`sql` by token and keyword classifiers [G5 §5]; MCP tools by server annotations (untrusted unless the
-server is trusted: `readOnlyHint` 0, `destructiveHint = FALSE` 2, none 3); nested `peter()` inherits and only
-tightens; `ask` is level 0.
-A path held in a name the code assigns is folded (literals through `c()`, `file.path()`, `paste()`, `paste0()`,
-`normalizePath()`, `path.expand()`, `tempfile()`, `withr::local_tempdir()` and `withr::local_tempfile()`, withr's two
-by the formals the classifier writes for them; the first four with every argument as R
-passes it, so `paste0()`'s `sep` is a part and `collapse` and `fsep` join the parts, and a `collapse` is also read
-as each value when a part holds a name or R's working directory), the worst value counting: a straight-line
-assignment replaces the name's values unless the code also assigns it with `<<-`, one in a branch, loop or call adds
-its value (and, when first, the binding before the code), and a value the code computes or a loop that assigns the
-name makes it computed [D-211]. A call of one of these helpers (or of a `list()` holding withr's variables) whose
-bare name the code binds with `=`, `<-` or `<<-`, as a formal or as a `for` variable, or that the environment the
-code would run in holds as other than base R's, is one the code computes, for a path, a command or a variable name;
-one the code binds otherwise (`assign()`, `delayedAssign()`, `makeActiveBinding()`, `list2env()`, `attach()`, a
-list given to `with()` or `within()`, an assignment into an environment such as `e$paste0 = f`) is read as base
-R's [D-272]. A function body and the code of `local()` (given no environment) bind their own names, followed so from
-their start: a function's other names, its formals included, are ones the code computes, `local()`'s are the names
-around it; after them a name they assign with `<<-` adds its values to that name, and a move in them adds its
-directory to R's [D-262]. R's working directory is held the same way, from `getwd()` when
-the code is read (a function body starts in it and in the one the code has moved R to): `setwd()` and
-`withr::local_dir()` move it (a relative directory given after a move is read in each one R may be in, one the code
-computes when that is, and before any move in the project), and `withr::with_dir()` and `xfun::in_dir()` leave one
-the code computes; `getwd()` reads it and `setwd()` returns the one before, both read as the helpers above are, so
-`owd = setwd("data"); ...; setwd(owd)` stays in the project at the code's top level, in a function body and in
-`local()`, and `setwd("data"); ...; setwd("..")` returns to it; a directory saved in a branch, a loop or another
-call's argument (`tryCatch(finally = setwd(owd))`) is one the code computes [D-262].
-The classifier is advisory and documented as not a security boundary; in-process R cannot be sandboxed [18 §2.5]. It
-reads code as written and does not run it, so code that builds a call, a name, a path or a command at run time, or
-reaches a function by another name, is read only as far as it can see; every form this section names as not read or
-not followed is of that kind, or is code in a file or a package, code another interpreter runs, or a call or
-argument the classifier has no rule for.
+`risk-commands.csv`, extendable by additive `risk_rule` records; a shipped risky-package list
+(targets, usethis, devtools, renv, pak, remotes, fs, gert, git2r, gh, googledrive, pins, `aws.*`,
+`paws.*`, DBI write verbs, httr/ httr2/curl request performers) is at least level 2 [18 sections 2.5
+and 7 item 1; IC-54]); gptr's own exports that change harness state (`gptr_config`,
+`gptr_permissions`, `gptr_trust`, `gptr_register`, `gptr_on`, `gptr_mcp_add`, ...) are level 4
+`control` and also check `run_current()` [IC-53], as are `Sys.setenv()`/`Sys.unsetenv()`,
+`withr::local_envvar()`/`withr::with_envvar()` and a Python `os.environ` write of a variable a
+registered provider reads (its `auth` names and `compat$base_url_env`, so `AWS_REGION` for Bedrock,
+the `bedrock-converse` key pair, and the names the `cli-claude` and `cli-codex` child environments
+keep, such as `CODEX_HOME`), `GPTR_*`, `*_BASE_URL`, R's startup variables or a variable that moves
+the user config directory or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`,
+`USERPROFILE`), in any letter case, those four R functions with a name the classifier cannot read
+(also the names passed to one handed to `lapply()`, `Map()`, `do.call()` or another function the
+classifier knows calls it, such as `sapply()` or `purrr::map()`; `do.call()` of a `list()` or `c()`
+of base R written out and `rlang::exec()`, of a function written out the code does not bind, are
+read as the call they make), a Python write whose name (a subscript, the first argument of
+`putenv()`, `unsetenv()`, `pop()`) is not a plain string literal (Python code is read as Python
+joins a line ending in a backslash outside a comment and a parenthesised `os.environ`),
+`readRenviron()` and `dotenv::load_dot_env()` [D-272]; writes to control-plane paths
+(`.gptr/settings*.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `agents/`, the user
+config directory, `.Rprofile`, `Makevars`, git hooks) are level 4 and to instruction files
+(`AGENTS.md`, `CLAUDE.md`, `vignette.Rmd`, skills, prompts) level 3 [IC-54]; `peter$sh/script/bg` by
+the command classifier; `peter$py`/`sql` by token and keyword classifiers [G5 section 5]; MCP tools
+by server annotations (untrusted unless the server is trusted: `readOnlyHint` 0,
+`destructiveHint = FALSE` 2, none 3); nested `peter()` inherits and only tightens; `ask` is level 0.
+A path held in a name the code assigns is folded (literals through `c()`, `file.path()`, `paste()`,
+`paste0()`, `normalizePath()`, `path.expand()`, `tempfile()`, `withr::local_tempdir()` and
+`withr::local_tempfile()`, withr's two by the formals the classifier writes for them; the first four
+with every argument as R passes it, so `paste0()`'s `sep` is a part and `collapse` and `fsep` join
+the parts, and a `collapse` is also read as each value when a part holds a name or R's working
+directory), the worst value counting: a straight-line assignment replaces the name's values unless
+the code also assigns it with `<<-`, one in a branch, loop or call adds its value (and, when first,
+the binding before the code), and a value the code computes or a loop that assigns the name makes it
+computed [D-211]; a `for` variable takes the folded values of its sequence, and `list.files()` and
+`dir()` with full names and `fs::dir_ls()` of a literal folder name a file in it [D-293]. The source
+of a move (`file.rename()`, `fs::file_move()`, Python's `os.rename()` and `shutil.move()`) is a
+delete, as `mv`'s is [D-293]. A call of one of these helpers (or of a `list()` holding withr's
+variables) whose bare name the code binds with `=`, `<-` or `<<-`, as a formal or as a `for`
+variable, or that the environment the code would run in holds as other than base R's, is one the
+code computes, for a path, a command or a variable name; one the code binds otherwise (`assign()`,
+`delayedAssign()`, `makeActiveBinding()`, `list2env()`, `attach()`, a list given to `with()` or
+`within()`, an assignment into an environment such as `e$paste0 = f`) is read as base R's [D-272]. A
+function body and the code of `local()` (given no environment) bind their own names, followed so
+from their start: a function's other names, its formals included, are ones the code computes,
+`local()`'s are the names around it; after them a name they assign with `<<-` adds its values to
+that name, and a move in them adds its directory to R's [D-262]. R's working directory is held the
+same way, from `getwd()` when the code is read (a function body starts in it and in the one the code
+has moved R to): `setwd()` and `withr::local_dir()` move it (a relative directory given after a move
+is read in each one R may be in, one the code computes when that is, and before any move in the
+project; more than 64 candidates are one the code computes), and `withr::with_dir()` and
+`xfun::in_dir()` leave it where it was [D-293]; `getwd()` reads it and `setwd()` returns the one
+before, both read as the helpers above are, so `owd = setwd("data"); ...; setwd(owd)` stays in the
+project at the code's top level, in a function body and in `local()`, and
+`setwd("data"); ...; setwd("..")` returns to it; a directory saved in a branch, a loop or another
+call's argument (`tryCatch(finally = setwd(owd))`) is one the code computes [D-262]. R moving back
+to a computed directory reads level 3, not 4: the directory of `with_dir()` and `in_dir()`, and a
+name saved with `owd = setwd(d)` or `owd = getwd()` in the scope that restores it, when the code
+binds that name no other way anywhere [D-293]. The classifier is advisory and documented as not a
+security boundary; in-process R cannot be sandboxed [18 section 2.5]. It reads code as written and
+does not run it, so code that builds a call, a name, a path or a command at run time, or reaches a
+function by another name, is read only as far as it can see; every form this section names as not
+read or not followed is of that kind, or is code in a file or a package, code another interpreter
+runs, or a call or argument the classifier has no rule for.
 
-In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command
-(`system2()`'s `args` and `env` too [D-267], `shell.exec()`'s file) the classifier cannot fold to literals: a
-`dynamic` row of these functions whose call text is no `<fn>(): ` reading. Its reason tells the model to run the command with
-`peter$sh()`, whose command meets the deny and ask rules when it runs (6.8.4); the code is not evaluated. Only an
-`r(fn:...)` allow rule covering those rows, matched against them alone, lifts it; plan, manual and edits are
-unchanged and a literal command is read and gated as before. Neither the rules nor the refusal read what a shell
-reads when it runs (its standard input, variables it expands, a script file), and a function the classifier does
-not resolve to these (a computed name, one reached through a list or an environment or handed to a function of
-the user's own) is not refused [D-262].
+In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()`, `shell.exec()`,
+`pipe()`, `processx::run()` or `data.table::fread(cmd =)` call whose command (`system2()`'s `args`
+and `env` too [D-267], `shell.exec()`'s file) the classifier cannot fold to literals: a `dynamic`
+row of these functions whose call text is no `<fn>(): ` reading. Its reason tells the model to run
+the command with `peter$sh()`, whose command meets the deny and ask rules when it runs (6.8.4); the
+code is not evaluated. Only an `r(fn:...)` allow rule covering those rows, matched against them
+alone, lifts it; plan, manual and edits are unchanged and a literal command is read and gated as
+before. Neither the rules nor the refusal read what a shell reads when it runs (its standard input,
+variables it expands, a script file), and a function the classifier does not resolve to these (a
+computed name, one reached through a list or an environment or handed to a function of the user's
+own) is not refused [D-262].
 
-Paths are placed in the project [D-262]: a relative path in R code is read in the project root, and a command in the
-directories it runs in (each `cd` and `env -C` target, a `peter$sh()` call's `wd`, and a `wd` of `processx::run()`
-(also as `callr::run()`) the call or a name the code assigns holds as a string, each read as a `cd` before it; a `wd`
-the code computes is read as the project root), the code a shell or Python runs there (`sh -c`, `python3 -c`,
-`cmd /c` and `pwsh -Command`, whose code is every word after the option, the literal scan) included; a `cd` target is
-read as `git -C`'s directory is (level 1 outside the project, 3 for a secret directory), and is one the shell computes
-only when the shell expands or globs its word (a quoted `'out[1]'` is that folder). The literal commands of
-`sys::exec_wait()`, `sys::exec_internal()` and `sys::exec_background()` are read as those of `processx::run()`. A
-drive-relative path (`D:x`, under drive D's own current directory on Windows) is `outside` on every OS, and the
-second reading of a line with a backslash (sh's) places a word that starts with a drive letter as a relative one, as
-sh does. Since a relative path would then name a file outside the project, `setwd()`, `withr::local_dir()`,
-`withr::with_dir()` and `xfun::in_dir()` to a directory outside the project and `tempdir()`, or to one the code
-computes (`here::here()`, whose root is the here package's, is one), are a level-4 `session` row, which the critical
-guard asks about in auto and yolo, and so is `chdir()` in Python code (`os.chdir()`, `os.fchdir()`,
-`contextlib.chdir()`, which move R's working directory too through 'reticulate': a plain string literal placed in the
-project or `tempdir()` is level 2; a relative one is placed in each directory R may be in, which an `os.chdir()` of a
-literal sets when it is a statement of its own on a line with no indentation, no `:` and no bracket left open, in code
-with no triple-quoted string, and any other `chdir()` adds to); a link `file.symlink()`, `file.link()`, `Sys.junction()`
-or `fs::link_create()` makes to a path outside the project is a level-4 `file_delete` row, as `ln`'s source is.
-`eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as `evalq(x)` does, and so does the
-evaluator's guard (below); `do.call()` and `rlang::exec()` of a function and arguments written out read the call they
-make, in the classifier and in the guard. Not
-followed: the working directory changed in other ways (`usethis::local_project()`, `get("setwd")`, the `wd` of
-`callr::r()`, `env` given `-C` among other short options or as an abbreviated `--chdir`: `env -iC DIR`,
-`env --chd=DIR`), the code another interpreter runs (`Rscript -e`, `perl -e`, `pwsh -CommandWithArgs` or `-cwa`),
-the command of `processx::process$new()`, a path the shell computes (`rm "$f"`, `xargs rm`) and code handed to
-`sh -c` as one word whose spaces are escaped with a backslash or written `$IFS` (`sh -c rm\ -f\ file`; reading it
-needs a tokenizer of its own), all level 3.
+Paths are placed in the project [D-262]: a relative path in R code is read in the project root, and
+a command in the directories it runs in (each `cd` and `env -C` target, a `peter$sh()` call's `wd`,
+and a `wd` of `processx::run()` (also as `callr::run()`) the call or a name the code assigns holds
+as a string, each read as a `cd` before it; a `wd` the code computes is read as the project root),
+the code a shell or Python runs there (`sh -c`, `python3 -c`, `cmd /c` and `pwsh -Command`, whose
+code is every word after the option, the literal scan) included; a `cd` target is read as `git -C`'s
+directory is (level 1 outside the project, 3 for a secret directory), and is one the shell computes
+only when the shell expands or globs its word (a quoted `'out[1]'` is that folder). The literal
+commands of `sys::exec_wait()`, `sys::exec_internal()` and `sys::exec_background()` are read as
+those of `processx::run()`. A drive-relative path (`D:x`, under drive D's own current directory on
+Windows) is `outside` on every OS, and the second reading of a line with a backslash (sh's) places a
+word that starts with a drive letter as a relative one, as sh does. Since a relative path would then
+name a file outside the project, `setwd()`, `withr::local_dir()`, `withr::with_dir()` and
+`xfun::in_dir()` to a directory outside the project and `tempdir()`, or to one the code computes
+(`here::here()` of literal parts is read in the project root [D-293]), are a level-4 `session` row,
+which the critical guard asks about in auto and yolo, and so is `chdir()` in Python code
+(`os.chdir()`, `os.fchdir()`, `contextlib.chdir()`, which move R's working directory too through
+'reticulate': a plain string literal placed in the project or `tempdir()` is level 2; a relative one
+is placed in each directory R may be in, which an `os.chdir()` of a literal sets when it is a
+statement of its own on a line with no indentation, no `:` and no bracket left open, in code with no
+triple-quoted string, and any other `chdir()` adds to); a link `file.symlink()`, `file.link()`,
+`Sys.junction()` or `fs::link_create()` makes to a path outside the project is a level-4
+`file_delete` row, as `ln`'s source is. `eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of
+`quote(x)` read `x`, as `evalq(x)` does, and so does the evaluator's guard (below); `do.call()` and
+`rlang::exec()` of a function and arguments written out read the call they make, in the classifier
+and in the guard. Not followed: the working directory changed in other ways
+(`usethis::local_project()`, `get("setwd")`, the `wd` of `callr::r()`, `env` given `-C` among other
+short options or as an abbreviated `--chdir`: `env -iC DIR`, `env --chd=DIR`), the code another
+interpreter runs (`Rscript -e`, `perl -e`, `pwsh -CommandWithArgs` or `-cwa`), the command of
+`processx::process$new()`, a path the shell computes (`rm "$f"`, `xargs rm`) and code handed to
+`sh -c` as one word whose spaces are escaped with a backslash or written `$IFS`
+(`sh -c rm\ -f\ file`; reading it needs a tokenizer of its own), all level 3.
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never runs,
 such as `q()`, `readline()` (also as `eval(quote(q()))`, `do.call(eval, list(quote(q())))` or
@@ -1894,26 +1916,28 @@ that is UNCERTAIN [G4 fact-check]). `tools.presets` ships defaults selecting `ex
 byte prefix emits `cache_break` naming the first differing element and the culprit handler; the guard resets
 on `session_tree` (rewind) [G4 §4.3.5, G7].
 
-**Compaction** (`compactor` spec, replaceable) [G4 §4.4, G2]:
+**Compaction** (`compactor` spec, replaceable) [G4 section 4.4, G2]:
 `threshold = min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, mo + 2 * r_cap),
-gptr.compact_at = 200000)` with `mo = min(max_output, window / 2)`, the output reserve also sent as `max_tokens`
-[D-250], plus the cold rule (idle beyond the tail TTL and context >= 100k:
+gptr.compact_at = 200000)` with `mo = min(max_output, window / 2)`, the output reserve also sent as
+`max_tokens` [D-250], plus the cold rule (idle beyond the tail TTL and context >= 100k:
 compact first). Checks run between tool rounds, before a new prompt and after an overflow error (one
-compact-and-retry, INFRA-26). The checkpoint request is sent in-conversation (a cache read; `max_tokens =
-2048`; a tool-calling reply is rejected) with G4's verbatim `<compaction_request>` prompt; the compaction
-entry holds the reused project and environment blocks, a `<checkpoint>` (model summary plus harness-extracted
-state: user messages including steering, objects with class, shape and creating code, decisions, files,
-active skills, the plan), the mode and a fresh workspace block; `keep_recent = 0`. No in-place
-micro-compaction (+32% cost and 25 invalidated thinking blocks in G4's simulation). Tool output is bounded at
-entry, with half the budget once the context exceeds half the threshold. For small windows the post-compaction
-floor (static prefix + project instructions + re-injection + checkpoint) is checked at freeze: re-injection
-budgets shrink to 25% of the threshold, and a model whose floor still reaches the threshold is refused for that
-preset; after a threshold compaction the next one waits until the context grew by 20% of the window [IC-71].
-On a CLI route (a model of `type = "cli"`) neither rule triggers, nor the halved tool-output budget: the CLI
-compacts its own conversation; `/compact` still runs, and the next turn starts a fresh CLI conversation from its
-checkpoint [D-203]. A compaction during a foreground run prints one dim line
-with its before and after token counts [D-202]; `/compact` reports the same counts
-(`compacted · 5.7k to 3.2k tokens`, dim as the status line) [D-245].
+compact-and-retry, INFRA-26). The checkpoint request is sent in-conversation (a cache read;
+`max_tokens =
+2048`; a tool-calling reply is rejected) with G4's verbatim `<compaction_request>` prompt; the
+compaction entry holds the reused project and environment blocks, a `<checkpoint>` (model summary
+plus harness-extracted state: user messages including steering, objects with class, shape and
+creating code, decisions, files, active skills, the plan), the mode and a fresh workspace block;
+`keep_recent = 0`. No in-place micro-compaction (+32% cost and 25 invalidated thinking blocks in
+G4's simulation). Tool output is bounded at entry, with half the budget once the context exceeds
+half the threshold. For small windows the post-compaction floor (static prefix + project
+instructions + re-injection + checkpoint) is checked at freeze: re-injection budgets shrink to 25%
+of the threshold, and a model whose floor still reaches the threshold is refused for that preset;
+after a threshold compaction the next one waits until the context grew by 20% of the threshold
+[IC-71, D-298]. On a CLI route (a model of `type = "cli"`) neither rule triggers, nor the halved
+tool-output budget: the CLI compacts its own conversation; `/compact` still runs, and the next turn
+starts a fresh CLI conversation from its checkpoint [D-203]. A compaction during a foreground run
+prints one dim line with its before and after token counts [D-202]; `/compact` reports the same
+counts (`compacted · 5.7k to 3.2k tokens`, dim as the status line) [D-245].
 
 ### 6.12 Evaluator [12 §3-4]
 
@@ -2043,13 +2067,17 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   released with `rm()`; list and S4 pre-images are defused before dropping (R6). After the call, settle: an
   address change means modified; release the rest. At turn end spill the largest held images or drop the
   oldest (defuse + `rm()`), and drop images older than `gptr.undo_turns` (20).
-- **Files.** A content-addressed store (XXH128 via rlang, gzip level 1, deduplicated), a baseline of small
-  source-like files (1 MB each, 100 MB total) at the first mutating call, a pruned walk after each mutating
-  call (per-turn scanning when a walk exceeds 250 ms), pre-capture of predicted literal paths; covers `edit`,
-  `write`, files written by model R code and child processes. Restores are 3-way (user edits after the turn are
-  kept); never through symlinks or hard links; never into `.git` or `R_user_dir()`; only inside the project root and
-  `tempdir()` unless the user confirms each outside path [IC-52]. Blob garbage collection keeps every blob that any
-  session file of the project references and skips while another live process holds a session lock [IC-71].
+- **Files.** A content-addressed store (XXH128 via rlang, gzip level 1, deduplicated), a baseline of
+  small source-like files (1 MB each, 100 MB total) at the first mutating call, a pruned walk after
+  each mutating call (per-turn scanning when a walk exceeds 250 ms), pre-capture of predicted
+  literal paths; covers `edit`, `write`, files written by model R code and child processes, but
+  never a `protected` or `control` path (`.env`, `.Renviron`, keys), whose rewind row reads "no
+  pre-image" [D-298]; the store is anchored to the tracker's project root, not the working
+  directory. Restores are 3-way (user edits after the turn are kept); never through symlinks or hard
+  links; never into `.git` or `R_user_dir()`; only inside the project root and `tempdir()` unless
+  the user confirms each outside path [IC-52]. Blob garbage collection keeps every blob that any
+  session file of the project references and skips while another live process holds a session lock,
+  however old its heartbeat [IC-71, D-298].
 - **Rewind.** `gptr_rewind(s, turn = -1L, ...)` undoes checkpoint records from the leaf to the lowest common
   ancestor (newest first), redoes those down to the target, appends `gptr.rewind` parented at the target (the
   durable leaf; the JSONL stays byte-append-only), hands back the undone prompt, returns `s` invisibly (so it
@@ -2306,24 +2334,30 @@ exactly like `peter()`: class `c("gptr_harness", "function")`, the one-line body
   (`coach_shuffle()`); if it cannot, the first that passed is kept. The result is the starting harness with the
   kept coaching, or unchanged, plus a count-only record.
 
-**The call.** `harness_call()` rewrites the person's call to `peter(...)` with the fixed arguments merged and one
-keyed extension factory (`harness_factory()`) added to `extensions`, and evaluates it in the caller's frame, so
-binding sites, `envir`, interpolation, pipes and `gptr_last()` behave as for `peter()` and the document recorder sees
-the call as written. The factory registers, in the harness's session, the note as the prompt section
-`coaching_<coaching hash>` (T1, order 790), skills that carry their own text, the deny-only policies `coaching` and
-`harness_rules`, and the finish hook that sends the review and the unmet requirements once or twice before peter
-stops. `gateway_register()` loads a factory with the same `gptr_key` once per session, so a continuation does not
-load it twice. Nothing is registered process-wide; a session's policies bind every session started under it [D-280].
+**The call.** `harness_call()` rewrites the person's call to `peter(...)` with the fixed arguments
+merged and one keyed extension factory (`harness_factory()`) added to `extensions`, and evaluates it
+in the caller's frame, so binding sites, `envir`, interpolation, pipes and `gptr_last()` behave as
+for `peter()` and the document recorder sees the call as written. The factory registers, in the
+harness's session, the note as the prompt section `coaching_<coaching hash>` (T1, order 790), skills
+that carry their own text, the deny-only policies `coaching` and `harness_rules`, and the finish
+hook that sends the review and the unmet requirements once or twice before peter stops.
+`gateway_register()` loads a factory with the same `gptr_key` once per session, so a continuation
+does not load it twice; a factory new to a session whose prompt is already frozen refreezes it, so
+the next request carries every loaded harness's coaching [D-291]. Nothing is registered
+process-wide; a session's policies bind every session started under it [D-280].
 
-**Process model.** Every session of a coaching call runs in its own R process, never in the person's.
-`coach_run_jobs()` (`gptr-child.R`) schedules jobs on the worker pool (§6.13), at most two at once per plan account,
-each through the `child` entry of `proc_rscript()` beside `worker_main()`, reusing P19's scheduling, registry
-shipping and provider revival [D-279]. A run's child gets copies of the objects, the resolved arguments and model,
-the person's registry records and rules, and copies of the project's instruction files. It runs unattended
-(`noninteractive_ask = "stop"`, recording off) in a fresh scratch folder that is its working folder and project root,
-with sub-agents inline, a model gate in `provider_stream()` and a process-wide `fence` policy that keeps writes,
-working-folder changes, installs, R child processes, `peter$script()` and login reads out by every route the
-classifier sees [D-284]. A coach's child, and the judge's, gets no registry and no tool, only its prompt, model and
+**Process model.** Every session of a coaching call runs in its own R process, never in the
+person's. `coach_run_jobs()` (`gptr-child.R`) schedules jobs on the worker pool (section 6.13), at
+most two at once per plan account, each through the `child` entry of `proc_rscript()` beside
+`worker_main()`, reusing P19's scheduling, registry shipping and provider revival [D-279]. A run's
+child gets copies of the objects, the resolved arguments and model, the person's registry records
+and rules, copies of the project's instruction files and the registered secrets the objects hold,
+which it registers to redact only [D-295]; the objects are written once per call to one file every
+run reads. It runs unattended (`noninteractive_ask = "stop"`, recording off) in a fresh scratch
+folder that is its working folder and project root, with sub-agents inline, a model gate in
+`provider_stream()` and a process-wide `fence` policy that keeps writes, working-folder changes,
+installs, R child processes, `peter$script()` and login reads out by every route the classifier sees
+[D-284]. A coach's child, and the judge's, gets no registry and no tool, only its prompt, model and
 reply schema. Interrupting the call kills every child.
 
 **Transport.** Parent to child, a job travels as an `.rds` spec in a private 0700 folder (the trusted direction).
@@ -2337,10 +2371,11 @@ for a starting run, whose risk is the ceiling of the finals.
 adapters (§8.3) to sessions that are unsaved, never resumed and run with the CLI's own tools off, and checks every
 session before its reply is kept; plan limits stop the call without retrying [D-274..D-277, D-282].
 
-**Recording.** A harness call is recorded like a `peter()` call with `harness=<name>:<coaching hash>`. A statement
-`<name> = gptr_coach(...)` is recorded as a coach block whose body is one literal
-`<name> = gptr_tailor(<start>, coaching = list(...))` and one line per run; a closed walker rebuilds the harness from
-it on replay with no model, key or process (§6.9.3; `04` §11.5, IC-87).
+**Recording.** A harness call is recorded like a `peter()` call with
+`harness=<name>:<coaching hash>`. A statement `<name> = gptr_coach(...)` is recorded as a coach
+block whose body is one literal `<name> = gptr::gptr_tailor(<start>, coaching = list(...))` and one
+line per run; a closed walker rebuilds the harness from it on replay with no model, key or process
+(section 6.9.3; `04` section 11.5, IC-87).
 
 ---
 

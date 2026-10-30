@@ -66,7 +66,7 @@ P08 -> P09 -> P10 -> P11 ;  P05, P07 -> P12 ;  P08, P09, P12 -> P13
 P08, P11 -> P14 ;  P08, P10 -> P15 ;  P11, P15 -> P16 ;  P08, P10 -> P17
 P10, P11 -> P18 ;  P11, P14, P15, P17 -> P19 ;  P12, P18, P19 -> P20 ;  P06, P14 -> P21
 P10, P11 -> P22 ;  P10, P11, P14, P16 -> P23
-P01..P23 -> P24 -> P25 -> P26 -> P27 -> P28
+P01..P23 -> P24 -> P25 -> P26 -> P27 -> P28 -> P29
 ```
 
 | Plan | Title | Milestone | Depends on | R files |
@@ -99,6 +99,7 @@ P01..P23 -> P24 -> P25 -> P26 -> P27 -> P28
 | P26 | Console and agent fixes | post-M5 | P01-P25 | 1 |
 | P27 | Windows coverage | post-M5 | P01-P26 | 0 |
 | P28 | Codex-style peter() console | post-M5 | P01-P27 | 2 |
+| P29 | Coached harnesses | post-M5 | P01-P28 | 3 |
 
 ## Requirements coverage
 

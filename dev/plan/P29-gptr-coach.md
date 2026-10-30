@@ -60,7 +60,8 @@ so in its report.
    with `text` instead of `path`. Skill lookup sees the calling session's records, and a skill
    body is its `text` when present.
 2. **Keyed factories (T1).** A function factory with attribute `gptr_key` (a string) is loaded at
-   most once per session by `gateway_register()`.
+   most once per session by `gateway_register()`; one new to a session whose prompt is already
+   frozen refreezes it (D-291).
 3. **Classifier (T2).**
    - `risk_classify_r()` results carry `calls` (chr, every function the code calls) and `targets`
      (`list(files = chr)`), including those of workspace functions read through `read_user()`.
@@ -100,7 +101,9 @@ so in its report.
      `child` bootstrap entry. It returns one plain-data result per job, in order.
    - Each job is `list(id, role = "run" | "coach" | "judge", spec, prompt, objects, args, model,
      schema)`. `spec` is a harness spec; `objects` is a named list; `args` are resolved `peter()`
-     argument values; `schema` is for coaches and the judge.
+     argument values; `schema` is for coaches and the judge. The comprehensive fix pass sends a
+     run's objects in one RDS file per call (`file`) and the registered secrets they hold (FIX-42,
+     D-295).
    - Each result is `list(id, status, reason, text, turns, usage, transcript, first_user, risk,
      refusals, unmet, files, plan, limit, checks, error, value, objects)`, plain data only (the
      review fixes added `first_user` and moved `value` and `objects` last; D-290).
@@ -251,7 +254,8 @@ counts (`[ FAIL 0 | WARN 0 | SKIP n | PASS m ]`), and anything left open.
 ## Decisions taken during planning (recorded as D-273 onward at integration)
 
 Recorded as D-273..D-283 in dev/DEVIATIONS.md. The adversarial review's fixes are D-284..D-290
-(dev/progress/P29.md, "Review fixes").
+(dev/progress/P29.md, "Review fixes"). The gateway refreeze is D-291, and the comprehensive fix pass
+amends D-284 and D-289 (D-297) and adds the children's secrets (D-295).
 
 - **D-273 Names.** `gptr_tailor()` and `gptr_coach()`, so that both keep the `gptr_` prefix
   (D-28 unchanged). The object class stays `gptr_harness`, because the object is a harness.
