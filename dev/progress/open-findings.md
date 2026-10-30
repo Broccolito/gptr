@@ -604,45 +604,46 @@ Rows the review of `f690afc7` and its fix pass add, each with its status.
 - **F-58** (low; n/a). In auto a coaching run can still write outside its scratch folder, or move
   its working folder, through code with a computed path or name: the decided fence rule (DEC-24)
   refused writes to literal paths through `write.csv()` and its kin and was reverted (`d3bef645`).
-  Status: open: a gate item must first apply the classifier half of the harness-child lane's
-  cross-lane diff, then `git revert d3bef645` and the diff's test half (FIX-41, D-297).
+  Status: fixed (F-58, FIX-49): the classifier reads the literal path, `d3bef645` is reverted, and
+  the fence refuses dynamic and unknown-path rows; FIX-49's Open lists what is left (a literal
+  option passed by position, `ggsave()`'s `path`).
 - **F-6 residual** (low; n/a). `assign()` or `list2env()` rebinding a saved directory name inside a
   loop after `setwd(owd)` is read is seen in walk order only, so that `setwd(owd)` may read 3.
-  Status: open (FIX-37, D-293).
+  Status: fixed (F-6 residual, FIX-49); a name the code computes for them stays open (FIX-49).
 - **copy-1** (medium; no, as at `f690afc7`). An inline function forwarded through a wrapper,
   `(function(...) peter(...))('x', big, extensions = function(gptr) NULL)`, copies `big` on the next
   edit, for `peter()` and a harness alike: `resolve_identifier()` evaluates the call in an
   `ident_mask()` whose parent is the wrapper's frame, and the kept extension closure keeps that
-  frame and its forced dots. Status: open; copy-safety is a non-negotiable rule (FIX-42).
+  frame and its forced dots. Status: fixed (copy-1, FIX-49), calls made off the call stack too.
 - **copy-2** (medium; no). `worker_ship_objects()` reads the objects with `mget()`, whose list keeps
   the caller's objects referenced after it is dropped (rule R6), so a worker's objects are copied on
-  the next edit; F-51's write-once-and-clear fix for coaching would carry over. Status: open
-  (FIX-42).
+  the next edit; F-51's write-once-and-clear fix for coaching would carry over. Status: fixed
+  (copy-2, FIX-49).
 - **F-80 cost** (low; new, F-80). The checkpoint baseline classes every path: about 0.31 ms a path,
   1.57 s of a 2.16 s baseline for 5,000 files, 0.96 s of it in `path_class_key()`'s per-path
-  `grepl()` calls, against 0.017 s for the same patterns over the whole vector. Status: open:
-  vectorise `path_class_key()` (FIX-43).
+  `grepl()` calls, against 0.017 s for the same patterns over the whole vector. Status: fixed
+  (F-80 cost, FIX-49): `path_class()` classes the whole vector, 5,000 paths in 0.33 s.
 - **F-64 limit** (low; n/a). Coaching spend charged inside a run is kept in memory and lost on
   resume: `usage_add_durable()` takes only rows its own session made. Status: kept, documented in 04
   IC-84 and 08 section 3.3 (FIX-42).
 - **glob-1** (to triage). The gate lane's writer reported a finding on empty path components in
   `risk_glob_paths()` as out of the pass's scope, without its detail in the lane's results. Status:
-  open: derive it again before acting (FIX-37).
+  fixed (glob-1, FIX-49): derived again and real, a doubled slash read one directory too deep.
 - **wall-1** (low; no). Under a load of 300 to 400 (other lanes and a 32-process busy loop)
   test-proc-rscript-native.R failed 2 of 3 runs on its deadline bounds (lines 15 and 18,
   `elapsed <= 60` and completion), never on a sampling error; at loads of 130 to 165 it passed 3
   of 3. Status: open, as L-34 (CI-106).
 - **ci-20** (low; n/a). The four serial CI lanes take 42 to 61 minutes (no-Suggests 46.0, C locale
   42.5, connections 61.2, macOS 54.7 on `4cf922a4`), and the maintainer asked that no CI job run
-  longer than 20 minutes. Status: fixed by CI-107 (every job 20 minutes, a gate 5; the full suite
-  in gated shards), which has not yet run on GitHub.
+  longer than 20 minutes. Status: fixed (ci-20, CI-107: every job 20 minutes, a gate 5; the full
+  suite in gated shards), which has not yet run on GitHub.
 - **live-9** (step; n/a). This pass changed the fence, the Codex hook and the transport, so
   live-coach and live-cli run again (records-4), with one live request at the highest reasoning
   effort for the 90 s idle timeout (F-132, DEC-41) and the Windows job once on a host with Codex for
   the hook (F-59, DEC-27). Status: open, a release step (Remaining, step 3).
 - **ack-1** (nit; no). Internal error texts in `R/proc-spawn.R` and `R/http-reactor.R` still say
   "acknowledgement", which tests match; not user documentation, and the spell check is clean.
-  Status: kept (FIX-45).
+  Status: fixed (ack-1, FIX-49): they say "acknowledgment".
 
 ## Closed by the comprehensive fix pass
 

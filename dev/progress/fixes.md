@@ -11135,3 +11135,147 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   failed jobs" reads the latest attempt of each shard. R-devel's `setup-r` took 7.0 and 12.5
   minutes in two sampled runs (40444185578, 40324291531), so a slow R-devel download can still use
   most of a 20-minute job.
+
+## FIX-49 - Copy-safety through wrappers, the coaching fence, path classing (2026-10-30, #93)
+- The last fix lanes on `7bafb06e`, each merged with `--no-ff`: copy (`claude/v1-fix8-copy`, head
+  `0131c01e`, merged as `3380f625`): copy-1 and copy-2; fence (`claude/v1-fix8-fence`, head
+  `15f96cb5`, merged as `c572190c`): F-58, glob-1 and F-6 residual; ckpt (`claude/v1-fix8-ckpt`,
+  head `0649c08d`, merged as `9bfcf3b6`): F-80 cost and ack-1. The ci lane (`claude/v1-ci-fast`,
+  head `c7407a44`, merged as `aaf09eb5`) is CI-107. Each item is a row of
+  `progress/open-findings.md`'s "Added by the comprehensive review".
+- copy-1 (medium; FIX-42; IC-41, rule R2; `27536a78`, `0131c01e`): an inline function forwarded
+  through a wrapper, `(function(...) peter(...))('x', big, extensions = function(gptr) NULL)`,
+  copied `big` on the next edit, for `peter()`, a harness and `gptr_coach()`: the identifier was
+  evaluated in an `ident_mask()` whose parent was the wrapper's frame, so the kept function held
+  that frame and its forced dots. `ident_home()` (R/gptr-capture.R) walks the calls by frame number
+  up the chain of `...` to the first that names the argument, and `peter()`, `harness_expand()`,
+  `gptr_coach()` and `gptr_tailor()` resolve identifiers there. A verifier found that the walk
+  assumed every parent number is below the frame's own. For a call made off the call stack (in a
+  `do.call()` envir, or a promise forced after its function returned) R reports the frame's own
+  number as its parent, so `w = function(...) lazy(peter(...)); w('p', model = m)()` hung, and
+  `do.call(peter, list('p', model = quote(m)), envir = e)` resolved `m` in `peter()`'s own frame.
+  `0131c01e`: when `sys.parents()[n] >= n`, `ident_home()` returns
+  `do.call(parent.frame, list(), envir = sys.frame(n))`, the environment where frame n's call was
+  made, at any hop; `do.call()` evaluates there without the `eval()` context that
+  `eval(quote(parent.frame()), sys.frame(n))` adds. On-stack walks and the callers are unchanged. A
+  wrapper itself called off the stack, `do.call(w, list('p', model = quote(m)), envir = e)`, now
+  resolves in `e`; the base resolved it in `w`'s frame and failed. Tests: test-copy-gateway.R "no
+  copy of big after an inline function forwarded through a wrapper (copy-1)" (`peter()`, a plain
+  and a combining harness, `gptr_coach()`); test-gptr-gateway.R "identifiers of a call made off the
+  call stack resolve where it was made" (`do.call()` of `peter()` and of a wrapper, a promise
+  forced later, the forwarding wrapper that hung): before the fix three failed and the fourth hung
+  to its time limit.
+- copy-2 (medium; FIX-42; rule R6; `fbca7674`): `worker_ship_objects()` read the objects with
+  `mget()`, and neither its list nor the spec `worker_spec_values()` returned was cleared, so the
+  caller's objects stayed referenced and the next edit copied them. `worker_ship_objects()` only
+  checks the names; `worker_spec_save()` reads the values into the spec, saves it and clears the
+  list in place, as `coach_objects_write()` does (F-51). Test: test-copy-subagent.R "a worker's
+  shipped objects are not copied on the next edit (copy-2)"; test-subagent-worker.R follows.
+- F-58 (low; FIX-41, D-297, DEC-24; `19ae4193`, `a0bbe5ed`, `15f96cb5`): in auto a coaching run
+  could write outside its scratch folder, or move its working folder, through a computed path or
+  function name, since the fence checked only the targets the classifier resolved. DEC-24's rule
+  (`6879ea8d`) had been reverted in `d3bef645` because the classifier read
+  `write.csv(x, 'out.csv')` and its kin as a write to an unknown path: their file sits in `...`, or
+  R cannot match the call while the namespace is not loaded, so every unnamed argument was a
+  possible path and the first of equal level, the computed data argument, won.
+  - `19ae4193` (R/perm-classify.R): when a named path argument went unmatched, computed arguments
+    count only if the code computes all of them, and of two paths at one level the worse class is
+    kept, so `file.remove('a', f)` reads unknown in either order.
+  - `a0bbe5ed` reverts `d3bef645`: `child_fence_why()` again refuses dynamic rows ("it runs only
+    code gptr can read") and `file_write` or `file_delete` rows whose `path_class` is unknown ("it
+    writes only to paths gptr can read").
+  - A verifier found named options in `...` still counted as possible paths:
+    `write.csv(df, file.path(d, 'x.csv'), fileEncoding = 'UTF-8')`, the `dec`, `quote` and `eol`
+    forms and a file from `Sys.getenv('OUT')` read workspace and passed the fence, and
+    `write.csv(df, f, na = '')` read level 0 (base: 2 unknown); end to end, such a step wrote
+    `na.csv` outside the scratch folder. `15f96cb5`: a path argument named in `...` is the only
+    path; for a row whose path argument is named, the other named arguments in `...` are not read
+    (a `...` row such as `file.remove()` reads all of them); and an empty literal does not count as
+    the path under the `one` rule, so `readr::write_csv(df, f, '')` reads 2 again.
+  - Every verifier probe reads 2 unknown and the fence denies it; `write.csv(df, 'out.csv',
+    na = '')`, `write.csv(x = df, 'out.csv')`, `readr::write_csv(df, 'x.csv')` and
+    `data.table::fwrite(df, 'x.csv')` read workspace and run. Against `7bafb06e` levels differ only
+    where the path is now read: `write.csv(df, file = '')` reads 0 (console), and a file under
+    `tempdir()` or from `tempfile()` 1 (temp), where the base read 2 unknown.
+  - Tests: test-perm-classify.R "a path argument R cannot match is the literal one, a tie the worse
+    class (F-58)"; test-gptr-child.R "the fence refuses R code that writes to a path or calls a
+    function it computes" (with the `fileEncoding` and `na = ''` forms) and "a coaching run cannot
+    write through a path or a function it computes", which gains a
+    `write.csv(mtcars, file.path(d, 'na.csv'), na = '')` step: on the first classifier `na.csv`
+    landed outside, with 3 refusals of 4.
+- glob-1 (to triage; FIX-37; `877d647e`): derived again, and real. `risk_glob_paths()` turned an
+  empty path component (a doubled slash) into the placeholder name `x`, so a glob word was read one
+  directory deeper than the shell reads it: `cp x .//.gptr//sett*` read 2 (workspace) where
+  `cp x ./.gptr/sett*` reads 4 (control), `cp x ~//.R/Makev*` and `tee .//.Renv* < x` read 3, and
+  `rm -rf .//*` named `./x` where it deletes the project's own files. Empty components are dropped
+  when the word is split (`Filter(nzchar, ...)`); a leading `//` stays in the word's lead. Test:
+  test-perm-classify.R "a doubled slash in a glob word names no directory of its own (review
+  glob-1)", 4 failures before the fix.
+- F-6 residual (low; FIX-37, D-293; `1a6ec1be`): `risk_bound()` read, before the walk, only the
+  names plain assignments, loops and formals bind; `assign()` and `list2env()` were seen in walk
+  order only. So `for (i in 1:2) { if (p) owd = getwd(); setwd(owd); assign('owd', f()) }` read 3,
+  as did its `list2env()` form and a function restoring `owd` called after `assign('owd', '/')`,
+  and `d = 'data'; for (i in 1:2) { setwd(d); base::assign('d', '/etc') }` read 2. `risk_bound()`
+  adds the names `assign()` and `list2env()` write out to `all` and `other`, so these read 4;
+  `?gptr_security` names `list2env()` among the ways a name is bound (R/gptr-config.R,
+  man/gptr_security.Rd). Test: four level-4 rows in test-perm-classify.R "here(), a restored
+  directory and paths after a move are read (review F-6)", 4 failures before the fix.
+- F-80 cost (low; FIX-43, D-298; `d24cc11b`): the checkpoint baseline classes every walked file
+  with `path_class()`, which called `path_class_key()` twice per path, each with up to 18 `grepl()`
+  calls on one string: about 0.31 ms a path, 1.57 s of a 2.16 s baseline for 5,000 files.
+  `path_class()` and `path_class_key()` (R/utils-paths.R) work on the whole vector: each pattern
+  runs once over all keys, each key takes the first class that applies (control, critical,
+  protected, instructions, workspace, temp, outside), and lexical and resolved keys combine with
+  `pmin()` over the guarded ranks; `path_class_one()` and the unused `context$root` are gone. The
+  input is marked UTF-8 once (`as_utf8()`): a vectorised `grepl()` over marked and unmarked
+  non-ASCII names fails in a C locale, and `gptr_doc()` passes `c(path, path_norm(path))`. Old
+  against new over 223 paths (2 roots, one inside `.claude/worktrees`; Linux, macOS and Windows
+  mocks; `R_PROFILE_USER` and `R_ENVIRON_USER` set; UTF-8 and C) gave no mismatch. 5,000 paths take
+  0.33 s (were 1.80 s) and a 5,000-file `ckpt_files_baseline()` 0.6 to 0.8 s (was 2.1 to 2.4 s), at
+  a load of about 20. Test: test-utils-paths.R "path_class() classes a vector as it classes each
+  path alone, in bounded time (F-80)": a 19-path vector over every class and a protected-folder
+  root, equal to one call per path; 5,000 paths under a coarse 30 s bound; a vector of marked and
+  unmarked UTF-8 names in a C locale.
+- ack-1 (nit; FIX-45; `0649c08d`): three internal error texts of the Windows stdin writer said
+  "acknowledgement", unlike the en-US package text F-131 fixed: two in `proc_writer_ack()`
+  (R/proc-spawn.R) and the reactor's at-exit failure (R/http-reactor.R). They say
+  "acknowledgment", and test-proc-writer-runtime.R's expectations follow. Comments and test names
+  keep the en-GB spelling: not user text, and the spell check is clean.
+- Integration on `aaf09eb5` (the four merges, no conflict; local macOS at loads of 110 to 310):
+  `devtools::document()` changes nothing; `lintr::lint_package()` no lints; the changed test files
+  with `^(copy|perm-|gptr-child|gptr-coach|gptr-tailor|ckpt-|subagent-worker|zzz)`, 24 files, FAIL 0
+  SKIP 10 PASS 5845 in UTF-8 and under `LC_ALL=C LANG=C`; the nine changed test files against the
+  installed package FAIL 0 SKIP 10 PASS 3433; `dev/release/tests` 14 files, 64 tests, PASS 300;
+  `spelling::spell_check_package()` clean; `dev/ci/check-plans.py` passes (the ci lane edits
+  plans). The full suite runs in CI-107's shards.
+- Ledger rows closed: copy-1, copy-2, F-58, glob-1, F-6 residual, F-80 cost and ack-1 (ci-20 by
+  CI-107). Deviations: none new; D-297 is to be amended (Open).
+- Open:
+  - F-58 residual (low): the `one` rule still takes a non-empty literal passed by position as the
+    path when R cannot place the path argument by position: `write.csv('a', file.path(d, 'x.csv'))`
+    and, with the namespace not loaded, `readr::write_csv(df, f, 'NA')` or
+    `data.table::fwrite(df, f, FALSE, 'auto')` read workspace (level 2, as at base) and pass the
+    fence; a `tempdir()` there reads 1. Telling `readr::write_csv(df, 'x.csv')` (the literal is the
+    path) from `fs::file_chmod(f, '755')` (it is not) needs each row's path position in
+    `inst/extdata/risk-functions.csv`, a design change for the maintainer.
+  - `ggplot2::ggsave('p.png', p, path = d)` reads 2 workspace for `'p.png'`, even with ggplot2
+    loaded, and writes into `d`: the classifier's ggsave row does not read `path`, so a coaching
+    run can write outside its scratch folder this way.
+  - Under DEC-24 the fence also refuses ordinary computed-function forms in coaching runs
+    (`Filter(Negate(is.null), l)`, `sapply(l, Negate(is.na))`, `fun = mean; fun(1:3)`,
+    `match.fun('mean')(1:3)`, `do.call(f, list(1))`) and `write.csv(df)` or `write.csv(df, '')`,
+    which print to the console (2 unknown, as at base). Reading these as safe is a gate item.
+  - `assign()` or `list2env()` with a computed name (`assign(nm, d)`, `list2env(l, e)`) is not
+    followed: `d = 'data'; nm = 'd'; assign(nm, '~'); unlink(d, recursive = TRUE)` reads 3.
+    `?gptr_security`'s "What the gate cannot do" covers it only as a name built at run time.
+  - copy-1: an inline function written in a function frame that also binds the object,
+    `f = function(d) peter('x', d, extensions = function(gptr) NULL)`, still copies on the next
+    edit, as R's lexical scoping requires (IC-41 may state this limit). A wrapper called off the
+    stack that runs `peter()` inside `eval()` on its own frame does not resolve the identifier, as
+    at base. No test runs `gptr_coach()` or a harness through a call made off the stack (scratch
+    probes for `gptr_tailor()` and a combining harness passed); a regression there would hang the
+    run, since the new row sets no time limit.
+  - The F-80 cost test's 30 s bound is coarse so that it cannot flake; at idle the old code (1.7 s
+    for 5,000 paths) passes it too, so the class checks are the guard.
+  - Records: IC-86 and 08 section 3.5 limit 4 should say the fence refuses dynamic and
+    unknown-path rows, and D-297 that F-58 landed. live-9 (live-coach) runs on this fence.
