@@ -196,10 +196,12 @@ eval_run = function(st) {
 
 #' Harness options, the anonymous-file sink and plot capture (undone by eval_restore()); the
 #' message sink in use is noted, so one the code leaves open is undone. Teed output is split to the
-#' console as R prints it, except in the console margin, where eval_echo() shows it (D-245); the
-#' evaluation's frame (`st$frame`) is where that display looks for the writer below it. During a T
-#' console's call isig is on while the code runs, so Ctrl-C interrupts it (tty_isig_on()), and
-#' bracketed paste is turned on again after it (eval_restore())
+#' console as R prints it, except for the agent's code in the console margin, where eval_echo()
+#' shows it (D-245); the agent's code prints at width 100, the person's own (`guard = FALSE`) at
+#' R's width, as R would print it (D-296). The evaluation's frame (`st$frame`) is where that
+#' display looks for the writer below it. During a T console's call isig is on while the code
+#' runs, so Ctrl-C interrupts it (tty_isig_on()), and bracketed paste is turned on again after it
+#' (eval_restore())
 #' @noRd
 eval_open = function(st) {
   force(st)
@@ -210,11 +212,12 @@ eval_open = function(st) {
   }
   st$pad = console_pad()
   st$colors = console_colors()
-  st$echo = st$tee && nzchar(st$pad)
+  st$echo = st$tee && st$guard && nzchar(st$pad)
   st$split = st$tee && !st$echo
   st$width = max(20L, cli::console_width() - nchar(st$pad))
   st$frame = sys.nframe() - 1L
-  st$old_opts = options(max.print = 1000L, width = 100L, rlang_interactive = FALSE,
+  width = if (st$guard) 100L else getOption("width")
+  st$old_opts = options(max.print = 1000L, width = width, rlang_interactive = FALSE,
                         cli.dynamic = FALSE, cli.num_colors = 1L, askYesNo = eval_no_ask)
   st$msg_sink = sink.number(type = "message")
   st$con = file("", "w+b")
