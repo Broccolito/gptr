@@ -639,17 +639,20 @@ test_that("a !code warning shows before the next prompt, none left for R's top l
     )), type = "message")
   })
   expect_true("Warning: a warning" %in% err)
-  # in the console margin at column 4, dim, in order with the code's output
+  # in the console margin too, as R prints them (D-296)
   local_mocked_bindings(console_pad = function() "  ")
   rs = repl_state(NULL, new.env())
   out = NULL
   expect_no_warning({
-    out = utils::capture.output(repl_passthrough(rs, "!print(1); warning('w')"))
+    err = utils::capture.output(type = "message", {
+      out = utils::capture.output(repl_passthrough(rs, "!print(1); warning('w')"))
+    })
   })
-  expect_identical(out[1:2], c("    [1] 1", "    Warning: w"))
+  expect_identical(out, c("[1] 1", ""))
+  expect_identical(err, "Warning: w")
 })
 
-test_that("a !code block's rows share one margin and end with a blank row (visual round 3)", {
+test_that("a !code block prints as R does and ends with a blank row (visual round 3, D-296)", {
   skip_on_cran()
   local_project()
   local_mocked_bindings(console_pad = function() "  ")
@@ -661,11 +664,10 @@ test_that("a !code block's rows share one margin and end with a blank row (visua
   out = utils::capture.output({
     err = utils::capture.output(repl_passthrough(rs, code), type = "message")
   })
-  # R's message, the output, the warning and the error at column 4, as a tool's result rows; then
+  # the code's message, output and warning as R prints them (D-296), the error at column 4; then
   # the blank row a command's output ends with
-  expect_identical(out, c("    a message", "    cat line", "    [1] 1 2 3",
-                          "    Warning: a warning", ""))
-  expect_identical(err, "    Error: boom")
+  expect_identical(out, c("cat line", "[1] 1 2 3", ""))
+  expect_identical(err, c("a message", "Warning: a warning", "    Error: boom"))
   # an error message of two lines is two rows
   err = utils::capture.output(invisible(utils::capture.output(
     repl_passthrough(rs, "!stop('one\\ntwo')"))), type = "message")
