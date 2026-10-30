@@ -196,6 +196,24 @@ test_that("yolo runs control, installs, writes anywhere and secret reads; level 
   expect_identical(gate_decide(gate_r("unlink('.env')"), yolo), "allow")
 })
 
+test_that("model code that stops every gptr job asks or is refused (review F-5)", {
+  skip_on_cran()
+  root = local_project()
+  local_permission_rules()
+  j = bridge_bg(c(rscript_path(), "--vanilla", "-e", "Sys.sleep(120)"), name = "keep")
+  withr::defer(j$kill())
+  ui = local_scripted_ui(list("n", "n"))
+  for (m in c("manual", "plan")) {
+    fake = local_fake_provider(list(fake_tool("r", code = "n = nrow(gptr_jobs(kill = TRUE))"),
+                                    "Done."))
+    e = new.env()
+    peter("Stop the jobs.", model = fake, mode = m, envir = e)
+    expect_null(e$n, label = m)
+    expect_identical(j$status(), "running", label = m)
+  }
+  expect_identical(sum(ui$log$method == "permission"), 2L)
+})
+
 test_that("the ask tool needs a person; without one it is ask_human (IC-68)", {
   call = list(id = "c3", name = "ask", nested = FALSE, risk = list(level = 0L),
               input = list(questions = list(list(id = "fmt", question = "Which format?"))))

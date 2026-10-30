@@ -954,7 +954,7 @@
 "gptr","gptr_fork",4,"control","","changes gptr's configuration or another session"
 "gptr","gptr_hook",0,"read","",""
 "gptr","gptr_init",4,"control","","changes gptr's configuration or another session"
-"gptr","gptr_jobs",0,"read","",""
+"gptr","gptr_jobs",0,"read","","control with kill = TRUE, which stops every job"
 "gptr","gptr_last",0,"read","",""
 "gptr","gptr_login",4,"control","","changes gptr's configuration or another session"
 "gptr","gptr_logout",4,"control","","changes gptr's configuration or another session"

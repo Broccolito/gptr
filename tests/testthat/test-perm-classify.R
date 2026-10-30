@@ -762,6 +762,19 @@ test_that("gptr_artifacts() that relaunches or stops an app is level 3 process (
   }
 })
 
+test_that("gptr_jobs(kill = TRUE) stops every job: level 4 control (review F-5)", {
+  root = local_project()
+  for (code in c("gptr_jobs()", "gptr_jobs(kill = FALSE)", "gptr::gptr_jobs(FALSE)")) {
+    expect_identical(gptr_risk(code, root = root)$level, 0L, label = code)
+  }
+  for (code in c("gptr_jobs(kill = TRUE)", "nrow(gptr::gptr_jobs(TRUE))")) {
+    r = gptr_risk(code, root = root)
+    expect_identical(list(r$level, r$categories), list(4L, "control"), label = code)
+  }
+  r = gptr_risk("gptr_jobs(kill = k)", root = root)
+  expect_identical(list(r$level, r$categories), list(3L, "dynamic"))
+})
+
 test_that("G5's 46 polyglot calls are classified through their arguments (G5 p08)", {
   skip_on_cran()
   root = local_project(files = list(

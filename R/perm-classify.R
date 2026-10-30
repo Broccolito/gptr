@@ -2884,10 +2884,11 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
           pc)
       return(TRUE)
     }
-    if (name %in% c("gptr_cache", "gptr_scrub")) {
-      x = if (name == "gptr_cache") risk_arg(a, "action", 1L) else risk_arg(a, "dry_run", 2L)
-      hit = if (name == "gptr_cache") is.character(x) && any(x %in% c("prune", "clear")) else
-        isFALSE(x)
+    if (name %in% c("gptr_cache", "gptr_scrub", "gptr_jobs")) {
+      x = switch(name, gptr_cache = risk_arg(a, "action", 1L),
+                 gptr_scrub = risk_arg(a, "dry_run", 2L), risk_arg(a, "kill", 1L))
+      hit = switch(name, gptr_cache = is.character(x) && any(x %in% c("prune", "clear")),
+                   gptr_scrub = isFALSE(x), isTRUE(x))
       if (hit) {
         add(ctx, label, name, 4L, "control")
       } else if (!is.null(x) && !is.character(x) && !is.logical(x)) {
