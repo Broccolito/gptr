@@ -11279,3 +11279,56 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
     for 5,000 paths) passes it too, so the class checks are the guard.
   - Records: IC-86 and 08 section 3.5 limit 4 should say the fence refuses dynamic and
     unknown-path rows, and D-297 that F-58 landed. live-9 (live-coach) runs on this fence.
+
+## FIX-50 - Live run: cache tokens, stepped runs, a record notice, output limit (2026-10-30, #93)
+- The live release run on `1cd31f4c` (live providers, offline repros of each finding) found four
+  items, fixed on `claude/v1-fixes`: L1, L3 and L4 test first (red, then green); L2 by the
+  contract, as documentation.
+- L1 (medium; `5dbe6890`): `coach_usage()` (R/gptr-coach.R) added only input and output, so
+  `h$record`'s run and total tokens, the coach block's `tokens=` and the plan-route projection
+  ("The starting run used N tokens; the whole call may use about M") left out cache reads and
+  writes whenever a provider caches (live: `start1` 146 tokens for a run of 7.7k input and 152
+  output; a projection of about 1.0k against about 58k). Its input is `usage_used()`'s tokens
+  less the output, as `gptr_usage()`, budgets and `peter()`'s block headers count them; no new
+  helper. Test: test-gptr-coach.R "the record and the plan projection count cache tokens, as
+  gptr_usage() does" (3 failures before the fix).
+- L2 (medium-low; `19273769`): after `gptr_step(s)` the session stays `running`, and a later
+  blocking gptr call at top level (another `peter()`, `gptr_source()`, `gptr_wait()` or
+  `gptr_step()` on another session) runs its tool calls, in auto R code and file writes
+  (`probe-step.R`). The contract makes this the design, so the behaviour is kept: 04 section 6.5
+  has `gptr_step()` pump the reactor until its turns end, not hold the run after them; section
+  8.2's `reactor_pump()` row and section 15.5 IC-57 give a pump with `run_current()` NULL
+  `allow_runs = NULL`, every run's FIFO tools; section 7.21's `bg_register()` row has R tools of
+  background runs wait for the next blocking gptr call. Only an idle tick (`bg_tick()`) and a
+  System 1 or nested pump keep other runs' tools queued (a System 1 call left the stepped run's
+  tool queued in a scratch probe). `?gptr_step` says so in its details, and that `gptr_wait()`
+  finishes the run first and `gptr_cancel()` stops it. No new test: test-http-reactor.R holds
+  that a top-level pump runs any run's FIFO tools (IC-57).
+- L3 (low; `0d9a86db`): in a non-interactive R with no `gptr_doc()` binding and `record = "ask"`,
+  `gptr_source(replay = "record")` ran its calls live, wrote no block and returned an empty table
+  in silence (`probe-record.R`): `doc_keep()` drops a site that cannot get consent and said so
+  only when `gptr_doc()` bound another document. Under `replay = "record"` it gives the notice
+  `doc_upsert()` gives without consent, "gptr did not record into rec.R: no write consent. Call
+  gptr_doc("rec.R") or set options(gptr.record = "auto") to record.", once per document, through
+  one helper, `doc_no_consent()` (R/doc-replay.R), whose `gptr_doc()` names the document as it
+  resolves from the working directory (as FIX-16 made `doc_keep()`'s). Under `replay = "auto"` a
+  plain script stays silent, as before. `?gptr_source` says that a call that cannot be recorded
+  still runs and that `replay = "record"` then says so. Test: test-doc-replay.R
+  "replay = \"record\" without write consent says once that nothing was recorded" (auto silent,
+  record once, then silent; the file unchanged; 1 failure before the fix).
+- L4 (low; `d7ac1764`): a run cut at the model's output limit (`stop_reason` `"length"`, no answer
+  text) ended as a normal finish ("done ... tokens", status `idle`) with no notice.
+  `run_finish_turn()` (R/agent-run.R), where every turn's stop reason is known, gives one notice
+  for such a turn: "The reply stopped at the model's output limit, so it may be incomplete." A
+  truncated tool call's turn gets it too; its tool result already tells the model. Test:
+  test-agent-run.R "a turn cut at the output limit says so in one notice" (fake provider; one
+  notice, status idle, none on a full answer; 1 failure before the fix).
+- Checks (local macOS at loads of 40 to 95): `devtools::document()` changed `gptr_source.Rd` and
+  `gptr_step.Rd` only; `lintr::lint()` of the 5 changed R and 3 changed test files no lints;
+  `^(gptr-coach|gptr-tailor|agent-|session-|doc-|gptr-capture|provider-fake|console-render)`, 26
+  files with the 3 changed ones, FAIL 0 SKIP 2 PASS 8302 in UTF-8 and FAIL 0 SKIP 10 PASS 8272
+  under `LC_ALL=C LANG=C`; the 3 changed test files against the installed package (`R CMD
+  INSTALL` into a scratch library, `testthat::test_dir(load_package = "installed")` on a copy of
+  the tests, user state isolated as `isolated-check.R` does) FAIL 0 SKIP 0 PASS 2053 in both
+  locales; `^(s1-emulate|cli-)`, where `"length"` also ends turns, FAIL 0 SKIP 1 PASS 1803.
+- Ledger rows: none (the findings came from the live run). Deviations: none. Open: none.
