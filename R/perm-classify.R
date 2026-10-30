@@ -1917,7 +1917,9 @@ risk_gateway = "peter"
 risk_plan_syntax = c("{", "(", risk_arrow, "=", "if", "for", "while", "repeat", "function",
                      "return", "break", "next", "switch", "[", "[[", "$", "@", "::", "~",
                      "<lambda>")
-risk_quoting_funs = c("quote", "bquote", "expression", "substitute", "~", "alist")
+# Calls whose arguments are quoted; not substitute()'s `env` or a one-sided formula (a lambda),
+# nor bquote()'s template, whose `.()` runs.
+risk_quoting_funs = c("quote", "expression", "substitute", "~", "alist")
 # Function slots: formals whose argument is called in any call R can match, and the slots of
 # functions whose formal name is ambiguous or whose namespace may not be loaded ((formal,
 # position) pairs).
@@ -2906,7 +2908,11 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
 
   # A function value: in a function slot (slot = TRUE) or bound by an assignment.
   use_value = function(x, ctx, slot) {
-    if (is.call(x) && identical(x[[1L]], as.name("function"))) return(invisible())
+    # a function written out, a one-sided formula (a lambda) and a number (an extractor) are
+    # read where they are written
+    lambda = is.call(x) && (identical(x[[1L]], as.name("function")) ||
+                              (identical(x[[1L]], as.name("~")) && length(x) == 2L))
+    if (lambda || is.numeric(x)) return(invisible())
     if (slot && is.call(x) && identical(x[[1L]], as.name("list"))) {
       for (v in as.list(x)[-1L]) use_value(v, ctx, slot)
       return(invisible())
@@ -3040,23 +3046,27 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     inner = ctx
     inner$seq = ctx$seq && r$name == "{"
-    if (r$name == "function") {
-      inner$def = TRUE
-      a = c(as.list(a[[1L]]), a[-1L])
-    }
+    # a one-sided formula is a function (a lambda of purrr or dplyr)
+    fun = r$name == "function" || (r$name == "~" && length(e) == 2L)
+    if (fun) inner$def = TRUE
+    if (r$name == "function") a = c(as.list(a[[1L]]), a[-1L])
     # a function body and local()'s code (in an environment of its own) bind their own names
     # (`known` above)
-    scope = r$name == "function" || (r$name == "local" && length(a) == 1L &&
-                                       !"local" %in% bound$all)
+    scope = fun || (r$name == "local" && length(a) == 1L && !"local" %in% bound$all)
     if (scope) {
       up = known
-      if (r$name == "function") {
+      if (fun) {
         known <<- structure(list(), wd = unique(c(attr(up, "wd0"), attr(up, "wd"))),
                             wd0 = attr(up, "wd0"))
       }
       inner$seq = TRUE
     }
-    if (r$name %in% risk_quoting_funs) inner$quote = TRUE
+    if (r$name == "substitute") {
+      m = risk_args(e, "substitute", "base")
+      walk(risk_arg(m, "env", 2L), inner)
+      a = list(risk_arg(m, "expr", 1L))
+    }
+    if (r$name %in% risk_quoting_funs && !fun) inner$quote = TRUE
     # eval(quote(x)) runs x, as evalq(x) does (also base::quote())
     if (r$name %in% c("eval", "eval_bare", "eval_tidy")) {
       for (i in seq_along(a)) {

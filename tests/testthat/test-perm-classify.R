@@ -1007,13 +1007,41 @@ test_that("indirections reach a literal target only at level 3 (D-132)", {
   root = local_project()
   cases = list(
     list(3L, "cmd = 'rm -rf ~'; system(cmd)"),
-    list(3L, "identity(unlink)('~', recursive = TRUE)"), list(3L, "eval(bquote(q()))"),
+    list(3L, "identity(unlink)('~', recursive = TRUE)"), list(4L, "eval(bquote(q()))"),
     list(3L, "Negate(file.remove)('.gptr/settings.json')"),
     list(3L, "purrr::partial(unlink, recursive = TRUE)('~')"),
     list(2L, "Map(file, '~/.Rprofile', 'w')"), list(2L, "lapply('~/.Rprofile', file, 'w')")
   )
   for (cs in cases) {
     expect_identical(gptr_risk(cs[[2]], root = root)$level, cs[[1]], label = cs[[2]])
+  }
+})
+
+test_that("what bquote(), substitute()'s env and a formula lambda run is code (review F-2, F-3)", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, envir = classify_env(), root = root)$level
+  for (code in c("bquote(.(unlink('~', recursive = TRUE)))",
+                 "bquote(.(options(gptr.unsafe_no_permissions = TRUE)))",
+                 "substitute(a, list(a = unlink('~', recursive = TRUE)))",
+                 "substitute(env = list(a = unlink('~', recursive = TRUE)), a)",
+                 "purrr::walk(1, ~ unlink('~', recursive = TRUE))",
+                 "dplyr::across(mpg, ~ { setwd('/'); .x })")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # neighbours: a plot label, substitute()'s expr, a model formula and a formula lambda's
+  # arithmetic, which offers an [a]lways rule; a number in a function slot extracts an element
+  for (code in c("plot(1, main = bquote(alpha == .(a)))", "substitute(unlink('~'), list())",
+                 "lm(y ~ unlink('~'), d)", "purrr::map(1:3, ~ .x + 1)",
+                 "dplyr::mutate(mtcars, dplyr::across(c(mpg, wt), ~ .x * 2))",
+                 "purrr::map_dbl(l, 1)")) {
+    r = gptr_risk(code, envir = classify_env(), root = root)
+    expect_true(r$level <= 2L && !r$dynamic, label = code)
+  }
+  for (code in c("purrr::map(1:3, ~ .x + 1)", "purrr::map_dbl(l, 1)",
+                 "dplyr::mutate(mtcars, dplyr::across(c(mpg, wt), ~ .x * 2))")) {
+    r = gptr_risk(code, envir = classify_env(), root = root)
+    expect_identical(r$level, 0L, label = code)
+    expect_false(is.null(rule_suggest(list(name = "r", risk = r))), label = code)
   }
 })
 

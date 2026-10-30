@@ -206,7 +206,10 @@ eval_guard_walk = function(e, acc, scope = character()) {
   } else {
     eval_guard_walk(head, acc, scope)
   }
-  if (fname %in% c("~", "quote", "bquote", "expression")) return(invisible())
+  # quoted code is data; bquote()'s `.()` and a one-sided formula (a lambda) are code
+  if (fname %in% c("quote", "expression") || (fname == "~" && length(e) != 2L)) {
+    return(invisible())
+  }
   if (identical(fname, "function") && length(e) >= 3L && is.pairlist(e[[2L]])) {
     inner = c(scope, names(e[[2L]]), eval_guard_fun_locals(e[[3L]]))
     fm = e[[2L]]
