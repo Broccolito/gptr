@@ -15,9 +15,10 @@ plain_max = list(depth = 20L, len = 1e6, nodes = 1e5, summary = 2000L, bytes = 6
 
 #' A value as plain JSON-ready data (08 section 3.3): `{type, len, data, na, names, dim, levels,
 #' tz, nrow}`. Numbers are base64 of little-endian writeBin(), so they stay exact (NA, NaN, -0);
-#' anything else, or a value nested or sized beyond plain_max, is its printed summary. Depth and
-#' values count from the first call, as plain_decode() counts them: a value may use `max` values
-#' less one for each later sibling, so a list of many values ends in summaries.
+#' anything else, a value these keys do not rebuild exactly (plain_exact()), or a value nested or
+#' sized beyond plain_max, is its printed summary. Depth and values count from the first call, as
+#' plain_decode() counts them: a value may use `max` values less one for each later sibling, so a
+#' list of many values ends in summaries.
 #' @noRd
 plain_encode = function(x, depth = 0L, max = plain_max$nodes,
                         seen = new.env(parent = emptyenv())) {
@@ -33,6 +34,7 @@ plain_encode = function(x, depth = 0L, max = plain_max$nodes,
         MoreArgs = list(depth = depth + 1L, seen = seen))
   }
   if (is.data.frame(x)) {
+    if (!plain_exact(x, "data.frame")) return(plain_summary(x))
     cols = each(unclass(x))
     if (any(vapply(cols, function(c) identical(c$type, "summary"), NA))) {
       seen$n = n0 + 1L
@@ -48,17 +50,33 @@ plain_encode = function(x, depth = 0L, max = plain_max$nodes,
   } else if (is.double(x) && (inherits(x, "Date") || inherits(x, "POSIXct"))) {
     if (inherits(x, "Date")) "Date" else "POSIXct"
   }
-  if (!length(type)) return(plain_summary(x))
+  if (!length(type) || !plain_exact(x, type)) return(plain_summary(x))
   out = list(type = type, len = length(x), data = switch(type,
     character = I(replace(as.character(x), is.na(x), "")),
     list = each(x),
     plain_bin(if (is.double(x)) as.double(x) else as.integer(x))))
   if (type == "character" && anyNA(x)) out$na = I(which(is.na(as.character(x))))
-  if (!is.null(names(x))) out$names = I(replace(names(x), is.na(names(x)), ""))
+  if (!is.null(names(x))) out$names = I(names(x))
   if (!is.null(dim(x))) out$dim = I(dim(x))
   if (type == "factor") out$levels = I(levels(x))
-  if (type == "POSIXct") out$tz = c(as.character(attr(x, "tzone")), "")[[1L]]
+  if (type == "POSIXct") out$tz = attr(x, "tzone")
   out
+}
+
+#' Do the plain keys rebuild a value of `type` exactly? Not with dimnames, an ordered factor's
+#' class, a data frame's own row names or more than one time zone, nor with NA names or levels,
+#' or text that is neither latin1 nor valid UTF-8 (text marked as bytes included)
+#' @noRd
+plain_exact = function(x, type) {
+  text = function(s) {
+    !anyNA(s) && all(Encoding(s) == "latin1" | (Encoding(s) != "bytes" & validUTF8(s)))
+  }
+  text(names(x) %||% character()) && switch(type,
+    data.frame = .row_names_info(x) <= 0L,
+    is.null(dimnames(x)) && (is.null(attr(x, "tzone")) || rlang::is_string(attr(x, "tzone"))) &&
+      (type != "character" || text(x[!is.na(x)])) &&
+      (type != "factor" || (identical(oldClass(x), "factor") && text(levels(x)) &&
+                              !anyDuplicated(levels(x)))))
 }
 
 #' Little-endian bytes of an integer or double vector, as base64
@@ -67,9 +85,12 @@ plain_bin = function(v) {
   gsub("\n", "", jsonlite::base64_enc(writeBin(v, raw(), endian = "little")), fixed = TRUE)
 }
 
-#' The printed summary of a value outside the plain kinds, clipped
+#' The printed summary of a value outside the plain kinds, clipped; at most 200 entries are
+#' printed, since printing a long list takes time quadratic in its length
 #' @noRd
 plain_summary = function(x) {
+  old = options(max.print = 200L)
+  on.exit(options(old), add = TRUE)
   txt = tryCatch(paste(utils::capture.output(print(x)), collapse = "\n"), error = function(e) "")
   txt = paste0("<", paste(class(x), collapse = "/"), ">", if (nzchar(txt)) "\n", txt)
   list(type = "summary", len = 1L, data = child_clip(txt, plain_max$summary))
@@ -174,7 +195,7 @@ plain_numbers = function(node, type, len) {
       structure(v, levels = lv, class = "factor")
     },
     Date = structure(v, class = "Date"),
-    POSIXct = .POSIXct(v, tz = plain_chr(node$tz %||% "", 1L)),
+    POSIXct = .POSIXct(v, tz = if (!is.null(node$tz)) plain_chr(node$tz, 1L)),
     v)
 }
 
@@ -345,22 +366,20 @@ child_line = function(st, line) {
   invisible(NULL)
 }
 
-#' A child exited: its result file read in the safe direction with its stream, then its slot
-#' moves on
+#' A child exited: its result file read in the safe direction with its stream (a result that
+#' cannot be read or merged is an error), then its slot moves on
 #' @noRd
 child_exit = function(ctx, ln, st, status) {
   st$watch = NULL
   job = ctx$jobs[[st$i]]
-  res = tryCatch(child_read(st$result_path), error = function(e) {
-    child_result_new(job$id, error = conditionMessage(e))
+  dir = job$direction %||% "final"
+  tail = redact(paste(st$stderr, collapse = "\n"))
+  none = child_result_new(job$id, error = paste0(
+    "the coaching child exited (status ", status, ") without a result",
+    if (nzchar(tail)) paste0(": ", tail)))
+  res = tryCatch(child_merge(child_read(st$result_path) %||% none, st, dir), error = function(e) {
+    child_merge(child_result_new(job$id, error = conditionMessage(e)), st, dir)
   })
-  if (is.null(res)) {
-    tail = redact(paste(st$stderr, collapse = "\n"))
-    res = child_result_new(job$id, error = paste0(
-      "the coaching child exited (status ", status, ") without a result",
-      if (nzchar(tail)) paste0(": ", tail)))
-  }
-  res = child_merge(res, st, job$direction %||% "final")
   res$id = job$id
   ctx$out[[st$i]] = res
   if (!is.null(res$limit)) ctx$limits[[ctx$kinds[[st$i]]]] = res$limit
@@ -423,14 +442,14 @@ child_refusals = function(x = NULL) {
              reason = as.character(x$reason))
 }
 
-#' A result with every field, `status` "error" unless given; the value and the objects come last,
-#' so that plain_encode() keeps the other fields whole
+#' A result with every field, `status` "error" unless given; the objects and then the value come
+#' last, so that plain_encode() keeps the other fields whole and the objects a list
 #' @noRd
 child_result_new = function(id, ...) {
   out = list(id = id, status = "error", reason = NULL, text = "", turns = 0L, usage = NULL,
              transcript = "", first_user = "", risk = 0L, refusals = child_refusals(),
              unmet = character(), files = NULL, plan = NULL, limit = NULL, checks = character(),
-             error = NULL, value = NULL, objects = list())
+             error = NULL, objects = list(), value = NULL)
   dots = list(...)
   out[names(dots)] = dots
   out
@@ -594,9 +613,10 @@ child_main = function(spec_path, result_path, out = NULL) {
   if (!is.null(reply)) out = reply$out
   res = child_outcome(job, out, env, objects, cs, dir, before)
   if (!is.null(reply) && identical(res$status, "idle")) res$value = reply$value
-  json = json_encode(plain_encode(res))
-  if (nchar(json, "bytes") > plain_max$bytes) {
-    # too large for the parent to read: the value and each object travel as their summaries
+  json = tryCatch(json_encode(plain_encode(res)), error = function(e) NULL)
+  if (is.null(json) || nchar(json, "bytes") > plain_max$bytes) {
+    # too large for the parent to read, or for R to encode: the value and each object travel as
+    # their summaries
     shown = function(v) if (!is.null(v)) plain_summary(v)$data
     res$value = shown(res$value)
     res$objects = lapply(res$objects, shown)
@@ -607,12 +627,12 @@ child_main = function(spec_path, result_path, out = NULL) {
 }
 
 #' The names a job's objects are bound under in its child: their labels, but a label R cannot
-#' use as a symbol (`..2`, which do.call() gives a value, `...` or "") gets a name of its own;
-#' child_call() passes such an object under its label
+#' use as a symbol (`..2`, which do.call() gives a value, `...` or "") or one an earlier object
+#' has gets a name of its own; child_call() passes such an object under its label
 #' @noRd
 child_bind = function(labels) {
   labels = labels %||% character()
-  bad = grepl("^([.][.]([.]|[0-9]+))?$", labels)
+  bad = grepl("^([.][.]([.]|[0-9]+))?$", labels) | duplicated(labels)
   labels[bad] = utils::tail(make.unique(c(labels, paste0("X", labels[bad]))), sum(bad))
   labels
 }
@@ -709,7 +729,10 @@ child_fence_why = function(call) {
   if (any(rproc)) return("it starts no other R process, whose code gptr cannot read")
   code = tryCatch(parse(text = paste(unlist(call$input$code), collapse = "\n"),
                         keep.source = FALSE), error = function(e) NULL)
-  if (!all(vapply(child_dirs(code), child_home, NA))) return(stay)
+  # a changer the classifier reads leaving the project or to a folder the code computes, as
+  # when it is passed to lapply()
+  moved = fl$fn %in% names(child_chdir) & !is.na(fl$path_class)
+  if (any(moved) || !all(vapply(child_dirs(code), child_home, NA))) return(stay)
   files = as.character(unlist(call$risk$targets$files))
   # rule_call_path() writes an absolute path as "//path" (Unix) or "/C:/path" (Windows), and
   # one inside the run's folder relative to it
@@ -725,17 +748,16 @@ child_fence_why = function(call) {
 child_chdir = c(setwd = "dir", with_dir = "new", local_dir = "new", in_dir = "dir")
 
 #' The folders R code moves to, each as written or NA when computed: the folder of setwd() and of
-#' withr's and xfun's directory changers (NA when one is passed on or named as text), every
-#' `wd =` argument (peter$sh(), processx), and where each cd, pushd, chdir or Set-Location in the
-#' code's strings goes
+#' withr's and xfun's directory changers called by name, NA for one named to do.call(),
+#' match.fun() or get(), every `wd =` argument (peter$sh(), processx), and where each cd, pushd,
+#' chdir or Set-Location in the code's strings goes. A changer passed on as a value is the
+#' classifier's to read (child_fence_why()).
 #' @noRd
 child_dirs = function(e) {
   lit = function(x) if (rlang::is_string(x)) x else NA_character_
   if (is.character(e)) {
-    cd = tryCatch(unlist(lapply(e[!is.na(e)], child_cd)), error = function(err) NA_character_)
-    return(c(cd, if (any(e %in% names(child_chdir))) NA_character_))
+    return(tryCatch(unlist(lapply(e[!is.na(e)], child_cd)), error = function(err) NA_character_))
   }
-  if (is.symbol(e)) return(if (as.character(e) %in% names(child_chdir)) NA_character_)
   if (!is.call(e) && !is.pairlist(e) && !is.expression(e)) return(character())
   parts = as.list(e)
   out = character()
@@ -744,13 +766,19 @@ child_dirs = function(e) {
     if (is.call(fn) && (identical(fn[[1L]], quote(`::`)) || identical(fn[[1L]], quote(`:::`)))) {
       fn = fn[[3L]]
     }
-    arg = if (is.symbol(fn)) unname(child_chdir[as.character(fn)]) else NA_character_
+    fn = if (is.symbol(fn)) as.character(fn) else ""
+    arg = c(child_chdir, do.call = "what", match.fun = "FUN", get = "x")[fn]
     if (!is.na(arg)) {
-      # the folder argument as R matches it: by its name, else the first unnamed one
+      # the folder (or function) argument as R matches it: by its name, else the first unnamed one
       sig = function(...) NULL
       formals(sig) = c(stats::setNames(alist(x = ), arg), alist(... = ))
-      out = lit(tryCatch(as.list(match.call(sig, e))[[arg]], error = function(err) NULL))
-      parts = parts[-1L]
+      v = tryCatch(as.list(match.call(sig, e))[[arg]], error = function(err) NULL)
+      if (fn %in% names(child_chdir)) {
+        out = lit(v)
+        parts = parts[-1L]
+      } else if ((is.symbol(v) || rlang::is_string(v)) && as.character(v) %in% names(child_chdir)) {
+        out = NA_character_
+      }
     }
     if ("wd" %in% names(parts)) out = c(out, lit(parts[["wd"]]))
   }
@@ -759,16 +787,16 @@ child_dirs = function(e) {
 
 #' Where the cd, pushd, chdir or Set-Location commands of a text go ("~" without a folder). Each
 #' piece between shell separators or quotes is read as a command after leading keywords, wrappers
-#' and assignments, so a cd inside `sh -c '...'` counts too; the names fold case only on
-#' Windows, whose shells do
+#' and assignments, so a cd inside `sh -c '...'` counts too; cd, pushd and chdir fold case only on
+#' Windows, whose shells do, and PowerShell's Set-Location everywhere
 #' @noRd
 child_cd = function(cmd) {
   out = character()
   lead = "^((then|do|else|!|builtin|command|exec|env|sudo|nohup|time|[A-Za-z_]\\w*=\\S*)\\s+)*"
   for (s in sub(lead, "", trimws(strsplit(cmd, "[;&|\n(){}`'\"]")[[1L]]), perl = TRUE)) {
     w = strsplit(s, "\\s+")[[1L]]
-    if (length(w) && (if (is_windows()) tolower(w[[1L]]) else w[[1L]]) %in%
-          c("cd", "pushd", "chdir", "set-location")) {
+    if (length(w) && ((if (is_windows()) tolower(w[[1L]]) else w[[1L]]) %in%
+                        c("cd", "pushd", "chdir") || tolower(w[[1L]]) == "set-location")) {
       to = w[-1L][!grepl("^-.", w[-1L])][1L]
       out = c(out, if (is.na(to)) "~" else to)
     }
@@ -907,7 +935,8 @@ child_objects = function(env, given) {
 }
 
 #' The files a run wrote or changed in its scratch folder (at most 100), with their text
-#' clipped; binary files have no text
+#' clipped; binary files have no text. A read that stops inside a character leaves its last
+#' bytes out.
 #' @noRd
 child_files = function(dir, before) {
   now = list.files(dir, recursive = TRUE, all.files = TRUE, full.names = TRUE)
@@ -915,8 +944,11 @@ child_files = function(dir, before) {
   now = utils::head(now[is.na(before[now]) | before[now] != sums], 100L)
   text = vapply(now, function(f) {
     b = readBin(f, "raw", n = 200000L)
-    txt = if (!any(b == 0)) rawToChar(b) else NA_character_
-    if (is.na(txt) || !validUTF8(txt)) NA_character_ else child_clip(as_utf8(txt), 50000L)
+    if (any(b == 0)) return(NA_character_)
+    cut = Find(function(k) validUTF8(rawToChar(utils::head(b, length(b) - k))),
+               if (file.size(f) > length(b)) 0:3 else 0L)
+    if (is.null(cut)) NA_character_ else
+      child_clip(as_utf8(rawToChar(utils::head(b, length(b) - cut))), 50000L)
   }, "", USE.NAMES = FALSE)
   data.frame(path = substring(now, nchar(dir) + 2L), bytes = file.size(now), text = text)
 }

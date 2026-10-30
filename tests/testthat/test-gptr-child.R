@@ -42,6 +42,27 @@ test_that("plain data round-trips exactly (08 section 3.3)", {
   expect_null(plain_rt(NULL))
 })
 
+test_that("a value the reader cannot rebuild exactly travels as its summary, never refused", {
+  latin = "caf\xe9"
+  Encoding(latin) = "latin1"
+  bytes = "caf\xc3\xa9"
+  Encoding(bytes) = "bytes"
+  exact = list(latin = latin, now = .POSIXct(1.5e9), utc = .POSIXct(1.5e9, tz = "UTC"),
+               df = data.frame(a = 1:3), named = c(a = 1, b = 2))
+  for (k in names(exact)) expect_identical(plain_rt(exact[[k]]), exact[[k]], label = k)
+  shown = list(na_level = addNA(factor(c("a", NA))), ordered = factor("a", ordered = TRUE),
+               bytes = bytes, native = rawToChar(as.raw(c(0x61, 0xff))),
+               dimnames = matrix(1:4, 2L, dimnames = list(c("a", "b"), NULL)),
+               rownames = mtcars[1:2, 1:2], subset = data.frame(a = 1:3)[2:3, , drop = FALSE],
+               na_name = stats::setNames(1:2, c("a", NA)),
+               bad_name = stats::setNames(list(1), rawToChar(as.raw(0xff))))
+  path = withr::local_tempfile(fileext = ".json")
+  writeLines(json_encode(plain_encode(child_result_new("a", status = "idle", objects = shown))),
+             path)
+  res = child_read(path)
+  for (k in names(shown)) expect_match(res$objects[[k]], "^<", label = k)
+})
+
 test_that("closures, environments, S4 and other classes travel as printed summaries", {
   x = list(f = function(x) x + 1, e = new.env(), s4 = methods::getClass("numeric"),
            fit = stats::lm(mpg ~ wt, data = mtcars), dt = as.difftime(1, units = "secs"))
@@ -118,6 +139,28 @@ test_that("a value too large or deep for the reader travels as its summary (08 s
   expect_type(res$objects$wide[[60000L]], "character")
 })
 
+test_that("a value that uses up the reader's count leaves the objects a list", {
+  testthat::local_mocked_bindings(plain_max = utils::modifyList(plain_max, list(nodes = 5000)))
+  path = withr::local_tempfile(fileext = ".json")
+  writeLines(json_encode(plain_encode(child_result_new("a", status = "idle",
+                                                       value = as.list(rep(1, 4984L)),
+                                                       objects = list(a = 1)))), path)
+  res = child_read(path)
+  expect_identical(res$objects, list(a = 1))
+  expect_match(res$value, "^<list>")
+})
+
+test_that("a long list's summary prints only what it keeps", {
+  skip_on_cran()
+  max = getOption("max.print")
+  started = proc.time()[["elapsed"]]
+  s = plain_summary(as.list(seq_len(2e5)))
+  expect_lt(proc.time()[["elapsed"]] - started, 10)
+  expect_match(s$data, "^<list>\n\\[\\[1\\]\\]")
+  expect_match(s$data, "more characters]", fixed = TRUE)
+  expect_identical(getOption("max.print"), max)
+})
+
 test_that("a report is read in the safe direction (08 section 3.3)", {
   stream = function(...) {
     st = new.env(parent = emptyenv())
@@ -139,6 +182,33 @@ test_that("a report is read in the safe direction (08 section 3.3)", {
   expect_identical(final$unmet, "save-results")
   start = child_merge(child_read(path), stream('{"gptr_coach":"risk","level":4}'), "start")
   expect_identical(start$risk, 1L)
+})
+
+test_that("a result the parent cannot merge ends its job with an error, and the slot moves on", {
+  st = new.env(parent = emptyenv())
+  st$i = 1L
+  st$risk = 0L
+  st$refusals = child_refusals()
+  st$unmet = character()
+  st$dir = withr::local_tempdir()
+  st$result_path = file.path(st$dir, "result.json")
+  forged = child_result_new("a", status = "idle")
+  forged$refusals = structure(list(id = data.frame(a = 1:2, b = 3:4, c = 5:6), tool = c("t", "u"),
+                                   reason = c("r", "s")), row.names = c(NA, -2L),
+                              class = "data.frame")
+  writeLines(json_encode(plain_encode(forged)), st$result_path)
+  ctx = new.env(parent = emptyenv())
+  ctx$jobs = list(list(id = "a"))
+  ctx$kinds = "fake"
+  ctx$out = list(NULL)
+  ctx$limits = list()
+  ln = new.env(parent = emptyenv())
+  ln$queue = integer()
+  child_exit(ctx, ln, st, 0L)
+  expect_identical(ctx$out[[1L]]$status, "error")
+  expect_match(ctx$out[[1L]]$error, "differing number of rows", fixed = TRUE)
+  expect_true(ln$settled)
+  expect_false(dir.exists(st$dir))
 })
 
 test_that("plan jobs share at most two slots per account; a reported limit skips the rest", {
@@ -237,6 +307,29 @@ test_that("the fence denies writes outside, moving away from the folder, install
   expect_identical(r("m = mean(1:3)"), "allow")
 })
 
+test_that("the fence reads a folder changer's name as a move only where R calls it", {
+  run = path_norm(withr::local_tempdir())
+  withr::local_options(gptr.project_root = run)
+  withr::local_dir(run)
+  r = function(code) {
+    call = list(name = "r", input = list(code = code), risk = gptr_risk(code))
+    child_fence(call, NULL)$decision %||% "allow"
+  }
+  for (code in c("in_dir = 'data'; d = read.csv(file.path(in_dir, 'x.csv'))", "x = 'setwd'",
+                 "with_dir = 1", "local_dir = c(a = 1); local_dir[['a']]")) {
+    expect_identical(r(code), "allow", label = code)
+  }
+  far = path_norm(tempdir())
+  for (code in c("setwd('/x')", "do.call('setwd', list('/x'))", "f = match.fun('setwd')",
+                 sprintf("do.call(setwd, list('%s'))", far), "lapply(dirs, setwd)",
+                 "Map('setwd', dirs)", "f = withr::with_dir",
+                 "system(\"pwsh -c 'Set-Location /tmp; echo x > pwn'\")",
+                 # a text whose first word is cd reads as a shell command (D-284)
+                 "labs = c('cd', 'ab')")) {
+    expect_identical(r(code), "deny", label = code)
+  }
+})
+
 test_that("a run's child: a fresh folder, the fence in the run and its sub-agent, events", {
   skip_on_cran()
   local_project()
@@ -318,6 +411,19 @@ test_that("a value without a label R can use is bound under a name of its own", 
   expect_match(res$first_user, "<attached name=\"..2\">", fixed = TRUE)
 })
 
+test_that("two objects under one label are bound under two names", {
+  skip_on_cran()
+  local_project()
+  expect_identical(child_bind(c("a", "a", "Xa")), c("a", "Xa.1", "Xa"))
+  # gptr_coach("Add them.", x, x = y) labels both objects `x`
+  fake = gptr_fake_provider(list(fake_tool("r", code = "s = c(x, Xx)"), "done"), name = "twofake")
+  res = child_local(list(id = "d", role = "run", prompt = "Add them.",
+                         objects = list(x = 1, x = 2), args = list(mode = "auto"),
+                         model = fake))$res
+  expect_identical(res$status, "idle")
+  expect_identical(res$objects, list(s = c(1, 2)))
+})
+
 test_that("a run's result holds its first user message on its own", {
   skip_on_cran()
   local_project()
@@ -344,6 +450,43 @@ test_that("a run's result too large for the parent keeps all but its value and o
   expect_match(res$value, "^<character>")
   expect_lt(nchar(res$value), 3000L)
   expect_match(res$objects$big, "^<character>")
+})
+
+test_that("a run's result R cannot encode keeps all but its value and objects", {
+  skip_on_cran()
+  local_project()
+  real = json_encode
+  box = new.env(parent = emptyenv())
+  box$n = 0L
+  # a value whose JSON is over R's string limit (2^31 - 1 bytes) fails in json_encode()
+  testthat::local_mocked_bindings(json_encode = function(x, pretty = FALSE) {
+    if (is.list(x) && "first_user" %in% unlist(x[["names"]])) {
+      box$n = box$n + 1L
+      if (box$n == 1L) stop("R character strings are limited to 2^31-1 bytes")
+    }
+    real(x, pretty)
+  })
+  fake = gptr_fake_provider(list(fake_tool("r", code = "big = 1:3; gptr_return(big)"),
+                                 "kept text"), name = "hugefake")
+  res = child_local(list(id = "h", role = "run", prompt = "Make it big.",
+                         args = list(mode = "auto"), model = fake))$res
+  expect_identical(box$n, 2L)
+  expect_identical(res$status, "idle")
+  expect_identical(res$text, "kept text")
+  expect_match(res$value, "^<integer>")
+  expect_match(res$objects$big, "^<integer>")
+})
+
+test_that("a large UTF-8 file keeps its text when the read stops inside a character", {
+  dir = withr::local_tempdir()
+  # 300,001 bytes, the 200,000th of them the first byte of an e-acute
+  writeBin(c(charToRaw(strrep("a\u00e9", 1e5)), charToRaw("a")), file.path(dir, "big.csv"))
+  writeBin(as.raw(c(0x61, 0x00, 0x62)), file.path(dir, "nul.dat"))
+  files = child_files(dir, character())
+  expect_identical(files$text[files$path == "nul.dat"], NA_character_)
+  big = files$text[files$path == "big.csv"]
+  expect_identical(substr(big, 1L, 4L), "a\u00e9a\u00e9")
+  expect_match(big, "[... clipped: ", fixed = TRUE)
 })
 
 test_that("a run that needs approval ends blocked", {
