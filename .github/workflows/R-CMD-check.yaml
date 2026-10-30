@@ -24,8 +24,8 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          # macOS runs the suite serially (37-45 minutes since P28's pty tests)
-          - {os: macos-latest, r: 'release', minutes: 60}
+          # macOS runs the suite serially (37-45 minutes since P28's pty tests, 56 since P29)
+          - {os: macos-latest, r: 'release', minutes: 75}
           # R-devel installs every dependency from source (about 65 minutes on a cold cache)
           - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release', minutes: 120}
           - {os: ubuntu-latest, r: 'release'}
@@ -98,7 +98,7 @@ jobs:
   no-suggests:
     runs-on: ubuntu-latest
     name: ubuntu-latest (release, no Suggests)
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       _R_CHECK_FORCE_SUGGESTS_: false
@@ -150,7 +150,7 @@ jobs:
   c-locale:
     runs-on: ubuntu-latest
     name: ubuntu-latest (release, LC_ALL=C)
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       LC_ALL: C
@@ -299,7 +299,7 @@ jobs:
   connections:
     runs-on: ubuntu-latest
     name: connections left open
-    timeout-minutes: 60
+    timeout-minutes: 75
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
