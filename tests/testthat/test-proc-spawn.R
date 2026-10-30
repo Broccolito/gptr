@@ -180,10 +180,10 @@ test_that("proc_run() output past 64 MiB keeps its head and tail and a status li
   expect_true(endsWith(res$stdout, "a\n[output exceeded 64 MB; process tree killed]\n"))
   # cut inside characters and before a partial one, the text stays UTF-8
   f = withr::local_tempfile()
-  writeBin(c(charToRaw(strrep("日", 24e6)), as.raw(0xe6)), f)
+  writeBin(c(charToRaw(strrep("\u65e5", 24e6)), as.raw(0xe6)), f)
   text = proc_read_text(f)
-  expect_true(startsWith(text, "日日"))
-  expect_true(endsWith(text, "日日\n[output exceeded 64 MB; process tree killed]\n"))
+  expect_true(startsWith(text, "\u65e5\u65e5"))
+  expect_true(endsWith(text, "\u65e5\u65e5\n[output exceeded 64 MB; process tree killed]\n"))
 })
 
 test_that("line_reader() returns complete lines and the final unterminated line at EOF", {

@@ -1229,7 +1229,7 @@ test_that("a rewind after setwd() uses the store of the session's project", {
 
 test_that("a file with a UTF-8 name is captured and restored in a C locale", {
   proj = local_project()
-  name = "café data.txt"
+  name = "caf\u00e9 data.txt"
   writeLines("x", file.path(proj, name))
   local_name_locale()
   ck = ckpt_ck_new("s0000000199")
