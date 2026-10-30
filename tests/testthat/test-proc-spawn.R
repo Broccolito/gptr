@@ -176,8 +176,10 @@ test_that("proc_run() output past 64 MiB keeps its head and tail and a status li
   res = proc_run(rscript_path(), c("--vanilla", "-e", code), timeout = 60)
   expect_false(res$timed_out)
   expect_lte(nchar(res$stdout, type = "bytes"), 64 * 1024^2 + 100)
-  expect_true(startsWith(res$stdout, "first\naaa"))
-  expect_true(endsWith(res$stdout, "a\n[output exceeded 64 MB; process tree killed]\n"))
+  # a Windows child's text-mode output arrives with CRLF line ends, which proc_run() keeps
+  out = gsub("\r\n", "\n", res$stdout, fixed = TRUE)
+  expect_true(startsWith(out, "first\naaa"))
+  expect_true(endsWith(out, "a\n[output exceeded 64 MB; process tree killed]\n"))
   # cut inside characters and before a partial one, the text stays UTF-8
   f = withr::local_tempfile()
   writeBin(c(charToRaw(strrep("\u65e5", 24e6)), as.raw(0xe6)), f)
