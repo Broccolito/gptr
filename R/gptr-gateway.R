@@ -232,28 +232,35 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
     gptr_warn(c("peter() got two unnamed strings: the first is the prompt, the second is context.",
                 "Name the prompt (prompt = \"...\") to make this explicit."), "two_prompts")
   }
+  # each identifier is resolved where it was written, which a wrapper's `...` passes on
   e = substitute(model)
-  id_model = if (ident_force_needed(e, "model", caller)) ident_value(model, "model", e) else
-    resolve_identifier(e, "model", caller)
+  at = ident_home("model", nf)
+  id_model = if (ident_force_needed(e, "model", at)) ident_value(model, "model", e) else
+    resolve_identifier(e, "model", at)
   e = substitute(mode)
-  id_mode = if (ident_force_needed(e, "mode", caller)) ident_value(mode, "mode", e) else
-    resolve_identifier(e, "mode", caller)
+  at = ident_home("mode", nf)
+  id_mode = if (ident_force_needed(e, "mode", at)) ident_value(mode, "mode", e) else
+    resolve_identifier(e, "mode", at)
   e = substitute(skills)
-  id_skills = if (ident_force_needed(e, "skills", caller)) ident_value(skills, "skills", e) else
-    resolve_identifier(e, "skills", caller)
+  at = ident_home("skills", nf)
+  id_skills = if (ident_force_needed(e, "skills", at)) ident_value(skills, "skills", e) else
+    resolve_identifier(e, "skills", at)
   e = substitute(plugins)
-  id_plugins = if (ident_force_needed(e, "plugins", caller)) ident_value(plugins, "plugins", e) else
-    resolve_identifier(e, "plugins", caller)
+  at = ident_home("plugins", nf)
+  id_plugins = if (ident_force_needed(e, "plugins", at)) ident_value(plugins, "plugins", e) else
+    resolve_identifier(e, "plugins", at)
   e = substitute(extensions)
-  id_ext = if (ident_force_needed(e, "extensions", caller)) {
+  at = ident_home("extensions", nf)
+  id_ext = if (ident_force_needed(e, "extensions", at)) {
     ident_value(extensions, "extensions", e)
   } else {
-    resolve_identifier(e, "extensions", caller)
+    resolve_identifier(e, "extensions", at)
   }
   e = substitute(tools)
-  id_tools = if (ident_force_needed(e, "tools", caller)) ident_value(tools, "tools", e) else
-    resolve_identifier(e, "tools", caller)
-  id_agents = resolve_agents(substitute(agents), caller)
+  at = ident_home("tools", nf)
+  id_tools = if (ident_force_needed(e, "tools", at)) ident_value(tools, "tools", e) else
+    resolve_identifier(e, "tools", at)
+  id_agents = resolve_agents(substitute(agents), ident_home("agents", nf))
   # an explicit `mode =` changes a continued session; an inherited one only tightens (IC-53)
   args$mode_given = !is.null(id_mode)
   if (is.null(prompt_text) && !isTRUE(args$stdin) && !gptr_can_prompt()) {
