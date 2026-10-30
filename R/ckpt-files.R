@@ -94,15 +94,19 @@ ckpt_store_get = function(hash, dest, store = ckpt_store_root()) {
 }
 
 #' Does another live process hold a session lock (`<file>.lock/pid`: pid, creation time; P06)?
-#' A lock without a pid file or older than 24 h is not held (P06's rule); an unreadable pid is.
+#' A lock without a pid file is not held; a readable holder is held while P06's lock_is_live()
+#' says so, and an unreadable pid while the file is younger than 24 h.
 #' @noRd
 ckpt_foreign_lock = function(session_files) {
   for (f in file.path(paste0(session_files, ".lock"), "pid")) {
-    age = as.numeric(Sys.time()) - as.numeric(file.mtime(f))
-    if (is.na(age) || age > 24 * 3600) next
-    x = suppressWarnings(as.numeric(readLines(f, warn = FALSE, encoding = "UTF-8")))
-    if (identical(x[1L], as.numeric(Sys.getpid()))) next
-    if (is.na(x[1L]) || pid_alive(x[1L], x[2L])) return(TRUE)
+    if (!file.exists(f)) next
+    h = lock_holder(dirname(f))
+    if (is.null(h) || is.na(h$pid)) {
+      age = as.numeric(Sys.time()) - as.numeric(file.mtime(f))
+      if (!is.na(age) && age <= 24 * 3600) return(TRUE)
+      next
+    }
+    if (!lock_is_mine(h) && lock_is_live(h)) return(TRUE)
   }
   FALSE
 }
