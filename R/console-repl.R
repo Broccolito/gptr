@@ -1384,9 +1384,12 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' again, and Ctrl-U clears the draft. A question (an approval, a choice) waits until typing
 #' pauses for a second, or three while the draft has text, and the draft stays: through
 #' questions, Ctrl-C and the pause menu, and to the next prompt, where Enter sends it. Keys typed
-#' while R code runs in this process (the `r` tool) show when it returns. A steer the answer did
-#' not take (it ended first) is the next prompt; after an abort or an error nothing queued is
-#' sent: the queued text and the draft go to the console history, and Up recalls them. Under
+#' while R code runs in this process (the `r` tool) show when it returns. Such code that reads
+#' the terminal through `readline()` or `menu()` inside another function shows only that read's
+#' prompt (the text printed before it shows when the code returns, the typed answer never), and
+#' Ctrl-C at that read aborts the answer instead of pausing it. A steer the answer did not take
+#' (it ended first) is the next prompt; after an abort or an error nothing queued is sent: the
+#' queued text and the draft go to the console history, and Up recalls them. Under
 #' TERM=dumb or in ESS a line typed with Enter is queued as `type_ahead` says. On the CLI routes
 #' (`claude-cli`, `codex`) the agent reads a steer after the CLI's answer, which is often the
 #' whole run.

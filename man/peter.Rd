@@ -216,9 +216,12 @@ queued; Up on an empty draft takes back the newest message not yet delivered, to
 again, and Ctrl-U clears the draft. A question (an approval, a choice) waits until typing
 pauses for a second, or three while the draft has text, and the draft stays: through
 questions, Ctrl-C and the pause menu, and to the next prompt, where Enter sends it. Keys typed
-while R code runs in this process (the \code{r} tool) show when it returns. A steer the answer did
-not take (it ended first) is the next prompt; after an abort or an error nothing queued is
-sent: the queued text and the draft go to the console history, and Up recalls them. Under
+while R code runs in this process (the \code{r} tool) show when it returns. Such code that reads
+the terminal through \code{readline()} or \code{menu()} inside another function shows only that read's
+prompt (the text printed before it shows when the code returns, the typed answer never), and
+Ctrl-C at that read aborts the answer instead of pausing it. A steer the answer did not take
+(it ended first) is the next prompt; after an abort or an error nothing queued is sent: the
+queued text and the draft go to the console history, and Up recalls them. Under
 TERM=dumb or in ESS a line typed with Enter is queued as \code{type_ahead} says. On the CLI routes
 (\code{claude-cli}, \code{codex}) the agent reads a steer after the CLI's answer, which is often the
 whole run.
