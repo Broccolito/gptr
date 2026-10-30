@@ -295,12 +295,16 @@ lock_is_mine = function(h) {
   identical(h$pid, Sys.getpid()) && isTRUE(abs(h$created - lock_self_created()) < 0.01)
 }
 
-#' Is a lock's holder alive (pid and creation time) with a heartbeat younger than 24 h?
+#' Is a lock's holder alive? Its pid and creation time prove it; a holder that cannot be checked
+#' (no creation time, or an unknown process state) also needs a heartbeat younger than 24 h
+#' (D-298: an idle session touches its pid file only while a run is live)
 #' @noRd
 lock_is_live = function(h) {
-  if (is.na(h$pid)) return(FALSE)
-  if (isTRUE(as.numeric(Sys.time()) - h$heartbeat > 24 * 3600)) return(FALSE)
-  isTRUE(pid_alive(h$pid, .POSIXct(h$created, tz = "UTC")))
+  if (is.na(h$pid) || !proc_pid_valid(h$pid)) return(FALSE)
+  alive = proc_identity(h$pid, h$created)$alive
+  if (isFALSE(alive)) return(FALSE)
+  if (isTRUE(alive) && is.finite(h$created)) return(TRUE)
+  !isTRUE(as.numeric(Sys.time()) - h$heartbeat > 24 * 3600)
 }
 
 #' Is a session file locked by another live process?
