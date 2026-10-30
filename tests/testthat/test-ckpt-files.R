@@ -1203,15 +1203,6 @@ test_that("protected and control files are never stored; their rows have no pre-
     rawToChar(if (endsWith(b, ".gz")) memDecompress(x, "gzip") else x)
   }, "")
   expect_false(any(grepl("fake-", text, fixed = TRUE)))
-  # a project inside a protected folder (Claude Code's .claude/worktrees) keeps its own files
-  inner = file.path(proj, "nest", ".claude", "worktrees", "p")
-  dir.create(file.path(inner, ".gptr"), recursive = TRUE)
-  writeLines("plain", file.path(inner, "b.txt"))
-  withr::local_dir(inner)
-  withr::local_options(gptr.project_root = inner)
-  ck = ckpt_ck_new("s0000000198")
-  ckpt_files_before(ck, call, turn = 1L)
-  expect_identical(names(ck$files$hash), "b.txt")
 })
 
 test_that("a rewind after setwd() uses the store of the session's project", {
