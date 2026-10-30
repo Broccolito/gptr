@@ -357,6 +357,9 @@ risk_target = function(w, op, root, dirs = root) {
     }))
   }
   best = list(pc = "unknown", level = -1L, secret = FALSE)
+  # a path in the project is a secret one by its part below the root, as P01's path_class() guards
+  pre = paste0(sub("/\\z", "", root, perl = TRUE), "/")
+  below = function(x) if (startsWith(x, pre)) substring(x, nchar(pre)) else x
   for (p in paths) {
     if (identical(p, "")) next
     pc = if (is.na(p)) "unknown" else risk_path_class(p, root)
@@ -373,7 +376,8 @@ risk_target = function(w, op, root, dirs = root) {
     }
     lv = risk_op_level(pc, op)
     sec = identical(op, "read") && !is.na(p) &&
-      (grepl(scan_secret_path_re, p, perl = TRUE) || grepl(scan_secret_path_re, w, perl = TRUE))
+      (grepl(scan_secret_path_re, below(p), perl = TRUE) ||
+         grepl(scan_secret_path_re, below(w), perl = TRUE))
     if (sec) lv = 3L
     if (lv > best$level || (lv == best$level && identical(pc, "control"))) {
       best = list(pc = pc, level = lv, secret = sec)

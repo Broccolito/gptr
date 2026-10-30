@@ -306,6 +306,19 @@ test_that("path_class() assigns the classes of report 18 and IC-54", {
   expect_identical(path_class(file.path(home, ".R", "Makevars"), root), "control")
 })
 
+test_that("a project in a protected folder classes a path by its part below the root (D-292)", {
+  base = path_norm(withr::local_tempdir())
+  root = file.path(base, ".claude", "worktrees", "proj")
+  dir.create(file.path(root, "sub"), recursive = TRUE)
+  root = path_norm(root)
+  cls = function(p) path_class(p, root)
+  expect_identical(cls(c("a.csv", "sub/out.txt", file.path(root, "x.R"))), rep("workspace", 3L))
+  expect_identical(cls(c(".git/config", ".env", "AGENTS.md", ".git/HEAD")),
+                   c("control", "protected", "instructions", "protected"))
+  expect_identical(cls(root), "critical")
+  expect_identical(cls(file.path(base, ".claude", "settings.json")), "protected")
+})
+
 test_that("path_class protects local credential directories and env files", {
   root = path_norm(withr::local_tempdir())
   paths = c(".secrets", ".secrets/jev-key.env", "keys/llm-passwords.env")

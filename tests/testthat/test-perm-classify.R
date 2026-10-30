@@ -1660,10 +1660,9 @@ test_that("a drive root is outside the project as R 4.2 on Windows places paths 
   expect_identical(lv("list.files('.')"), 0L)
 })
 
-test_that("a project in a protected folder reads its root as its folders (review round 6)", {
-  # every path under .git or .claude is protected (Claude Code's worktrees live in
-  # .claude/worktrees), the project's root read whole too, as before review round 5; a read
-  # under .claude is also a secret path's (3)
+test_that("a project in a protected folder reads its paths as any project's (D-292)", {
+  # a path in the project is classed by its part below the root (Claude Code's worktrees live in
+  # .claude/worktrees), the project's root read whole as its folders
   base = withr::local_tempdir()
   for (dirs in list(c(".git", "proj"), c(".claude", "worktrees", "proj"))) {
     root = do.call(file.path, as.list(c(base, dirs)))
@@ -1672,12 +1671,17 @@ test_that("a project in a protected folder reads its root as its folders (review
     withr::local_dir(root)
     withr::local_options(gptr.project_root = root)
     lv = function(code) gptr_risk(code, root = root)$level
-    for (code in c("list.files('.')", "list.files()", "system('ls .')")) {
-      expect_identical(lv(code), if (dirs[[1L]] == ".git") 2L else 3L, label = code)
-      expect_identical(lv(code), lv("list.files('sub')"), label = code)
+    for (code in c("list.files('.')", "list.files()", "system('ls .')", "list.files('sub')",
+                   "x = read.csv('a.csv')")) {
+      expect_true(lv(code) <= 1L, label = code)
     }
-    expect_identical(lv("setwd('.')"), lv("setwd('sub')"))
-    expect_identical(lv("withr::local_dir('.')"), lv("withr::local_dir('sub')"))
+    for (code in c("writeLines('x', 'out.txt')", "setwd('.')", "setwd('sub')",
+                   "withr::local_dir('sub')")) {
+      expect_identical(lv(code), 2L, label = code)
+    }
+    expect_identical(lv("unlink('out.txt')"), 3L)
+    expect_identical(lv("unlink('.git/config')"), 4L)
+    expect_identical(lv("x = readLines('.env')"), 3L)
   }
 })
 
