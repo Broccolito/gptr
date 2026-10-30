@@ -102,11 +102,16 @@ test_that("gptr_parallel() returns a team of the members (contract 6.5 example)"
 
 test_that("gptr_parallel() members run concurrently, max_active at a time", {
   skip_on_cran()
-  local_team_fake(list(fake_text("slow", delay = 2)))
-  t0 = Sys.time()
+  starts = numeric()
+  local_team_fake(function(request) {
+    starts <<- c(starts, reactor_now())
+    fake_text("slow", delay = 2)
+  })
   team = gptr_parallel(a = peter("one", envir = new.env()), b = peter("two", envir = new.env()),
                        c = peter("three", envir = new.env()))
-  expect_lt(as.numeric(difftime(Sys.time(), t0, units = "secs")), 5)
+  # concurrent members send their requests together; one after another they are 2 s apart
+  expect_length(starts, 3L)
+  expect_lt(diff(range(starts)), 2)
   expect_identical(unname(vapply(team$children, function(s) s$status, "")), rep("idle", 3L))
   t1 = Sys.time()
   gptr_parallel(a = peter("one", envir = new.env()), b = peter("two", envir = new.env()),
