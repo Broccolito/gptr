@@ -2361,9 +2361,16 @@ risk_s3_args = function(e, fn) {
 
 #' The expressions a call may pass as its path argument: the matched one, or the one named in its
 #' `...`; else every argument in a `...` row's `...`, or every unnamed argument (attribute `one`
-#' when only one of them is the path: a named argument R did not match)
+#' when only one of them is the path: a named argument R did not match). A `folder/file` row
+#' (ggsave()'s "path/filename") writes its file in the folder the call passes.
 #' @noRd
 risk_path_exprs = function(a, arg) {
+  if (grepl("/", arg, fixed = TRUE)) {
+    ps = risk_path_exprs(a, sub(".*/", "", arg))
+    dir = risk_arg(a, sub("/.*", "", arg))
+    if (!is.null(dir)) ps[] = lapply(ps, function(p) call("file.path", dir, p))
+    return(ps)
+  }
   dots = a[["..."]]
   v = if (arg != "...") risk_arg(a, arg, default = TRUE) %||% risk_arg(as.list(dots), arg)
   if (!is.null(v)) return(list(v))

@@ -1449,6 +1449,34 @@ test_that("a process's stdout or stderr file is a write classified by its path",
   expect_identical(lv("processx::run('ls', stderr = '2>&1')"), 0L)
 })
 
+test_that("ggsave() writes its file in its path folder, with ggplot2 loaded or not (FIX-51)", {
+  root = local_project()
+  out = path_norm(withr::local_tempdir(tmpdir = dirname(tempdir())))
+  r = function(code) gptr_risk(code, root = root)
+  # ggplot2's formals while it is loaded, and none while it is not
+  sig = function(filename, plot, device = NULL, path = NULL, scale = 1, ...) NULL
+  matched = risk_args
+  for (loaded in c(TRUE, FALSE)) {
+    local_mocked_bindings(risk_args = function(e, fn, pkg) {
+      if (!identical(fn, "ggsave")) return(matched(e, fn, pkg))
+      matched(e, if (loaded) sig else fn, if (loaded) pkg else NA)
+    })
+    for (code in sprintf(c("ggplot2::ggsave('p.png', p, path = '%s')",
+                           "ggplot2::ggsave(path = '%s', filename = 'p.png')"), out)) {
+      x = r(code)
+      expect_identical(list(x$level, x$flagged$path_class, x$paths),
+                       list(3L, "outside", file.path(out, "p.png")), label = code)
+    }
+    expect_identical(r("ggplot2::ggsave('p.png', p, path = d)")$flagged$path_class, "unknown")
+    expect_identical(r("ggplot2::ggsave('settings.json', p, path = '.gptr')")$level, 4L)
+    # neighbours: without a folder, or with one in the project, a write there as before
+    for (code in c("ggplot2::ggsave('p.png', p)", "ggplot2::ggsave('p.png', p, path = 'figs')")) {
+      expect_identical(r(code)$level, 2L, label = code)
+    }
+    expect_identical(r("ggplot2::ggsave('p.png', p, path = 'figs')")$targets$files, "figs/p.png")
+  }
+})
+
 test_that("starting a background process is level 2 process", {
   root = local_project()
   lv = function(code) gptr_risk(code, root = root)$level

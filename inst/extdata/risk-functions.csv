@@ -895,7 +895,7 @@
 "ggplot2","geom_*",0,"read","",""
 "ggplot2","ggplot",0,"read","",""
 "ggplot2","ggplot_build",0,"read","",""
-"ggplot2","ggsave",2,"file_write","filename",""
+"ggplot2","ggsave",2,"file_write","path/filename",""
 "ggplot2","ggtitle",0,"read","",""
 "ggplot2","guide_*",0,"read","",""
 "ggplot2","guides",0,"read","",""

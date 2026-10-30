@@ -4172,7 +4172,9 @@ Records live in the session log (`gptr.checkpoint`, `gptr.rewind`, §4.6). Never
 
 `inst/extdata/risk-functions.csv`: columns `package`, `function`, `level` (0-4), `category` (`read`, `object_write`,
 `file_write`, `file_delete`, `network`, `process`, `install`, `dynamic`, `session`, `secret`, `interactive`,
-`critical`, `control` (IC-53)), `path_arg` (the argument holding a path, or empty), `note`; plus a `packages` table
+`critical`, `control` (IC-53)), `path_arg` (the argument holding a path, or empty; `folder/file`
+names a file argument written in a folder argument when the call passes one, as `ggsave()`'s
+`path/filename`), `note`; plus a `packages` table
 of risky packages whose unlisted functions are at least level 2 (IC-54). An unlisted function of a package outside
 base, stats, utils, methods, graphics, grDevices and tools is level 1. `inst/extdata/risk-commands.csv`:
 `command`, `subcommand` (or `*`), `level`, `category`, `note` (G5 levels). Plugins and users extend both through

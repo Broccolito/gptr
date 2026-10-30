@@ -271,6 +271,8 @@ test_that("the fence denies writes outside, moving away from the folder, install
   expect_identical(r(sprintf("write.csv(mtcars, '%s')", out)), "deny")
   expect_identical(r(sprintf("peter$write('%s', 'x')", out)), "deny")
   expect_identical(r(sprintf("write.csv(mtcars, '%s')", inside)), "allow")
+  expect_identical(r(sprintf("ggplot2::ggsave('p.png', p, path = '%s')", dirname(out))), "deny")
+  expect_identical(r("ggplot2::ggsave('p.png', p, path = 'sub')"), "allow")
   expect_identical(r("write.csv(mtcars, 'sub/x.csv')"), "allow")
   expect_identical(r("readr::write_csv(mtcars, 'x.csv')"), "allow")
   expect_identical(r("file.remove('a', f)"), "deny")
@@ -342,7 +344,7 @@ test_that("the fence refuses R code that writes to a path or calls a function it
   # `d` was set by an earlier call, so this call cannot show where the file goes
   expect_match(fence("writeLines('x', file.path(d, 'w.txt'))")$reason,
                "it writes only to paths gptr can read", fixed = TRUE)
-  for (code in c("unlink(file.path(d, 'old'))",
+  for (code in c("unlink(file.path(d, 'old'))", "ggplot2::ggsave('p.png', p, path = d)",
                  "write.csv(mtcars, file.path(d, 'x.csv'), fileEncoding = 'UTF-8')",
                  "write.csv(mtcars, file.path(d, 'x.csv'), na = '')")) {
     expect_identical(fence(code)$decision, "deny", label = code)
