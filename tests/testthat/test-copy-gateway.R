@@ -107,3 +107,21 @@ for (label in names(copy_rows)) {
     expect_no_copy(c(copy_setup, row[[1L]]), row[[2L]], label = label, in_run_edit = row[[3L]])
   })
 }
+
+# gptr_coach() refuses gptr.unsafe_no_permissions, so its row has a setup of its own; its runs
+# are R processes, called directly and through a wrapper
+test_that("no copy of big after gptr_coach('Count big.', big)", {
+  local_worker_lib()
+  setup = c("big = runif(5e6)",
+            paste0("solver = gptr_fake_provider(function(request) ",
+                   "if (length(request$last_results)) 'Done.' else ",
+                   "list(tool = 'r', input = list(code = 'gptr_return(length(big))')), ",
+                   "name = 'solver')"),
+            paste0("coach = gptr_fake_provider(list('{\"note\": \"n\", \"notes\": \"n\"}'), ",
+                   "name = 'coach')"),
+            "options(gptr.quiet = TRUE)")
+  call = "gptr_coach('Count big.', big, model = solver, mode = 'auto', coach = coach, check = NULL)"
+  expect_no_copy(setup, paste("h =", call), label = "gptr_coach()")
+  wrapped = c("w = function(...) gptr_coach(...)", paste("h =", sub("gptr_coach", "w", call)))
+  expect_no_copy(setup, wrapped, label = "a wrapper of gptr_coach()")
+})

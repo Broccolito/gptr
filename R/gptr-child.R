@@ -184,12 +184,14 @@ plain_numbers = function(node, type, len) {
 #'
 #' A job is `list(id, role = "run" | "coach" | "judge", spec, prompt, objects, args, model,
 #' schema, budget, direction)`: `spec` a harness spec, `prompt` the interpolated prompt, `objects`
-#' a named list, `args` resolved peter() arguments, `model` a reference or a provider spec,
-#' `schema` a coach's reply schema, `direction` "final" (default) or "start" (the safe reading of
-#' the run's report); a coach's `surface`, `base` and `rules_allowed` are read by
+#' a named list, or `file` the path of an RDS file holding it (gptr_coach() writes its objects
+#' once and keeps no reference to them), `args` resolved peter() arguments, `model` a reference or
+#' a provider spec, `schema` a coach's reply schema, `direction` "final" (default) or "start" (the
+#' safe reading of the run's report); a coach's `surface`, `base` and `rules_allowed` are read by
 #' coach_child_reply(). Children run on the worker pool, at most two at once per plan account;
-#' once a plan reports its limit, its later jobs are not started (status `skipped`). Interrupting
-#' this call kills every child.
+#' once a plan reports its limit, its later jobs are not started (status `skipped`). Each child
+#' registers this R session's secrets, so it redacts them. Interrupting this call kills every
+#' child.
 #' @param jobs A list of jobs.
 #' @return One plain-data result per job, in order: `list(id, status, reason, text, turns,
 #'   usage, value, objects, transcript, risk, refusals, unmet, files, plan, limit, checks,
@@ -203,7 +205,7 @@ coach_run_jobs = function(jobs) {
   ctx$kinds = vapply(jobs, function(j) coach_model_kind(j$model), "")
   ctx$out = vector("list", length(jobs))
   ctx$limits = list()
-  ctx$base = list(options = child_options(), parent = proc_self())
+  ctx$base = list(options = child_options(), parent = proc_self(), secrets = child_secrets())
   if (any(vapply(jobs, function(j) identical(j$role, "run"), NA))) {
     ctx$run = list(registry = worker_registry(character()), rules = child_rules(),
                    instructions = child_instructions())
@@ -225,6 +227,7 @@ child_job_check = function(job) {
   check_choice(job$direction %||% "final", c("final", "start"), "direction")
   check_string(job$prompt, "prompt", empty = TRUE)
   check_list(job$objects, "objects", named = TRUE, null = TRUE)
+  check_string(job$file, "file", null = TRUE)
   check_list(job$args, "args", named = TRUE, null = TRUE)
   bad = names(Filter(worker_unserialisable, c(job$objects, job$args, list(model = job$model))))
   if (length(bad)) {
@@ -498,6 +501,16 @@ child_options = function() {
   c(opts, list(gptr.replay = replay_mode()))
 }
 
+#' The registered secrets that redact, which a child registers before it runs, so it redacts them
+#' in the objects it was sent and in all it writes or sends (D-295)
+#' @noRd
+child_secrets = function() {
+  lapply(unname(Filter(function(e) isTRUE(e$redact), secrets_state()$reg)), function(e) {
+    c(e[c("name", "source", "active", "origin")],
+      list(value = get(e$id, envir = vault_env(), inherits = FALSE)))
+  })
+}
+
 #' The provider record a model reference names, sent to a coach's child when the person
 #' registered it (a coach gets no registry); gptr's own providers are left to the child
 #' @noRd
@@ -524,6 +537,7 @@ child_provider = function(model) {
 child_main = function(spec_path, result_path, out = NULL) {
   p = readRDS(spec_path, refhook = worker_refhook)
   job = p$job
+  if (!is.null(job$file)) job$objects = readRDS(job$file, refhook = worker_refhook)
   run = identical(job$role, "run")
   dir = tempfile("gptr-run-")
   dir.create(dir, mode = "0700")
@@ -546,6 +560,7 @@ child_main = function(spec_path, result_path, out = NULL) {
   the$rules_session = p$rules
   the$coach_role = if (run) "run" else "coach"
   the$model_gate = coach_model_kind
+  for (sec in p$secrets) secret_register(sec$value, sec$name, sec$source, sec$active, sec$origin)
   cs = new.env(parent = emptyenv())
   cs$out = out %||% tryCatch(processx::conn_create_fd(1L, close = FALSE),
                              error = function(e) stdout())

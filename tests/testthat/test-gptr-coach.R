@@ -617,6 +617,56 @@ test_that("peter() arguments are taken from their own frames when gptr_coach() i
   }
   use()
   expect_identical(job_by_id(log, "start1")$args$budget, list(turns = 3))
+  # an identifier resolves as peter() resolves it through a wrapper: a variable from its own frame
+  fa = gptr_fake_provider(list("a"), name = "fa")
+  m = fa
+  g = function() {
+    m = coach_solver()
+    x = c(1, NA, 3)
+    wrap("Average x.", x, model = m, mode = "auto", coach = coach_fake())
+  }
+  expect_identical(g()$record$model, "solver/solver-1")
+  expect_identical(job_by_id(log, "start1")$model$name, "solver")
+})
+
+test_that("a budget fixed in the starting harness also caps the coaches and the judge", {
+  local_project()
+  log = local_coach_stub(coach_answer(judge = judge_picks("compose2")))
+  lim = list(turns = 9L)
+  coach_k(k = 2L, harness = gptr_tailor(peter, budget = lim))
+  for (id in c("proc1", "compose2", "judge")) {
+    expect_identical(job_by_id(log, id)$budget, lim, label = id)
+  }
+  expect_error(coach_k(harness = gptr_tailor(peter, budget = list(dollars = 1))),
+               "Unknown budget field", class = "gptr_error_invalid_argument")
+})
+
+test_that("a tool of a user extension file is known before any session synced it", {
+  local_gw()
+  dir = file.path(gptr_user_dir("config"), "extensions")
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  f = file.path(dir, "coach-mytool.R")
+  writeLines(paste0("function(gptr) gptr$register(gptr::gptr_tool(\"coach_mytool\", \"Mine.\", ",
+                    "execute = function(input, ctx) \"ok\"))"), f)
+  withr::defer({
+    unlink(f)
+    for (r in registry_candidates("tool", "coach_mytool", NULL)) registry_remove(r$id)
+  })
+  args = list(tools = c("minimal", "coach_mytool"))
+  expect_invisible(coach_args_check(args, harness_spec(peter)))
+})
+
+test_that("a coaching skill whose name you took since is refused before any process starts", {
+  withr::defer(res_prune("skills:", character()))
+  local_project()
+  log = local_coach_children()
+  h = gptr_tailor(peter, coaching = list(skills = list(list(name = "late-tips",
+                                                             description = "D.", text = "T."))))
+  off = gptr_register(gptr_spec("skill", "late-tips", description = "Mine.", text = "Mine."))
+  withr::defer(off())
+  expect_error(coach_demo(harness = h), "reuse the skill name late-tips", fixed = TRUE,
+               class = "gptr_error_coaching")
+  expect_length(log$jobs, 0L)
 })
 
 # A usage row of request `id`
@@ -634,6 +684,8 @@ test_that("coaching spend reaches gptr_usage(), each request once", {
     c(answer(job), list(usage = usage_of(id)))
   })
   requests = function() attr(gptr_usage(), "totals")[["requests"]]
+  # the session-less log only: live sessions of earlier tests drop out when R collects them
+  testthat::local_mocked_bindings(live_all = function() list())
   before = requests()
   coach_k()
   expect_identical(requests() - before, 6)
@@ -709,4 +761,27 @@ test_that("the demo in real processes, at most two at once, leaves no child behi
   expect_match(h$coaching$note, "na.rm", fixed = TRUE)
   jobs = gptr_jobs()
   expect_false(any(jobs$kind == "worker"))
+})
+
+test_that("a registered secret in a run's objects reaches its child's model redacted (D-295)", {
+  local_worker_lib()
+  local_project()
+  local_vault()
+  key = "sk-coachfake-0123456789abcdef"
+  secret_register(key, "COACH_FAKE_KEY")
+  seen = withr::local_tempfile()
+  # the child's model writes every request's text where this test reads it
+  script = function(request) {
+    cat(unlist(request$messages), file = seen, sep = "\n", append = TRUE)
+    if (length(request$last_results)) "Done." else list(tool = "r", input = list(code = "cfg"))
+  }
+  environment(script) = list2env(list(seen = seen), parent = globalenv())
+  job = list(id = "start1", role = "run", spec = harness_spec(peter), prompt = "Show cfg.",
+             objects = list(cfg = list(token = key)), args = list(mode = "auto"),
+             model = gptr_fake_provider(script, name = "echo"), direction = "start")
+  res = coach_run_jobs(list(job))
+  expect_identical(res[[1L]]$status, "idle")
+  sent = paste(readLines(seen), collapse = "\n")
+  expect_match(sent, "[secret:COACH_FAKE_KEY]", fixed = TRUE)
+  expect_false(grepl(key, sent, fixed = TRUE))
 })
