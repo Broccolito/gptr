@@ -2545,6 +2545,14 @@ risk_bound = function(exprs) {
     val <<- c(val, b)
     other <<- c(other, b)
     if (h %in% c("for", "function")) all <<- c(all, val)
+    # the names assign() and list2env() write out
+    fn = risk_head(e[[1L]])$name
+    if (fn %in% c("assign", "list2env")) {
+      x = risk_arg(risk_args(e, fn, "base"), "x", 1L)
+      x = if (is.character(x)) x else if (is.call(x)) setdiff(names(x), "")
+      all <<- c(all, x)
+      other <<- c(other, x)
+    }
     xs = as.list(e)
     for (i in seq_along(xs)) if (!identical(xs[[i]], quote(expr = ))) visit(xs[[i]])
   }

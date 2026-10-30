@@ -1703,7 +1703,12 @@ test_that("here(), a restored directory and paths after a move are read (review 
                  "f = function() owd = getwd(); f(); setwd(owd)",
                  "owd = getwd(); f = function(owd) setwd(owd); f('/etc')",
                  "f = function(owd) { if (p) owd = getwd(); setwd(owd) }",
-                 "f = function() { if (p) owd = getwd(); setwd(owd) }; owd = '/etc'; f()")) {
+                 "f = function() { if (p) owd = getwd(); setwd(owd) }; owd = '/etc'; f()",
+                 # assign() and list2env() too, wherever they come in a loop
+                 "for (i in 1:2) { if (p) owd = getwd(); setwd(owd); assign('owd', f()) }",
+                 "repeat { if (p) owd = getwd(); setwd(owd); list2env(list(owd = f()), e) }",
+                 "f = function() { if (p) owd = getwd(); setwd(owd) }; assign('owd', '/'); f()",
+                 "d = 'data'; for (i in 1:2) { setwd(d); base::assign('d', '/etc') }")) {
     expect_identical(lv(code), 4L, label = code)
   }
   # a relative path after a move is one in the directory R moved to
