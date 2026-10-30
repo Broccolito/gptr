@@ -825,6 +825,13 @@ test_that("a 200 reply that is not an event stream ends with its text and is not
   expect_equal(reply(": PROCESSING\n\n: PROCESSING\n\n")$types(), "done")
 })
 
+test_that("the Mistral profile sends max_tokens, as Mistral's reference documents", {
+  model = list(id = "mistral-medium-3", provider = "mistral", api = "openai-completions")
+  body = json_decode(completions_build(model, stream_context(), list())$body)
+  expect_identical(body$max_tokens, 100L)
+  expect_null(body$max_completion_tokens)
+})
+
 test_that("a retry hint the reactor neither re-sends nor fails keeps its parent class", {
   r = local_mock_reactor()
   # P04 already forgot the transfer (a hint flushed at on_done, or any http_json body)

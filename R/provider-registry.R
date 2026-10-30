@@ -34,7 +34,7 @@ provider_table = function() {
     list(id = "mistral", api = "openai-completions", base_url = "https://api.mistral.ai/v1",
          auth = "MISTRAL_API_KEY",
          compat = list(tool_id = "alnum9", thinking_in_content = TRUE, supports_store = FALSE,
-                       supports_developer_role = FALSE)),
+                       supports_developer_role = FALSE, max_tokens_field = "max_tokens")),
     list(id = "together", api = "openai-completions", base_url = "https://api.together.ai/v1",
          auth = "TOGETHER_API_KEY",
          compat = list(thinking_format = "together", max_tokens_field = "max_tokens",
