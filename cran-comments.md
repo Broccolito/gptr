@@ -79,8 +79,8 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   MCP server or a Shiny app) or gptr worker processes are skipped, and the suite needs no network.
   To keep the check short, `tests/testthat.R` runs on CRAN a fixed list of 35 test files (the
   permission, redaction and secret tests and files that reach all but 12 of the R files) without
-  their slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 20 s here
-  (`Running 'testthat.R' [20s/20s]` in the local check), 33 s in GitHub's Ubuntu R-devel job and
+  their slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take about 20 s
+  here (FAIL 0, SKIP 954, PASS 3497 in the local check), 33 s in GitHub's Ubuntu R-devel job and
   92 s in its Windows job. Live provider tests run only when `GPTR_LIVE_TESTS` is `"true"`.
 * The 15 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
@@ -97,7 +97,7 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   NOTE and over its time budget: Ubuntu R-devel without Suggests (480 s) and Windows release with
   both manuals (600 s).
 * GitHub's CRAN-mode checks took 256 s (Ubuntu R-devel, budget 480 s) and 494 s (Windows
-  release, budget 600 s), and the local one 144 s.
+  release, budget 600 s), and the local one 146 s at low load.
 * R-hub (Windows R-devel and R-release, Ubuntu R-devel with gcc 12) and win-builder (R-release,
   R-oldrelease and R-devel) run on the final tarball before submission.
 
@@ -107,19 +107,24 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 installed-size NOTE of R 4.2 (oldrel-4; see below). The R-hub and win-builder results of the final
 tarball are added here before submission.
 
+The incoming feasibility check with remote URL checks gives one NOTE: the URL
+https://broccolito.github.io/gptr/articles/tailor-and-coach.html returns 404. It is the article
+for this release's new functions, linked from the README; it returns 200 once the package website
+is deployed from `main` with this release, before submission.
+
 The local check also reports two INFO lines: 'repr', which gptr enhances, was not available for
 checking, and the installed size.
 
 ## Installed size
 
-The installed size is 7.6 to 8.0 Mb in the CRAN-mode checks (8.0 Mb on macOS, 7.7 Mb on Ubuntu
-R-devel, 7.6 Mb on Windows): R 5.7 to 6.1 Mb and doc 1.3 to 1.4 Mb. R is the byte-compiled code
-of 128 R files, with no data sets and no compiled code; doc holds the 15 HTML vignettes. Current R
-versions report the size as INFO; R 4.2 reports it as a NOTE (11.1 Mb in GitHub's R 4.2 job, which
-keeps the package source).
+The installed size is 7.6 to 8.1 Mb in the CRAN-mode checks (8.0 to 8.1 Mb on macOS, 7.7 Mb on
+Ubuntu R-devel, 7.6 Mb on Windows): R 5.7 to 6.1 Mb and doc 1.3 to 1.4 Mb. R is the byte-compiled
+code of 128 R files, with no data sets and no compiled code; doc holds the 15 HTML vignettes.
+Current R versions report the size as INFO; R 4.2 reports it as a NOTE (11.1 Mb in GitHub's R 4.2
+job, which keeps the package source).
 
 ## Reverse dependencies
 
-`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-10-26:
+`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-10-30:
 none.
 No package depends on, imports, links to or suggests gptr.
