@@ -647,6 +647,33 @@ test_that("a worker child answers through its proxy session and returns its expo
   expect_length(worker_pids(), 0L)
 })
 
+# Added (FIX-37, F-86, D-295): the child starts with the parent's registered secrets that the
+# shipped objects hold, so such an object reaches the child's model as [secret:NAME]; no other
+# value travels in the spec (IC-70). The fake runs in the child and answers with what its second
+# request held.
+test_that("a registered secret in a shipped object reaches the worker's model redacted", {
+  local_worker_lib()
+  local_vault()
+  key = "p19-cfg-value-fakefakefake0042"
+  secret_register(key, "CFG_TOKEN")
+  secret_register("p19-other-value-fakefake0043", "OTHER_TOKEN")
+  w = worker_spec_values(list(object_names = "cfg"), list2env(list(cfg = list(token = key))))
+  expect_identical(w$secrets, list(list(name = "CFG_TOKEN", value = key)))
+  expect_null(worker_spec_values(list(object_names = character()), emptyenv())$secrets)
+  local_team_fake(eval(bquote(function(request) {
+    if (!length(request$last_results)) return(list(tool = "r", input = list(code = "str(cfg)")))
+    seen = paste(unlist(request$messages), collapse = "\n")
+    if (grepl(.(key), seen, fixed = TRUE)) "raw" else
+      if (grepl("[secret:CFG_TOKEN]", seen, fixed = TRUE)) "redacted" else "neither"
+  }), baseenv()))
+  parent = session_new("fake/fake-1", "auto", home = new.env(), kind = "team")
+  e = new.env()
+  e$cfg = list(token = key)
+  h = start_worker(parent, "describe cfg", base = e, objects = "cfg")
+  expect_true(run_wait(list(h$run), timeout = 120))
+  expect_identical(h$session$text, "redacted")
+})
+
 test_that("a plugin r member and a fake provider spec work inside a worker (IC-69)", {
   local_worker_lib()
   local_project()
