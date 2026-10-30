@@ -2708,7 +2708,9 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     nms = names(a) %||% rep("", length(a))
     d = a[["..."]]
     vals = c(a[nms %in% risk_slot_names], d[names(d) %in% risk_slot_names])
-    if (name %in% risk_handler_funs) vals = c(vals, d %||% a[nzchar(nms)])
+    if (name %in% risk_handler_funs) {
+      vals = c(vals, if (is.null(attr(a, "formals"))) a[nzchar(nms)] else d)
+    }
     hof = matrix(risk_hof_args[[name]] %||% character(), 2L)
     fm = names(attr(a, "formals"))
     for (i in seq_len(ncol(hof))) {

@@ -1058,6 +1058,20 @@ test_that("what bquote(), substitute()'s env and a formula lambda run is code (r
   }
 })
 
+test_that("tryCatch() without handlers calls none of its arguments (review F-12)", {
+  root = local_project()
+  for (code in c("tryCatch(read.csv('data/x.csv'), finally = message('done'))",
+                 "tryCatch({ x = 1 })", "withCallingHandlers(print(1))")) {
+    expect_true(gptr_risk(code, root = root)$level <= 1L, label = code)
+    expect_false("<computed>" %in% risk_plan_disallowed(code, root), label = code)
+  }
+  for (code in c("tryCatch(x, error = function(e) unlink('~', recursive = TRUE))",
+                 "tryCatch(stop('x'), error = q)", "tryCatch(x, finally = unlink('~'))")) {
+    expect_identical(gptr_risk(code, root = root)$level, 4L, label = code)
+  }
+  expect_identical(gptr_risk("tryCatch(x, error = hs[[1]])", root = root)$level, 3L)
+})
+
 test_that("a name assigned outside a function body holds the paths it may hold (D-211)", {
   skip_on_cran()
   root = local_project()
