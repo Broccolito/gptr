@@ -11,24 +11,26 @@
 ckpt_no_compress = paste0("[.](gz|bz2|xz|zip|zst|rds|rda|RData|qs2?|parquet|feather|arrow|",
                           "png|jpe?g|gif|pdf|xlsx|docx|pptx)$")
 
-#' The checkpoint store, `<workspace root>/checkpoints`: `.gptr/` when the project has one, else
-#' `tempdir()/gptr`; never `.git`, never `R_user_dir()` (contract 11.14)
+#' The checkpoint store of the project `root`, `<workspace root>/checkpoints`: `.gptr/` when the
+#' project has one, else `tempdir()/gptr`; never `.git`, never `R_user_dir()` (contract 11.14).
+#' A file tracker passes its own root, so a later setwd() does not move the store.
 #' @noRd
-ckpt_store_root = function() {
-  file.path(workspace_root(create = TRUE), "checkpoints")
+ckpt_store_root = function(root = project_root()) {
+  ws = file.path(root, ".gptr")
+  file.path(if (dir.exists(ws)) ws else file.path(tempdir(), "gptr"), "checkpoints")
 }
 
-#' Paths of a blob, gzip first
+#' Paths of a blob in `store`, gzip first
 #' @noRd
-ckpt_blob_path = function(hash, ext = c(".gz", "")) {
-  file.path(ckpt_store_root(), "blobs", substr(hash, 1L, 2L), paste0(hash, ext))
+ckpt_blob_path = function(hash, ext = c(".gz", ""), store = ckpt_store_root()) {
+  file.path(store, "blobs", substr(hash, 1L, 2L), paste0(hash, ext))
 }
 
 #' The stored blob of a hash, or NULL (also for a hash read from a record that is not 32 hex)
 #' @noRd
-ckpt_blob_find = function(hash) {
+ckpt_blob_find = function(hash, store = ckpt_store_root()) {
   if (!isTRUE(grepl("^[0-9a-f]{32}$", hash))) return(NULL)
-  p = ckpt_blob_path(hash)
+  p = ckpt_blob_path(hash, store = store)
   p = p[file.exists(p)]
   if (length(p)) p[[1L]] else NULL
 }
@@ -39,19 +41,21 @@ ckpt_blob_find = function(hash) {
 #' garbage collector reads, is refreshed. A blob that cannot be stored is an error
 #' (`gptr_error_workspace`), never a hash without content.
 #' @param path Paths of existing regular files.
+#' @param store The checkpoint store (`ckpt_store_root()`).
 #' @return Their XXH128 hashes (32 hex), in order.
 #' @noRd
-ckpt_store_put = function(path) {
-  hashes = hash_file(path)
+ckpt_store_put = function(path, store = ckpt_store_root()) {
+  src = fs_path(path)
+  hashes = hash_file(src)
   for (i in seq_along(path)) {
-    have = ckpt_blob_find(hashes[i])
+    have = ckpt_blob_find(hashes[i], store)
     if (!is.null(have)) {
       Sys.setFileTime(have, Sys.time())
       next
     }
-    size = file.size(path[i])
+    size = file.size(src[i])
     gz = size <= 8e6 && !grepl(ckpt_no_compress, path[i], ignore.case = TRUE)
-    dest = ckpt_blob_path(hashes[i], if (gz) ".gz" else "")
+    dest = ckpt_blob_path(hashes[i], if (gz) ".gz" else "", store)
     dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
     tmp = tempfile(paste0(basename(dest), ".tmp-"), tmpdir = dirname(dest))
     on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
@@ -60,9 +64,9 @@ ckpt_store_put = function(path) {
     })
     if (gz) {
       con = gzfile(tmp, "wb", compression = 1L)
-      tryCatch(writeBin(readBin(path[i], "raw", size), con), finally = close(con))
+      tryCatch(writeBin(readBin(src[i], "raw", size), con), finally = close(con))
     } else {
-      if (!isTRUE(file.copy(path[i], tmp, overwrite = TRUE, copy.mode = FALSE))) {
+      if (!isTRUE(file.copy(src[i], tmp, overwrite = TRUE, copy.mode = FALSE))) {
         gptr_abort(paste0("Cannot copy checkpoint content from ", path[i], "."),
                    "workspace", path = dest)
       }
@@ -79,10 +83,11 @@ ckpt_store_put = function(path) {
 #' Write the stored content of `hash` to `dest` atomically (contract 7.16)
 #' @return `TRUE`, or `FALSE` when the blob is missing.
 #' @noRd
-ckpt_store_get = function(hash, dest) {
-  p = ckpt_blob_find(hash)
+ckpt_store_get = function(hash, dest, store = ckpt_store_root()) {
+  p = ckpt_blob_find(hash, store)
   if (is.null(p)) return(FALSE)
   b = readBin(p, "raw", file.size(p))
+  dest = fs_path(dest)
   dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
   write_atomic(dest, if (endsWith(p, ".gz")) memDecompress(b, "gzip") else b)
   TRUE
@@ -174,7 +179,7 @@ ckpt_source_re = "[.](R|r|Rmd|qmd|Rnw|md|ya?ml|json|txt|csv|tsv|ipynb|py|sql|sh|
 #' Is each path a detected link (or a conservative Windows canonical alias)?
 #' @noRd
 ckpt_is_link = function(path) {
-  path_is_link(path)
+  path_is_link(fs_path(path))
 }
 
 #' The files of a project through P10's walker (contract 7.10): hidden and git-ignored files
@@ -222,7 +227,7 @@ ckpt_walked = function(tr, full) {
 #' Mode bits of files as integers (-1 when unknown)
 #' @noRd
 ckpt_modes = function(full) {
-  m = as.integer(file.mode(full))
+  m = as.integer(file.mode(fs_path(full)))
   m[is.na(m)] = -1L
   m
 }
@@ -231,7 +236,7 @@ ckpt_modes = function(full) {
 #' @noRd
 ckpt_ingest = function(tr, rel) {
   full = file.path(tr$root, rel)
-  h = ckpt_store_put(full)
+  h = ckpt_store_put(full, ckpt_store_root(tr$root))
   tr$hash[rel] = h
   tr$mode[rel] = ckpt_modes(full)
   h
@@ -241,6 +246,7 @@ ckpt_ingest = function(tr, rel) {
 #' @noRd
 ckpt_regular = function(full) {
   if (!length(full)) return(logical())
+  full = fs_path(full)
   # ps's POSIX stat is unavailable on Windows; named pipes use a separate namespace there.
   if (is_windows()) return(path_info(full)$isdir %in% FALSE & !ckpt_is_link(full))
   type = ps::ps_fs_stat(full, follow = FALSE)$type
@@ -248,25 +254,30 @@ ckpt_regular = function(full) {
   type %in% "regular file" & !ckpt_is_link(full)
 }
 
-#' Can `full` be captured: a readable regular file, no link, within gptr.checkpoint_capture_max?
+#' Can `full` be captured: a readable regular file, no link, within gptr.checkpoint_capture_max,
+#' neither protected nor control in the project of `root` (keys, .env and .Renviron are never
+#' stored, as writing one is already a level-4 question)?
 #' @noRd
-ckpt_capturable = function(full) {
-  file.exists(full) && !dir.exists(full) && isTRUE(ckpt_regular(full)) &&
-    file.access(full, 4L) == 0L &&
-    isTRUE(file.size(full) <= gptr_opt("checkpoint_capture_max"))
+ckpt_capturable = function(full, root = project_root()) {
+  f = fs_path(full)
+  file.exists(f) && !dir.exists(f) && isTRUE(ckpt_regular(f)) && file.access(f, 4L) == 0L &&
+    isTRUE(file.size(f) <= gptr_opt("checkpoint_capture_max")) &&
+    !path_class(f, root) %in% c("protected", "control")
 }
 
 #' The baseline at the first mutating call: walk, then capture files within
 #' gptr.checkpoint_track_file_max each and gptr.checkpoint_track_total in all, small source-like
-#' files first
+#' files first, none protected or control
 #' @noRd
 ckpt_files_baseline = function(tr) {
   tr$walk_time = as.numeric(Sys.time())
   w = ckpt_walk(tr$root, tr$prune)
   tr$stat = w
   w = w[!w$link & w$size <= gptr_opt("checkpoint_track_file_max") &
-          file.access(file.path(tr$root, w$path), 4L) == 0L, , drop = FALSE]
-  w = w[ckpt_regular(file.path(tr$root, w$path)), , drop = FALSE]
+          file.access(fs_path(file.path(tr$root, w$path)), 4L) == 0L, , drop = FALSE]
+  full = fs_path(file.path(tr$root, w$path))
+  w = w[ckpt_regular(full) & !path_class(full, tr$root) %in% c("protected", "control"), ,
+        drop = FALSE]
   w = w[order(!grepl(ckpt_source_re, w$path), w$size), , drop = FALSE]
   ckpt_ingest(tr, w$path[cumsum(w$size) <= gptr_opt("checkpoint_track_total")])
 }
@@ -289,8 +300,8 @@ ckpt_files_scan = function(tr) {
   racy = !changed & !n$link & n$mtime >= tr$walk_time - 2 & both %in% names(tr$hash)
   regular = ckpt_regular(file.path(tr$root, both[racy]))
   changed[racy] = !regular
-  racy[racy] = regular & file.access(file.path(tr$root, both[racy]), 4L) == 0L
-  racy[racy] = hash_file(file.path(tr$root, both[racy])) != tr$hash[both[racy]]
+  racy[racy] = regular & file.access(fs_path(file.path(tr$root, both[racy])), 4L) == 0L
+  racy[racy] = hash_file(fs_path(file.path(tr$root, both[racy]))) != tr$hash[both[racy]]
   list(walk = w, time = time, created = setdiff(w$path, old$path), modified = both[changed | racy],
        deleted = setdiff(old$path, w$path))
 }
@@ -319,14 +330,14 @@ ckpt_files_step = function(tr) {
     pre = if (status[i] != "created" && p %in% names(tr$hash)) tr$hash[[p]] else ""
     mode = if (p %in% names(tr$mode)) tr$mode[[p]] else -1L
     tr$hash = tr$hash[names(tr$hash) != p]
-    keep = status[i] != "deleted" && ckpt_capturable(file.path(tr$root, p))
+    keep = status[i] != "deleted" && ckpt_capturable(file.path(tr$root, p), tr$root)
     post = if (keep) ckpt_ingest(tr, p) else ""
     reason = if (link) {
       "symbolic link"
     } else if (status[i] != "deleted" && !keep && !ckpt_regular(file.path(tr$root, p))) {
       "not a regular file"
     } else if (status[i] != "created" && !nzchar(pre)) {
-      "no pre-image: over the size cap or outside the baseline"
+      "no pre-image: over the size cap, protected or outside the baseline"
     } else {
       ""
     }
@@ -356,12 +367,14 @@ ckpt_call_paths = function(call) {
   unique(path_norm(p))
 }
 
-#' State of a predicted path: its content hash (stored), "" when absent, "?" when not capturable
+#' State of a predicted path: its content hash (stored in the store of `root`), "" when absent,
+#' "?" when not capturable
 #' @noRd
-ckpt_explicit_state = function(full) {
-  if (!file.exists(full) || dir.exists(full)) return("")
-  if (!ckpt_capturable(full)) return("?")
-  ckpt_store_put(full)
+ckpt_explicit_state = function(full, root) {
+  f = fs_path(full)
+  if (!file.exists(f) || dir.exists(f)) return("")
+  if (!ckpt_capturable(full, root)) return("?")
+  ckpt_store_put(full, ckpt_store_root(root))
 }
 
 #' Does a walked path still hold what the last scan saw: a tracked file its content (`state`), any
@@ -370,7 +383,7 @@ ckpt_explicit_state = function(full) {
 ckpt_as_scanned = function(tr, rel, state) {
   if (rel %in% names(tr$hash)) return(identical(state, tr$hash[[rel]]))
   i = match(rel, tr$stat$path)
-  info = path_info(file.path(tr$root, rel))
+  info = path_info(fs_path(file.path(tr$root, rel)))
   if (is.na(i)) return(is.na(info$size))
   isTRUE(info$size == tr$stat$size[i] && as.numeric(info$mtime) == tr$stat$mtime[i])
 }
@@ -381,7 +394,7 @@ ckpt_as_scanned = function(tr, rel, state) {
 ckpt_stat_refresh = function(tr, rel) {
   if (is.null(tr$stat)) return(invisible())
   full = file.path(tr$root, rel)
-  info = path_info(full)
+  info = path_info(fs_path(full))
   add = data.frame(path = rel, size = info$size, mtime = as.numeric(info$mtime),
                    link = ckpt_is_link(full))
   tr$stat = rbind(tr$stat[tr$stat$path != rel, , drop = FALSE], add[!is.na(add$size), ])
@@ -407,11 +420,12 @@ ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
   for (p in paths) {
     rel = ckpt_walked(tr, p)
     if (!is.na(rel) && !isTRUE(tr$per_turn)) {
-      if (!rel %in% names(tr$hash) && ckpt_capturable(p) && ckpt_as_scanned(tr, rel, "")) {
+      if (!rel %in% names(tr$hash) && ckpt_capturable(p, tr$root) &&
+            ckpt_as_scanned(tr, rel, "")) {
         ckpt_ingest(tr, rel)
       }
     } else {
-      state = ckpt_explicit_state(p)
+      state = ckpt_explicit_state(p, tr$root)
       tr$explicit[p] = if (is.na(rel) || ckpt_as_scanned(tr, rel, state)) state else "?"
       tr$explicit_mode[p] = ckpt_modes(p)
     }
@@ -427,7 +441,7 @@ ckpt_files_explicit = function(tr, paths) {
   rows = list()
   for (p in intersect(paths, names(tr$explicit))) {
     before = tr$explicit[[p]]
-    now = ckpt_explicit_state(p)
+    now = ckpt_explicit_state(p, tr$root)
     if (identical(now, before) || identical(before, "?")) next
     status = if (!nzchar(before)) "created" else if (!nzchar(now)) "deleted" else "modified"
     link = ckpt_is_link(p)
@@ -439,7 +453,7 @@ ckpt_files_explicit = function(tr, paths) {
       ""
     }
     rel = ckpt_walked(tr, p)
-    info = path_info(p)
+    info = path_info(fs_path(p))
     rows[[length(rows) + 1L]] = ckpt_file_row(
       if (is.na(rel)) p else rel, is.na(rel), status, before, if (identical(now, "?")) "" else now,
       tr$explicit_mode[[p]], info$size, as.numeric(info$mtime), !nzchar(reason), reason)
@@ -497,7 +511,8 @@ ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
 ckpt_files_own_write = function(trs, full, write) {
   seen = function(tr) {
     rel = if (is.null(tr$stat)) NA_character_ else ckpt_walked(tr, full)
-    if (!is.na(rel) && ckpt_as_scanned(tr, rel, ckpt_explicit_state(full))) rel else NA_character_
+    same = !is.na(rel) && ckpt_as_scanned(tr, rel, ckpt_explicit_state(full, tr$root))
+    if (same) rel else NA_character_
   }
   rels = vapply(trs, function(tr) tryCatch(seen(tr), error = function(e) NA_character_), "")
   value = write()
@@ -505,7 +520,11 @@ ckpt_files_own_write = function(trs, full, write) {
     tr = trs[[i]]
     rel = rels[[i]]
     tryCatch({
-      if (ckpt_capturable(full)) ckpt_ingest(tr, rel) else tr$hash = tr$hash[names(tr$hash) != rel]
+      if (ckpt_capturable(full, tr$root)) {
+        ckpt_ingest(tr, rel)
+      } else {
+        tr$hash = tr$hash[names(tr$hash) != rel]
+      }
       ckpt_stat_refresh(tr, rel)
     }, error = function(e) NULL)
   }
@@ -574,6 +593,7 @@ ckpt_confirm_outside = function(full, session) {
 ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FALSE,
                            turn_now = NA_integer_, redo = FALSE) {
   tr = ckpt_files_tr(ck)
+  store = ckpt_store_root(tr$root)
   verb = if (redo) "redone" else "restored"
   gone = if (redo) "deleted" else "created"
   old = !redo && isTRUE(fragment$turn <= turn_now - gptr_opt("checkpoint_turns"))
@@ -581,18 +601,20 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
   rows = fragment$files
   for (r in rows[order(!vapply(rows, function(x) identical(x$status, gone), NA))]) {
     full = if (isTRUE(r$abs)) r$path else file.path(fragment$root, r$path)
+    f = fs_path(full)
     item = paste("file", r$path)
     goal = if (redo) r$post else r$pre
     left = if (redo) r$pre else r$post
     remove = identical(r$status, gone)
     g = ckpt_restore_guard(full)
     why = c(if (!isTRUE(r$restorable)) r$reason, if (old) "older than gptr.checkpoint_turns turns",
-            if (!g$ok) g$reason, if (!remove && is.null(ckpt_blob_find(goal))) "no stored copy")
+            if (!g$ok) g$reason,
+            if (!remove && is.null(ckpt_blob_find(goal, store))) "no stored copy")
     if (length(why)) {
       out = ckpt_item(out, item, FALSE, paste0("not ", verb, " (", why[1L], ")"))
       next
     }
-    exists = file.exists(full) && !dir.exists(full)
+    exists = file.exists(f) && !dir.exists(f)
     if (exists && !isTRUE(ckpt_regular(full))) {
       out = ckpt_item(out, item, FALSE, paste0("not ", verb, " (not a regular file)"))
       next
@@ -600,11 +622,11 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
     held = if (identical(r$status, if (redo) "created" else "deleted")) {
       !exists
     } else if (nzchar(left)) {
-      exists && file.access(full, 4L) == 0L && identical(hash_file(full), left)
+      exists && file.access(f, 4L) == 0L && identical(hash_file(f), left)
     } else {
       # the new content was not stored: its size and mtime stand in
-      exists && isTRUE(file.size(full) == r$post_size &&
-                         abs(as.numeric(file.mtime(full)) - r$post_mtime) < 1e-3)
+      exists && isTRUE(file.size(f) == r$post_size &&
+                         abs(as.numeric(file.mtime(f)) - r$post_mtime) < 1e-3)
     }
     if (!held && !force) {
       since = if (redo) "undo" else "checkpoint"
@@ -623,11 +645,11 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
       next
     }
     if (remove) {
-      ok = unlink(full) == 0L
+      ok = unlink(f) == 0L
     } else {
-      ok = tryCatch(ckpt_store_get(goal, full), error = function(e) FALSE)
+      ok = tryCatch(ckpt_store_get(goal, full, store), error = function(e) FALSE)
       if (ok && !exists && !redo && r$mode >= 0) {
-        Sys.chmod(full, as.octmode(r$mode), use_umask = FALSE)
+        Sys.chmod(f, as.octmode(r$mode), use_umask = FALSE)
       }
     }
     rel = ckpt_walked(tr, full)

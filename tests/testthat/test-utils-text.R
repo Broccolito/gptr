@@ -97,6 +97,16 @@ test_that("clean_terminal() drops ANSI and OSC sequences, collapses progress and
   out = clean_terminal(x)
   expect_identical(out[1:4], c("red text", "a link", "100%", "done"))
   expect_identical(out[5], paste0(strrep("z", 400), " ...[+50 chars]"))
+  expect_identical(clean_terminal(c("abc\rdef", "a\rb\rc\r", "x")), c("def", "c", "x"))
+})
+
+test_that("clean_terminal() is linear on one long line", {
+  skip_on_cran()
+  t = system.time({
+    out = clean_terminal(c(strrep("a", 1e7), paste0(strrep("b", 1e7), "\rc\r", strrep("d", 1e7))))
+  })
+  expect_lt(t[["elapsed"]], 10)
+  expect_identical(out, paste0(strrep(c("a", "d"), 400), " ...[+", 1e7 - 400, " chars]"))
 })
 
 test_that("listings print at most 20 rows, a count line and the footer", {

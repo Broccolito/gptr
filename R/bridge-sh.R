@@ -202,6 +202,10 @@ bridge_run = function(target, input, wd, timeout, env, merge) {
   timed_out = FALSE
   repeat {
     p$wait(200L)
+    if (isTRUE(file.size(out_f) > proc_output_cap)) {
+      kill_all(p, grace = 0)
+      break
+    }
     if (!p$is_alive()) break
     if (reactor_now() - t0 > timeout) {
       timed_out = TRUE

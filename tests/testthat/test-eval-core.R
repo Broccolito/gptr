@@ -780,3 +780,18 @@ test_that("the console shows the output it indents with registered secrets redac
   })
   expect_match(err, "Warning: [secret:R6_FAKE_KEY]", fixed = TRUE)
 })
+
+test_that("the person's own code prints as R does, the agent's in the console margin (D-296)", {
+  skip_on_cran()
+  local_mocked_bindings(console_pad = function() "  ")
+  withr::local_options(width = 63L)
+  e = new.env()
+  code = "w = getOption('width'); 1:3"
+  out = utils::capture.output(invisible(eval_r(code, e, plots = "none", tee = TRUE, guard = FALSE)))
+  expect_identical(e$w, 63L)
+  expect_identical(out, "[1] 1 2 3")
+  out = utils::capture.output(invisible(eval_r(code, e, plots = "none", tee = TRUE)))
+  expect_identical(e$w, 100L)
+  expect_true(any(grepl("    [1] 1 2 3", out, fixed = TRUE)))
+  expect_identical(getOption("width"), 63L)
+})

@@ -297,3 +297,17 @@ test_that("s3_register() removes only its own delayed hook when the package unlo
     expect_identical(getHook(event), list(other))
   }
 })
+
+test_that("a T console's modes keep what is typed at SIGINT, as a D console's do", {
+  log = character()
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    log <<- c(log, modes)
+    if (identical(modes, "-g")) "SAVED"
+  })
+  withr::defer(tty_restore())
+  tty = tty_call(TRUE)
+  expect_true("noflsh" %in% tty$set)
+  expect_true("noflsh" %in% log)
+  tty_restore()
+  expect_identical(utils::tail(log, 2L), c("SAVED", "-paste"))
+})

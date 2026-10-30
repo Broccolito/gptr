@@ -355,6 +355,19 @@ test_that("a user edit made after the turn survives the 3-way restore; the rewin
   expect_match(block, "~ x (conflict", fixed = TRUE)
 })
 
+test_that("names holding 'failed' or 'conflict' do not make a full rewind partial", {
+  skip_on_cran()
+  proj = local_project()
+  local_fake_provider(list(
+    fake_tool("r", code = "failed_models = 1; writeLines('a', 'conflict_notes.txt')"), "one"))
+  e = new.env()
+  s = peter("one", model = "fake/fake-1", mode = "auto", envir = e)
+  expect_no_warning(gptr_rewind(s, 0))
+  expect_false(s$last_rewind$partial)
+  expect_false(exists("failed_models", envir = e, inherits = FALSE))
+  expect_false(file.exists(file.path(proj, "conflict_notes.txt")))
+})
+
 test_that("each rewind replaces the note: a later full rewind tells the model nothing", {
   skip_on_cran()
   local_project()

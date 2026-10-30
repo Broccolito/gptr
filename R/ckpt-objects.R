@@ -786,10 +786,16 @@ ckpt_note = function(call, run = NULL) {
 # with_seed_preserved(), IC-61).
 
 #' The open user connections, named by number: each one's conn_id as text (unique within this R
-#' process; text, so an image never keeps a connection alive)
+#' process; text, so an image never keeps a connection alive). processx's supervisor FIFOs, which
+#' the session's first supervised spawn opens, are left out: closing them breaks every later spawn.
 #' @noRd
 ckpt_cons = function() {
   n = setdiff(as.integer(getAllConnections()), 0:2)
+  sup = file.path(tempdir(), "supervisor_std")
+  n = n[!vapply(n, function(i) {
+    s = summary(getConnection(i))
+    identical(s$class, "fifo") && startsWith(s$description, sup)
+  }, NA)]
   stats::setNames(vapply(n, function(i) format(attr(getConnection(i), "conn_id")), ""), n)
 }
 

@@ -261,8 +261,11 @@ clean_terminal = function(x) {
   text = gsub("\033\\[[0-?]*[ -/]*[@-~]", "", text, perl = TRUE)
   text = gsub("\033\\][^\a\033]*(\a|\033\\\\)", "", text, perl = TRUE)
   text = gsub("\r+(\n|$)", "\\1", text, perl = TRUE)
-  text = gsub("[^\n\r]*\r", "", text, perl = TRUE)
-  cap_lines(strsplit(text, "\n", fixed = TRUE)[[1L]], 400L)
+  lines = strsplit(text, "\n", fixed = TRUE)[[1L]]
+  # the last frame of each line, without a regex: [^\n\r]*\r is quadratic on one long line
+  cr = grepl("\r", lines, fixed = TRUE)
+  lines[cr] = vapply(strsplit(lines[cr], "\r", fixed = TRUE), function(p) p[length(p)], "")
+  cap_lines(lines, 400L)
 }
 
 #' Cut lines longer than `max_chars`, noting how many characters were dropped

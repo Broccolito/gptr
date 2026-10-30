@@ -796,7 +796,7 @@ idle_read = function(draft, keys, answers = character()) {
        draft = rd$compose$draft)
 }
 
-keys_mode = "-icanon -echo -iexten -isig min 1 time 0 paste"
+keys_mode = "-icanon -echo -iexten -isig noflsh min 1 time 0 paste"
 
 ctrl_c = function() {
   signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))

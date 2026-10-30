@@ -117,10 +117,11 @@ tty_modes = function(modes = "-g") {
 #' Set the terminal modes of a console call (IC-76, D-243), the saved ones (`stty -g`) kept: a T
 #' console's composer reads keys as typed, `-icanon -echo -iexten -isig min 1 time 0` (Ctrl-C is a
 #' key it reads, as a signal could be lost under load; opost stays on, and `min 1` keeps a tool
-#' that reads stdin waiting, never at an end of input); a D console turns the echo off and keeps
-#' what is typed at SIGINT (`-echo noflsh`; `keys` FALSE), so the pause menu's drain keeps a line
-#' being typed (policy_menu()). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which
-#' also runs at q() (a finalizer, onexit); nothing is set when stty fails. A T console's set also
+#' that reads stdin waiting, never at an end of input); a D console turns the echo off
+#' (`-echo`; `keys` FALSE). Both keep what is typed at SIGINT (`noflsh`; for a T console while R
+#' code runs with isig on), so the pause menu's drain keeps a line being typed (policy_menu()).
+#' `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which also runs at q() (a
+#' finalizer, onexit); nothing is set when stty fails. A T console's set also
 #' turns bracketed paste on (`paste`, D-263), and every return to the saved modes (tty_restore(),
 #' tty_question(), gptr_readline()) turns it off first, so readline never reads with it on: GNU
 #' readline 8.1+ toggles it around its own reads, older readline (CRAN macOS R's 5.2) and libedit
@@ -134,7 +135,7 @@ tty_call = function(keys) {
   tty$saved = saved
   tty$keys = keys
   tty$set = if (keys) {
-    c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0", "paste")
+    c("-icanon", "-echo", "-iexten", "-isig", "noflsh", "min", "1", "time", "0", "paste")
   } else {
     c("-echo", "noflsh")
   }
@@ -555,7 +556,8 @@ s3_register = function(generic, class, method = NULL) {
 #'
 #' @section Transport and processes:
 #' - `gptr.connect_timeout` (seconds, `20`), `gptr.first_byte_timeout` (seconds, `120`) and
-#'   `gptr.idle_timeout` (seconds, `90`): network timeouts.
+#'   `gptr.idle_timeout` (seconds, `90`): network timeouts. High-effort reasoning on OpenAI or
+#'   Google may need `options(gptr.idle_timeout = 300)`.
 #' - `gptr.max_retry_delay` (seconds, `60`): a longer `retry-after` from a provider fails at
 #'   once.
 #' - `gptr.max_attempts` (integer, `4`): transport attempts per request.
@@ -569,7 +571,9 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.cli_turn_timeout` (seconds, `3600`): wall-clock time per command-line turn.
 #'
 #' @section Evaluation and tools:
-#' - `gptr.r_timeout` (seconds, `3600`): time limit of the `r` tool when nobody is present.
+#' - `gptr.r_timeout` (seconds, `3600`): time limit of the `r` tool when nobody is present. It
+#'   stops R code that is computing; in a non-interactive R it does not end `Sys.sleep()` or
+#'   `system()`, which `peter$sh(timeout = )` does for a command.
 #' - `gptr.r_output_tokens` (integer, `4000`): estimated tokens of one `r` result.
 #' - `gptr.r_max_images` (integer, `3`): plot images attached to one `r` result.
 #' - `gptr.helper_output_tokens` (integer, `1500`): printed size of `peter$` helper results.
