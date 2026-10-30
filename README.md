@@ -197,7 +197,8 @@ for scores, uncertainty, calibration and a complete offline example.
 note, skills, a review). `gptr_coach()` improves the coaching by running
 your task in separate R processes and keeps a change only when the new
 run passes gptr's checks and your `check`. Rules and coaching never
-loosen permission checks.
+loosen permission checks. A `gptr_coach()` call runs your task several
+times (4 runs and 3 coach sessions by default) and takes minutes.
 
 ``` r
 auto_peter = gptr_tailor(peter, mode = "auto")

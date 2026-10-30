@@ -282,7 +282,7 @@ my_peter = gptr_coach("Clean this year's survey.", survey_2026, harness = their_
 
 ## Recording coaching in a script
 
-In a recorded script or notebook ([Script as history](script-as-history.html)), a top-level
+In a recorded script or notebook ([Record, replay and export](script-as-history.html)), a top-level
 harness call is recorded like a `peter()` call, and its header adds `harness=<name>:<hash>`.
 When the coaching changes, the block becomes stale, as when you edit a prompt. A top-level
 `name = gptr_coach(...)`, with `harness` left out or a plain name, is recorded as a block of
@@ -308,7 +308,9 @@ mean_peter = gptr_tailor(auto_peter, coaching = list(
 
 On replay, gptr reads the body as literal text without running it and returns the same harness
 with no model, no key and no R process, so `GPTR_REPLAY=replay` still proves that a script makes
-no model call. Define the starting harness earlier in the script, since the body names it. Only
+no model call. The replayed harness carries the recorded coaching but an empty `$record`; the
+decision is the block's `## Decision:` line. Define the starting harness earlier in the script,
+since the body names it. Only
 the coaching and one line per run are written: never your data, transcripts, values or `check`.
 A call that errors or stops at a plan limit writes nothing, and `gptr_export()` refuses a
 document that holds a coach block.
@@ -316,6 +318,6 @@ document that holds a coach block.
 ## Read more
 
 - `?gptr_tailor` and `?gptr_coach` for every argument and limit.
-- [Script as history](script-as-history.html) for recording and replay.
+- [Record, replay and export](script-as-history.html) for recording and replay.
 - [Teams and background work](teams-and-background.html) for sub-agents, teams and fan-outs.
 - `?gptr_permissions` for the rule language and `?gptr_security` for the safety model.

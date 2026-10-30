@@ -187,7 +187,7 @@ commands available in the current session, including any supplied by plugins or 
 | `/mcp` | List MCP servers. |
 | `/permissions` | Show the permission rules. |
 | `/permissions allow|ask|deny|remove <rule>` | Change a rule for this R process, for example `/permissions allow r(fn:saveRDS)`. |
-| `/retry` | Undo the last turn and send its recovered prompt again, with the `!` notes it was sent with; may make a model request. |
+| `/retry` | Undo the last turn and send its recovered prompt again, with the `!` notes it was sent with when it is the latest message sent; may make a model request. |
 | `/undo` | Undo the last turn's restorable objects, files and conversation. |
 | `/redo` | Redo what the last rewind undid. |
 | `/rewind [k]` | Offer a rewind menu, or retain turns 1 through `k`. |
@@ -242,7 +242,7 @@ appears at the next `peter>` prompt. With `gptr_config(type_ahead = "follow_up",
 `/commands` and `!code` run at the next prompt, in the order typed. Up on an empty draft takes
 back the newest message not yet delivered, to edit and send again; Ctrl-U clears the draft. A
 recording document keeps what you sent, steers included
-([Script as history](script-as-history.html)).
+([Record, replay and export](script-as-history.html)).
 
 A question (an approval, a choice) waits until you stop typing for a second, or three seconds
 while the draft has text, so a key meant for the draft never answers it. The draft stays through
@@ -307,7 +307,7 @@ gptr_cancel(session)
 
 For persistent conversation storage, initialize a project with `gptr_init(path)` and review its
 trust decision. `gptr_sessions()` lists stored sessions, and `gptr_resume(id)` recovers one.
-[Script as history](script-as-history.html) covers document recording, replay and
+[Record, replay and export](script-as-history.html) covers document recording, replay and
 transcripts; [Language models](language-models.html) covers scripted calls that need no
 interactive console.
 

@@ -26,7 +26,8 @@ html[data-bs-theme] .gptr-vignette-brand { display: none; }
 
 Keep data and computation in R, and send models enough context to choose useful actions.
 For inline work, an object around 4 GB can remain in the same R session across turns. The model
-sees a compact description while its R tool computes on the object. No repeated export and
+receives size-limited descriptions, previews and tool output that may include data values, while
+its R tool computes on the object. No repeated export and
 reload cycle is required; R copies, computation time and request latency still depend on the
 workflow. Workers receive serialized context rather than sharing the parent workspace.
 Four practices help:
@@ -85,7 +86,7 @@ writeLines(gptr_describe(iris, budget = 60))
 `gptr_describe()` summarizes class, shape and values within a budget (150 tokens by default).
 Packages can register methods for their own classes. Generative-model context normally uses
 these descriptions and names; **System 1 questions send their input states**, so their egress
-and size rules differ. See [System 1 decisions](system-one.html).
+and size rules differ. See [Typed decisions](system-one.html).
 
 
 ``` r

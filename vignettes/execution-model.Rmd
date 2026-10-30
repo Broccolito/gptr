@@ -101,7 +101,7 @@ compact descriptions that can include schema, sample values and summaries. The f
 object remains available to R code. Printed tool output is bounded, with an output handle for
 long results, and captured plots can be sent as images. Those previews and results may contain
 data values; the permission and egress controls still apply. System 1 decisions instead send
-encoded input states under their own size rules; see [System 1 decisions](system-one.html).
+encoded input states under their own size rules; see [Typed decisions](system-one.html).
 
 `context = "names"` reduces workspace context to names and attachments to headers;
 `context = "none"` omits both built-in workspace and attached-object descriptions. These settings
@@ -180,7 +180,7 @@ as.data.frame(session$history)
 
 Without an initialized project workspace, session files use a temporary directory.
 `gptr_init()` creates `.gptr/` for project storage. Recording an R document is a separate choice;
-see [Script as history](script-as-history.html).
+see [Record, replay and export](script-as-history.html).
 
 A history document records executed code, decisions and bounded output. It does not
 automatically archive the full input dataset. Replay runs the recorded R procedure again;

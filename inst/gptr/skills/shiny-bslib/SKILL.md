@@ -2,8 +2,6 @@
 name: shiny-bslib
 description: "Build Shiny apps with bslib layouts (page_sidebar, cards, value boxes) for artifacts."
 license: Apache-2.0
-metadata:
-  source: "gptr research report 17, sections 2.4 and 4.4"
 ---
 
 # Shiny artifacts with bslib

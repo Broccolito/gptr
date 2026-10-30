@@ -56,9 +56,13 @@ processed.
 ## Any calls at once
 
 ```r
-both = gptr_parallel(plan = peter("Plan the analysis", model = "opus"),
-                     lit = peter("Summarise the literature on X", model = "flash"))
+both = gptr_parallel(plan = peter("Plan the analysis", model = "opus", envir = new.env()),
+                     lit = peter("Summarise the literature on X", model = "flash",
+                                 envir = new.env()))
 ```
+
+A member without `envir =` runs in your environment, shared with the other members. The members
+are nested calls, so `gptr_parallel()` records nothing; `agents =` and `parallel =` are recorded.
 
 ## Typed decisions in control flow
 
