@@ -194,7 +194,8 @@ test_that("a result the parent cannot merge ends its job with an error, and the 
   st$result_path = file.path(st$dir, "result.json")
   forged = child_result_new("a", status = "idle")
   forged$refusals = structure(list(id = data.frame(a = 1:2, b = 3:4, c = 5:6), tool = c("t", "u"),
-                                   reason = c("r", "s")), row.names = 1:2, class = "data.frame")
+                                   reason = c("r", "s")), row.names = c(NA, -2L),
+                              class = "data.frame")
   writeLines(json_encode(plain_encode(forged)), st$result_path)
   ctx = new.env(parent = emptyenv())
   ctx$jobs = list(list(id = "a"))
