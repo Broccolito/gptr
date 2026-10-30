@@ -330,6 +330,33 @@ test_that("a project in a protected folder classes a path by its part below the 
   expect_identical(cls(file.path(base, ".claude", "settings.json")), "protected")
 })
 
+test_that("path_class() classes a vector as it classes each path alone, in bounded time (F-80)", {
+  base = path_norm(withr::local_tempdir())
+  root = file.path(base, ".claude", "worktrees", "proj")
+  dir.create(root, recursive = TRUE)
+  root = path_norm(root)
+  p = c(NA, "", "https://x.org/a", "R/*.R", "C:x", "a.R", "sub/../b.csv", "sub\\c.R",
+        ".gptr/settings.json", ".git/hooks/x", ".git/HEAD", "keys/a.env", "AGENTS.md",
+        ".gptr/skills/s/SKILL.md", root, "/", file.path(tempdir(), "t.csv"),
+        file.path(base, ".claude", "x.json"), "/opt/elsewhere/x")
+  cls = path_class(p, root)
+  expect_identical(cls, c("unknown", "unknown", "url", "wildcard", "outside", rep("workspace", 3L),
+    "control", "control", "protected", "protected", "instructions", "instructions", "critical",
+    "critical", "temp", "protected", "outside"))
+  expect_identical(cls, vapply(p, path_class, "", root = root, USE.NAMES = FALSE))
+  many = file.path(root, sprintf("d%02d/f%04d.R", seq_len(5000L) %% 50L, seq_len(5000L)))
+  t0 = proc.time()[["elapsed"]]
+  expect_identical(unique(path_class(many, root)), "workspace")
+  # 0.3 s on an idle laptop (1.7 s with a grepl() call per path); coarse, so load cannot fail it
+  expect_lt(proc.time()[["elapsed"]] - t0, 30)
+  # a vector may mix marked and unmarked UTF-8 names, which a C locale cannot match together
+  p = c(file.path(root, "caf\u00e9.R"), "d\u00e9j\u00e0.env")
+  bytes = p
+  Encoding(bytes) = "unknown"
+  local_name_locale()
+  expect_identical(path_class(c(p, bytes), root), rep(c("workspace", "protected"), 2L))
+})
+
 test_that("path_class protects local credential directories and env files", {
   root = path_norm(withr::local_tempdir())
   paths = c(".secrets", ".secrets/jev-key.env", "keys/llm-passwords.env")
