@@ -3291,7 +3291,7 @@ test_that("a fan-out block records each child's code and value, so replay restor
   expect_match(r$block$header[[1L]]$children, paste0("^a:", sid, ":m,b:", sid, ":m$"))
   body = doc_block_body(r$txt, r$block)
   for (nm in c("a", "b")) {
-    expect_true(any(body == paste0("}, envir = gptr_resume(block = \"", r$block$id,
+    expect_true(any(body == paste0("}, envir = gptr::gptr_resume(block = \"", r$block$id,
                                    "\", child = \"", nm, "\")$envir)")))
   }
   expect_true(any(body == "  m = mean(.x[[1]])"))
@@ -3421,7 +3421,7 @@ test_that("re-sourcing NS-3 twice keeps the main line and the fork's overlay apa
   expect_match(readLines(f)[b$start[3]], " fork=s[0-9a-f]{10}:2", perl = TRUE)
   fork_body = doc_block_body(readLines(f), b[3, ])
   expect_identical(fork_body[1], "local({")
-  expect_identical(fork_body[3], paste0("}, envir = gptr_resume(block = \"", b$id[3],
+  expect_identical(fork_body[3], paste0("}, envir = gptr::gptr_resume(block = \"", b$id[3],
                                         "\")$envir)"))
   e2 = new.env(parent = globalenv())
   e2$d = data.frame(mt = c(5, 12, 18, 25))

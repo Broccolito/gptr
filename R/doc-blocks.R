@@ -1255,13 +1255,15 @@ doc_string_tails = function(lines) {
 
 #' Wrap body lines for an overlay fork or a team child (IC-46, IC-47); the block id is filled in
 #' when the block is written (doc_block_token). Lines inside a multi-line string keep their text.
+#' The home is `gptr::gptr_resume()`, so a script that calls gptr only through `gptr::` replays.
 #' @noRd
 doc_wrap_local = function(body, child = NULL) {
   if (!length(body)) return(character())
   target = if (is.null(child)) {
-    paste0("gptr_resume(block = \"", doc_block_token, "\")")
+    paste0("gptr::gptr_resume(block = \"", doc_block_token, "\")")
   } else {
-    paste0("gptr_resume(block = \"", doc_block_token, "\", child = ", doc_str_literal(child), ")")
+    paste0("gptr::gptr_resume(block = \"", doc_block_token, "\", child = ",
+           doc_str_literal(child), ")")
   }
   pad = nzchar(body) & !doc_string_tails(body)
   body[pad] = paste0("  ", body[pad])
@@ -1668,7 +1670,7 @@ doc_team_block_lines = function(team, site, call_ordinal) {
       body = c(body, doc_wrap_local(as.character(code), child = nm))
     }
     if (length(exports)) {
-      body = c(body, paste0(exports, " = gptr_resume(block = \"", doc_block_token,
+      body = c(body, paste0(exports, " = gptr::gptr_resume(block = \"", doc_block_token,
                             "\", child = ", doc_str_literal(nm), ")$envir$", exports))
     }
     children[[nm]] = list(text = txt, session = cd$id, model = cd$model,

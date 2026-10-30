@@ -884,8 +884,9 @@ doc_assign_parts = function(e) {
 }
 
 #' A coach block body read without evaluating it (08 section 3.6, replay steps 1 and 2): exactly
-#' one `<name> = gptr_tailor(<start>)` or `<name> = gptr_tailor(<start>, coaching = <literal>)`
-#' gives list(name, start, coaching), anything else NULL
+#' one `<name> = gptr::gptr_tailor(<start>)` or `<name> = gptr::gptr_tailor(<start>, coaching =
+#' <literal>)`, `gptr_tailor` also unqualified (as written before FIX-37), gives list(name, start,
+#' coaching) with `start` the starting harness as written: a name or `gptr::peter`; else NULL
 #' @noRd
 doc_coach_walk = function(body) {
   tryCatch({
@@ -893,10 +894,11 @@ doc_coach_walk = function(body) {
     a = if (length(ex) == 1L) doc_assign_parts(ex[[1L]])
     rhs = a$value
     nms = names(rhs) %||% rep("", length(rhs))
-    ok = is.call(rhs) && identical(rhs[[1L]], as.name("gptr_tailor")) &&
-      length(rhs) %in% 2:3 && is.symbol(rhs[[2L]]) && nzchar(as.character(rhs[[2L]])) &&
+    start = if (is.call(rhs) && length(rhs) %in% 2:3) rhs[[2L]]
+    ok = is.call(rhs) && deparse(rhs[[1L]]) %in% c("gptr_tailor", "gptr::gptr_tailor") &&
+      ((is.symbol(start) && nzchar(as.character(start))) || identical(start, quote(gptr::peter))) &&
       !nzchar(nms[2L]) && (length(rhs) == 2L || identical(nms[3L], "coaching"))
-    if (!ok) NULL else list(name = a$name, start = as.character(rhs[[2L]]),
+    if (!ok) NULL else list(name = a$name, start = start,
                             coaching = if (length(rhs) == 3L) doc_coach_value(rhs[[3L]]))
   }, error = function(e) NULL)
 }
@@ -913,11 +915,14 @@ doc_coach_hash = function(coaching) ns_fun("coaching_hash")(coaching)
 #' The assignment that rebuilds a harness from its starting harness `start` and `coaching` (NULL:
 #' the starting harness's own), every text written by doc_str_literal() and redacted with the
 #' persist profile; NULL with a notice unless the text parses back to exactly that assignment and,
-#' with coaching, to the coaching hash `hash` (08 section 3.6, safe writing)
+#' with coaching, to the coaching hash `hash` (08 section 3.6, safe writing). It calls
+#' `gptr::gptr_tailor()`, and `gptr::peter` for the start `peter`, so a script that calls gptr
+#' only through `gptr::` runs it.
 #' @noRd
 doc_coaching_code = function(name, start, coaching, hash) {
-  head = paste0(deparse(as.name(name), backtick = TRUE), " = gptr_tailor(",
-                deparse(as.name(start), backtick = TRUE))
+  from = if (identical(start, "peter")) quote(gptr::peter) else as.name(start)
+  head = paste0(deparse(as.name(name), backtick = TRUE), " = gptr::gptr_tailor(",
+                deparse(from, backtick = TRUE))
   items = if (!is.null(coaching)) doc_r_items(doc_redact_text(coaching))
   code = if (is.null(coaching)) {
     paste0(head, ")")
@@ -929,7 +934,7 @@ doc_coaching_code = function(name, start, coaching, hash) {
   back = if (!is.null(w$coaching)) {
     tryCatch(doc_coach_hash(doc_coach_valid(w$coaching)), error = function(e) NA_character_)
   }
-  if (!is.null(w) && identical(w$name, name) && identical(w$start, start) &&
+  if (!is.null(w) && identical(w$name, name) && identical(w$start, from) &&
       (is.null(coaching) || identical(back, hash))) {
     return(code)
   }
@@ -984,7 +989,11 @@ doc_coach_replay = function(site, call) {
                        "the result."), "notice")
     return(get(sub(":[^:]*$", "", site$harness), envir = call$envir, mode = "function"))
   }
-  start = get(w$start, envir = call$envir, mode = "function")
+  start = if (is.symbol(w$start)) {
+    get(as.character(w$start), envir = call$envir, mode = "function")
+  } else {
+    eval(w$start, baseenv())
+  }
   tailor = ns_fun("gptr_tailor")
   if (is.null(coaching)) tailor(start) else tailor(start, coaching = coaching)
 }
