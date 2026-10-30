@@ -1191,6 +1191,31 @@ test_that("an argument named in part is read while its namespace is not loaded (
   expect_identical(lv("fs::link_create(p = 'sub', n = 'lnk')"), 2L)
 })
 
+test_that("a move deletes its source in R, Python and the shell alike (D-293)", {
+  root = local_project()
+  p = file.path(withr::local_tempdir(tmpdir = dirname(tempdir())), "x")
+  x = deparse(p)
+  lv = function(code) gptr_risk(code, root = root)$level
+  py = function(code) flags_level(risk_python(paste0("import os, shutil\n", code), root))
+  for (code in c(paste0("file.rename(", x, ", 'f')"), paste0("fs::file_move(", x, ", 'f')"),
+                 paste0("fs::file_move(new_path = 'f', path = ", x, ")"),
+                 paste0("system('mv ", p, " data/')"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  for (code in c(paste0("os.rename(", x, ", 'x')"), paste0("shutil.move(", x, ", 'x')"))) {
+    expect_identical(py(code), 4L, label = code)
+  }
+  # neighbours: a move inside the project writes (Python's token reading deletes too), one from
+  # a name the code computes deletes it; pandas' rename() is no move
+  for (code in c("file.rename('a.csv', 'b.csv')", "fs::file_move('a.csv', 'b.csv')",
+                 "system('mv a.csv b.csv')")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  expect_identical(lv("file.rename(f, 'b.csv')"), 3L)
+  expect_identical(py("os.rename('a.csv', 'b.csv')"), 3L)
+  expect_true(py("df = df.rename(columns={'a': 'b'})") <= 2L)
+})
+
 test_that("routes to gptr's namespace are control or dynamic (IC-53, D-132)", {
   root = local_project()
   for (code in c("environment(gptr_config)", "dplyr::mutate(df, across(p, gptr_config))",

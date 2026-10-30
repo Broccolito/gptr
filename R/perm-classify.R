@@ -1771,7 +1771,8 @@ risk_py_rules = list(
                              "platform\\.popen|asyncio\\.create_subprocess|multiprocessing|",
                              "webbrowser)")),
   list(3L, "file_delete", paste0("\\b(os\\.remove|os\\.unlink|os\\.rmdir|shutil\\.rmtree|",
-                                  "os\\.removedirs)|\\.(unlink|rmdir)\\(")),
+                                  "os\\.removedirs|os\\.renames?|os\\.replace|shutil\\.move)|",
+                                  "\\.(unlink|rmdir)\\(")),
   list(3L, "network",
        "\\b(requests|urllib|http\\.client|httpx|aiohttp|socket|ftplib|smtplib)\\b"),
   list(3L, "dynamic", paste0("\\b(exec|eval|compile|__import__|getattr|globals|locals)\\s*\\(|",
@@ -2844,6 +2845,15 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
         add(ctx, paste0(label, " (links outside the project)"), name, risk_op_level(pc, "delete"),
             "file_delete", names(pcs)[match(pc, pcs)], pc)
       }
+      return(FALSE)
+    }
+    if (name %in% c("file.rename", "file_move")) {
+      # a move deletes its source, read as the shell's mv reads it: a delete unless it is in the
+      # project or tempdir(); its row writes the target
+      src = risk_arg(a, if (name == "file_move") "path" else "from", 1L)
+      v = fold(src, known)
+      ok = vapply(v[nzchar(v)], risk_path_cls, "", "file_delete", root) %in% c("workspace", "temp")
+      if (is.null(v) || !all(ok)) add_path(list(src), "file_delete", 3L, ctx, label, name)
       return(FALSE)
     }
     if (name %in% c("setwd", "local_dir", "with_dir", "in_dir")) {
