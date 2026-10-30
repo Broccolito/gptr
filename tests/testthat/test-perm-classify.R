@@ -1489,6 +1489,16 @@ test_that("moving R's working directory out of the project is level 4 (review ro
   }
 })
 
+test_that("with_dir() and in_dir() leave R where it was (D-293)", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c("withr::with_dir('data', x); setwd('sub')",
+                 "xfun::in_dir('data', x); setwd('data')")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  expect_identical(lv("withr::with_dir('data', x); setwd('/')"), 4L)
+})
+
 test_that("a Windows wd is placed as Windows places it, on every OS (review round 4)", {
   root = "C:/Users/x y/proj"
   local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)

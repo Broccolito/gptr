@@ -2806,8 +2806,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     if (name %in% c("setwd", "local_dir", "with_dir", "in_dir")) {
       # out of the project, the paths the gate places in it name files elsewhere
       v = fold(risk_arg(a, if (name %in% c("setwd", "in_dir")) "dir" else "new", 1L), known)
-      # R is then in the directory setwd() and local_dir() move to; in or after with_dir() and
-      # in_dir() in one the code computes
+      # R is then in the directory setwd() and local_dir() move to; in with_dir() and in_dir() in
+      # one the code computes (walk() moves it back after them)
       wd = attr(known, "wd")
       # after a move, a relative directory is one in the directory R is in (one the code computes
       # when that is); before any, it is read in the project, as every relative path is
@@ -3001,6 +3001,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     # their place, as a pipe and eval(quote()) are
     direct = if (r$name %in% c("do.call", "exec")) direct_call(e, r)
     if (!is.null(direct)) return(walk(direct, ctx))
+    # with_dir() and in_dir() move R back when their code ends
+    back = if (r$name %in% c("with_dir", "in_dir")) attr(known, "wd")
     if (r$how == "computed") {
       add(ctx, paste("calls a function the code computes:", text(e[[1L]])), "<computed>", 3L,
           "dynamic")
@@ -3081,6 +3083,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     inner$away = ctx$away || r$name %in% risk_unknown_funs
     for (i in seq_along(a)) if (!identical(a[[i]], quote(expr = ))) walk(a[[i]], inner)
+    if (!is.null(back)) attr(known, "wd") <<- back
     if (scope) {
       wd = attr(known, "wd")
       known <<- up
