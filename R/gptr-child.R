@@ -348,22 +348,20 @@ child_line = function(st, line) {
   invisible(NULL)
 }
 
-#' A child exited: its result file read in the safe direction with its stream, then its slot
-#' moves on
+#' A child exited: its result file read in the safe direction with its stream (a result that
+#' cannot be read or merged is an error), then its slot moves on
 #' @noRd
 child_exit = function(ctx, ln, st, status) {
   st$watch = NULL
   job = ctx$jobs[[st$i]]
-  res = tryCatch(child_read(st$result_path), error = function(e) {
-    child_result_new(job$id, error = conditionMessage(e))
+  dir = job$direction %||% "final"
+  tail = redact(paste(st$stderr, collapse = "\n"))
+  none = child_result_new(job$id, error = paste0(
+    "the coaching child exited (status ", status, ") without a result",
+    if (nzchar(tail)) paste0(": ", tail)))
+  res = tryCatch(child_merge(child_read(st$result_path) %||% none, st, dir), error = function(e) {
+    child_merge(child_result_new(job$id, error = conditionMessage(e)), st, dir)
   })
-  if (is.null(res)) {
-    tail = redact(paste(st$stderr, collapse = "\n"))
-    res = child_result_new(job$id, error = paste0(
-      "the coaching child exited (status ", status, ") without a result",
-      if (nzchar(tail)) paste0(": ", tail)))
-  }
-  res = child_merge(res, st, job$direction %||% "final")
   res$id = job$id
   ctx$out[[st$i]] = res
   if (!is.null(res$limit)) ctx$limits[[ctx$kinds[[st$i]]]] = res$limit

@@ -163,6 +163,32 @@ test_that("a report is read in the safe direction (08 section 3.3)", {
   expect_identical(start$risk, 1L)
 })
 
+test_that("a result the parent cannot merge ends its job with an error, and the slot moves on", {
+  st = new.env(parent = emptyenv())
+  st$i = 1L
+  st$risk = 0L
+  st$refusals = child_refusals()
+  st$unmet = character()
+  st$dir = withr::local_tempdir()
+  st$result_path = file.path(st$dir, "result.json")
+  forged = child_result_new("a", status = "idle")
+  forged$refusals = structure(list(id = data.frame(a = 1:2, b = 3:4, c = 5:6), tool = c("t", "u"),
+                                   reason = c("r", "s")), row.names = 1:2, class = "data.frame")
+  writeLines(json_encode(plain_encode(forged)), st$result_path)
+  ctx = new.env(parent = emptyenv())
+  ctx$jobs = list(list(id = "a"))
+  ctx$kinds = "fake"
+  ctx$out = list(NULL)
+  ctx$limits = list()
+  ln = new.env(parent = emptyenv())
+  ln$queue = integer()
+  child_exit(ctx, ln, st, 0L)
+  expect_identical(ctx$out[[1L]]$status, "error")
+  expect_match(ctx$out[[1L]]$error, "differing number of rows", fixed = TRUE)
+  expect_true(ln$settled)
+  expect_false(dir.exists(st$dir))
+})
+
 test_that("plan jobs share at most two slots per account; a reported limit skips the rest", {
   lanes = child_lanes(c("claude", "api", "claude", "claude", "codex", "fake"))
   expect_identical(lanes, list(c(1L, 4L), 2L, 3L, 5L, 6L))
