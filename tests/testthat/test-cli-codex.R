@@ -1175,7 +1175,7 @@ test_that("a fake CLI joins two inline agents and two workers on one reactor (IN
   skip_without_installed_gptr()
   f = local_fake_cli("codex", "slow")
   slow = function(name) {
-    gptr_fake_provider(list(list(text = paste(name, "done"), delay = 3)), name = name)
+    gptr_fake_provider(list(list(text = paste(name, "done"), delay = 6)), name = name)
   }
   inline1 = slow("fakea")
   inline2 = slow("fakeb")
@@ -1192,7 +1192,9 @@ test_that("a fake CLI joins two inline agents and two workers on one reactor (IN
   expect_identical(team$a1$text, "fakea done")
   expect_identical(team$w2$text, "faked done")
   expect_identical(team$code$messages[[length(team$code$messages)]]$route, "plan-cli")
-  expect_lt(elapsed, 13)
+  # four 6 s agents one after another take 24 s; the workers are other processes, so the bound is
+  # on the whole call
+  expect_lt(elapsed, 0.8 * 4 * 6)
 })
 
 # These copies isolate leaf observations without changing base or package namespace bindings.
