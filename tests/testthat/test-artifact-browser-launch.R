@@ -301,8 +301,8 @@ test_that("artifact browser marked owner releases only its exact dead settled fa
   expect_invisible(owner$release())
   expect_false(x$state$registered)
   expect_false(dir.exists(x$state$roots[[1L]]))
-  expect_true(file.exists(x$state$calls$stderr))
-  expect_true(file.exists(x$state$calls$stdout))
+  expect_false(file.exists(x$state$calls$stderr))
+  expect_false(file.exists(x$state$calls$stdout))
 })
 
 test_that("artifact browser spawn refusal preserves its condition without a foreign signal", {
@@ -360,7 +360,8 @@ test_that("artifact browser spawn refusal preserves its condition without a fore
         expect_identical(lease$owner$get_process(), x$process)
         expect_true(dir.exists(x$state$roots[[1L]]))
       }
-      expect_true(all(file.exists(c(x$state$calls$stdout, x$state$calls$stderr))))
+      expect_identical(file.exists(c(x$state$calls$stdout, x$state$calls$stderr)),
+        rep(!settles, 2L))
     }
     x = artifact_launch_fixture()
     x$state$registered = FALSE
@@ -424,7 +425,7 @@ test_that("artifact browser spawn refusal preserves its condition without a fore
     expect_false(dir.exists(x$state$roots[[1L]]))
     expect_identical(x$scope$artifact_state$browser_pending, foreign)
     expect_identical(x$state$signals, integer())
-    expect_true(all(file.exists(c(x$state$calls$stdout, x$state$calls$stderr))))
+    expect_false(any(file.exists(c(x$state$calls$stdout, x$state$calls$stderr))))
     expect_identical(nrow(x$scope$gptr_jobs(kill = TRUE)), 0L)
     expect_identical(x$scope$artifact_state$browser_pending, foreign)
   }
@@ -462,7 +463,7 @@ test_that("artifact browser release settles only its exact retained stopped fami
     expect_identical(x$state$family_calls,
       if (mode %in% c("settled", "unconfirmed")) 1L else 0L)
     expect_identical(x$state$signals, integer())
-    expect_true(all(file.exists(x$state$files)))
+    expect_identical(file.exists(x$state$files), rep(mode != "settled", 2L))
   }
 })
 
@@ -497,7 +498,7 @@ test_that("artifact browser directory failure reports its stage and retains retr
     x$scope$unlink = base::unlink
     expect_invisible(owner$release())
     expect_false(dir.exists(root))
-    expect_true(all(file.exists(x$state$files)))
+    expect_false(any(file.exists(x$state$files)))
   }
 })
 
@@ -533,7 +534,8 @@ test_that("artifact browser close waits for its unmarked helpers before removing
       stopifnot(seconds > 0, seconds <= 0.02)
       x$state$clock = x$state$clock + seconds
     }
-    x$scope$unlink = function(path, recursive) {
+    x$scope$unlink = function(path, recursive = FALSE) {
+      if (!recursive) return(base::unlink(path))
       x$state$unlinked_at = c(x$state$unlinked_at, x$state$clock)
       # A helper writing in the profile during the walk makes R's unlink return 1.
       if (x$state$clock < x$state$exits) 1L else base::unlink(path, recursive = recursive)
@@ -569,7 +571,7 @@ test_that("artifact browser close waits for its unmarked helpers before removing
       expect_identical(x$state$unlinked_at, x$state$exits)
       expect_false(dir.exists(root))
     }
-    expect_true(all(file.exists(x$state$files)))
+    expect_false(any(file.exists(x$state$files)))
   }
 })
 
@@ -708,7 +710,7 @@ test_that("a dead settled browser removes a real owned POSIX SingletonSocket onl
   expect_invisible(owner$release())
   expect_false(file.exists(x$state$roots[[1L]]))
   expect_true(file.exists(outside))
-  expect_true(all(file.exists(x$state$files)))
+  expect_false(any(file.exists(x$state$files)))
   expect_identical(x$state$signals, integer())
 })
 
@@ -801,5 +803,5 @@ test_that("socket removal preserves failure conditions and requires exact dead s
   x$scope$file.remove = base::file.remove
   expect_invisible(owner$release())
   expect_false(file.exists(socket))
-  expect_true(all(file.exists(x$state$files)))
+  expect_false(any(file.exists(x$state$files)))
 })
