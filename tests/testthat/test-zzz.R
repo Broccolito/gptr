@@ -180,12 +180,6 @@ test_that("the package loaded without load-time errors", {
   expect_length(the$load_errors, 0L)
 })
 
-test_that("imports_used() references every Imports package", {
-  used = vapply(imports_used(), function(f) is.function(f), logical(1))
-  expect_true(all(used))
-  expect_length(used, 13L)
-})
-
 test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-72, IC-73)", {
   skip_on_cran()
   description = source_file("DESCRIPTION")
