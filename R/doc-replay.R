@@ -1522,7 +1522,10 @@ doc_console_held = function(s) {
 #' `tools::R_user_dir("gptr", "cache")`, so any R process of the same user can apply them.
 #'
 #' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
-#' or functions do not. A block records the R code the agent ran: of a call that stopped part-way,
+#' or functions do not. Only blank lines may separate a call's statement from its blocks: after a
+#' comment or code line between them the blocks belong to no call, so the call is asked again and
+#' gets a new block while the old block's code still runs. A block records the R code the agent
+#' ran: of a call that stopped part-way,
 #' the expressions that ran, and code that changed your objects even where the model passed
 #' `record = false`, which leaves out only inspection. Binding supplies recording consent even
 #' when automatic recording is off, but `.opts = list(record = FALSE)` suppresses recording for
@@ -1977,16 +1980,19 @@ doc_catalog_prune = function() {
 #' runs as ordinary R. A call whose block is stale (its prompt or the values interpolated into it
 #' changed), or every call under `replay = "live"` (an undone block runs without being rewritten;
 #' `replay = "record"` regenerates it), asks the model again and rewrites its block in place, and
-#' the old block is skipped, which base `source()` cannot do. A console turn is asked again with
+#' the old block is skipped, which base `source()` cannot do. Only that block is regenerated: a
+#' later turn of the same session keeps its block, answered in the old turn's context, so re-ask
+#' it with `replay = "record"` when it depends on the turn that changed. Only blank lines may
+#' separate a call from its blocks (see [gptr_doc()]). A console turn is asked again with
 #' what the console sent with it, from its block's `#< ` lines (the `@file` heads and `!` notes;
 #' see [gptr_doc()]): the request is the same even when the file changed or is gone. It is asked
 #' with the model and in the mode its statement names, else those its session has from the turns
 #' before, else the `model` and `mode` settings of the session that re-asks: a statement names
 #' them only where they differed from what it gets without them (see [gptr_doc()]). A named model
-#' must be available there; `model` asks every call with another one. A re-ask does not send the
-#' `## Steer:` and `## Follow-up:` lines of a turn or the text of an approval answered `n <text>`,
-#' and the new block does not keep them. Direct R lines a transcript turned off are comments and
-#' do not run.
+#' must be available there; `model` asks a `peter()` or harness call with another one. A re-ask
+#' does not send the `## Steer:` and `## Follow-up:` lines of a turn or the text of an approval
+#' answered `n <text>`, and the new block does not keep them. Direct R lines a transcript turned
+#' off are comments and do not run.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function
@@ -2002,9 +2008,10 @@ doc_catalog_prune = function() {
 #' @param echo `TRUE` prints each expression before it is evaluated.
 #' @param model `NULL`, or a model name or reference string (`"sonnet"`,
 #'   `"anthropic/claude-sonnet-5-5"`, or one of a provider you registered), not a provider spec
-#'   object: every call the file asks again (each one under `replay = "live"`) uses it instead of
-#'   the model it names or its session has, so a recorded analysis can be re-asked with your own
-#'   model. A block that replays asks no model.
+#'   object: every `peter()` or harness call the file asks again (each one under
+#'   `replay = "live"`) uses it instead of the model it names or its session has, so a recorded
+#'   analysis can be re-asked with your own model. A `gptr_coach()` call and a team or fan-out call
+#'   (`agents =`, `parallel =`) keep the models they name. A block that replays asks no model.
 #' @return Invisibly, the `gptr_blocks` listing of the file after the run with an extra column
 #'   `action`: `replayed`, `regenerated`, `ran`, `skipped`, or `NA` for blocks no call touched.
 #'   A stale block whose call ran but could not be rewritten (for example without write consent)
