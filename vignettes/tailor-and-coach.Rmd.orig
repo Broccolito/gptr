@@ -30,8 +30,8 @@ model and are shown without running them.
 ## Tailor a harness by hand
 
 `gptr_tailor()` starts from `peter` or from another harness. `...` fixes named `peter()`
-arguments such as `mode`, `model`, `tools`, `budget` or `extensions`. `rules =` holds your own
-hard rules, and `coaching =` holds what gptr gives Peter, in four parts.
+arguments other than the prompt, such as `mode`, `model`, `tools`, `budget` or `extensions`.
+`rules =` holds your own hard rules, and `coaching =` holds what gptr gives Peter, in four parts.
 
 ```{r}
 library(gptr)
@@ -161,9 +161,9 @@ runs' own model at `k = 1` is untested, so `k = 2` or a stronger `coach` model m
 
 **Cost.** A call makes `k * (2 + length(focus))` runs of your task and `k * (1 + length(focus))`
 coach sessions, plus up to one judge session when `k > 1`: 4 runs and 3 coach sessions with the
-defaults. A `budget` caps each run and each coach session, so a default call can spend up to
-seven such budgets. gptr prints the count and asks the usual question about sending your data
-to each model before it starts.
+defaults. A `budget`, given here or fixed in the starting harness, caps each run, each coach
+session and the judge, so a default call can spend up to seven such budgets. gptr prints the
+count and asks the usual question about sending your data to each model before it starts.
 
 **Where it runs.** Every session runs unattended in its own fresh R process, with copies of the
 objects you passed and an empty folder. A run does not see the rest of your workspace or your
@@ -219,7 +219,8 @@ their_peter
 ```
 
 `gptr_tailor(readRDS(file))` rebuilds the harness with a new id, checks its coaching, and shows
-any fixed argument that loads code or loosens checks, such as `extensions` or `mode = "yolo"`.
+any fixed argument that loads code or loosens checks, such as `extensions`, `plugins`,
+`mode = "yolo"` or a `system` prompt in `.opts`.
 Treat a harness from someone else like an R script from them: functions among its fixed
 arguments run when you call it, and `readRDS()` itself can load packages. A coach block in a
 recorded script (below) holds the coaching as literal text, never your fixed arguments or
@@ -253,13 +254,13 @@ In a recorded script or notebook ([Record, replay and export](script-as-history.
 harness call is recorded like a `peter()` call, and its header adds `harness=<name>:<hash>`.
 When the coaching changes, the block becomes stale, as when you edit a prompt. A top-level
 `name = gptr_coach(...)`, with `harness` left out or a plain name, is recorded as a block of
-kind `coach`, whose body rebuilds the result with `gptr_tailor()` and lists each run and the
+kind `coach`, whose body rebuilds the result with `gptr::gptr_tailor()` and lists each run and the
 decision:
 
 ```{r, eval = FALSE}
 mean_peter = gptr_coach("Ages of -9 are missing. ...", survey, harness = auto_peter)
 # >>> gptr:7f3a1c ... kind=coach harness=mean_peter:9c41e2d0 start=auto_peter:5b0e77a1 ...
-mean_peter = gptr_tailor(auto_peter, coaching = list(
+mean_peter = gptr::gptr_tailor(auto_peter, coaching = list(
   note = "Recode -9 to NA before you average, and check the result with table().",
   skills = list(),
   review = NULL,

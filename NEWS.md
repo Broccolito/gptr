@@ -122,6 +122,8 @@ generated code can inspect and modify objects already in memory.
   passing it again when you continue the session does not load it twice.
 * MCP: a client for both protocol eras (`gptr_mcp()`, `gptr_mcp_add()`) that exposes server
   tools as R functions, and `gptr_mcp_serve()`, which serves the live session to other agents.
+  A project's own servers, also those in the project files of Claude Code, Codex, Cursor,
+  VS Code and Pi, start only in a trusted project.
 * Artifacts are Shiny apps launched in the background from the live session
   (`gptr_artifacts()`).
 * Secrets are kept in a private vault and redacted everywhere; `gptr_login()` signs in to

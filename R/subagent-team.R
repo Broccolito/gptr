@@ -619,7 +619,7 @@ subagent_fanout_element = function(call, target, i) {
 
 #' `run()` of the fan-out route: a replayed block (IC-47), else gptr_map(). Each replayed child
 #' gets its element bound as `.x` in its home, as a live child has it, so the child code the
-#' block records (`local({ ... }, envir = gptr_resume(block =, child =)$envir)`) runs again.
+#' block records (`local({ ... }, envir = gptr::gptr_resume(block =, child =)$envir)`) runs again.
 #' @noRd
 route_fanout_run = function(call) {
   subagent_route_checks(call)
