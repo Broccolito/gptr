@@ -2355,8 +2355,8 @@ risk_base_helpers = c("stdout", "stderr", "getwd", "setwd", "tempdir", "tempfile
 #' A path expression built from literals and the names in `known` (each name's folded values,
 #' NA for one the code computes), folded; NULL when the code computes it, a call of a helper in
 #' `masked` (one the code or the session binds) included; "" for the console (tempdir() and
-#' tempfile() are this session's; getwd() is where the code has moved R to and setwd() returns
-#' where it was, `known`'s attributes `wd` and `owd`)
+#' tempfile() are this session's, here::here() is the project's root; getwd() is where the code
+#' has moved R to and setwd() returns where it was, `known`'s attributes `wd` and `owd`)
 #' @noRd
 risk_fold = function(x, known = NULL, masked = NULL) {
   if (is.character(x)) return(x)
@@ -2376,6 +2376,11 @@ risk_fold = function(x, known = NULL, masked = NULL) {
     if (is.null(attr(a, "formals"))) return(NULL)
     dir = if (is.null(a[["tmpdir"]])) tempdir() else risk_fold(a[["tmpdir"]], known, masked)
     return(if (!is.null(dir)) file.path(dir, "file"))
+  }
+  # here::here() is the project root
+  if (identical(h$pkg, "here") && identical(h$name, "here")) {
+    parts = lapply(as.list(x)[-1L], risk_fold, known, masked)
+    return(if (!any(vapply(parts, is.null, NA))) do.call(file.path, c(project_root(), parts)))
   }
   if (!is.call(x) || !is.symbol(x[[1L]])) return(NULL)
   fn = as.character(x[[1L]])
@@ -2410,10 +2415,11 @@ risk_fold = function(x, known = NULL, masked = NULL) {
   v
 }
 
-#' The class of one literal path read, written or deleted by a call of `category`
+#' The class of one literal path read, written or deleted by a call of `category`, a relative
+#' one in each of `dirs`
 #' @noRd
-risk_path_cls = function(p, category, root) {
-  risk_target(p, switch(category, read = "read", file_delete = "delete", "write"), root)$pc
+risk_path_cls = function(p, category, root, dirs = root) {
+  risk_target(p, switch(category, read = "read", file_delete = "delete", "write"), root, dirs)$pc
 }
 
 #' The worst of several path classes
@@ -2526,6 +2532,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   # directory, and a name they assign with <<- adds the values `sup` holds for it.
   known = structure(list(), wd = wd, wd0 = wd)
   sup = list()
+  # names whose last assignment saved R's directory (the value of setwd() or getwd())
+  saved = character()
   bound = risk_bound(exprs)
   # A helper the code binds (to a function or a value it computes), or the session holds as
   # other than base's, is called as one the code computes: risk_fold() folds no call of it.
@@ -2656,7 +2664,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     for (p in ps) {
       v = fold(p, known)
       w = v[nzchar(v)]
-      cls = vapply(w, risk_path_cls, character(1), category, root)
+      # a relative path is in the project before any move, then where R is (NA: one the code
+      # computes)
+      dirs = if (identical(attr(known, "wd"), attr(known, "wd0"))) root else attr(known, "wd")
+      cls = vapply(w, risk_path_cls, character(1), category, root, dirs)
       pc = if (is.null(v)) "unknown" else if (!length(w)) "console" else risk_cmd_worst(cls)
       lv = risk_path_level(category, level, pc)
       # T1: a read of a secret file is 3
@@ -2805,7 +2816,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     if (name %in% c("setwd", "local_dir", "with_dir", "in_dir")) {
       # out of the project, the paths the gate places in it name files elsewhere
-      v = fold(risk_arg(a, if (name %in% c("setwd", "in_dir")) "dir" else "new", 1L), known)
+      x = risk_arg(a, if (name %in% c("setwd", "in_dir")) "dir" else "new", 1L)
+      v = fold(x, known)
       # R is then in the directory setwd() and local_dir() move to; in with_dir() and in_dir() in
       # one the code computes (walk() moves it back after them)
       wd = attr(known, "wd")
@@ -2823,8 +2835,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       attr(known, "wd") <<- if (length(to) > 64L) NA_character_ else to
       pc = if (!length(v)) "unknown" else risk_cmd_worst(vapply(v, risk_path_cls, "", "read", root))
       if (pc %in% c("workspace", "temp")) return(FALSE)
+      # a directory the code computes that R moves back from (with_dir(), in_dir(), a name the
+      # code saved R's directory in) is 3
+      undo = name %in% c("with_dir", "in_dir") || (is.symbol(x) && as.character(x) %in% saved)
       add(ctx, paste0(label, if (!length(v)) " (a directory the code computes)" else
-        " (leaves the project)"), name, 4L, "session", v[1L] %||% NA_character_, pc)
+        " (leaves the project)"), name, if (!length(v) && undo) 3L else 4L, "session",
+        v[1L] %||% NA_character_, pc)
       return(TRUE)
     }
     if (name %in% c("Sys.setenv", "Sys.unsetenv", "local_envvar", "with_envvar")) {
@@ -2951,6 +2967,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     if (!is.symbol(node) && !is.character(node)) return(invisible())
     nm = as.character(node)
     v = if (!is.call(target)) fold(value, known)
+    h = if (is.call(value) && !is.call(target)) risk_head(value[[1L]])
+    save = !is.null(h) && h$name %in% c("setwd", "getwd") &&
+      (identical(h$pkg, "base") || (is.na(h$pkg) && !h$name %in% masked))
+    saved <<- if (save) union(saved, nm) else setdiff(saved, nm)
     known[[nm]] <<- if (ctx$seq && op != "<<-" && !nm %in% tg$super) v %||% NA_character_ else
       unique(c(known[[nm]] %||% NA_character_, v %||% NA_character_))
     if (op == "<<-") sup[[nm]] <<- unique(c(sup[[nm]], v %||% NA_character_))

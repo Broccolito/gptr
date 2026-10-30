@@ -84,10 +84,12 @@ test_that("eval(quote(x)) is read as x, and xfun::in_dir() as with_dir() (review
                  paste0("eval(base::quote(setwd(", o, ")))"),
                  paste0("base::eval(envir = e, quote(unlink(", deparse(file.path(out, "m")), ")))"),
                  paste0("rlang::eval_tidy(quote(withr::local_dir(", o, ")))"),
-                 paste0("xfun::in_dir(", o, ", unlink('marker.txt'))"), "xfun::in_dir(d, x)")) {
+                 paste0("xfun::in_dir(", o, ", unlink('marker.txt'))"))) {
     expect_identical(lv(code), 4L, label = code)
   }
-  # neighbours: in the project, eval()'s own row (3) as evalq()'s; a quote() alone is data
+  # neighbours: in the project, eval()'s own row (3) as evalq()'s; a quote() alone is data; a
+  # directory the code computes that R moves back from is 3 (D-293)
+  expect_identical(lv("xfun::in_dir(d, x)"), 3L)
   expect_identical(lv("eval(quote(setwd('sub')))"), lv("evalq(setwd('sub'))"))
   expect_identical(lv("eval(quote(unlink('marker.txt')))"), 3L)
   expect_identical(lv("xfun::in_dir('sub', x)"), 2L)
@@ -217,10 +219,11 @@ test_that("getwd() and setwd()'s value are the working directory (review round 5
   # out of the project, or a directory the code computes, as before
   for (code in c("setwd(o)", "setwd(file.path(getwd(), '..', '..'))",
                  "setwd(tempdir()); setwd(file.path(getwd(), '..'))",
-                 "withr::with_dir('data', setwd(file.path(getwd(), '..', '..')))",
-                 "if (x) owd = setwd('data'); setwd(owd)")) {
+                 "withr::with_dir('data', setwd(file.path(getwd(), '..', '..')))")) {
     expect_identical(lv(code), 4L, label = code)
   }
+  # a directory saved in a branch is one the code computes, which R moves back to (D-293)
+  expect_identical(lv("if (x) owd = setwd('data'); setwd(owd)"), 3L)
   # from a folder in the project: getwd() is where the code has moved R to
   withr::local_dir(file.path(root, "data"))
   expect_identical(lv("setwd(file.path(getwd(), '..'))"), 2L)
@@ -449,9 +452,11 @@ test_that("a function body and local() read the names they bind as the top level
   expect_identical(lv(paste0("f = function() { p = ", o, "; unlink(p) }")), 4L)
   expect_identical(lv(paste0("p = ", o, "; local({ q = p; unlink(q) })")), 4L)
   # neighbours: a function's other names are ones the code computes, as is a directory saved in a
-  # branch, and a name a body assigns with <<- or local() given an environment adds its value
+  # branch (which R moves back to: 3, D-293), and a name a body assigns with <<- or local() given
+  # an environment adds its value
+  expect_identical(lv("if (p) { owd = setwd('data'); setwd(owd) }"), 3L)
   for (code in c("f = function(d) { owd = setwd(d); on.exit(setwd(owd)) }",
-                 "f = function() setwd(owd)", "if (p) { owd = setwd('data'); setwd(owd) }",
+                 "f = function() setwd(owd)",
                  paste0("f = function() { owd = setwd(", o, "); on.exit(setwd(owd)) }"),
                  paste0("p = 'a.csv'; f = function() p <<- ", o, "; f(); unlink(p)"),
                  paste0("p = ", o, "; local({ p = 'a.csv' }); unlink(p)"),

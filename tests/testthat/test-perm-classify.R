@@ -1489,6 +1489,31 @@ test_that("moving R's working directory out of the project is level 4 (review ro
   }
 })
 
+test_that("here(), a restored directory and paths after a move are read (review F-6)", {
+  root = local_project()
+  lv = function(code, envir = NULL) gptr_risk(code, envir = envir, root = root)$level
+  for (code in c("setwd(here::here())", "setwd(here::here('data'))",
+                 "withr::with_dir(here::here('data'), x)",
+                 "owd = getwd(); tryCatch(setwd('data'), finally = setwd(owd))")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  # a directory the code computes that R is moved back from is 3, one it moves to 4
+  for (code in c("p = TRUE; if (p) owd = setwd('data'); setwd(owd)",
+                 "lapply(dirs, function(d) withr::with_dir(d, x))", "xfun::in_dir(d, x)")) {
+    expect_identical(lv(code), 3L, label = code)
+  }
+  for (code in c("setwd(here::here(d))", "setwd(d)",
+                 "if (p) owd = setwd('data'); owd = f(); setwd(owd)", "withr::local_dir(d)")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # a relative path after a move is one in the directory R moved to
+  r = gptr_risk("setwd(tempdir()); writeLines('x', 'a.txt')", root = root)
+  expect_identical(r$flagged$path_class[r$flagged$fn == "writeLines"], "temp")
+  expect_identical(lv("setwd(tempdir()); unlink('a.txt')"), 2L)
+  expect_identical(lv("setwd('/'); x = 1; unlink('a.txt')"), 4L)
+  expect_identical(lv("unlink('a.txt')"), 3L)
+})
+
 test_that("with_dir() and in_dir() leave R where it was (D-293)", {
   root = local_project()
   lv = function(code) gptr_risk(code, root = root)$level
