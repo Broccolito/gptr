@@ -1100,10 +1100,12 @@ test_that("a name assigned outside a function body holds the paths it may hold (
                  "if (!exists('p')) p = tempfile(); unlink(p, recursive = TRUE)",
                  "p = tempfile(); for (f in c('/etc/a', '/etc/b')) { unlink(p); p = f }",
                  "p = tempfile(); for (f in c('/etc/a')) { unlink(p); p[1] = f }",
-                 "f = function() p <<- '~'; p = tempfile(); f(); unlink(p, recursive = TRUE)",
-                 "p = tempfile(); assign(value = '/etc/x', x = 'p'); file.remove(p)")) {
+                 "f = function() p <<- '~'; p = tempfile(); f(); unlink(p, recursive = TRUE)")) {
     expect_identical(gptr_risk(code, root = root)$level, 3L, label = code)
   }
+  # the value assign() binds is read (review F-7)
+  code = "p = tempfile(); assign(value = '/etc/x', x = 'p'); file.remove(p)"
+  expect_identical(gptr_risk(code, root = root)$level, 4L)
 })
 
 test_that("routes to gptr's namespace are control or dynamic (IC-53, D-132)", {
@@ -1512,6 +1514,30 @@ test_that("here(), a restored directory and paths after a move are read (review 
   expect_identical(lv("setwd(tempdir()); unlink('a.txt')"), 2L)
   expect_identical(lv("setwd('/'); x = 1; unlink('a.txt')"), 4L)
   expect_identical(lv("unlink('a.txt')"), 3L)
+})
+
+test_that("a name assign(), list2env() or eval() binds in local() is one outside it (review F-7)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  o = deparse(out)
+  lv = function(code) gptr_risk(paste0("d = 'data'; ", code, "; setwd(d)"), root = root)$level
+  for (code in c(paste0("local({ assign('d', ", o, ", inherits = TRUE) })"),
+                 paste0("local({ assign('d', ", o, ", envir = globalenv()) })"),
+                 paste0("local({ assign('d', ", o, ", pos = 1) })"),
+                 paste0("local({ list2env(list(d = ", o, "), globalenv()) })"),
+                 paste0("list2env(list(d = ", o, "), globalenv())"),
+                 paste0("local({ eval(quote(d <- ", o, "), globalenv()) })"),
+                 paste0("eval(quote(d <- ", o, "), envir = globalenv())"),
+                 paste0("evalq(d <- ", o, ", globalenv())"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  x = deparse(file.path(out, "x"))
+  expect_identical(gptr_risk(paste0("p = 'a.csv'; local({ assign('p', ", x,
+                                    ", inherits = TRUE) }); unlink(p)"), root = root)$level, 4L)
+  # neighbours: local()'s own names stay in it
+  for (code in c("local({ x = 1 })", paste0("local({ d = ", o, " })"))) {
+    expect_identical(lv(code), 2L, label = code)
+  }
 })
 
 test_that("with_dir() and in_dir() leave R where it was (D-293)", {

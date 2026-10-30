@@ -2529,7 +2529,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   # adds to. A function body and local()'s code bind their own names, read so from their start:
   # a function's other names are ones the code computes and R is where the code started or has
   # moved it to, local()'s are the names around it. After them a move in them adds to R's
-  # directory, and a name they assign with <<- adds the values `sup` holds for it.
+  # directory, and a name they assign with <<- or assign() (or inside eval(), evalq(), with() or
+  # within()) adds the values `sup` holds for it.
   known = structure(list(), wd = wd, wd0 = wd)
   sup = list()
   # names whose last assignment saved R's directory (the value of setwd() or getwd())
@@ -2973,7 +2974,9 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     saved <<- if (save) union(saved, nm) else setdiff(saved, nm)
     known[[nm]] <<- if (ctx$seq && op != "<<-" && !nm %in% tg$super) v %||% NA_character_ else
       unique(c(known[[nm]] %||% NA_character_, v %||% NA_character_))
-    if (op == "<<-") sup[[nm]] <<- unique(c(sup[[nm]], v %||% NA_character_))
+    if (op %in% c("<<-", "assign") || isTRUE(ctx$outer)) {
+      sup[[nm]] <<- unique(c(sup[[nm]], v %||% NA_character_))
+    }
     if (ctx$def && op != "<<-") {
       # in a function body only a replacement of a name the code does not bind can reach an
       # object outside it (an environment, by reference)
@@ -3045,11 +3048,19 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     if (r$name == "for") note_assign(a[[1L]], "=", ctx)
     if (r$name == "assign" && length(a)) {
-      x = risk_arg(risk_args(e, "assign", "base"), "x", 1L)
+      m = risk_args(e, "assign", "base")
+      x = risk_arg(m, "x", 1L)
       if (is.character(x)) {
-        note_assign(as.name(x), "assign", ctx)
+        note_assign(as.name(x), "assign", ctx, risk_arg(m, "value", 2L))
       } else {
         add_tg("unknown", "assign(<computed name>)")
+      }
+    }
+    # list2env() binds the names of a list written out, as assign() does
+    if (r$name == "list2env" && length(a)) {
+      x = risk_arg(risk_args(e, "list2env", "base"), "x", 1L)
+      if (is.call(x) && isTRUE(risk_head(x[[1L]])$name %in% setdiff("list", masked))) {
+        for (nm in setdiff(names(x), "")) note_assign(as.name(nm), "assign", ctx, x[[nm]])
       }
     }
     if (r$name == "[" && is.symbol(a[[1L]]) && any(vapply(a, function(x) {
@@ -3077,6 +3088,9 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     # a one-sided formula is a function (a lambda of purrr or dplyr)
     fun = r$name == "function" || (r$name == "~" && length(e) == 2L)
     if (fun) inner$def = TRUE
+    # an assignment inside eval(), evalq(), with() or within() may bind in an enclosing
+    # environment, as <<- and assign() may
+    inner$outer = !fun && (isTRUE(ctx$outer) || r$name %in% c("eval", "evalq", "with", "within"))
     if (r$name == "function") a = c(as.list(a[[1L]]), a[-1L])
     # a function body and local()'s code (in an environment of its own) bind their own names
     # (`known` above)
