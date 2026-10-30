@@ -335,6 +335,15 @@ doc_coaching_of = function(v) {
   doc_coach_hash(NULL)
 }
 
+#' The harness a reader that runs nothing takes a call of `head` to run (doc_block_status()'s
+#' `hh`): the block header's `harness=` when it names that head, else none (peter), so a block a
+#' coached harness recorded reads stale under `peter(`
+#' @noRd
+doc_head_harness = function(header, head) {
+  hh = header[["harness"]]
+  if (rlang::is_string(hh) && identical(sub(":[^:]*$", "", hh), head)) hh
+}
+
 #' Render a marker block (contract 11.5): header, indented non-empty body lines, footer
 #' @noRd
 doc_render_block = function(id, header = list(), body = character(), indent = "") {

@@ -1700,7 +1700,8 @@ doc_blocks_text = function(text, fmt) {
     ph = if (is.na(k)) "" else calls$ph[k]
     coach = !is.na(k) && identical(calls$head[k], "gptr_coach")
     status = doc_block_status(h, doc_block_body(text, b), ph, h[["args"]],
-                              h[[if (coach) "start" else "harness"]], coach)
+                              if (coach) h[["start"]] else doc_head_harness(h, calls$head[k]),
+                              coach)
     doc_block_row(b$id, paste0(b$start, "-", b$end),
                   if (is.na(k)) NA_character_ else calls$prompt[k], status, h)
   })
@@ -1720,6 +1721,7 @@ doc_blocks_ipynb = function(text) {
   owned = rep(FALSE, length(cells))
   prompt = rep(NA_character_, length(cells))
   ph = rep("", length(cells))
+  called = rep(NA_character_, length(cells))
   coach = rep(FALSE, length(cells))
   declared = vapply(cells[agent], function(cell) {
     h = nb_cell_meta(cell)[["harness"]]
@@ -1738,13 +1740,15 @@ doc_blocks_ipynb = function(text) {
       owned[at] = TRUE
       prompt[at] = top$prompt[j]
       ph[at] = top$ph[j]
+      called[at] = top$head[j]
       coach[at] = identical(top$head[j], "gptr_coach")
     }
   }
   lapply(which(agent), function(i) {
     meta = nb_cell_meta(cells[[i]])
     status = doc_block_status(meta, nb_cell_lines(cells[[i]]), ph[i], meta[["args"]],
-                              meta[[if (coach[i]) "start" else "harness"]], coach[i])
+                              if (coach[i]) meta[["start"]] else doc_head_harness(meta, called[i]),
+                              coach[i])
     doc_block_row(sub("^gptr-", "", ids[i]), paste0("cell ", i), prompt[i], status, meta)
   })
 }

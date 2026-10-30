@@ -1521,3 +1521,34 @@ test_that("a local model keeps its tag in the block and S2, and answers are reda
   expect_false(any(grepl("FAKEtoken", unlist(lapply(files, readLines, encoding = "UTF-8")),
                          fixed = TRUE)))
 })
+
+# ---- comprehensive fix pass (FIX-37) -------------------------------------------------------------
+
+test_that("gptr_blocks() reads a coached harness's block called by peter() as stale", {
+  local_project()
+  h = paste0("h:", "1234abcd")
+  blank = paste0("h:", doc_coach_hash(NULL))
+  block = function(id, prompt, harness) {
+    doc_render_block(id, list(model = "m", prompt = prompt_hash(prompt),
+                              sha = doc_body_sha("x = 1"), harness = harness), "x = 1")
+  }
+  f = file.path(getwd(), "coached.R")
+  writeLines(c("s = h(\"one\")", block("aaaaaa", "one", h), "s = peter(\"two\")",
+               block("bbbbbb", "two", h), "s = peter(\"three\")", block("cccccc", "three", blank)),
+             f)
+  expect_identical(gptr_blocks(f)$status, c("fresh", "stale", "fresh"))
+  agent = function(id, prompt) {
+    list(cell_type = "code", execution_count = NULL, id = paste0("gptr-", id),
+         metadata = list(gptr = list(id = id, model = "m", prompt = prompt_hash(prompt),
+                                     sha = doc_body_sha("x = 1"), harness = h)),
+         outputs = list(), source = list("x = 1"))
+  }
+  nb = list(cells = list(list(cell_type = "code", execution_count = NULL, id = "c1",
+                              metadata = json_obj(), outputs = list(),
+                              source = list("h(\"one\")\n", "peter(\"two\")")),
+                         agent("aaaaaa", "one"), agent("bbbbbb", "two")),
+            metadata = json_obj(), nbformat = 4L, nbformat_minor = 5L)
+  f = file.path(getwd(), "coached.ipynb")
+  writeLines(json_encode(nb, pretty = TRUE), f)
+  expect_identical(gptr_blocks(f)$status, c("fresh", "stale"))
+})

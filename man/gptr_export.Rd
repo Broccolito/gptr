@@ -26,7 +26,10 @@ comments, so it is not executed a second time. User R and comments keep their so
 Only bare or symbol-assigned literal Peter calls and Peter-only native pipelines
 are admitted; a pipeline may start from a session handle an earlier Peter statement assigned,
 as the later turns of a console transcript do, and after its prompt a call may name objects
-without argument names, as a console turn's \verb{@objects} are written. Distinct statements sharing
+without argument names, as a console turn's \verb{@objects} are written. Every named argument must
+be one literal (a string, number, logical or \code{NULL}), so a call with \code{agents = list(...)},
+\code{budget = list()} or \code{envir = new.env()} is refused, and the refusal names that argument.
+A harness definition, \verb{<name> = gptr_tailor(...)}, is ordinary code. Distinct statements sharing
 a line (including semicolon-separated statements), mixed pipelines, nested or computed calls,
 pending writes, missing or edited blocks, secret markers and interpolated-input hashes are
 refused. An undone block that no statement owns, a console turn that \verb{/undo} or \verb{/retry} undid

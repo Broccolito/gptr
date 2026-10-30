@@ -201,6 +201,61 @@ test_that("a fresh block of a coached harness call exports like a peter() block"
   expect_true(all(c("# s = h(\"one\")", "x = 1") %in% readLines(target)))
 })
 
+test_that("a harness definition exports as ordinary code, in a script and in a transcript", {
+  local_project()
+  def = "h = gptr_tailor(peter, mode = \"auto\")"
+  f = export_fixture(call = "s = h(\"one\")", header = list(harness = "h:1234abcd"),
+                     before = c("library(gptr)", def))
+  raw = file.path(getwd(), "raw.R")
+  gptr_export(f, raw)
+  expect_true(all(c(def, "# s = h(\"one\")", "x = 1") %in% readLines(raw)))
+  clean = file.path(getwd(), "clean.R")
+  gptr_export(f, clean, format = "peter")
+  expect_true(all(c(def, "s = h(\"one\")", "# x = 1") %in% readLines(clean)))
+  def = "h_1a2b3c4d = gptr_tailor(peter, coaching = list(note = \"Be terse.\"))"
+  f = export_fixture(call = "s_ab12cd = h_1a2b3c4d(\"one\")",
+                     header = list(harness = "h_1a2b3c4d:1234abcd"),
+                     before = c("# gptr: h_1a2b3c4d needs fixed arguments that are not recorded: x",
+                                def))
+  transcript = file.path(getwd(), "transcript.R")
+  gptr_export(f, transcript)
+  expect_true(all(c(def, "# s_ab12cd = h_1a2b3c4d(\"one\")", "x = 1") %in% readLines(transcript)))
+  # any other statement naming a harness is still refused
+  f = export_fixture(call = "s = h(\"one\")", header = list(harness = "h:1234abcd"),
+                     before = c(def, "g = h"))
+  expect_error(gptr_export(f, file.path(getwd(), "other.R")), "unresolved Peter references",
+               class = "gptr_error_doc_export")
+})
+
+test_that("a coached harness's block called by peter() is stale for gptr_export()", {
+  local_project()
+  f = export_fixture(header = list(harness = "h:1234abcd"))
+  target = file.path(getwd(), "plain.R")
+  err = expect_error(gptr_export(f, target), class = "gptr_error_doc_export")
+  expect_match(err$reason, "stale")
+  f = export_fixture(header = list(harness = paste0("h:", doc_coach_hash(NULL))))
+  expect_identical(gptr_export(f, target), path_norm(target))
+})
+
+test_that("gptr_export() takes `format` exactly and names a non-literal argument it refuses", {
+  local_project()
+  f = export_fixture()
+  for (format in list("xml", NA, 1, "p", c("r", "peter", "x"))) {
+    expect_error(gptr_export(f, file.path(getwd(), "out.R"), format = format),
+                 class = "gptr_error_invalid_argument")
+  }
+  for (arg in c("agents = list(a = gptr_agent(\"x\"))", "budget = list()", "envir = new.env()",
+                ".opts = list()", "agents = ags")) {
+    f = export_fixture(call = paste0("crew = peter(\"one\", mtcars, ", arg, ")"))
+    err = expect_error(gptr_export(f, file.path(getwd(), "out.R")),
+                       class = "gptr_error_doc_export")
+    expect_match(err$reason, paste0("argument `", sub(" = .*", "", arg), "`"), fixed = TRUE)
+  }
+  f = export_fixture(call = "s = peter(\"zero\", budget = list(usd = 1)) |> peter(\"one\")")
+  err = expect_error(gptr_export(f, file.path(getwd(), "out.R")), class = "gptr_error_doc_export")
+  expect_match(err$reason, "argument `budget`", fixed = TRUE)
+})
+
 test_that("history export keeps quoted notes and UTF-8 output inert and bounded", {
   local_project()
   accent = intToUtf8(0xe9L)
@@ -284,7 +339,8 @@ test_that("raw export refuses ambiguous calls and unresolved session semantics",
   # a console turn's @objects are unnamed names after the prompt (FIX-33); nothing else is
   expect_identical(doc_export_chain(str2lang("peter(\"one\", fit, dat)")), 1L)
   expect_identical(doc_export_chain(str2lang("peter(fit, \"one\")")), 0L)
-  expect_identical(doc_export_chain(str2lang("peter(\"one\", mode = auto)")), 0L)
+  expect_identical(doc_export_chain(str2lang("peter(\"one\", mode = auto)")),
+                   structure(0L, arg = "mode"))
   calls = c("before = 1; s = peter(\"one\"); after = 2",
             "s = peter(\"one\")$value", "s = peter(\"one\") |> identity()",
             "s = peter(paste0(\"o\", \"ne\"))", "s = list(peter(\"one\"))",
