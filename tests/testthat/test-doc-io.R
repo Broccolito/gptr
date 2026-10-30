@@ -584,6 +584,26 @@ test_that("a sidecar of an earlier process that had this pid is a dead one (pid 
                    c(res$block_id, "cccccc"))
 })
 
+test_that("a sidecar whose anchors have no `head`, as an earlier build wrote it, is applied", {
+  local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  writeLines(c("peter(\"first\")", "z = 1"), f)
+  doc_io_dead_sidecar(f, "first")
+  side = doc_sidecar_path(f)
+  text = rawToChar(readBin(side, "raw", n = file.size(side)))
+  old = sub("\"head\":\"peter\",", "", text, fixed = TRUE)
+  expect_false(identical(old, text))
+  writeBin(charToRaw(old), side)
+  rec = doc_sidecar_read(f)
+  expect_length(rec$upserts, 1L)
+  expect_null(rec$upserts[[1L]]$site$anchor$head)
+  expect_true(doc_recover(f))
+  expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
+  expect_null(doc_sidecar_read(f))
+})
+
 test_that("a forked child stamps its own creation time, not proc_self()'s inherited one", {
   skip_if(is.na(proc_self()$create_time), "no process creation time on this platform")
   local_project()
