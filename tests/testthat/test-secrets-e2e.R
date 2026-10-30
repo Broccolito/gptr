@@ -353,3 +353,17 @@ test_that("an Rscript run with a bound document leaves no key in documents or si
   expect_identical(sum(files), 0L, info = e2e_leaks(files))
   expect_identical(e2e_count_text(c(res$stdout, res$stderr), keys), 0L)
 })
+
+test_that("auto refuses a secret read beside an empty argument (FIX-37)", {
+  skip_on_cran()
+  local_project()
+  local_permission_rules()
+  e2e_register()
+  for (code in "quote(Sys.getenv(x = )); v = Sys.getenv('TYPESAFE_API_KEY')") {
+    fake = local_fake_provider(list(fake_tool("r", code = code), "Done."))
+    e = new.env()
+    expect_error(peter("Read it.", model = fake, envir = e, mode = "auto"),
+                 class = "gptr_error_permission", label = code)
+    expect_false(exists("v", envir = e, inherits = FALSE), label = code)
+  }
+})

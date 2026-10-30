@@ -627,9 +627,11 @@ secret_scan = function(code, tainted = character()) {
       arg_names = names(args) %||% rep("", length(args))
       pos = match("x", arg_names)
       if (is.na(pos)) pos = match("", arg_names)
+      # an empty x is a missing one: every variable
+      if (!is.na(pos) && identical(args[[pos]], quote(expr = ))) pos = NA
       x = if (!is.na(pos)) args[[pos]]
-      known = if (is.na(pos)) list(names = character()) else if (identical(x, quote(expr = ))) {
-        NULL
+      known = if (is.na(pos)) {
+        list(names = character())
       } else if (is.symbol(x) && as.character(x) %in% names(binds)) {
         list(names = binds[[as.character(x)]])
       } else {

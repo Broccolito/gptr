@@ -499,6 +499,23 @@ test_that("known shell environment dumps include PowerShell and command case var
   }
 })
 
+test_that("an empty argument is read as R reads it and never stops the scan (FIX-37)", {
+  local_vault()
+  secret_register("FAKEregistered012345", "TEST_API_KEY", "test")
+  # an empty x of Sys.getenv() is a missing x: every variable, as with none
+  for (code in c("Sys.getenv(x = )", "Sys.getenv(, 'a')", "base::Sys.getenv(, '')",
+                 "quote(Sys.getenv(, ''))")) {
+    expect_true("env_dump" %in% secret_scan(code)$findings$rule, label = code)
+    scan = secret_scan(paste0(code, "; v = Sys.getenv('TEST_API_KEY')"))
+    expect_true("secret_env_registered" %in% scan$findings$rule, label = code)
+    expect_true(scan$guard, label = code)
+    expect_identical(scan$assigned, "v", label = code)
+  }
+  app = c("library(shiny)", "quote(Sys.getenv(x = ))",
+          "shinyApp(fluidPage(), function(input, output) NULL)")
+  expect_named(artifact_static_check(app), c("ok", "stage", "messages", "packages"))
+})
+
 
 # registry_all() returns a list named by record name; compare plain names
 spec_names = function(specs) unname(vapply(specs, function(s) s$name, ""))
