@@ -97,7 +97,8 @@ rule_code_text = function(fl) {
 #'
 #' Allow rules with fn/category/sh/sql/secret match only when EVERY flagged call (level >= 1, with a
 #' function name) is covered; deny and ask rules match when ANY is, level 0 included (report 18
-#' section 3.7, D-267). An sh: glob ending ` *` also matches the command alone (`cat *`, `cat`).
+#' section 3.7, D-267). An sh: glob ending ` *` also matches the command alone (`cat *`, `cat`);
+#' it matches the command as written, in any case where file names are (macOS, Windows; D-147).
 #' An allow secret: rule covers r code only, whose every flagged call reads a named secret by name
 #' (`Sys.getenv()` or a shell's `$NAME`): a tool's risk lists no flagged call to cover.
 #' @noRd
@@ -124,8 +125,9 @@ rule_hit = function(p, call, lst) {
   text = rule_code_text(fl)
   hit = switch(p$kind, fn = fl$fn %in% p$value, category = fl$category %in% p$value,
                sh = fl$fn %in% perm_shell_fns &
-                 grepl(sub(" .*\\z", "( .*)?\\z", risk_glob_re(p$value), fixed = TRUE), text,
-                       perl = TRUE),
+                 grepl(paste0(if (is_windows() || is_macos()) "(?i)",
+                              sub(" .*\\z", "( .*)?\\z", risk_glob_re(p$value), fixed = TRUE)),
+                       text, perl = TRUE),
                sql = fl$fn %in% perm_sql_fns &
                  toupper(sub("\\s.*$", "", text)) %in% toupper(p$value))
   if (lst == "allow") nrow(fl) > 0L && all(hit) else any(hit)
@@ -303,13 +305,16 @@ perm_control_guard = function(what) {
 #' (`write(results/**)`, relative to the project root; `~/...` for the home; `//...` for other
 #' absolute paths); for `r`, `level<=n`, `fn:name,...` (every flagged function covered),
 #' `category:name,...`, `sh:<command glob>` (`r(sh:git push*)`; a glob ending in ` *` also
-#' matches the command alone, so `r(sh:cat *)` covers `cat` too), `sql:<keywords>`
-#' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read: an
-#' allow rule covers `r` code only when every call it flags reads one of the named secrets by name,
-#' with `Sys.getenv()` or a shell's `$NAME`; it covers a secret handed to a child through the `env`
-#' of `peter$sh()` or `peter$script()` only when the same code reads that secret by name, while a
-#' deny or ask `secret:NAME` rule meets every such hand-over); MCP tools by name
-#' (`mcp__github__*`). Deny rules win over ask rules, which win over allow rules. Deny and ask
+#' matches the command alone, so `r(sh:cat *)` covers `cat` too; a glob matches the command as
+#' written, in any case on macOS and Windows, so it misses options placed before a subcommand, as
+#' in `git -C dir push`), `sql:<keywords>` (`r(sql:select)`) and `secret:NAME` (the only rule
+#' that pre-approves a guarded secret read: an allow rule covers `r` code only when every call it
+#' flags reads one of the named secrets by name, with `Sys.getenv()` or a shell's `$NAME`; it
+#' covers a secret handed to a child through the `env` of `peter$sh()` or `peter$script()` only
+#' when the same code reads that secret by name, while a deny or ask `secret:NAME` rule meets every
+#' such hand-over); MCP tools by name (`mcp__github__*`). A tool name names a tool the model calls,
+#' never a `peter$` member, served or not: `r(fn:peter$script)` names `peter$script()` in `r` code.
+#' Deny rules win over ask rules, which win over allow rules. Deny and ask
 #' rules match any call that [gptr_risk()] flags, a read-only shell command included
 #' (`r(sh:cat *)` denies `peter$sh("cat notes.txt")`); an R function it knows to be read-only,
 #' such as `readLines()`, is not flagged, so `fn:` rules never match it. Allow rules

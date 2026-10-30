@@ -163,6 +163,17 @@ test_that("sh: and category: rules see a program given by its path", {
   }
 })
 
+test_that("sh: globs match in any case where file names do (D-294)", {
+  root = local_project()
+  call = r_call("system('RM -rf build')")
+  local_mocked_bindings(is_windows = function() FALSE, is_macos = function() TRUE)
+  expect_identical(rule_match(list(deny = "r(sh:rm *)"), call)$deny, "r(sh:rm *)")
+  local_mocked_bindings(is_macos = function() FALSE)
+  expect_identical(rule_match(list(deny = "r(sh:rm *)"), call)$deny, character())
+  expect_identical(rule_match(list(deny = "r(sh:git push*)"),
+                              r_call("system('git push origin main')"))$deny, "r(sh:git push*)")
+})
+
 test_that("sh: rules read the command of a background job", {
   root = local_project()
   for (code in c("peter$bg('rm -rf build')", "peter$bg(c('rm', '-rf', 'build'))")) {
