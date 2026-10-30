@@ -494,7 +494,7 @@ doc_route_match = function(call) {
                             template = call$template %||% call$prompt,
                             context_labels = doc_context_labels(call$context),
                             ask = doc_console_may_record(call),
-                            harness = doc_console_harness(call))
+                            harness = doc_console_harness(call), args = args_hash(call$interp))
     if (!is.null(site)) assign("top_level", TRUE, envir = call)
   }
   if (is.null(site) || is.null(site$path)) return(FALSE)

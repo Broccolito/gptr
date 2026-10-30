@@ -1928,7 +1928,7 @@ doc_upsert_fallback = function(site, up, backend) {
   }
   s = up$session
   tsite = doc_console_site(session_id = if (is.null(s)) NULL else session_data(s)$id,
-                           template = site$template)
+                           template = site$template, args = site$args_hash)
   if (is.null(tsite)) return(failed)
   up$block_id = NULL
   res = tryCatch(doc_file_upsert(doc_format_get("transcript"), tsite, up),

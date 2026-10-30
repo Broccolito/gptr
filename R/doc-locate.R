@@ -413,12 +413,13 @@ doc_transcript_target = function(ask = FALSE) {
 }
 
 #' The console site of a call or REPL turn: the transcript target as a document whose turns are
-#' appended (`format` "transcript" for .R targets); NULL when there is no target. An `.R`
-#' transcript calls a harness by its definition (`harness`, doc_console_harness(): `head`, the
-#' `h_<id>` name, `define`, its lines, and `key`, `h_<id>:<coaching hash>`; 08 section 3.6).
+#' appended (`format` "transcript" for .R targets); NULL when there is no target. `args` is the
+#' `args=` hash of the prompt's interpolated values (args_hash()), as a script's call records it.
+#' An `.R` transcript calls a harness by its definition (`harness`, doc_console_harness(): `head`,
+#' the `h_<id>` name, `define`, its lines, and `key`, `h_<id>:<coaching hash>`; 08 section 3.6).
 #' @noRd
 doc_console_site = function(session_id = NULL, template = NULL, context_labels = character(),
-                            ask = FALSE, session_file = NULL, harness = NULL) {
+                            ask = FALSE, session_file = NULL, harness = NULL, args = NULL) {
   target = doc_transcript_target(ask = ask)
   if (is.null(target)) return(NULL)
   fmt = doc_format_of(target)
@@ -428,7 +429,7 @@ doc_console_site = function(session_id = NULL, template = NULL, context_labels =
        format = if (tr) "transcript" else fmt, stmt = NULL, expr = NULL,
        occurrence = 1L, ordinal = 1L, backend = "transcript", top_level = TRUE, in_block = NULL,
        ide_id = NULL, defer = FALSE, console = TRUE, driver = "console",
-       prompt_hash = prompt_hash(template %||% ""), args_hash = NULL, template = template,
+       prompt_hash = prompt_hash(template %||% ""), args_hash = args, template = template,
        session_id = session_id, session_file = session_file,
        context_labels = as.character(context_labels), block = NULL, anchor = NULL, indent = "",
        head = if (tr) harness$head, define = if (tr) harness$define,
@@ -512,9 +513,10 @@ doc_context_labels = function(context) {
 #' call (a call inside a function, a later pass of a top-level loop under Rscript, an evaluated
 #' text), the call is nested there (architecture 6.9.3: no block): its site has no statement and
 #' is not top-level, with or without srcrefs, and it is neither a console turn nor looked up in
-#' the IDE's buffer. Only an IDE location that fails falls back to the console. A console turn
-#' (a call with the attribute `gptr_console`, which the console REPL builds) is in no document,
-#' whatever sourced the console or the editor holds (IC-49).
+#' the IDE's buffer; so is a call in a document that cannot be read (one that is not UTF-8, say),
+#' which a notice says once. Only an IDE location that fails falls back to the console. A console
+#' turn (a call with the attribute `gptr_console`, which the console REPL builds) is in no
+#' document, whatever sourced the console or the editor holds (IC-49).
 #' @noRd
 doc_locate = function(call) {
   template = call$template %||% call$prompt
@@ -529,7 +531,14 @@ doc_locate = function(call) {
   for (f in finders) {
     raw = tryCatch(f(call, ph, call0), error = function(e) NULL)
     if (is.null(raw)) next
-    site = tryCatch(doc_site_finish(raw, call, ph, call0), error = function(e) NULL)
+    site = tryCatch(doc_site_finish(raw, call, ph, call0), error = function(e) {
+      if (!identical(raw$kind, "ide")) {
+        gptr_inform(paste0("The calls in ", doc_rel(raw$path), " run live and are not recorded: ",
+                           conditionMessage(e)), "notice",
+                    .once = paste0("doc_read:", path_key(raw$path)))
+      }
+      NULL
+    })
     if (!is.null(site)) break
     if (!identical(raw$kind, "ide")) {
       nested = TRUE
@@ -543,7 +552,8 @@ doc_locate = function(call) {
     site = tryCatch(doc_console_site(session_id = sid,
                                      template = if (is.na(ph)) NULL else template,
                                      context_labels = doc_context_labels(call$context),
-                                     harness = doc_console_harness(call)),
+                                     harness = doc_console_harness(call),
+                                     args = args_hash(call$interp)),
                     error = function(e) NULL)
   }
   if (is.environment(call)) assign("top_level", isTRUE(site$top_level), envir = call)
