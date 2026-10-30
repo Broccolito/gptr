@@ -2817,7 +2817,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       }
       attr(known, "owd") <<- wd
       to = if (name %in% c("setwd", "local_dir") && length(v)) v else NA_character_
-      attr(known, "wd") <<- if (ctx$seq) to else unique(c(wd, to))
+      if (!ctx$seq) to = unique(c(wd, to))
+      # more directories than a reading follows (each branched move doubles them) are one the
+      # code computes
+      attr(known, "wd") <<- if (length(to) > 64L) NA_character_ else to
       pc = if (!length(v)) "unknown" else risk_cmd_worst(vapply(v, risk_path_cls, "", "read", root))
       if (pc %in% c("workspace", "temp")) return(FALSE)
       add(ctx, paste0(label, if (!length(v)) " (a directory the code computes)" else

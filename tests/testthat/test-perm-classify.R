@@ -1499,6 +1499,21 @@ test_that("with_dir() and in_dir() leave R where it was (D-293)", {
   expect_identical(lv("withr::with_dir('data', x); setwd('/')"), 4L)
 })
 
+test_that("more directories than a reading follows are one the code computes (D-293)", {
+  skip_on_cran()
+  root = local_project()
+  code = paste0("if (p", 1:16, ") setwd('d", 1:16, "')", collapse = "\n")
+  t = system.time({
+    r = gptr_risk(code, root = root)
+  })[["elapsed"]]
+  expect_lt(t, 5)
+  expect_identical(r$level, 4L)
+  expect_match(r$flagged$call, "a directory the code computes", fixed = TRUE, all = FALSE)
+  # neighbours: six such lines are 64 directories, each still read
+  expect_identical(gptr_risk(paste0("if (p", 1:6, ") setwd('d", 1:6, "')", collapse = "\n"),
+                             root = root)$level, 2L)
+})
+
 test_that("a Windows wd is placed as Windows places it, on every OS (review round 4)", {
   root = "C:/Users/x y/proj"
   local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)
