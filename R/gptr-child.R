@@ -426,14 +426,14 @@ child_refusals = function(x = NULL) {
              reason = as.character(x$reason))
 }
 
-#' A result with every field, `status` "error" unless given; the value and the objects come last,
-#' so that plain_encode() keeps the other fields whole
+#' A result with every field, `status` "error" unless given; the objects and then the value come
+#' last, so that plain_encode() keeps the other fields whole and the objects a list
 #' @noRd
 child_result_new = function(id, ...) {
   out = list(id = id, status = "error", reason = NULL, text = "", turns = 0L, usage = NULL,
              transcript = "", first_user = "", risk = 0L, refusals = child_refusals(),
              unmet = character(), files = NULL, plan = NULL, limit = NULL, checks = character(),
-             error = NULL, value = NULL, objects = list())
+             error = NULL, objects = list(), value = NULL)
   dots = list(...)
   out[names(dots)] = dots
   out

@@ -118,6 +118,17 @@ test_that("a value too large or deep for the reader travels as its summary (08 s
   expect_type(res$objects$wide[[60000L]], "character")
 })
 
+test_that("a value that uses up the reader's count leaves the objects a list", {
+  testthat::local_mocked_bindings(plain_max = utils::modifyList(plain_max, list(nodes = 5000)))
+  path = withr::local_tempfile(fileext = ".json")
+  writeLines(json_encode(plain_encode(child_result_new("a", status = "idle",
+                                                       value = as.list(rep(1, 4984L)),
+                                                       objects = list(a = 1)))), path)
+  res = child_read(path)
+  expect_identical(res$objects, list(a = 1))
+  expect_match(res$value, "^<list>")
+})
+
 test_that("a long list's summary prints only what it keeps", {
   skip_on_cran()
   max = getOption("max.print")
