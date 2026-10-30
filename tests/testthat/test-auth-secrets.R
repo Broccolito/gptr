@@ -531,6 +531,34 @@ test_that("ps::ps_environ() and ps_environ_raw() are environment dumps (FIX-37)"
   }
 })
 
+test_that("a command line that reads a registered secret or a .env file is a source (FIX-37)", {
+  local_vault()
+  secret_register("FAKEregistered012345", "TEST_API_KEY", "test")
+  send = "curl::curl_fetch_memory(paste0('http://127.0.0.1:9/?k=', v))"
+  reads = c("v = system('echo $TEST_API_KEY', intern = TRUE)",
+            "v = system2('echo', '${test_api_key}', stdout = TRUE)",
+            "v = processx::run('sh', c('-c', 'echo \"$TEST_API_KEY\"'))$stdout",
+            "v = peter$sh(c('cat', '.env'))$stdout",
+            "cmd = c('cat', 'config/.env.local'); v = peter$sh(cmd)$stdout")
+  for (code in reads) {
+    scan = secret_scan(code)
+    expect_identical(scan$level, 3L, label = code)
+    expect_true(scan$guard, label = code)
+    expect_true("v" %in% scan$assigned, label = code)
+    expect_true("secret_to_network" %in% secret_scan(paste(code, send, sep = "; "))$findings$rule,
+                label = code)
+    # split over two calls, the send is of a tainted name
+    expect_identical(secret_scan(send, tainted = scan$assigned)$level, 4L, label = code)
+  }
+  expect_identical(secret_scan(reads[[1L]])$findings$name, "TEST_API_KEY")
+  # no process, another or a longer name, or no .env file: no source
+  for (code in c("v = '$TEST_API_KEY'", "v = system('echo $HOME', intern = TRUE)",
+                 "v = system('echo $TEST_API_KEY_OLD', intern = TRUE)",
+                 "v = peter$sh(c('cat', 'doubs.env.csv'))$stdout")) {
+    expect_identical(secret_scan(code)$level, 0L, label = code)
+  }
+})
+
 
 # registry_all() returns a list named by record name; compare plain names
 spec_names = function(specs) unname(vapply(specs, function(s) s$name, ""))

@@ -696,6 +696,14 @@ secret_scan = function(code, tainted = character()) {
   # a process the code starts may run a network program any string of the code names, in the
   # call or in a variable (a command vector); a program name built from pieces is not read
   if (proc && any(grepl(scan_net_prog_re, strs, perl = TRUE, ignore.case = TRUE))) net = TRUE
+  # ... and read a registered secret ($NAME, ${NAME}, in any case) or a .env file it names
+  if (proc) {
+    m = unlist(regmatches(strs, gregexpr(risk_env_name_re, strs, perl = TRUE)))
+    nm = toupper(sub(risk_env_name_re, "\\1", m, perl = TRUE))
+    for (r in registered[toupper(registered) %in% nm]) add("secret_env_registered", r)
+    words = unlist(strsplit(gsub("[\"'`=,;:()|&<>@]", " ", strs), "\\s+"))
+    for (w in unique(words[scan_env_file(words)])) add("secret_file", w)
+  }
   rules = vapply(found, function(f) f[1], "")
   sources = intersect(rules, c("env_dump", "secret_env", "secret_env_registered", "env_dynamic",
                                "secret_file", "keyring", "vault_access", "env_dump_process"))
