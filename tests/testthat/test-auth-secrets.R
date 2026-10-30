@@ -253,7 +253,7 @@ test_that("invalid URL authorities are rejected without conversion warnings", {
 })
 
 # G6 section 5.4 (test_classify.R): 40 cases, each list(code, level, secret guard). A .env or
-# .Renviron file is a guarded read since review round 6.
+# .Renviron file is a guarded read since review round 6, a file named auth.json since FIX-37.
 scan_cases = list(
   list("summary(mtcars)", 0L, FALSE),
   list("Sys.getenv('HOME')", 0L, FALSE),
@@ -271,7 +271,7 @@ scan_cases = list(
   list("readLines('.env')", 3L, TRUE),
   list("readLines('~/Downloads/jev-key.env')", 3L, TRUE),
   list("readRenviron('~/.Renviron')", 3L, TRUE),
-  list("jsonlite::fromJSON('~/.codex/auth.json')", 3L, FALSE),
+  list("jsonlite::fromJSON('~/.codex/auth.json')", 3L, TRUE),
   list("readLines('~/.ssh/id_ed25519')", 3L, FALSE),
   list("read.csv('data/.env.production')", 3L, TRUE),
   list("readLines('/proc/self/environ')", 3L, FALSE),
@@ -556,6 +556,17 @@ test_that("a command line that reads a registered secret or a .env file is a sou
                  "v = system('echo $TEST_API_KEY_OLD', intern = TRUE)",
                  "v = peter$sh(c('cat', 'doubs.env.csv'))$stdout")) {
     expect_identical(secret_scan(code)$level, 0L, label = code)
+  }
+})
+
+test_that("gptr's credential store is a guarded read, through a computed path too (FIX-37)", {
+  local_vault()
+  for (code in c("readLines(file.path(tools::R_user_dir('gptr', 'config'), 'auth.json'))",
+                 "jsonlite::fromJSON('~/.config/R/gptr/auth.json')")) {
+    scan = secret_scan(code)
+    expect_identical(scan$level, 3L, label = code)
+    expect_true(scan$guard, label = code)
+    expect_true(gptr_risk(code)$secret_guard, label = code)
   }
 })
 
