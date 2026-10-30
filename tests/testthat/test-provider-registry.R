@@ -799,6 +799,32 @@ test_that("transport failures and normaliser errors end the stream exactly once"
   expect_true("t2" %in% r$cancelled)
 })
 
+test_that("a 200 reply that is not an event stream ends with its text and is not retried", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  reply = function(text) {
+    log = local_stream_log()
+    provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+    t = r$http[[length(r$http)]]
+    t$on_headers(200L, list())
+    t$on_bytes(charToRaw(text))
+    t$on_done(200L, list())
+    log
+  }
+  body = '{"error":{"message":"no route for model m1","type":"invalid_model"}}'
+  log = reply(body)
+  expect_equal(log$types(), "error")
+  err = log$events[[1]]$error
+  expect_equal(err$class, "gptr_error_provider")
+  expect_equal(err$status, 200L)
+  expect_equal(log$done[[1]]$error_message,
+               paste("The provider's reply is not an event stream:", body))
+  expect_false(run_retryable(log$done[[1]], err))
+  expect_length(r$retries, 0L)
+  # keep-alive comments alone are an event stream that sent no event yet
+  expect_equal(reply(": PROCESSING\n\n: PROCESSING\n\n")$types(), "done")
+})
+
 test_that("a retry hint the reactor neither re-sends nor fails keeps its parent class", {
   r = local_mock_reactor()
   # P04 already forgot the transfer (a hint flushed at on_done, or any http_json body)

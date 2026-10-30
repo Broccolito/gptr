@@ -810,6 +810,25 @@ stream_rate_sync = function(id) {
   invisible(TRUE)
 }
 
+#' The end of an SSE body: an unterminated last event is pushed only when its data is JSON (a
+#' cut one ends the stream as its normaliser ends a cut stream); a body that held no event and
+#' is not keep-alive comments is the server's own reply (a gateway's error object, a whole
+#' completion, a portal page), which ends the stream quoting its start
+#' @noRd
+stream_sse_end = function(st, rest, status) {
+  if (!is.null(rest)) {
+    if (!is.null(adp_json_try(rest$data))) stream_push(st, rest)
+    return(invisible(NULL))
+  }
+  text = trimws(raw_to_utf8(st$head))
+  if (st$units == 0L && nzchar(text) && !startsWith(text, ":")) {
+    stream_normaliser_fail(st, stream_condition(
+      paste("The provider's reply is not an event stream:", substr(text, 1L, 200L)),
+      "provider", status = status))
+  }
+  invisible(NULL)
+}
+
 #' HTTP transports (http_sse, http_ndjson, http_json): one transfer for the whole request
 #' A second on_headers() (a re-send) resets the normaliser and the splitter; a splitter failure
 #' ends the stream like a normaliser failure. `stream = "raw"` pushes each body chunk unsplit.
@@ -833,6 +852,8 @@ stream_http = function(st, adapter) {
     st$norm = adapter$parse(st$model, st$opts)
     st$split = switch(kind, sse = sse_splitter(), ndjson = ndjson_splitter(), NULL)
     st$body = list()
+    st$head = raw()
+    st$units = 0L
     st$hold = FALSE
   }
   reset()
@@ -850,10 +871,12 @@ stream_http = function(st, adapter) {
       return(invisible(NULL))
     }
     if (identical(kind, "raw")) return(stream_push(st, list(data = raw)))
+    if (length(st$head) < 200L) st$head = c(st$head, raw)
     units = tryCatch(st$split$push(raw), error = function(e) {
       stream_fail_live(st, stream_error_condition(e, "stream splitter"))
       list()
     })
+    st$units = st$units + length(units)
     for (u in units) {
       if (st$finished || isTRUE(st$hold)) break
       stream_push(st, if (identical(kind, "ndjson")) list(data = u) else u)
@@ -865,13 +888,10 @@ stream_http = function(st, adapter) {
       if (identical(kind, "json")) {
         body = if (length(st$body)) do.call(c, st$body) else raw()
         stream_push(st, list(data = raw_to_utf8(body), status = status, headers = headers))
-      } else if (!is.null(st$split)) {
-        rest = st$split$flush()
-        if (identical(kind, "ndjson")) {
-          for (u in rest) stream_push(st, list(data = u))
-        } else if (!is.null(rest)) {
-          stream_push(st, rest)
-        }
+      } else if (identical(kind, "ndjson")) {
+        for (u in st$split$flush()) stream_push(st, list(data = u))
+      } else if (identical(kind, "sse")) {
+        stream_sse_end(st, st$split$flush(), status)
       }
       TRUE
     }, error = function(e) {
