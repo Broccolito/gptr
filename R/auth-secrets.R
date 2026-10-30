@@ -463,6 +463,8 @@ scan_ns_ops = c("::", paste0("::", ":"))
 scan_assign_ops = c("=", "assign", paste0("<", "-"), paste0("<<", "-"))
 scan_net_pkgs = c("", "httr2", "httr", "curl", "utils", "base", "gh", "blastula", "websocket")
 scan_ns_funs = c("getFromNamespace", "asNamespace", "getNamespace", "loadNamespace")
+# Every variable of a process, as Sys.getenv() returns them
+scan_environ_funs = c("ps_environ", "ps_environ_raw")
 scan_proc_funs = c("system", "system2", "shell", "run", "process", "r_bg", "r", "run_process",
                    "exec_wait")
 scan_member_funs = c("sh", "bg", "script")
@@ -598,6 +600,7 @@ secret_scan = function(code, tainted = character()) {
     if (is.symbol(e)) {
       s = as.character(e)
       if (s %in% c("Sys.getenv", "readRenviron", "key_get")) add("env_dynamic", s)
+      if (s %in% scan_environ_funs) add("env_dump", s)
       uses <<- c(uses, s)
       return(invisible())
     }
@@ -657,6 +660,7 @@ secret_scan = function(code, tainted = character()) {
         add("env_dynamic", "Sys.getenv")
       }
     }
+    if (fn %in% scan_environ_funs) add("env_dump", fn)
     if (fn %in% c("do.call", "get", "match.fun", "exec", "Map", "lapply", "sapply", "vapply")) {
       syms = character()
       for (i in seq_along(args)) if (is.symbol(args[[i]])) syms = c(syms, as.character(args[[i]]))

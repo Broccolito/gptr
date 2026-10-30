@@ -516,6 +516,21 @@ test_that("an empty argument is read as R reads it and never stops the scan (FIX
   expect_named(artifact_static_check(app), c("ok", "stage", "messages", "packages"))
 })
 
+test_that("ps::ps_environ() and ps_environ_raw() are environment dumps (FIX-37)", {
+  local_vault()
+  secret_register("FAKEregistered012345", "TEST_API_KEY", "test")
+  send = "; httr2::req_perform(httr2::request(paste0('http://127.0.0.1:9/?k=', v)))"
+  for (code in c("v = ps::ps_environ()[['TEST_API_KEY']]", "v = ps::ps_environ_raw()",
+                 "v = ps_environ(ps::ps_handle())", "f = ps::ps_environ; v = f()")) {
+    scan = secret_scan(code)
+    expect_identical(scan$level, 3L, label = code)
+    expect_true(scan$guard, label = code)
+    expect_true("v" %in% scan$assigned, label = code)
+    expect_true("secret_to_network" %in% secret_scan(paste0(code, send))$findings$rule,
+                label = code)
+  }
+})
+
 
 # registry_all() returns a list named by record name; compare plain names
 spec_names = function(specs) unname(vapply(specs, function(s) s$name, ""))
