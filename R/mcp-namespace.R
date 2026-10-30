@@ -65,7 +65,7 @@ mcp_tool_spec = function(s, tool, exposure) {
   sig = mcp_signature(name, schema, mcp_first_sentence(desc),
                       prefix = paste0("peter$mcp$", mcp_r_name(server), "$"))
   gptr_tool(name = mcp_wire_name(server, name), description = desc, parameters = schema,
-            execute = function(input, ctx) mcp_invoke(server, name, input),
+            execute = function(input, ctx) mcp_invoke(server, name, input, ctx$session),
             exposure = if (identical(exposure, "direct")) "direct" else "hidden",
             risk = function(input, ctx) {
               list(level = level, categories = "mcp", paths = character())
@@ -81,7 +81,8 @@ mcp_tool_spec = function(s, tool, exposure) {
 
 #' Register (or reuse) the spec of an MCP tool: rank 6 (source builtin:mcp) for servers every
 #' session sees, rank 0 scoped to `session` for a session's own servers (plugins = , P17). The
-#' server record it was built from is kept, so mcp_sync() drops it when that record changes.
+#' server record and the tool it was built from are kept: mcp_sync() drops it when that record
+#' changes, and a changed tool (a refreshed schema) is built again.
 #' @noRd
 mcp_spec_ensure = function(s, tool, exposure, session = NULL) {
   st = mcp_state()
@@ -93,7 +94,7 @@ mcp_spec_ensure = function(s, tool, exposure, session = NULL) {
   if (!is.null(old)) {
     current = registry_get("tool", wire, session = sid)
     want = if (identical(exposure, "direct")) "direct" else "hidden"
-    same = !is.null(current) && identical(current$exposure, want)
+    same = !is.null(current) && identical(current$exposure, want) && identical(old$tool, tool)
     if (same) return(current)
     registry_remove(old$id)
   }
@@ -103,16 +104,17 @@ mcp_spec_ensure = function(s, tool, exposure, session = NULL) {
   } else {
     registry_add(spec, source = "session", rank = 0L, session = sid)
   }
-  assign(key, list(id = id, sid = sid, server = s), envir = st$specs)
+  assign(key, list(id = id, sid = sid, server = s, tool = tool), envir = st$specs)
   registry_get("tool", wire, session = sid) %||% spec
 }
 
 #' Call an MCP tool for execute(): an isError result is signalled as gptr_error_mcp_tool (the
 #' dispatcher turns it into an error result and caps the text at the spec's 4,000 output
-#' tokens); the R value is the simplified structuredContent, else the text (contract 9.4)
+#' tokens); the R value is the simplified structuredContent, else the text (contract 9.4).
+#' `session` finds a server only that session sees (a peter(plugins =) plugin's).
 #' @noRd
-mcp_invoke = function(server, tool, input) {
-  conn = mcp_conn_get(server)
+mcp_invoke = function(server, tool, input, session = NULL) {
+  conn = mcp_conn_get(server, session)
   res = mcp_call(conn, tool, input)
   assign(paste0(server, "/", tool), reactor_now(), envir = mcp_state()$lru)
   if (isTRUE(res$is_error)) {

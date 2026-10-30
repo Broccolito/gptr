@@ -300,12 +300,18 @@ mcp_transport = function(spec) {
 }
 
 #' Cache key of a server: sha256 of its command and args, or of its URL origin and path
-#' (contract 11.9)
+#' (contract 11.9), and of its env and cwd, or headers, when it has them
 #' @noRd
 mcp_cache_key = function(spec) {
-  if (!is.null(spec$url)) return(hash_sha256(canonical_json(list(url = url_for_log(spec$url)))))
-  hash_sha256(canonical_json(list(command = as.character(spec$command),
-                                  args = I(as.character(unlist(spec$args) %||% character())))))
+  kv = function(x) if (length(x)) as.list(mcp_map_chr(x))
+  x = if (!is.null(spec$url)) {
+    list(url = url_for_log(spec$url), headers = kv(spec$headers))
+  } else {
+    list(command = as.character(spec$command),
+         args = I(as.character(unlist(spec$args) %||% character())), env = kv(spec$env),
+         cwd = spec$cwd)
+  }
+  hash_sha256(canonical_json(x[!vapply(x, is.null, NA)]))
 }
 
 #' A cache file under R_user_dir("gptr", "cache")/<kind>/ (directories only created to write)
@@ -480,16 +486,15 @@ mcp_map_chr = function(x) {
   stats::setNames(as.character(y), names(y))
 }
 
-#' The connect-time view of a spec: placeholders expanded; values that came from a placeholder
+#' The connect-time view of a spec: placeholders expanded; env values of 8 or more characters
 #' under a secret-like name, or that look secret, are registered in the vault at once (env
 #' entries by their name; `${VAR}` placeholders of args and the URL by the variable's name)
 #' @noRd
 mcp_expand_spec = function(spec, project = project_root()) {
   raw_args = as.character(unlist(spec$args) %||% character())
-  raw = mcp_map_chr(spec$env)
   ex = list(command = mcp_expand(spec$command, project),
             args = mcp_expand(raw_args, project),
-            env = mcp_expand(raw, project), cwd = mcp_expand(spec$cwd, project),
+            env = mcp_expand(mcp_map_chr(spec$env), project), cwd = mcp_expand(spec$cwd, project),
             url = mcp_expand(spec$url, project),
             headers = mcp_expand(mcp_map_chr(spec$headers), project))
   keys = names(ex$env) %||% rep("", length(ex$env))
@@ -497,8 +502,7 @@ mcp_expand_spec = function(spec, project = project_root()) {
     k = keys[[i]]
     v = ex$env[[i]]
     if (is.na(k) || !nzchar(k) || is.na(v)) next
-    from_var = grepl("${", raw[[i]], fixed = TRUE)
-    if (nchar(v) >= 8L && ((from_var && mcp_secret_name(k)) || !identical(redact(v), v))) {
+    if (nchar(v) >= 8L && (mcp_secret_name(k) || !identical(redact(v), v))) {
       secret_register(v, k, source = "mcp")
     }
   }
@@ -695,8 +699,9 @@ mcp_request = function(conn, method, params = NULL, timeout = NULL, modern = NUL
   if (raw) return(resp)
   if (!is.null(resp$error)) {
     code = suppressWarnings(as.integer(resp$error$code %||% NA_integer_))
-    # over HTTP the status decides: P04 does not hand a non-2xx body (its JSON-RPC code) to on_fail
-    stale = isTRUE(conn$era_from_cache) && !isTRUE(retried) &&
+    # over HTTP the status decides: P04 does not hand a non-2xx body (its JSON-RPC code) to on_fail.
+    # A tools/call error is the tool's own (mcp_call() lists the tools first on a new connection).
+    stale = isTRUE(conn$era_from_cache) && !isTRUE(retried) && !identical(method, "tools/call") &&
       isTRUE(code %in% c(-32600L, -32601L, -32602L) || status %in% c(400L, 404L))
     if (stale) {
       in_handshake = is.na(conn$era)
@@ -932,7 +937,13 @@ mcp_tools = function(conn, refresh = FALSE) {
     cursor = res$nextCursor
     if (is.null(cursor)) break
   }
-  tools = lapply(tools, mcp_tool_norm)
+  named = vapply(tools, function(t) rlang::is_string(t$name) && nzchar(t$name), NA)
+  if (!all(named)) {
+    registry_diagnostic("builtin:mcp", "mcp_tools", "unnamed_tool",
+                        paste0("MCP server ", conn$name, " listed ", sum(!named),
+                               " tools without a name; they are left out."))
+  }
+  tools = lapply(tools[named], mcp_tool_norm)
   if (identical(conn$transport, "http") && identical(conn$era, "modern")) {
     tools = Filter(mcp_tool_headers_ok, tools)
   }

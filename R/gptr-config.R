@@ -421,11 +421,14 @@ trust_record = function(root) {
   if (is.list(rec)) rec else NULL
 }
 
-#' Existing trust-gated files of a project (IC-52), including the .env files P03 discovers
+#' Existing trust-gated files of a project (IC-52), including the .env files P03 discovers and the
+#' project MCP files of other harnesses that gptr reads (mcp_config_sources())
 #' @noRd
 trust_gated_paths = function(root) {
   ws = file.path(root, ".gptr")
-  files = file.path(ws, c("settings.json", "mcp.json", "SYSTEM.md", "APPEND_SYSTEM.md"))
+  files = c(file.path(ws, c("settings.json", "mcp.json", "SYSTEM.md", "APPEND_SYSTEM.md")),
+            file.path(root, c(".mcp.json", ".codex/config.toml", ".cursor/mcp.json",
+                              ".vscode/mcp.json", ".pi/mcp.json")))
   found = c(files[file.exists(files) & !dir.exists(files)], dotenv_project_files(root))
   for (d in file.path(ws, c("extensions", "plugins", "agents"))) {
     if (dir.exists(d)) {
@@ -637,14 +640,16 @@ trust_resolve = function(root) {
 #' Record or read whether a project is trusted
 #'
 #' Trust decides whether gptr applies or runs what a project directory contains: project
-#' settings beyond tightening, `.gptr/extensions/` and project plugins, project MCP servers,
-#' `SYSTEM.md` and `APPEND_SYSTEM.md`, project `.env` discovery, provider base-URL overrides,
-#' project skills (`.gptr/skills/`, `.agents/skills/`, `.claude/skills/` and relative
-#' `skills.paths` entries), prompt templates (`.gptr/prompts/`), the tool and model fields of
-#' project agent files, and the authority of project instructions. The
-#' decision is kept in `tools::R_user_dir("gptr", "config")/trust.json` with a fingerprint of the
-#' trust-gated files; when they change, the project counts as untrusted again until you confirm.
-#' Called from model code during a run, recording a decision is refused.
+#' settings beyond tightening, `.gptr/extensions/` and project plugins, project MCP servers
+#' (`.gptr/mcp.json` and the `.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`,
+#' `.vscode/mcp.json` and `.pi/mcp.json` of other harnesses), `SYSTEM.md` and
+#' `APPEND_SYSTEM.md`, project `.env` discovery, provider base-URL overrides, project skills
+#' (`.gptr/skills/`, `.agents/skills/`, `.claude/skills/` and relative `skills.paths` entries),
+#' prompt templates (`.gptr/prompts/`), the tool and model fields of project agent files, and
+#' the authority of project instructions. The decision is kept in
+#' `tools::R_user_dir("gptr", "config")/trust.json` with a fingerprint of the trust-gated files;
+#' when they change, the project counts as untrusted again until you confirm. Called from model
+#' code during a run, recording a decision is refused.
 #'
 #' @param path A directory inside the project; its project root is used.
 #' @param trust `NULL` to read the decision, `TRUE` or `FALSE` to record one.

@@ -1,7 +1,7 @@
 # Configurations of every harness gptr reads, in a temporary home and project
 local_foreign_configs = function(trust = FALSE, files = list(), .env = parent.frame()) {
   home = local_mcp_home(.env)
-  proj = local_project(files = files, trust = trust, .env = .env)
+  proj = local_project(files = files, .env = .env)
   write_json_file(file.path(proj, ".mcp.json"), list(mcpServers = list(
     filesystem = list(command = "npx",
                       args = I(c("-y", "@modelcontextprotocol/server-filesystem", "."))),
@@ -32,6 +32,8 @@ local_foreign_configs = function(trust = FALSE, files = list(), .env = parent.fr
                                      env = list(PERPLEXITY_API_KEY = "${input:k}")))))
   write_json_file(file.path(home, ".pi", "agent", "mcp.json"), list(mcpServers = list(
     docs = list(url = "https://example.com/mcp", exposure = "deferred"))))
+  # trusted after the project files are written: they are trust-gated
+  if (trust) gptr_trust(proj, trust = TRUE)
   list(home = home, project = proj)
 }
 
@@ -61,14 +63,28 @@ test_that("the TOML subset reads a Codex config", {
                class = "gptr_error_invalid_argument")
 })
 
+test_that("long TOML strings are read in linear time (F-116)", {
+  skip_on_cran()
+  line = paste0(strrep("w", 48), "\\n")
+  value = strrep(paste0(strrep("w", 48), "\n"), 1200)
+  text = c(paste0("a = \"", strrep(line, 1200), "\""),
+           "b = \"\"\"", paste0(strrep(line, 1200), "\"\"\""))
+  t0 = proc.time()[["elapsed"]]
+  x = mcp_toml_read(text = text)
+  expect_lt(proc.time()[["elapsed"]] - t0, 3)
+  expect_identical(x$a, value)
+  expect_identical(x$b, value)
+})
+
 test_that("foreign configs are found under user_home() and app_config_dir() and merged (IC-63)", {
   fx = local_foreign_configs()
   specs = mcp_config_all(fx$project)
   expect_setequal(names(specs), c("local-db", "filesystem", "sentry", "github", "context7",
                                   "figma", "perplexity", "docs"))
   expect_identical(specs$`local-db`$source, "claude-code:local")
-  expect_identical(specs$filesystem$source, "claude-code:project")
-  expect_identical(specs$filesystem$also_in, "claude-desktop:user")
+  # an untrusted project's copy of a user's server joins the user's entry (F-111)
+  expect_identical(specs$filesystem$source, "claude-desktop:user")
+  expect_identical(specs$filesystem$also_in, "claude-code:project")
   expect_identical(specs$github$timeout, 120)
   expect_identical(specs$github$headers[["Authorization"]], "Bearer ${GITHUB_TOKEN}")
   expect_identical(specs$context7$timeout, 90)
@@ -78,7 +94,8 @@ test_that("foreign configs are found under user_home() and app_config_dir() and 
   expect_identical(specs$figma$toolExposure, list(get_file = "r", `*` = "hidden"))
   expect_true(specs$perplexity$needs_input)
   expect_identical(specs$docs$exposure, "deferred")
-  expect_false(specs$filesystem$startable)
+  expect_true(specs$filesystem$startable)
+  expect_false(specs$sentry$startable)
   expect_true(specs$github$startable)
   expect_false(specs$github$trusted)
 })
@@ -120,7 +137,8 @@ test_that("gptr_mcp() lists servers without connecting; untrusted project server
     mcpServers = list(old = list(command = "evil"))))))
   write_json_file(file.path(gptr_user_dir("config", create = TRUE), "mcp.json"), list(
     mcpServers = list(old = list(type = "sse", url = "https://old.example/sse"))))
-  spec = list(command = "npx", args = c("-y", "@upstash/context7-mcp@latest"))
+  spec = list(command = "npx", args = c("-y", "@upstash/context7-mcp@latest"),
+              env = c(HOME = "${HOME}"))
   mcp_era_put(spec, "modern", "2026-07-28")
   procs = length(ps::ps_children(ps::ps_handle()))
   x = gptr_mcp()
@@ -131,14 +149,14 @@ test_that("gptr_mcp() lists servers without connecting; untrusted project server
   row = function(n) x[x$name == n, ]
   expect_identical(row("context7")$era, "modern")
   expect_identical(row("figma")$status, "disabled")
-  expect_identical(row("filesystem")$status, "untrusted")
-  expect_false(row("filesystem")$trusted)
+  expect_identical(row("sentry")$status, "untrusted")
+  expect_false(row("sentry")$trusted)
   expect_identical(row("perplexity")$status, "untrusted")
   expect_identical(row("old")$status, "unsupported (sse)")
   expect_identical(row("old")$source, "gptr:user")
   expect_identical(row("github")$status, "configured")
   expect_false(row("github")$trusted)
-  expect_error(gptr_mcp("filesystem", tools = TRUE), class = "gptr_error_untrusted")
+  expect_error(gptr_mcp("sentry", tools = TRUE), class = "gptr_error_untrusted")
   expect_error(gptr_mcp("nope"), class = "gptr_error_unknown_member")
   expect_error(gptr_mcp(tools = NA), class = "gptr_error_invalid_argument")
 })
@@ -264,4 +282,105 @@ test_that("gptr_mcp(tools = TRUE) uses a fresh tool cache and connects only when
   expect_identical(unique(gptr_mcp(tools = TRUE)$server), "fixture")
   expect_error(gptr_mcp("stale", tools = TRUE), class = "gptr_error_spawn")
   gptr_mcp_remove("fixture")
+})
+
+test_that("gptr's own project mcp.json writes keep the project trusted (F-82)", {
+  local_mcp_home()
+  proj = local_project(trust = TRUE)
+  gptr_mcp_add("proj", command = "srv", scope = "project")
+  expect_true(trust_ok(proj))
+  expect_true(gptr_trust(proj))
+  x = gptr_mcp()
+  expect_identical(x$status[x$name == "proj"], "configured")
+  expect_true(gptr_mcp_remove("proj", scope = "project"))
+  expect_true(trust_ok(proj))
+  expect_true(gptr_trust(proj))
+})
+
+test_that("the MCP files of other harnesses in a project are trust-gated (F-83)", {
+  fx = local_foreign_configs(trust = TRUE)
+  x = gptr_mcp()
+  expect_identical(x$status[x$name == "sentry"], "configured")
+  write_json_file(file.path(fx$project, ".mcp.json"), list(mcpServers = list(
+    pulled = list(command = "sh"))))
+  x = gptr_mcp()
+  expect_identical(x$status[x$name == "pulled"], "untrusted")
+  expect_identical(gptr_trust(fx$project), NA)
+  proj = local_project(gptr = FALSE)
+  write_json_file(file.path(proj, ".mcp.json"), list(mcpServers = list(only = list(command = "x"))))
+  expect_true(trust_resources_present(proj))
+})
+
+test_that("foreign servers that differ only in env, headers or cwd stay apart (F-109)", {
+  home = local_mcp_home()
+  local_project()
+  gh = function(token) list(command = "gh-mcp", env = list(GITHUB_TOKEN = token))
+  web = function(token) {
+    list(type = "http", url = "https://mcp.example.org/mcp", headers = list(Authorization = token))
+  }
+  write_json_file(file.path(home, ".claude.json"), list(mcpServers = list(
+    `gh-work` = gh("${WORK_TOKEN}"), `gh-personal` = gh("${HOME_TOKEN}"),
+    `web-a` = web("Bearer ${A_TOKEN}"), `web-b` = web("Bearer ${B_TOKEN}"),
+    `dir-a` = list(command = "srv", cwd = "/a"), `dir-b` = list(command = "srv", cwd = "/b"))))
+  specs = mcp_config_all()
+  nm = c("gh-work", "gh-personal", "web-a", "web-b", "dir-a", "dir-b")
+  expect_true(all(nm %in% names(specs)))
+  expect_length(unique(vapply(specs[nm], mcp_cache_key, "")), 6L)
+})
+
+test_that("colliding foreign names are made unique; no entry is lost (F-110)", {
+  home = local_mcp_home()
+  proj = local_project()
+  claude = list(mcpServers = list(gh = list(command = "gh-user")))
+  claude$projects = list()
+  claude$projects[[proj]] = list(mcpServers = list(gh = list(command = "gh-local")))
+  write_json_file(file.path(home, ".claude.json"), claude)
+  write_json_file(file.path(proj, ".mcp.json"), list(mcpServers = list(
+    gh = list(command = "gh-project"))))
+  gptr_trust(proj, trust = TRUE)
+  specs = Filter(function(s) startsWith(s$source, "claude-code:"), mcp_config_all(proj))
+  expect_length(unique(names(specs)), 3L)
+  expect_setequal(vapply(specs, function(s) s$command, ""),
+                  c("gh-local", "gh-project", "gh-user"))
+  expect_identical(specs$gh$command, "gh-local")
+})
+
+test_that("an untrusted project's servers never take a user server's name (F-111)", {
+  home = local_mcp_home()
+  proj = local_project(files = list(".gptr/mcp.json" = json_encode(list(
+    mcpServers = list(fs = list(command = "repo-fs"))))))
+  write_json_file(file.path(proj, ".mcp.json"), list(mcpServers = list(
+    github = list(command = "repo-gh"))))
+  write_json_file(file.path(home, ".claude.json"), list(mcpServers = list(
+    github = list(command = "user-gh"))))
+  write_json_file(file.path(home, ".cursor", "mcp.json"), list(mcpServers = list(
+    fs = list(command = "user-fs"))))
+  specs = mcp_config_all(proj)
+  expect_identical(specs$github$command, "user-gh")
+  expect_true(specs$github$startable)
+  expect_identical(specs$fs$command, "user-fs")
+  repo = Filter(function(s) s$command %in% c("repo-gh", "repo-fs"), specs)
+  expect_length(repo, 2L)
+  expect_false(any(vapply(repo, function(s) s$startable, NA)))
+})
+
+test_that("a live connection follows its server's configuration (F-119)", {
+  local_mcp_home()
+  local_project()
+  fx = local_mcp_fixture("modern", "stdio")
+  path = file.path(gptr_user_dir("config", create = TRUE), "mcp.json")
+  conf = function(args) {
+    write_json_file(path, list(mcpServers = list(fixture = list(
+      command = fx$spec$command, args = I(args), env = as.list(fx$spec$env)))))
+  }
+  conf(fx$spec$args)
+  old = mcp_conn_get("fixture")
+  expect_identical(mcp_conn_get("fixture"), old)
+  conf(c(fx$spec$args, "--extra=1"))
+  new = mcp_conn_get("fixture")
+  expect_false(old$alive)
+  expect_identical(new$spec$args, c(fx$spec$args, "--extra=1"))
+  expect_identical(mcp_call(new, "echo", list(text = "new"))$text, "new")
+  unlink(path)
+  expect_error(mcp_conn_get("fixture"), class = "gptr_error_unknown_member")
 })
