@@ -1,12 +1,15 @@
-## Current checkpoint — 1.0 pre-release fixes (PRs #88, #90 and #93, FIX-27..FIX-36), 2026-10-28
+## Current checkpoint — 1.0 pre-release, P29 and the comprehensive fix pass (#93), 2026-10-30
 
 PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3`, which since the
 PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
 and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-104 (`main`
 `13a917ff`), and the branch `claude/v1-fixes` from it, PR #93, adds FIX-27..FIX-34, merged and
-through six review rounds, CI-105 (contributor PR #92), and FIX-35 and FIX-36. Each has its record
-in `progress/fixes.md`, in id order, and decisions D-255, D-257, D-258, D-261 and D-262..D-272 and
-the amendments of D-188, D-233, D-243, D-244, D-251 and D-254 are in `DEVIATIONS.md`:
+through six review rounds, CI-105 (contributor PR #92), FIX-35 and FIX-36, then P29 (`gptr_tailor()`
+and `gptr_coach()`: plan `plan/P29-gptr-coach.md`, log `progress/P29.md`, contract IC-83..IC-89,
+D-273..D-290), merged into #93, and the comprehensive review and fix pass (FIX-37..FIX-48, CI-106,
+D-291..D-300). Each has its record in `progress/fixes.md`, in id order, and decisions D-255, D-257,
+D-258, D-261 and D-262..D-300 and the amendments of D-188, D-211, D-233, D-243, D-244, D-245, D-251,
+D-254, D-262, D-284 and D-289 are in `DEVIATIONS.md`:
 
 - CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
   accepts, in place of a fixed list of 23, so a host secret such as `CLAUDE_CODE_MESSAGING_TOKEN`
@@ -200,6 +203,30 @@ the amendments of D-188, D-233, D-243, D-244, D-251 and D-254 are in `DEVIATIONS
   calls it (such as `sapply()` or `purrr::map()`) are level 4 `control`, as `?gptr_security` now
   says; Python code is read as Python joins a line ending in a backslash outside a comment and a
   parenthesised `os.environ`. Not covered: the variable changes the Open list names.
+- P29 (#93, merged as `d3c653a3`): `gptr_tailor()` builds a harness, a function called exactly like
+  `peter()` with fixed arguments, the person's own rules and coaching (a note, skills, a review,
+  rules); `gptr_coach()` improves the coaching by running the task in separate R processes, on API
+  keys and on Claude Code and Codex plans, and code decides whether it is kept; harness and coaching
+  calls are recorded and replay without a model (Tasks 1-11, an adversarial review's 39 findings,
+  live tests on Bedrock, a Claude Code plan and a Codex plan; D-273..D-290). The gateway refreeze
+  for a second harness is D-291.
+- The comprehensive review and fix pass (FIX-37..FIX-48, CI-106, D-291..D-300): one review of
+  `f690afc7` with 15 lenses planned 168 items and 67 decisions; twelve lanes fixed them test first,
+  the integration merged them (`0f2677fe`..`1851579c`) and committed the cross-lane halves, the one
+  regeneration and three CI test fixes; CI on `4cf922a4` is green. The classifier reads loops over
+  vectors, folder listings, moves, restored directories, `here::here()`, formula lambdas,
+  `bquote()`, `do.call()` lists and Python comments as R and Python run them, a project inside a
+  protected folder is no longer protected throughout, and auto and yolo refuse a computed command in
+  `pipe()`, `processx::run()` and `fread(cmd =)` (FIX-37, D-292..D-294); a failed secret scan asks,
+  and command-line reads, `ps::ps_environ()` and `auth.json` are secret reads (FIX-38, D-295);
+  coaching children redact the secrets their data holds, the Codex hook denies by a JSON decision
+  that PowerShell cannot turn into a pass, the fence reads a folder changer only where R calls it,
+  and `gptr_coach()` keeps no reference to the caller's data (FIX-41, FIX-42, D-295, D-297); output
+  caps, checkpoint scope, lock age and the compaction wait (FIX-43, FIX-45, D-298); MCP trust and
+  merging and plugin ranks (FIX-44, D-299); providers (FIX-46); documents (FIX-40); the console
+  (FIX-39, D-296); the cheat sheet, guides, README and NEWS (FIX-47); the CI lanes' time and test
+  timing bounds (CI-106); the records and the regeneration (FIX-48; D-300 records the decisions
+  taken without code). F-58, the fence rule for computed paths and functions, is held back (D-297).
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -283,6 +310,15 @@ On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset a
   of the four final verdicts (gate6's and secret6's) left open items, not fixed here and recorded in
   `progress/open-findings.md`.
 
+- The comprehensive fix pass, on `4cf922a4` (the records commits after it change `dev/`, the
+  regenerated vignettes and the cheat sheet PDF): CI green, R-CMD-check.yaml run 41080141377 and
+  Windows-check.yaml run 41080141232, every job, the CRAN-mode checks in 256 s (Ubuntu R-devel, 480
+  s budget) and 494 s (Windows release, 600 s); locally `R CMD check --as-cran` in CRAN mode under
+  `env -i` on a `git archive` of the head (`ddd84502`, the code of `4cf922a4`), Status OK with no
+  NOTE in 144 s, the tests [20s/20s] (FAIL 0 SKIP 954 PASS 3466), both manuals, installed size 8.0
+  Mb; `check-docs.R`, `check-files.R all` and `check-examples.R` (61 pages) 0 problems; FIX-48 has
+  the rest. Each lane's red and green runs are in its FIX entry.
+
 For PR #88, on the merged code `556acb00`, locally on macOS:
 
 - The neighbours of FIX-21 and FIX-22 (every `console-`, `agent-`, `perm-` and `doc-` file, with
@@ -316,154 +352,52 @@ and its man pages, the cheat sheet, NEWS, vignettes, `inst/WORDLIST` and `dev/`,
   library in 31 s; a fresh R loads it and runs `peter()` and `example(gptr_wait)` with the scripted
   model.
 
-Open (found, not fixed):
+Open (found, not fixed). Every finding still open is a row of `progress/open-findings.md` with its
+status: the comprehensive fix pass closed 32 rows and added 16. In short:
 
-- A computed command run through a function reached by a computed name or through a list or an
-  environment (`get("system")(cmd)`, `baseenv()$system(cmd)`) or handed to a function of your own
-  (`g(system)`), `eval(parse())`, a sourced file, package code, `pipe()` or `processx::run()`
-  still escapes `sh:` rules in auto and yolo, and neither the rules nor the refusal read what a
-  shell reads when it runs (its standard input, variables it expands, a script file), as
-  `?gptr_security` says; in manual and edits an allow rule such as `r(level<=3)` still lets a
-  computed `system()` run without asking past a deny `sh:` rule, as before (FIX-27; `system2()`'s
-  `env` is read since FIX-32).
-- The classifier places paths in the project but does not follow the working directory changed
-  other than by `setwd()`, `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()`
-  (`usethis::local_project()`, `get("setwd")`, the `wd` of `callr::r()`), nor read the code
-  another interpreter runs (`Rscript -e`, `perl -e`, `node -e`, `pwsh -CommandWithArgs` or `-cwa`),
-  a path the shell computes (`rm "$f"` in a loop, `xargs rm`), a code word handed to `sh -c` or
-  `bash -c` whose spaces are escaped with a backslash or written `$IFS` (`sh -c rm\ -f\ file`;
-  reading it needs a tokenizer of its own), `env` with `-C` in a cluster of short options
-  (`env -iC DIR`) or an abbreviated `--chdir`, `eval()` of a quote reached otherwise
-  (`eval(bquote())`, a quoted call held in a name) or the command of `processx::process$new()`: each
-  is level 3 or lower, which auto and yolo run whatever it deletes, as `?gptr_security` says. A
-  `processx::run()` `wd` the code computes is read as the project (FIX-27 review rounds 4 and 5).
-- The save-and-restore idiom with its directory saved in a branch, a loop or another call's argument
-  (`if (p) owd = setwd("data")`, `tryCatch(finally = setwd(owd))`), and `setwd(here::here())`, still
-  ask in auto and yolo (level 4, documented); after `setwd(tempdir())` a relative `setwd()` target
-  is read in `tempdir()`, but other relative paths are still placed in the project root (FIX-27
-  review rounds 5 and 6).
-- `file.rename()` and `fs::file_move()` remove their source, which is not read as a delete (a move
-  of a file outside the project into it is level 2); the maintainer's call (FIX-27 review round 6).
-- After `withr::with_dir()` or `xfun::in_dir()` a relative `setwd()` target counts as a directory
-  the code computes (level 4) (FIX-27 review round 6).
-- In a project inside a protected folder (`.git`, `.claude` or `.aws`) every directory is
-  protected, so `setwd('.')` and `setwd('sub')` are level 4 there, as before round 5: the
-  maintainer's call (FIX-27 review round 5).
-- test-perm-classify.R "a command run in a directory outside the project reads it (review round
-  4)" writes the raw `tempfile()` path into R code, whose backslashes on Windows (`\U`) stop the
-  parse, so its `cd` line may read 0 there, not 1; it has not run on Windows (FIX-27 review round
-  4, the fixes' verifier).
-- An approved `system()` child's output starts on the frozen `r` row; Codex's own shell is not
-  switched off in the read-only modes; the prefix gate leaves `standard_core` 1 token (FIX-32). A
-  registered secret handed to a child through `env` asks each time in auto, and twice in manual,
-  unless the code also reads it by name; the idle gate does not take the level 3 of an ordinary
-  variable passed through (FIX-32 review round 5). A `$NAME` of a registered name in a `peter$sh()`
-  or `peter$bg()` command asks in auto although their children start without registered secrets;
-  output the console does not indent (a console that cannot redraw a line, or `gptr.verbose`
-  below 2) shows a secret model code prints, on the screen only; a network program name the code
-  computes is not read for the secret-to-network question (FIX-32 review round 6). A command line or
-  Python that only mentions `.env` (for example `echo .env >> .gitignore`, or a comment) asks in
-  auto as a read; code that reads a secret, starts a process and names a network program in any
-  string (a `message()` that says `curl`) asks in yolo (FIX-32 review round 6 verification).
-- A replayed script sends again a steer its run took after the script went on (a run sent to the
-  background from the pause menu, a `gptr_wait(timeout =)` that returned before the run ended), and
-  a `gptr_step(s, <n>)` that ended the run keeps the notes, so a later turn equal to one is still
-  skipped (FIX-22).
-- A job that ends with no pump and no `kill()` before its first status look still gets its end time
-  at that look, an upper bound; processx 3.9.0's `get_end_time()` gives the exact end but needs the
-  processx floor raised from 3.8.0, the maintainer's call (FIX-23).
-- R draws no prompt again after a background callback's output, so the person types on a row
-  without `> ` (FIX-21 L1).
-- A console transcript repeats the call's prompt for the turn a parked session resumes, and the
-  console note it answered is not recorded (FIX-21 L3).
-- A direct R line that names a session by a variable bound at R's prompt (`!!gptr::gptr_wait(b)`)
-  stops the transcript's replay, which names it `s_<id>`, as FIX-20 R29 (FIX-21).
-- `gptr_wait()` on a waiting session, called from inside a run's tool, resumes it as a nested run
-  that inherits the outer run's safety record (it used to hang); the permission gate still asks
-  the person (FIX-21).
-- Replayed closures and `function` calls have no srcref where the agent's keep a `<gptr>` one of its
-  code, so a replayed ggplot is 1,412 bytes smaller serialized and 768 bytes by `env_snap_size()`;
-  an expression that names `peter()` still makes its objects with the document's srcrefs (FIX-24).
-- An exported transcript keeps its replay note, which names the source transcript, and a refusal
-  names no line (FIX-25, FIX-33).
-- An authenticated proxy variable (`HTTPS_PROXY` with a password) is not secret-looking, so
-  discovery still registers its password as `HTTPS_PROXY_PASSWORD` (CI-99).
-- Why the Windows stdin writer exits early is not known (2 of 1,356 writer cases in CI, none in
-  6,583 measured); a recurrence fails on `writer_failed` in about 5 s, the writer's stderr in the
-  witness (CI-98, CI-101).
-- Windows setup sometimes times out downloading pak from r-lib.github.io (60 s); if it recurs, set
-  `R_DEFAULT_INTERNET_TIMEOUT` in `Windows-check.yaml`.
-- The Windows stdin writer's bootstrap stays about 630 bytes under Rscript's 9998-byte `-e` limit
-  with ordinary paths; it embeds `.libPaths()` (compressed) and the temp path, so very long ones
-  (a 153-character TMPDIR with a long check library: 10,179 bytes) make the writer refuse to start
-  (`proc_writer_code_bytes()`; found by #88's CRAN gate).
-- What slowed or stopped pak's subprocess on the reporting Mac, and what removed its loaded copy of
-  gptr before `load_all()`, is not in the report (CI-102).
-- No CRAN test reaches 10 R files: `artifact-registry`, `bridge-lang`, `console-jsonl`,
-  `doc-export`, `doc-knitr`, `proc-rscript`, `provider-bedrock`, `s1-emulate`, `s1-ollama` and
-  `tool-search` (CI-93).
-- A later console turn that uses an object made by a direct R line that is off still stops
-  `source()`, as the undo kept the object (FIX-29).
-- A console statement names the model and mode of a turn only as D-265 states: a switch during a run
-  applies to the whole re-ask, a model given as a provider object is not named on a session's first
-  statement, `.opts$thinking`, the budget, tools, skills and `.opts` are not recorded, and a turn
-  recorded in auto or yolo is re-asked in that mode (FIX-30).
-- A line of `!` code that reads as another entry's first line but is not a comment still ends its
-  section (FIX-31); a marker line inside a multi-line string of `!` code leaves the transcript's
-  markers malformed, which the next block write names (FIX-33).
-- A direct R line that read an object a turn changed stays on after the undo and replays with the
-  restored value (FIX-33 DOC-3); a turn sent from outside the console is retried with the pending
-  notes only (DOC-6); artifact references without `.gptr/` name `tempdir()/gptr` (MM-4); code
-  recorded despite `record = false` has no `#>` output (ALL-3); claude-cli and codex blocks record
-  `model=claude-cli/default` and `codex/default` (ALL-6); a refused turn records an empty block
-  (PERM-8).
-- On macOS a two-line paste without a final newline answers a question with its first line, as
-  documented (FIX-34 PASTE-1); the console's not-run row cuts a guard refusal's long reason
-  (FIX-34's merge).
-- Tab writes an `@` name holding a space or other punctuation without quotes, which the mention
-  does not read whole; in a UTF-8 locale R's regular expressions read no mention in a line holding
-  a file name that is not valid UTF-8, and Rgui and Rterm in a code page hold only its characters
-  (FIX-34 review round 5).
-- Pasted text holding a paste end marker, in a terminal that does not filter pastes, still sends at
-  a newline of a read between when a read ends right after that marker and the rest is split again
-  before the paste's own end marker (two pauses of 50 ms inside one paste), and a message sent there
-  that starts with `!` or `/` runs as R or as a command at the next prompt with no Enter; a Ctrl-C
-  typed in the same batch as a paste, or within about 0.1 s of its read (at most 0.2 s on the
-  polling beat), or within 2 s of the last read of a paste left open (one whose end marker a
-  question took), is dropped, while after a longer pause inside a split paste a Ctrl-C byte in the
-  read between, or a pasted one that reaches the reader more than 2 s after a paste's last read, is
-  the key, which pauses the run and lets the bytes after it answer the menu; a paste left open makes
-  Enter only add lines until the run ends; and DEL, Ctrl-U and Ctrl-W inside a paste still edit the
-  draft there (FIX-28 review rounds 1, 3, 4 and 6, D-263 Limits).
-- In a terminal that ignores bracketed paste a paste still splits when a read comes more than
-  about 145 ms late (IC-76's 0.2 s bound; CI-94, FIX-28).
-- A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
-- At a load average of 260 and more the owned browser close's process-table walks
-  (`proc_children()`, `proc_tree()`) can take 12-28 s and use up its 10 s deadline: 4 of 33
-  closes under 32 busy loops ended "close timed out" (FIX-35 F2).
-- Variable changes the classifier does not read, each level 3 or lower, which auto runs, as
-  `?gptr_security` says: code in a file R runs (`source()`, `sys.source()`,
-  `eval(parse(file = ))`); `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` or
-  `withr::with_envvar()` reached by a computed name, through a list or an environment, or handed to
-  a function the classifier does not know calls it (`get("Sys.unsetenv")`, `baseenv()$Sys.setenv`,
-  `asNamespace("withr")$local_envvar`, `with(list(f = withr::with_envvar), ...)`,
-  `assign("f", Sys.unsetenv)`, `identity(withr::local_envvar)`); a Python write that reaches
-  `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`) or through `ctypes`, or
-  that passes `os.environ.update()` a mapping the code computes, a mapping whose names are not plain
-  string literals (`{'\x48OME': d}`, `{'H' 'OME': d}`) or keyword names not all in upper case;
-  Python run through 'reticulate' (FIX-36, D-272).
-- The macOS row's time grows with its serial pty tests (CI-96).
-- A `process_jsonl` line's events still follow the abort flag (its adapters check the signal
-  themselves, 04 section 8.1), and an `inprocess` generator keeps its two calls after it; the
-  partial of an abort inside a unit holds what was emitted only for a normaliser that records a
-  delta before it emits it (FIX-26).
-- Hosted CI on 2026-10-25: Ubuntu's apt mirror stalled twice; after setups of 30 and 19 minutes, two
-  Ubuntu jobs reached their 45-minute limit in R CMD check, and both passed on a re-run. On
-  2026-10-26 (#88) it stalled the token benchmark's install until its 30-minute limit; the re-run
-  passed.
-- CI-93's and FIX-20's other Open notes stay in `progress/fixes.md`.
+- F-58: in auto a coaching run can write outside its folder or move its working folder through code
+  with a computed path or name; the decided fence rule refused writes to literal paths and is
+  reverted until a gate item fixes the classifier (D-297).
+- Copy-safety: an inline function forwarded through a wrapper of `peter()` or a harness keeps the
+  wrapper's frame, and `worker_ship_objects()`'s `mget()` keeps the caller's objects referenced, so
+  both copy them on the next edit (ledger copy-1, copy-2).
+- The classifier's documented limits (L-3's and L-4's rest, L-62) and accepted costs (L-63, L-6,
+  L-7), F-6's residual in loops, and the gate writer's unrecorded note on `risk_glob_paths()`
+  (glob-1).
+- P29: a run that leaves very many large objects can still pass 64 MiB after the fallback and is
+  refused; a positional `wd` of a direct R call and code the classifier cannot read stay outside the
+  fence (08 honest limit 1); coaching spend inside a run is not in the session file (F-64); P29h is
+  not built (deferred, D-300).
+- The console's paste and terminal limits (L-9..L-17, L-65), the transcripts' (L-18..L-25, V6T-3,
+  R6-REG-2), the Windows stdin writer (L-41, L-42), L-44, L-45, L-49, L-66 (the prefix gate's one
+  token), the checkpoint baseline's classing cost, agent-9 and runtime-10.
+- Gaps: Windows, Linux, R 4.2 and R-devel only through CI; the forms and consoles L-37 names; narrow
+  live evidence (L-38); no aspell here (L-39).
+- CI: the four serial lanes take 42 to 61 minutes, and the maintainer asked that no CI job run
+  longer than 20 minutes: CI-107, a CI redesign by another agent, takes it up; deadline bounds of
+  test-proc-rscript-native.R fail at loads of 300 to 400 (wall-1).
+- The maintainer's: PERM-4 (Codex's own shell in the read-only modes) and PV-4 (b): CLAUDE.md and
+  AGENTS.md lines 3 and 30, whose text the ledger row prepares (DEC-57).
 
-Remaining: the CRAN submission and P25's live steps are the maintainer's.
+Remaining, in this order (F-156, DEC-59):
+
+1. On the final head: `dev/ci/isolated-check.R check`, the CRAN-mode `R CMD check --as-cran` under
+   `env -i` and the full suite (L-27).
+2. Push, read every job until green, then rewrite PR #93's title and body to cover FIX-27..FIX-48,
+   CI-106, P29, D-262..D-300 and the checks (L-28).
+3. Run `GPTR_LIVE_TESTS` live-coach and live-cli again, since this pass changed the fence, the hook
+   and the transport; one live request at the highest reasoning effort for the 90 s idle timeout
+   (F-132); the Windows job once on a host with Codex for the hook (F-59) (ledger live-9).
+4. Merge #93, wait for the pkgdown deploy, confirm that `articles/tailor-and-coach.html` returns 200
+   (the README links it), then run the incoming check with remote URLs, win-builder and R-hub on the
+   final tarball and set `cran-comments.md`'s hosted results and reverse-dependency date
+   (`cran_comments_set_revdeps()`) (L-29, F-142).
+5. Watch `main`'s CI until green (L-30).
+6. Clean up branches and worktrees (L-31); ask first about `claude/p29-gptr-coach` and the
+   `gptr-p29` worktrees.
+7. Update the maintainer's checkout (L-32).
+8. The CRAN submission and P25's live steps are the maintainer's (L-33).
+9. Report to the maintainer and update the memory files (L-71).
 
 ## Historical checkpoint — P28, CI-92..97, FIX-20 and the dev docs (PRs #78-#83), 2026-10-25
 
