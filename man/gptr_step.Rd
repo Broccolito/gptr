@@ -25,6 +25,12 @@ running session is advanced the same way; a waiting background session is left a
 \code{.run = FALSE} builds a session without making its model request; \code{\link[=gptr_step]{gptr_step()}} or
 \code{\link[=gptr_wait]{gptr_wait()}} starts it. Supply an explicit workspace with \verb{envir =} when results must
 remain available outside the function that creates the session.
+
+A session left running after its turns is not paused: its run continues, tool calls
+included, during any later blocking gptr call at top level, such as another \code{peter()} call,
+\code{\link[=gptr_source]{gptr_source()}}, or \code{\link[=gptr_wait]{gptr_wait()}} or \code{\link[=gptr_step]{gptr_step()}} on another session. In mode \code{"auto"} such a
+call can thus run the session's R code and write its files. Call \code{\link[=gptr_wait]{gptr_wait()}} on the session
+to finish its run first, or \code{\link[=gptr_cancel]{gptr_cancel()}} to stop it.
 }
 \examples{
 session = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")),

@@ -118,6 +118,12 @@ sdk_sessions = function(x, arg = "x") {
 #' [gptr_wait()] starts it. Supply an explicit workspace with `envir =` when results must
 #' remain available outside the function that creates the session.
 #'
+#' A session left running after its turns is not paused: its run continues, tool calls
+#' included, during any later blocking gptr call at top level, such as another `peter()` call,
+#' [gptr_source()], or [gptr_wait()] or [gptr_step()] on another session. In mode `"auto"` such a
+#' call can thus run the session's R code and write its files. Call [gptr_wait()] on the session
+#' to finish its run first, or [gptr_cancel()] to stop it.
+#'
 #' @param s A session.
 #' @param turns The number of turns to advance (`Inf` for all).
 #' @return `s`, invisibly. A run that settles in status `error`, `blocked`, `budget` or
