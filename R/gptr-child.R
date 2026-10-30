@@ -67,9 +67,12 @@ plain_bin = function(v) {
   gsub("\n", "", jsonlite::base64_enc(writeBin(v, raw(), endian = "little")), fixed = TRUE)
 }
 
-#' The printed summary of a value outside the plain kinds, clipped
+#' The printed summary of a value outside the plain kinds, clipped; at most 200 entries are
+#' printed, since printing a long list takes time quadratic in its length
 #' @noRd
 plain_summary = function(x) {
+  old = options(max.print = 200L)
+  on.exit(options(old), add = TRUE)
   txt = tryCatch(paste(utils::capture.output(print(x)), collapse = "\n"), error = function(e) "")
   txt = paste0("<", paste(class(x), collapse = "/"), ">", if (nzchar(txt)) "\n", txt)
   list(type = "summary", len = 1L, data = child_clip(txt, plain_max$summary))

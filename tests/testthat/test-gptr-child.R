@@ -118,6 +118,17 @@ test_that("a value too large or deep for the reader travels as its summary (08 s
   expect_type(res$objects$wide[[60000L]], "character")
 })
 
+test_that("a long list's summary prints only what it keeps", {
+  skip_on_cran()
+  max = getOption("max.print")
+  started = proc.time()[["elapsed"]]
+  s = plain_summary(as.list(seq_len(2e5)))
+  expect_lt(proc.time()[["elapsed"]] - started, 10)
+  expect_match(s$data, "^<list>\n\\[\\[1\\]\\]")
+  expect_match(s$data, "more characters]", fixed = TRUE)
+  expect_identical(getOption("max.print"), max)
+})
+
 test_that("a report is read in the safe direction (08 section 3.3)", {
   stream = function(...) {
     st = new.env(parent = emptyenv())
