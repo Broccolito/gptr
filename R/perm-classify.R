@@ -2650,6 +2650,14 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       return(NULL)
     }
     if (is.symbol(f) && as.character(f) %in% bound$all) return(NULL)
+    # the call they make runs a quote()'s code, unless do.call() is told to quote
+    if (!isTRUE(risk_arg(a, "quote"))) {
+      args = lapply(args, function(x) {
+        q = !missing(x) && is.call(x) && length(x) == 2L &&
+          (identical(x[[1L]], quote(quote)) || identical(x[[1L]], quote(base::quote)))
+        if (q) x[[2L]] else x
+      })
+    }
     as.call(c(f, args))
   }
 

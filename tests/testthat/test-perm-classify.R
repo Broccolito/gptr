@@ -1216,6 +1216,19 @@ test_that("a move deletes its source in R, Python and the shell alike (D-293)", 
   expect_true(py("df = df.rename(columns={'a': 'b'})") <= 2L)
 })
 
+test_that("do.call() runs the quoted elements of a list written out (review F-23)", {
+  root = local_project()
+  x = deparse(file.path(withr::local_tempdir(tmpdir = dirname(tempdir())), "x"))
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c(paste0("do.call(identity, list(quote(unlink(", x, "))))"),
+                 paste0("do.call('identity', list(base::quote(unlink(", x, "))))"),
+                 paste0("rlang::exec(identity, quote(unlink(", x, ")))"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # neighbours: quote = TRUE passes them quoted
+  expect_true(lv(paste0("do.call(identity, list(quote(unlink(", x, "))), quote = TRUE)")) <= 2L)
+})
+
 test_that("routes to gptr's namespace are control or dynamic (IC-53, D-132)", {
   root = local_project()
   for (code in c("environment(gptr_config)", "dplyr::mutate(df, across(p, gptr_config))",

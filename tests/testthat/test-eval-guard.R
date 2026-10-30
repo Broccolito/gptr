@@ -47,6 +47,14 @@ test_that("what bquote() and a formula lambda run is guarded (review F-2, F-3)",
   }
 })
 
+test_that("do.call() runs the quoted elements of a list written out (review F-23)", {
+  for (code in c("do.call(identity, list(quote(q())))", "rlang::exec(identity, quote(q()))",
+                 "do.call(identity, list(base::quote(readline())))")) {
+    expect_true(length(guard(code)$blocked) > 0L, label = code)
+  }
+  expect_identical(guard("do.call(f, list(quote(q())), quote = TRUE)")$blocked, character())
+})
+
 test_that("a local binding never hides a call of q, quit or another blocked function", {
   skip_on_cran()
   expect_equal(guard("q = 1; q('no')")$blocked, "q")
