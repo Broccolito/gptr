@@ -33,6 +33,12 @@ test_that("gptr's configuration exports and hooks are level 4 control rows (IC-5
   }
   expect_identical(risk_lookup("setHook", NA_character_, tab)$category, "control")
   expect_identical(risk_lookup("assignInNamespace", "utils", tab)$level, 4L)
+  # trace() rewrites package code, gptr's too (review F-14)
+  for (code in c("trace('perm_check', quote(cat('x')), where = gptr::peter)",
+                 "trace(gptr::peter, quote(x))")) {
+    r = gptr_risk(code)
+    expect_identical(list(r$level, r$categories), list(4L, "control"), label = code)
+  }
   expect_identical(risk_lookup("q", NA_character_, tab)$category, "critical")
 })
 
@@ -227,6 +233,27 @@ test_that("the Python classifier scans tokens; running Python is at least level 
   for (cs in cases) expect_identical(flags_level(risk_python(cs[[2]])), cs[[1]], label = cs[[2]])
 })
 
+test_that("Python comments and a chdir( in a string are no code (D-294)", {
+  root = local_project()
+  py = function(code) risk_python(code, root)
+  for (code in c("print('call os.chdir(d) first')", "# os.remove('/tmp/x')",
+                 "x = 1  # subprocess.run('rm -rf ~', shell=True)")) {
+    f = py(code)
+    expect_identical(list(flags_level(f), unique(f$category)), list(1L, "session"), label = code)
+  }
+  expect_identical(flags_level(py("import subprocess\nsubprocess.run('rm -rf ~', shell = True)")),
+                   4L)
+  expect_identical(flags_level(py("import os\nos.chdir('/')")), 4L)
+  # neighbours: a # in a string (a triple-quoted one, or after an escaped quote) is no comment
+  for (s in c("s = '''\nx # y''' ; ", "s = 'it\\'s # y' ; ")) {
+    for (cs in list(c("network", "import requests; requests.get('http://x')"),
+                    c("dynamic", "getattr(__import__('os'), 'system')('ls')"),
+                    c("file_delete", "import os; os.remove('/etc/hosts')"))) {
+      expect_true(cs[1] %in% py(paste0(s, cs[2]))$category, label = paste0(s, cs[2]))
+    }
+  }
+})
+
 test_that("flag rows bind without duplicates", {
   a = risk_flags_row("x", "f", 2L, "file_write")
   b = risk_flags_bind(a, a, risk_flags_empty())
@@ -373,6 +400,26 @@ test_that("every shipped level-0 command row has a read-only reading (D-061)", {
   off = gptr_register(gptr_spec("risk_rule", "p11_test_cmd0", rows = cmd, target = "command"))
   withr::defer(off())
   expect_identical(flags_level(risk_command("mytool --any thing", root)), 0L)
+})
+
+test_that("a long quoted word is read in time linear in its length (review F-13)", {
+  skip_on_cran()
+  root = local_project()
+  took = function(n) {
+    cmd = paste0("echo '", strrep("aB+/", n / 4), "' > data/blob.txt")
+    system.time({
+      r = risk_classify(cmd, root = root, kind = "command")
+    })[["elapsed"]]
+  }
+  t1 = took(1e5)
+  t2 = took(2e5)
+  expect_lt(t2, 30)
+  expect_lt(t2 / max(t1, 0.05), 3)
+  tk = risk_sh_tokens("a 'b c'd \"e\\\"f\" 2>&1 >out x[1] $'q' # c\nls | wc")
+  expect_identical(as.vector(tk), c("a", "b cd", "e\"f", "\0012>&", "1", "\001>", "out", "x[1]",
+                                    "q", "\001;", "ls", "\001|", "wc"))
+  expect_identical(attr(tk, "hidden"), c("b c", "e\"f", "q", " c"))
+  expect_identical(attr(tk, "dyn")[8L], "g")
 })
 
 test_that("text encodings and long glob words are read safely (D-061)", {
@@ -762,6 +809,19 @@ test_that("gptr_artifacts() that relaunches or stops an app is level 3 process (
   }
 })
 
+test_that("gptr_jobs(kill = TRUE) stops every job: level 4 control (review F-5)", {
+  root = local_project()
+  for (code in c("gptr_jobs()", "gptr_jobs(kill = FALSE)", "gptr::gptr_jobs(FALSE)")) {
+    expect_identical(gptr_risk(code, root = root)$level, 0L, label = code)
+  }
+  for (code in c("gptr_jobs(kill = TRUE)", "nrow(gptr::gptr_jobs(TRUE))")) {
+    r = gptr_risk(code, root = root)
+    expect_identical(list(r$level, r$categories), list(4L, "control"), label = code)
+  }
+  r = gptr_risk("gptr_jobs(kill = k)", root = root)
+  expect_identical(list(r$level, r$categories), list(3L, "dynamic"))
+})
+
 test_that("G5's 46 polyglot calls are classified through their arguments (G5 p08)", {
   skip_on_cran()
   root = local_project(files = list(
@@ -913,6 +973,26 @@ test_that("secret rules come from P03's secret_scan() (G6 section 3.8)", {
   expect_identical(r$secrets, character())
 })
 
+test_that("a registered name that does not look secret is a secret read in a command (F-25)", {
+  root = local_project()
+  local_vault()
+  withr::local_envvar(F25_PLAIN = "plain-test-0000-f25")
+  secret_register("plain-test-0000-f25", "F25_PLAIN")
+  expect_false(is_secret_name("F25_PLAIN"))
+  r = gptr_risk("system('echo $F25_PLAIN')", root = root)
+  expect_identical(list(r$level, r$secret_guard, r$secrets), list(3L, TRUE, "F25_PLAIN"))
+})
+
+test_that("a secret scan that fails on code that parses is a guarded level 4 (D-295)", {
+  root = local_project()
+  local_mocked_bindings(secret_scan = function(...) stop("a scan bug"))
+  r = gptr_risk("x = 1", root = root)
+  expect_identical(list(r$level, r$secret_guard, r$flagged$call),
+                   list(4L, TRUE, "secret_scan_failed"))
+  expect_identical(gptr_risk("x (", root = root)$label, "invalid")
+  expect_identical(nrow(risk_secret_scan("x (")$findings), 0L)
+})
+
 test_that("gptr_risk() validates its arguments and returns the contract fields (5.11)", {
   expect_error(gptr_risk(1), class = "gptr_error_invalid_argument")
   expect_error(gptr_risk("x", envir = list()), class = "gptr_error_invalid_argument")
@@ -997,7 +1077,7 @@ test_that("indirections reach a literal target only at level 3 (D-132)", {
   root = local_project()
   cases = list(
     list(3L, "cmd = 'rm -rf ~'; system(cmd)"),
-    list(3L, "identity(unlink)('~', recursive = TRUE)"), list(3L, "eval(bquote(q()))"),
+    list(3L, "identity(unlink)('~', recursive = TRUE)"), list(4L, "eval(bquote(q()))"),
     list(3L, "Negate(file.remove)('.gptr/settings.json')"),
     list(3L, "purrr::partial(unlink, recursive = TRUE)('~')"),
     list(2L, "Map(file, '~/.Rprofile', 'w')"), list(2L, "lapply('~/.Rprofile', file, 'w')")
@@ -1005,6 +1085,48 @@ test_that("indirections reach a literal target only at level 3 (D-132)", {
   for (cs in cases) {
     expect_identical(gptr_risk(cs[[2]], root = root)$level, cs[[1]], label = cs[[2]])
   }
+})
+
+test_that("what bquote(), substitute()'s env and a formula lambda run is code (review F-2, F-3)", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, envir = classify_env(), root = root)$level
+  for (code in c("bquote(.(unlink('~', recursive = TRUE)))",
+                 "bquote(.(options(gptr.unsafe_no_permissions = TRUE)))",
+                 "substitute(a, list(a = unlink('~', recursive = TRUE)))",
+                 "substitute(env = list(a = unlink('~', recursive = TRUE)), a)",
+                 "purrr::walk(1, ~ unlink('~', recursive = TRUE))",
+                 "dplyr::across(mpg, ~ { setwd('/'); .x })")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # neighbours: a plot label, substitute()'s expr, a model formula and a formula lambda's
+  # arithmetic, which offers an [a]lways rule; a number in a function slot extracts an element
+  for (code in c("plot(1, main = bquote(alpha == .(a)))", "substitute(unlink('~'), list())",
+                 "lm(y ~ unlink('~'), d)", "purrr::map(1:3, ~ .x + 1)",
+                 "dplyr::mutate(mtcars, dplyr::across(c(mpg, wt), ~ .x * 2))",
+                 "purrr::map_dbl(l, 1)")) {
+    r = gptr_risk(code, envir = classify_env(), root = root)
+    expect_true(r$level <= 2L && !r$dynamic, label = code)
+  }
+  for (code in c("purrr::map(1:3, ~ .x + 1)", "purrr::map_dbl(l, 1)",
+                 "dplyr::mutate(mtcars, dplyr::across(c(mpg, wt), ~ .x * 2))")) {
+    r = gptr_risk(code, envir = classify_env(), root = root)
+    expect_identical(r$level, 0L, label = code)
+    expect_false(is.null(rule_suggest(list(name = "r", risk = r))), label = code)
+  }
+})
+
+test_that("tryCatch() without handlers calls none of its arguments (review F-12)", {
+  root = local_project()
+  for (code in c("tryCatch(read.csv('data/x.csv'), finally = message('done'))",
+                 "tryCatch({ x = 1 })", "withCallingHandlers(print(1))")) {
+    expect_true(gptr_risk(code, root = root)$level <= 1L, label = code)
+    expect_false("<computed>" %in% risk_plan_disallowed(code, root), label = code)
+  }
+  for (code in c("tryCatch(x, error = function(e) unlink('~', recursive = TRUE))",
+                 "tryCatch(stop('x'), error = q)", "tryCatch(x, finally = unlink('~'))")) {
+    expect_identical(gptr_risk(code, root = root)$level, 4L, label = code)
+  }
+  expect_identical(gptr_risk("tryCatch(x, error = hs[[1]])", root = root)$level, 3L)
 })
 
 test_that("a name assigned outside a function body holds the paths it may hold (D-211)", {
@@ -1035,10 +1157,94 @@ test_that("a name assigned outside a function body holds the paths it may hold (
                  "if (!exists('p')) p = tempfile(); unlink(p, recursive = TRUE)",
                  "p = tempfile(); for (f in c('/etc/a', '/etc/b')) { unlink(p); p = f }",
                  "p = tempfile(); for (f in c('/etc/a')) { unlink(p); p[1] = f }",
-                 "f = function() p <<- '~'; p = tempfile(); f(); unlink(p, recursive = TRUE)",
-                 "p = tempfile(); assign(value = '/etc/x', x = 'p'); file.remove(p)")) {
+                 "f = function() p <<- '~'; p = tempfile(); f(); unlink(p, recursive = TRUE)")) {
     expect_identical(gptr_risk(code, root = root)$level, 3L, label = code)
   }
+  # the value assign() binds is read (review F-7)
+  code = "p = tempfile(); assign(value = '/etc/x', x = 'p'); file.remove(p)"
+  expect_identical(gptr_risk(code, root = root)$level, 4L)
+})
+
+test_that("a for loop over a vector and a listing of a folder are read as its files (D-293)", {
+  root = local_project()
+  o = deparse(withr::local_tempdir(tmpdir = dirname(tempdir())))
+  lv = function(code) gptr_risk(code, envir = classify_env(), root = root)$level
+  for (code in c(paste0("file.remove(list.files(", o, ", full.names = TRUE))"),
+                 "unlink(Sys.glob('~/*'), recursive = TRUE)",
+                 paste0("unlink(dir(", o, ", full.names = TRUE), recursive = TRUE)"),
+                 paste0("fs::file_delete(fs::dir_ls(", o, "))"),
+                 "for (f in c('/etc/gptr-a', 'b.csv')) unlink(f)",
+                 paste0("for (f in list.files(", o, ", full.names = TRUE)) file.remove(f)"),
+                 paste0("unlink(list.files(", o, ", all.files = TRUE, full.names = TRUE))"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  for (code in c("for (f in list.files(tempdir(), full.names = TRUE)) file.remove(f)",
+                 "unlink(list.files(tempdir(), full.names = TRUE))")) {
+    expect_true(lv(code) <= 1L, label = code)
+  }
+  # neighbours: a folder in the project, names alone, a computed folder and a deleter lapply()
+  # calls
+  for (code in c("file.remove(list.files('output', full.names = TRUE))",
+                 "file.remove(list.files('~'))", "file.remove(list.files(d, full.names = TRUE))",
+                 "lapply(fs, unlink)", "for (f in fs) unlink(f)")) {
+    expect_identical(lv(code), 3L, label = code)
+  }
+})
+
+test_that("an argument named in part is read while its namespace is not loaded (review F-18)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  o = deparse(withr::local_tempdir(tmpdir = dirname(tempdir())))
+  lv = function(code) gptr_risk(code, root = root)$level
+  # fs's formals are not known while fs is not loaded
+  matched = risk_args
+  local_mocked_bindings(risk_args = function(e, fn, pkg) {
+    matched(e, fn, if (identical(fn, "link_create")) NA else pkg)
+  })
+  for (code in c(paste0("fs::link_create(p = ", o, ", n = 'lnk')"),
+                 paste0("fs::link_create(n = 'lnk', pa = ", o, ")"),
+                 paste0("fs::link_create(", o, ", 'lnk')"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  expect_identical(lv("fs::link_create(p = 'sub', n = 'lnk')"), 2L)
+})
+
+test_that("a move deletes its source in R, Python and the shell alike (D-293)", {
+  root = local_project()
+  p = file.path(withr::local_tempdir(tmpdir = dirname(tempdir())), "x")
+  x = deparse(p)
+  lv = function(code) gptr_risk(code, root = root)$level
+  py = function(code) flags_level(risk_python(paste0("import os, shutil\n", code), root))
+  for (code in c(paste0("file.rename(", x, ", 'f')"), paste0("fs::file_move(", x, ", 'f')"),
+                 paste0("fs::file_move(new_path = 'f', path = ", x, ")"),
+                 paste0("system('mv ", p, " data/')"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  for (code in c(paste0("os.rename(", x, ", 'x')"), paste0("shutil.move(", x, ", 'x')"))) {
+    expect_identical(py(code), 4L, label = code)
+  }
+  # neighbours: a move inside the project writes (Python's token reading deletes too), one from
+  # a name the code computes deletes it; pandas' rename() is no move
+  for (code in c("file.rename('a.csv', 'b.csv')", "fs::file_move('a.csv', 'b.csv')",
+                 "system('mv a.csv b.csv')")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  expect_identical(lv("file.rename(f, 'b.csv')"), 3L)
+  expect_identical(py("os.rename('a.csv', 'b.csv')"), 3L)
+  expect_true(py("df = df.rename(columns={'a': 'b'})") <= 2L)
+})
+
+test_that("do.call() runs the quoted elements of a list written out (review F-23)", {
+  root = local_project()
+  x = deparse(file.path(withr::local_tempdir(tmpdir = dirname(tempdir())), "x"))
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c(paste0("do.call(identity, list(quote(unlink(", x, "))))"),
+                 paste0("do.call('identity', list(base::quote(unlink(", x, "))))"),
+                 paste0("rlang::exec(identity, quote(unlink(", x, ")))"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # neighbours: quote = TRUE passes them quoted
+  expect_true(lv(paste0("do.call(identity, list(quote(unlink(", x, "))), quote = TRUE)")) <= 2L)
 })
 
 test_that("routes to gptr's namespace are control or dynamic (IC-53, D-132)", {
@@ -1404,6 +1610,22 @@ test_that("a command run in a directory outside the project reads it (review rou
   expect_identical(lv("system('cd ~/.ssh && ls')"), 3L)
 })
 
+test_that("a relative cd moves from the directory the line moved to last (D-294)", {
+  root = local_project()
+  lv = function(cmd) risk_classify(cmd, root = root, kind = "command")
+  for (cmd in c("cd .gptr && cd extensions && echo x > guard.R",
+                "cd .git && cd hooks && echo x > pre-commit")) {
+    r = lv(cmd)
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = cmd)
+  }
+  for (cmd in c("cd data && ls && cd .. && rm -rf build",
+                "mkdir -p build && cd build && cmake .. && make && cd .. && rm -rf build")) {
+    expect_true(lv(cmd)$level < 4L, label = cmd)
+  }
+  # the folders a line may be in are kept: a later command is read in each
+  expect_identical(lv("cd sub && rm -rf ../../build")$level, 4L)
+})
+
 test_that("moving R's working directory out of the project is level 4 (review round 4)", {
   root = local_project()
   dir.create(file.path(root, "sub"))
@@ -1422,6 +1644,97 @@ test_that("moving R's working directory out of the project is level 4 (review ro
                  "withr::with_dir(tempdir(), x)")) {
     expect_identical(lv(code), 2L, label = code)
   }
+})
+
+test_that("here(), a restored directory and paths after a move are read (review F-6)", {
+  root = local_project()
+  lv = function(code, envir = NULL) gptr_risk(code, envir = envir, root = root)$level
+  for (code in c("setwd(here::here())", "setwd(here::here('data'))",
+                 "withr::with_dir(here::here('data'), x)",
+                 "owd = getwd(); tryCatch(setwd('data'), finally = setwd(owd))")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  # a directory the code computes that R is moved back from is 3, one it moves to 4
+  for (code in c("p = TRUE; if (p) owd = setwd('data'); setwd(owd)",
+                 "lapply(dirs, function(d) withr::with_dir(d, x))", "xfun::in_dir(d, x)")) {
+    expect_identical(lv(code), 3L, label = code)
+  }
+  for (code in c("setwd(here::here(d))", "setwd(d)",
+                 "if (p) owd = setwd('data'); owd = f(); setwd(owd)", "withr::local_dir(d)")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # so is a name the code binds to another value anywhere, by <<- or in with(), or in a loop, one
+  # it saved in another scope, and in a function body a formal or one saved in a branch
+  for (code in c("d = Sys.getenv('X'); local({ d = getwd() }); setwd(d)",
+                 "d = Sys.getenv('X'); f = function() d = getwd(); f(); setwd(d)",
+                 "d = Sys.getenv('X'); tryCatch(d <- getwd(), error = function(e) 1); setwd(d)",
+                 "owd = Sys.getenv('X'); if (FALSE) owd = getwd(); setwd(owd)",
+                 "if (p) owd = '/etc' else owd = getwd(); setwd(owd)",
+                 "owd = getwd(); local({ owd <<- Sys.getenv('X') }); setwd(owd)",
+                 "owd <<- getwd(); setwd(owd)", "with(df, owd <- getwd()); setwd(owd)",
+                 "for (i in 1:2) { if (i == 1) owd = getwd(); setwd(owd); owd = Sys.getenv('X') }",
+                 "local({ owd = getwd() }); setwd(owd)",
+                 "f = function() owd = getwd(); f(); setwd(owd)",
+                 "owd = getwd(); f = function(owd) setwd(owd); f('/etc')",
+                 "f = function(owd) { if (p) owd = getwd(); setwd(owd) }",
+                 "f = function() { if (p) owd = getwd(); setwd(owd) }; owd = '/etc'; f()")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # a relative path after a move is one in the directory R moved to
+  r = gptr_risk("setwd(tempdir()); writeLines('x', 'a.txt')", root = root)
+  expect_identical(r$flagged$path_class[r$flagged$fn == "writeLines"], "temp")
+  expect_identical(lv("setwd(tempdir()); unlink('a.txt')"), 2L)
+  expect_identical(lv("setwd('/'); x = 1; unlink('a.txt')"), 4L)
+  expect_identical(lv("unlink('a.txt')"), 3L)
+})
+
+test_that("a name assign(), list2env() or eval() binds in local() is one outside it (review F-7)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  o = deparse(out)
+  lv = function(code) gptr_risk(paste0("d = 'data'; ", code, "; setwd(d)"), root = root)$level
+  for (code in c(paste0("local({ assign('d', ", o, ", inherits = TRUE) })"),
+                 paste0("local({ assign('d', ", o, ", envir = globalenv()) })"),
+                 paste0("local({ assign('d', ", o, ", pos = 1) })"),
+                 paste0("local({ list2env(list(d = ", o, "), globalenv()) })"),
+                 paste0("list2env(list(d = ", o, "), globalenv())"),
+                 paste0("local({ eval(quote(d <- ", o, "), globalenv()) })"),
+                 paste0("eval(quote(d <- ", o, "), envir = globalenv())"),
+                 paste0("evalq(d <- ", o, ", globalenv())"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  x = deparse(file.path(out, "x"))
+  expect_identical(gptr_risk(paste0("p = 'a.csv'; local({ assign('p', ", x,
+                                    ", inherits = TRUE) }); unlink(p)"), root = root)$level, 4L)
+  # neighbours: local()'s own names stay in it
+  for (code in c("local({ x = 1 })", paste0("local({ d = ", o, " })"))) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+})
+
+test_that("with_dir() and in_dir() leave R where it was (D-293)", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c("withr::with_dir('data', x); setwd('sub')",
+                 "xfun::in_dir('data', x); setwd('data')")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  expect_identical(lv("withr::with_dir('data', x); setwd('/')"), 4L)
+})
+
+test_that("more directories than a reading follows are one the code computes (D-293)", {
+  skip_on_cran()
+  root = local_project()
+  code = paste0("if (p", 1:16, ") setwd('d", 1:16, "')", collapse = "\n")
+  t = system.time({
+    r = gptr_risk(code, root = root)
+  })[["elapsed"]]
+  expect_lt(t, 5)
+  expect_identical(r$level, 4L)
+  expect_match(r$flagged$call, "a directory the code computes", fixed = TRUE, all = FALSE)
+  # neighbours: six such lines are 64 directories, each still read
+  expect_identical(gptr_risk(paste0("if (p", 1:6, ") setwd('d", 1:6, "')", collapse = "\n"),
+                             root = root)$level, 2L)
 })
 
 test_that("a Windows wd is placed as Windows places it, on every OS (review round 4)", {
@@ -1478,10 +1791,9 @@ test_that("a drive root is outside the project as R 4.2 on Windows places paths 
   expect_identical(lv("list.files('.')"), 0L)
 })
 
-test_that("a project in a protected folder reads its root as its folders (review round 6)", {
-  # every path under .git or .claude is protected (Claude Code's worktrees live in
-  # .claude/worktrees), the project's root read whole too, as before review round 5; a read
-  # under .claude is also a secret path's (3)
+test_that("a project in a protected folder reads its paths as any project's (D-292)", {
+  # a path in the project is classed by its part below the root (Claude Code's worktrees live in
+  # .claude/worktrees), the project's root read whole as its folders
   base = withr::local_tempdir()
   for (dirs in list(c(".git", "proj"), c(".claude", "worktrees", "proj"))) {
     root = do.call(file.path, as.list(c(base, dirs)))
@@ -1490,12 +1802,17 @@ test_that("a project in a protected folder reads its root as its folders (review
     withr::local_dir(root)
     withr::local_options(gptr.project_root = root)
     lv = function(code) gptr_risk(code, root = root)$level
-    for (code in c("list.files('.')", "list.files()", "system('ls .')")) {
-      expect_identical(lv(code), if (dirs[[1L]] == ".git") 2L else 3L, label = code)
-      expect_identical(lv(code), lv("list.files('sub')"), label = code)
+    for (code in c("list.files('.')", "list.files()", "system('ls .')", "list.files('sub')",
+                   "x = read.csv('a.csv')")) {
+      expect_true(lv(code) <= 1L, label = code)
     }
-    expect_identical(lv("setwd('.')"), lv("setwd('sub')"))
-    expect_identical(lv("withr::local_dir('.')"), lv("withr::local_dir('sub')"))
+    for (code in c("writeLines('x', 'out.txt')", "setwd('.')", "setwd('sub')",
+                   "withr::local_dir('sub')")) {
+      expect_identical(lv(code), 2L, label = code)
+    }
+    expect_identical(lv("unlink('out.txt')"), 3L)
+    expect_identical(lv("unlink('.git/config')"), 4L)
+    expect_identical(lv("x = readLines('.env')"), 3L)
   }
 })
 

@@ -36,6 +36,25 @@ test_that("local variables named q, member names and formulas are not flagged", 
   expect_equal(guard("e = quote(q())")$blocked, character())
 })
 
+test_that("what bquote() and a formula lambda run is guarded (review F-2, F-3)", {
+  for (code in c("bquote(.(q()))", "bquote(.(readline()))", "eval(bquote(q()))",
+                 "purrr::walk(1, ~ q('no'))", "purrr::map(1, ~ readline())")) {
+    expect_true(length(guard(code)$blocked) > 0L, label = code)
+  }
+  for (code in c("fit = lm(y ~ q, data = d)", "plot(1, main = bquote(alpha == .(a)))",
+                 "purrr::map(1:3, ~ .x + 1)")) {
+    expect_identical(guard(code)$blocked, character(), label = code)
+  }
+})
+
+test_that("do.call() runs the quoted elements of a list written out (review F-23)", {
+  for (code in c("do.call(identity, list(quote(q())))", "rlang::exec(identity, quote(q()))",
+                 "do.call(identity, list(base::quote(readline())))")) {
+    expect_true(length(guard(code)$blocked) > 0L, label = code)
+  }
+  expect_identical(guard("do.call(f, list(quote(q())), quote = TRUE)")$blocked, character())
+})
+
 test_that("a local binding never hides a call of q, quit or another blocked function", {
   skip_on_cran()
   expect_equal(guard("q = 1; q('no')")$blocked, "q")

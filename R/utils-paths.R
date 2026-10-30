@@ -499,6 +499,10 @@ path_class_key = function(key, context) {
         grepl("^[a-z]:/?$", key, ignore.case = TRUE)) {
     return("critical")
   }
+  # a path in the project is guarded by its part below the root, as a project may sit in a
+  # protected folder (Claude Code's worktrees in .claude/worktrees)
+  ws = inside(context$root_key)
+  if (ws) key = substring(key, nchar(sub("/$", "", context$root_key)) + 1L)
   protected = has("(^|/)\\.git(/|$)") ||
     has("(^|/)\\.renviron$") ||
     has("(^|/)\\.env([.][^/]*)?$") ||
@@ -511,7 +515,7 @@ path_class_key = function(key, context) {
     has("(^|/)\\.gptr/vignette\\.rmd$") ||
     has("(^|/)\\.gptr/(skills|prompts)(/|$)")
   if (instructions) return("instructions")
-  if (inside(context$root_key)) return("workspace")
+  if (ws) return("workspace")
   if (inside(context$temp_key)) return("temp")
   "outside"
 }

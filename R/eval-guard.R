@@ -106,6 +106,14 @@ eval_guard_direct = function(fname, e) {
     return(NULL)
   }
   if (is.character(f) && length(f) == 1L && !is.na(f) && nzchar(f)) f = as.name(f)
+  # the call runs a quote()'s code, unless do.call() is told to quote
+  if (!isTRUE(eval_guard_arg(mc, "quote")$value)) {
+    args = lapply(args, function(x) {
+      q = !missing(x) && is.call(x) && length(x) == 2L &&
+        (identical(x[[1L]], quote(quote)) || identical(x[[1L]], quote(base::quote)))
+      if (q) x[[2L]] else x
+    })
+  }
   if (is.symbol(f) || eval_guard_is_ns(f)) as.call(c(list(f), args))
 }
 
@@ -206,7 +214,10 @@ eval_guard_walk = function(e, acc, scope = character()) {
   } else {
     eval_guard_walk(head, acc, scope)
   }
-  if (fname %in% c("~", "quote", "bquote", "expression")) return(invisible())
+  # quoted code is data; bquote()'s `.()` and a one-sided formula (a lambda) are code
+  if (fname %in% c("quote", "expression") || (fname == "~" && length(e) != 2L)) {
+    return(invisible())
+  }
   if (identical(fname, "function") && length(e) >= 3L && is.pairlist(e[[2L]])) {
     inner = c(scope, names(e[[2L]]), eval_guard_fun_locals(e[[3L]]))
     fm = e[[2L]]

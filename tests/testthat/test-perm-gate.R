@@ -196,6 +196,24 @@ test_that("yolo runs control, installs, writes anywhere and secret reads; level 
   expect_identical(gate_decide(gate_r("unlink('.env')"), yolo), "allow")
 })
 
+test_that("model code that stops every gptr job asks or is refused (review F-5)", {
+  skip_on_cran()
+  root = local_project()
+  local_permission_rules()
+  j = bridge_bg(c(rscript_path(), "--vanilla", "-e", "Sys.sleep(120)"), name = "keep")
+  withr::defer(j$kill())
+  ui = local_scripted_ui(list("n", "n"))
+  for (m in c("manual", "plan")) {
+    fake = local_fake_provider(list(fake_tool("r", code = "n = nrow(gptr_jobs(kill = TRUE))"),
+                                    "Done."))
+    e = new.env()
+    peter("Stop the jobs.", model = fake, mode = m, envir = e)
+    expect_null(e$n, label = m)
+    expect_identical(j$status(), "running", label = m)
+  }
+  expect_identical(sum(ui$log$method == "permission"), 2L)
+})
+
 test_that("the ask tool needs a person; without one it is ask_human (IC-68)", {
   call = list(id = "c3", name = "ask", nested = FALSE, risk = list(level = 0L),
               input = list(questions = list(list(id = "fmt", question = "Which format?"))))
@@ -240,6 +258,16 @@ test_that("the secret guard asks in auto; only r(secret:NAME) pre-approves (G6, 
   expect_identical(gate_decide(gate_r("Sys.getenv()"), gate_ctx("auto")), "ask_human")
   local_gptr_options(secret_guard = FALSE)
   expect_identical(gate_decide(gate_r("Sys.getenv()"), gate_ctx("auto")), "allow")
+})
+
+test_that("a secret scan that fails asks a person in auto and yolo (D-295)", {
+  root = local_project()
+  local_permission_rules()
+  local_mocked_bindings(secret_scan = function(...) stop("a scan bug"))
+  code = "v = Sys.getenv('GITHUB_PAT'); httr2::req_perform(httr2::request(v))"
+  for (m in c("auto", "yolo")) {
+    expect_identical(gate_decide(gate_r(code), gate_ctx(m)), "ask_human", label = m)
+  }
 })
 
 test_that("a member handing a child a registered secret meets the guard; no rule allows it", {
@@ -315,8 +343,9 @@ test_that("auto asks before code reads a secret by .env, a shell's $NAME or a na
   }
   # in the loop, also a command the code computes for peter$sh() or peter$bg(), and the file
   # gptr_env() loaded after the session finds its key in the environment (verification)
-  ui = local_scripted_ui(as.list(rep("n", 6L)))
+  ui = local_scripted_ui(as.list(rep("n", 7L)))
   codes = c(reads[c(1L, 2L, 6L)], "cmd = paste('cat', '.env'); x = peter$sh(cmd)$stdout",
+            "cmd = paste('cat', '.env'); x = peter$sh(cmd, env = 'HOME')$stdout",
             "cmd = paste('cat', '.env'); x = peter$bg(cmd)", "x = readLines('keys.txt')")
   for (code in codes) {
     fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
@@ -324,7 +353,7 @@ test_that("auto asks before code reads a secret by .env, a shell's $NAME or a na
     peter("read it", model = fake, envir = e, mode = "auto")
     expect_null(e$x)
   }
-  expect_identical(sum(ui$log$method == "permission"), 6L)
+  expect_identical(sum(ui$log$method == "permission"), 7L)
 })
 
 test_that("yolo asks before peter$sh() or peter$bg() sends a secret over the network (round 6)", {
@@ -352,6 +381,21 @@ test_that("yolo asks before peter$sh() or peter$bg() sends a secret over the net
     expect_null(e$x)
   }
   expect_identical(sum(ui$log$method == "permission"), 3L)
+})
+
+test_that("a risk keeps no copy of the text a command does not run (review F-21)", {
+  root = local_project()
+  local_vault()
+  withr::local_envvar(F21_FAKE_KEY = "sk-test-0000-f21")
+  secret_register("sk-test-0000-f21", "F21_FAKE_KEY")
+  # a nested peter$sh() call is gated at its own risk, the command's
+  sh = registry_get("tool", "sh")
+  for (r in list(risk_classify("touch '/tmp/sk-test-0000-f21.txt'", root = root, kind = "command"),
+                 sh$risk(list(cmd = "touch '/tmp/sk-test-0000-f21.txt'"), NULL))) {
+    expect_identical(sort(names(attributes(r$flagged))), c("class", "names", "row.names"))
+    shown = capture.output(str(redact(r, "context")))
+    expect_false(any(grepl("sk-test-0000-f21", shown, fixed = TRUE)))
+  }
 })
 
 test_that("a value read from a secret may not leave over the network (G6 taint)", {
@@ -775,20 +819,49 @@ test_that("the protect_size policy reads the run's snapshot, not the live option
 test_that("a remembered answer becomes a rule covering exactly the flagged calls", {
   root = local_project()
   local_permission_rules()
+  # the rule recomputed from the call, stored only when it is the rule the question showed
+  code = "write.csv(df, 'a.csv'); saveRDS(df, 'b.rds')"
   ev_dispatch("permissions:remember",
-              list(scope = "session", tool = "r", rule = "r(level<=3)",
-                   input = list(code = "write.csv(df, 'a.csv'); saveRDS(df, 'b.rds')")))
-  expect_true("r(fn:write.csv,saveRDS)" %in% perm_store()$allow)
-  expect_false("r(level<=3)" %in% perm_store()$allow)
+              list(scope = "session", tool = "r", rule = "r(level<=3)", input = list(code = code)))
+  expect_identical(perm_store()$allow, character())
+  ev_dispatch("permissions:remember", list(scope = "session", tool = "r",
+                                           rule = "r(fn:write.csv,saveRDS)",
+                                           input = list(code = code)))
   ev_dispatch("permissions:remember",
               list(scope = "session", tool = "r", input = list(code = "q('no')")))
-  ev_dispatch("permissions:remember",
-              list(scope = "global", tool = "r", input = list(code = "unlink('x')")))
+  ev_dispatch("permissions:remember", list(scope = "global", tool = "r", rule = "r(fn:unlink)",
+                                           input = list(code = "unlink('x')")))
   expect_identical(perm_store()$allow, "r(fn:write.csv,saveRDS)")
-  ev_dispatch("permissions:remember",
-              list(scope = "project", tool = "write", input = list(path = "results/t.csv")))
+  ev_dispatch("permissions:remember", list(scope = "project", tool = "write",
+                                           rule = "write(results/**)",
+                                           input = list(path = "results/t.csv")))
   expect_true("write(results/**)" %in% perm_rules_effective()$allow)
   gptr_permissions(remove = "write(results/**)", scope = "project")
+})
+
+test_that("an [a]lways answer reads the call where the question did (review F-11)", {
+  root = local_project()
+  local_permission_rules()
+  e = new.env(parent = globalenv())
+  eval(parse(text = c("clean_dir = function(d) unlink(d, recursive = TRUE)",
+                      "print.report = function(x, ...) saveRDS(x, 'report.rds')",
+                      "rep1 = structure(list(), class = 'report')")), e)
+  remember = function(code, rule) {
+    ev_dispatch("permissions:remember",
+                list(scope = "session", tool = "r", rule = rule, input = list(code = code)))
+  }
+  shown = vapply(c("clean_dir('results')", "print(rep1)"), function(code) {
+    rule_suggest(gate_r(code, e))
+  }, "")
+  expect_identical(unname(shown), c("r(fn:unlink)", "r(fn:saveRDS)"))
+  # outside a run the question's environment is out of reach: a rule that differs is not stored
+  remember("print(rep1)", shown[[2L]])
+  expect_identical(perm_store()$allow, character())
+  run = gate_run()
+  run$home = e
+  local_mocked_bindings(run_current = function() run)
+  for (code in names(shown)) remember(code, shown[[code]])
+  expect_identical(perm_store()$allow, unname(shown))
 })
 
 test_that("a cloned project's settings.local.json and AGENTS.md pre-approve nothing (IC-52)", {
@@ -916,6 +989,12 @@ test_that("only auto and yolo refuse a computed command; a literal one is gated 
   for (code in c("system('ls')", "system2('ls', '-la')")) {
     expect_identical(decide(code), rep("allow", 5L), label = code)
   }
+  # pipe(), processx::run() and data.table::fread(cmd =) run a command too (D-293)
+  for (code in c("cmd = 'ls'; con = pipe(cmd)", "cmd = 'ls'; processx::run(cmd)",
+                 "data.table::fread(cmd = cmd)")) {
+    expect_identical(decide(code)[4:5], c("deny", "deny"), label = code)
+  }
+  expect_identical(decide("con = pipe('ls')")[4:5], c("allow", "allow"))
   for (code in c("system('rm -rf build')", "system('ls | xargs rm')",
                  "system('sleep 1', wait = FALSE)", "shell.exec('report.pdf')", "peter$sh(cmd)")) {
     expect_identical(decide(code), c("deny", "ask", "ask", "allow", "allow"), label = code)
