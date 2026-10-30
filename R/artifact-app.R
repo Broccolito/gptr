@@ -786,7 +786,7 @@ artifact_browser_launch = function(args) {
         gptr_abort("The private headless browser directory did not finish cleanup: path remains.",
                    "io", operation = "close", path = root, cleanup_stage = "remaining")
       }
-      # Raw logs remain available to callers after the exact marked family settles.
+      unlink(c(stdout, stderr))
       invisible(NULL)
     })
   lease = list(browser = NULL, owner = owner)
