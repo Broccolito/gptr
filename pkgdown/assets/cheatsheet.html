@@ -435,7 +435,6 @@ gptr_config(providers = list(
   replay = "replay")</dt><dd>Rerun with no model call; <code>"live"</code> asks again.</dd>
           <dt>GPTR_REPLAY=replay Rscript analysis.R</dt><dd>Prove from the shell that a script needs no model.</dd>
           <dt>gptr_blocks("analysis.R")</dt><dd>Block status: fresh, stale, <span class="nowrap">user-edited</span> or undone.</dd>
-
           <dt>gptr_doc("report.Rmd")
 rmarkdown::render("report.Rmd")</dt><dd>Render as usual; blocks become <code>gptr-&lt;id&gt;</code> chunks.</dd>
           <dt>gptr_doc("analysis.ipynb", sync = TRUE)</dt><dd>Write the blocks queued while it was open.</dd>
@@ -462,7 +461,6 @@ rmarkdown::render("report.Rmd")</dt><dd>Render as usual; blocks become <code>gpt
         <p>The model calls <code>read</code>, <code>r</code>, <code>edit</code>, <code>write</code> and <code>ask</code>; in <code>r</code> it uses <code>peter$</code> helpers, which you can call too.</p>
         <dl>
           <dt>peter("Review R/.", tools = extended)</dt><dd>Presets: <code>minimal</code>, <code>standard</code>, <code>readonly</code> (<code>r</code> can still write files), <code>extended</code> (adds grep, find, ls).</dd>
-
           <dt>peter(q, tools = c("-write", "+grep"))</dt><dd>Remove or add single tools.</dd>
           <dt>peter$read("R/fit.R", limit = 40)
 peter$grep("lm\\(", path = "R")
@@ -474,7 +472,6 @@ peter$write("notes.txt", "done\n")</dt><dd>Edit text in place; write files atomi
 peter$bg(c("Rscript", "long.R"))</dt><dd>Run a program, or one in the background.</dd>
           <dt>peter$sql("SELECT cyl, AVG(mpg)
   FROM mtcars GROUP BY cyl", mtcars)</dt><dd>SQL on data frames; <code>peter$py()</code> runs Python.</dd>
-
           <dt>peter("Make a Shiny app of it.", survey)</dt><dd>An artifact: <code>app.R</code>, launched at the console.</dd>
           <dt>gptr_artifacts()
 gptr_artifacts("survey-view", open = TRUE)</dt><dd>List apps; open, stop or relaunch a version.</dd>
@@ -503,7 +500,6 @@ off = gptr_register(up)</dt><dd>Add a tool; <code>off()</code> removes it.</dd>
       <section class="panel">
         <h2>Teams, fan-outs, background</h2>
         <p>Members inherit the mode. A team fails only when no member finishes.</p>
-
         <dl>
           <dt>s = peter("Review fit.", agents = list(
   stats = agent(system = "Check stats."),
@@ -516,7 +512,6 @@ off = gptr_register(up)</dt><dd>Add a tool; <code>off()</code> removes it.</dd>
           <dt>b = peter("Check.", background = TRUE)
 gptr_wait(b)</dt><dd>Experimental: return at once; also <code>gptr_steer()</code>, <code>gptr_cancel()</code>, <code>gptr_jobs()</code>.</dd>
           <dt>gptr_usage(s, by = "agent")</dt><dd>Tokens and cost by session, agent, model or route.</dd>
-
         </dl>
       </section>
       <section class="panel">
