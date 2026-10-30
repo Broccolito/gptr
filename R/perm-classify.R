@@ -2350,14 +2350,15 @@ risk_path_exprs = function(a, arg) {
 # The base functions the classifier reads as base's: the helpers risk_fold() folds, and c() and
 # list() holding the variables of withr's setters.
 risk_base_helpers = c("stdout", "stderr", "getwd", "setwd", "tempdir", "tempfile", "path.expand",
-                      "normalizePath", "file", "gzfile", "bzfile", "xzfile", "c", "file.path",
-                      "paste0", "paste", "list")
+                      "normalizePath", "file", "gzfile", "bzfile", "xzfile", "list.files", "dir",
+                      "Sys.glob", "c", "file.path", "paste0", "paste", "list")
 
 #' A path expression built from literals and the names in `known` (each name's folded values,
 #' NA for one the code computes), folded; NULL when the code computes it, a call of a helper in
 #' `masked` (one the code or the session binds) included; "" for the console (tempdir() and
-#' tempfile() are this session's, here::here() is the project's root; getwd() is where the code
-#' has moved R to and setwd() returns where it was, `known`'s attributes `wd` and `owd`)
+#' tempfile() are this session's, here::here() is the project's root, Sys.glob() its pattern;
+#' getwd() is where the code has moved R to and setwd() returns where it was, `known`'s attributes
+#' `wd` and `owd`)
 #' @noRd
 risk_fold = function(x, known = NULL, masked = NULL) {
   if (is.character(x)) return(x)
@@ -2383,6 +2384,13 @@ risk_fold = function(x, known = NULL, masked = NULL) {
     parts = lapply(as.list(x)[-1L], risk_fold, known, masked)
     return(if (!any(vapply(parts, is.null, NA))) do.call(file.path, c(project_root(), parts)))
   }
+  # a listing of a folder names files in it, read as one there (`x`, as risk_glob_paths() names a
+  # part the code computes; fs's formals as written here)
+  if (identical(h$pkg, "fs") && identical(h$name, "dir_ls")) {
+    a = risk_args(x, function(path, all, recurse, type, glob, regexp, invert, fail, ...) NULL)
+    dir = if (!is.null(attr(a, "formals"))) risk_fold(a[["path"]] %||% ".", known, masked)
+    return(if (!is.null(dir)) file.path(dir, "x"))
+  }
   if (!is.call(x) || !is.symbol(x[[1L]])) return(NULL)
   fn = as.character(x[[1L]])
   if (fn %in% masked) return(NULL)
@@ -2398,8 +2406,15 @@ risk_fold = function(x, known = NULL, masked = NULL) {
                     masked)
     return(if (!is.null(dir)) file.path(dir, "file"))
   }
+  if (fn %in% c("list.files", "dir")) {
+    a = risk_args(x, fn, "base")
+    dir = if (isTRUE(risk_arg(a, "full.names"))) {
+      risk_fold(risk_arg(a, "path", 1L, default = TRUE), known, masked)
+    }
+    return(if (!is.null(dir)) file.path(dir, "x"))
+  }
   arg = switch(fn, path.expand = , normalizePath = "path",
-               file = , gzfile = , bzfile = , xzfile = "description")
+               file = , gzfile = , bzfile = , xzfile = "description", Sys.glob = "paths")
   if (!is.null(arg)) return(risk_fold(risk_arg(risk_args(x, fn, "base"), arg, 1L), known, masked))
   if (!fn %in% c("c", "file.path", "paste0", "paste")) return()
   # every argument as R passes it (paste0()'s `sep` is a part, `collapse` and `fsep` join them)
@@ -3047,7 +3062,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       b = risk_bound(list(e))
       for (nm in c(b$all, b$val)) known[[nm]] <<- NA_character_
     }
-    if (r$name == "for") note_assign(a[[1L]], "=", ctx)
+    # a for variable takes each value of its sequence
+    if (r$name == "for") note_assign(a[[1L]], "=", ctx, a[[2L]])
     if (r$name == "assign" && length(a)) {
       m = risk_args(e, "assign", "base")
       x = risk_arg(m, "x", 1L)

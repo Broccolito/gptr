@@ -1108,6 +1108,31 @@ test_that("a name assigned outside a function body holds the paths it may hold (
   expect_identical(gptr_risk(code, root = root)$level, 4L)
 })
 
+test_that("a for loop over a vector and a listing of a folder are read as its files (D-293)", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, envir = classify_env(), root = root)$level
+  for (code in c("file.remove(list.files('~', full.names = TRUE))",
+                 "unlink(Sys.glob('~/*'), recursive = TRUE)",
+                 "unlink(dir('~', full.names = TRUE), recursive = TRUE)",
+                 "fs::file_delete(fs::dir_ls('~'))",
+                 "for (f in c('/etc/gptr-a', 'b.csv')) unlink(f)",
+                 "for (f in list.files('~', full.names = TRUE)) file.remove(f)",
+                 "unlink(list.files('~', all.files = TRUE, full.names = TRUE))")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  for (code in c("for (f in list.files(tempdir(), full.names = TRUE)) file.remove(f)",
+                 "unlink(list.files(tempdir(), full.names = TRUE))")) {
+    expect_true(lv(code) <= 1L, label = code)
+  }
+  # neighbours: a folder in the project, names alone, a computed folder and a deleter handed to
+  # lapply()
+  for (code in c("file.remove(list.files('output', full.names = TRUE))",
+                 "file.remove(list.files('~'))", "file.remove(list.files(d, full.names = TRUE))",
+                 "lapply(fs, unlink)", "for (f in fs) unlink(f)")) {
+    expect_identical(lv(code), 3L, label = code)
+  }
+})
+
 test_that("routes to gptr's namespace are control or dynamic (IC-53, D-132)", {
   root = local_project()
   for (code in c("environment(gptr_config)", "dplyr::mutate(df, across(p, gptr_config))",
