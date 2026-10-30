@@ -937,6 +937,21 @@ ident_hyphen_name = function(expr) {
   if (!is.null(l) && !is.null(r)) paste0(l, "-", r)
 }
 
+#' Where the argument `nm` of the call that made frame number `n` was written: the frame that call
+#' was made from or, when it passed `nm` on through `...`, the frame of the first call up the chain
+#' that names it. An identifier is resolved there, so a function it makes keeps no frame that only
+#' forwarded it, nor that frame's forced dots (rule R2). Frames are read by number, never listed.
+#' @noRd
+ident_home = function(nm, n) {
+  repeat {
+    sc = sys.call(n)
+    n = sys.parents()[n]
+    if (n == 0L || nm %in% names(sc) || !any(vapply(as.list(sc), identical, NA, quote(...)))) {
+      return(sys.frame(n))
+    }
+  }
+}
+
 #' TRUE when the gateway must force the formal's promise (evaluated in its own environment, G3
 #' t2b): an unknown symbol bound where it is called, or an I() call
 #' @noRd

@@ -86,8 +86,9 @@ gptr_coach = function(..., harness = peter, check = NULL, coach = NULL, k = 1L,
   # a skill name taken since the harness was made is refused before anything starts
   coaching_validate(start$coaching)
   e = substitute(coach)
-  coach = if (ident_force_needed(e, "model", caller)) ident_value(coach, "model", e) else
-    resolve_identifier(e, "model", caller)
+  at = ident_home("coach", nf)
+  coach = if (ident_force_needed(e, "model", at)) ident_value(coach, "model", e) else
+    resolve_identifier(e, "model", at)
   check_function(check, "check", null = TRUE)
   k = check_number(k, "k", min = 1, max = 5, int = TRUE)
   strategy = check_choice(strategy, c("parallel", "sequential"), "strategy")
@@ -256,18 +257,20 @@ coach_task = function(sc, caller, ...) {
   }
   # a value comes from its own promise, so dots a wrapper passes on keep their frames
   args = list()
+  nf = sys.nframe()
   k = 1L
   while (k <= n) {
     e = exprs[[k]]
     if (pa[k]) {
+      at = ident_home(nms[k], nf)
       args[nms[k]] = list(if (identical(nms[k], "agents")) {
-        resolve_agents(e, caller)
+        resolve_agents(e, at)
       } else if (!nms[k] %in% harness_idents) {
         ...elt(k)
-      } else if (ident_force_needed(e, nms[k], caller)) {
+      } else if (ident_force_needed(e, nms[k], at)) {
         ident_value(...elt(k), nms[k], e)
       } else {
-        resolve_identifier(e, nms[k], caller)
+        resolve_identifier(e, nms[k], at)
       })
     }
     k = k + 1L

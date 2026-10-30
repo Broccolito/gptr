@@ -67,7 +67,7 @@ gptr_tailor = function(x = peter, ..., rules = NULL, coaching = NULL, dir = NULL
   session_control_check("gptr_tailor")
   check_string(dir, "dir", null = TRUE)
   spec = harness_spec(x)
-  spec$args = harness_merge(spec$args, harness_resolve_args(parent.frame(), ...))
+  spec$args = harness_merge(spec$args, harness_resolve_args(...))
   if (!is.null(rules)) spec$rules = rules
   if (!is.null(coaching)) spec$coaching = coaching
   spec$record = NULL
@@ -177,9 +177,9 @@ harness_plugins_check = function(plugins) {
   invisible(plugins)
 }
 
-#' The fixed arguments of a gptr_tailor() call, resolved in the caller as peter() resolves them
+#' The fixed arguments of a gptr_tailor() call, resolved as peter() resolves them
 #' @noRd
-harness_resolve_args = function(caller, ...) {
+harness_resolve_args = function(...) {
   exprs = as.list(substitute(list(...)))[-1L]
   nms = ...names() %||% rep("", ...length())
   nms[is.na(nms)] = ""
@@ -194,14 +194,16 @@ harness_resolve_args = function(caller, ...) {
     gptr_abort(paste0("`", nms[anyDuplicated(nms)], "` is given more than once."),
                "invalid_argument", arg = "...", expected = "each argument once")
   }
+  nf = sys.nframe()
   out = list()
   for (i in seq_along(nms)) {
     nm = nms[i]
     e = exprs[[i]]
+    at = ident_home(nm, nf)
     v = if (nm %in% harness_idents) {
-      harness_ident(e, nm, caller, function() ...elt(i))
+      harness_ident(e, nm, at, function() ...elt(i))
     } else if (identical(nm, "agents")) {
-      resolve_agents(e, caller)
+      resolve_agents(e, at)
     } else {
       ...elt(i)
     }
@@ -225,10 +227,11 @@ harness_ident = function(e, nm, caller, force) {
 #' A call's arguments with each `...` written out from the caller's dots as peter() reads them:
 #' identifiers resolved (peter() reads no `..i`), a literal as written (so a prompt is still
 #' interpolated), every other one as `..i`, named by its label when peter() would attach it as
-#' context unnamed (unless the label is a peter() argument), so the label stays. It holds the
-#' caller's frame, so it makes no closure and loops with `while` (rules R2, R3).
+#' context unnamed (unless the label is a peter() argument), so the label stays (`nf`: the
+#' harness call's frame number). It holds the caller's frame, so it makes no closure and loops
+#' with `while` (rules R2, R3).
 #' @noRd
-harness_expand = function(args, dots, envir) {
+harness_expand = function(args, dots, envir, nf) {
   exprs = as.list(eval(quote(substitute(list(...))), envir))[-1L]
   n = length(exprs)
   nms = names(exprs) %||% rep("", n)
@@ -248,12 +251,13 @@ harness_expand = function(args, dots, envir) {
   i = 1L
   while (i <= n) {
     e = exprs[[i]]
-    el[i] = list(if (!nms[i] %in% harness_idents) {
+    at = if (nms[i] %in% harness_idents) ident_home(nms[i], nf)
+    el[i] = list(if (is.null(at)) {
       if (lit[i]) e else as.name(paste0("..", i))
-    } else if (ident_force_needed(e, nms[i], envir)) {
+    } else if (ident_force_needed(e, nms[i], at)) {
       ident_value(eval(call("...elt", i), envir), nms[i], e)
     } else {
-      resolve_identifier(e, nms[i], envir)
+      resolve_identifier(e, nms[i], at)
     })
     i = i + 1L
   }
@@ -307,7 +311,7 @@ harness_call = function(fn, call, envir) {
   fwd = if (any(dots)) eval(quote(...names()), envir)
   join = c(intersect(names(spec$args), harness_listlike), if (!is.null(factory)) "extensions")
   if (any(fwd %in% join)) {
-    args = harness_expand(args, dots, envir)
+    args = harness_expand(args, dots, envir, sys.parent())
     fwd = NULL
   }
   for (nm in setdiff(names(spec$args), fwd)) {

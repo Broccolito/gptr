@@ -116,6 +116,20 @@ test_that("no copy of big after a harness call, direct and through a wrapper tha
                  label = "a harness through a wrapper whose extensions combine")
 })
 
+# copy-1: an identifier expression a wrapper forwards is evaluated where it was written, so the
+# kept function holds no wrapper frame and its forced dots
+test_that("no copy of big after an inline function forwarded through a wrapper (copy-1)", {
+  setup = c(copy_setup, "h0 = suppressMessages(gptr_tailor(peter, model = fake))",
+            paste("h1 = suppressMessages(gptr_tailor(peter, model = fake,",
+                  "extensions = function(g) NULL))"))
+  call = "s = w('describe', big, extensions = function(gptr) NULL)"
+  expect_no_copy(setup, c("w = function(...) peter(..., model = fake)", call),
+                 label = "peter() through a wrapper")
+  expect_no_copy(setup, c("w = function(...) h0(...)", call), label = "a harness through a wrapper")
+  expect_no_copy(setup, c("w = function(...) h1(...)", call),
+                 label = "a harness through a wrapper whose extensions combine")
+})
+
 # gptr_coach() refuses gptr.unsafe_no_permissions, so its row has a setup of its own; its runs
 # are R processes, called directly and through a wrapper
 test_that("no copy of big after gptr_coach('Count big.', big)", {
@@ -132,4 +146,6 @@ test_that("no copy of big after gptr_coach('Count big.', big)", {
   expect_no_copy(setup, paste("h =", call), label = "gptr_coach()")
   wrapped = c("w = function(...) gptr_coach(...)", paste("h =", sub("gptr_coach", "w", call)))
   expect_no_copy(setup, wrapped, label = "a wrapper of gptr_coach()")
+  inline = c(wrapped[1L], sub(")$", ", extensions = function(gptr) NULL)", wrapped[2L]))
+  expect_no_copy(setup, inline, label = "a wrapper of gptr_coach() with an inline function")
 })
