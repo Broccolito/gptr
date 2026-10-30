@@ -1553,21 +1553,46 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
 
 #' Recorded code of every turn of a (child) session, without outputs or comment lines (team
 #' blocks); attribute `secrets` when a marker stays in it, `value` the name the latest turn that
-#' designated one gave (as a block's `value=`), else none
+#' designated one gave (as a block's `value=`), else none, and `usage` its turns' tokens and cost
+#' (doc_usage_add())
 #' @noRd
 doc_session_code = function(session) {
   d = session_data(session)
   code = character()
   secrets = FALSE
   value = NULL
+  usage = doc_usage_none
   for (k in seq_len(d$turns %||% 0L)) {
     tb = doc_turn_body(doc_turn_entries(session, k), with_out = FALSE,
                        plan_mode = identical(d$mode, "plan"))
     code = c(code, tb$code)
     secrets = secrets || tb$secrets
     value = tb$value %||% value
+    usage = doc_usage_add(usage, tb)
   }
-  structure(code, secrets = secrets, value = value)
+  structure(code, secrets = secrets, value = value, usage = usage)
+}
+
+# no usage yet (doc_usage_add())
+doc_usage_none = list(tokens = c(0, 0), tokens_known = TRUE, cost = 0, cost_known = TRUE)
+
+#' The tokens and cost of two usages (doc_turn_body()'s fields: `tokens`, `tokens_known`, `cost`,
+#' `cost_known`); a total is known only when both are
+#' @noRd
+doc_usage_add = function(a, b) {
+  list(tokens = a$tokens + b$tokens, tokens_known = a$tokens_known && b$tokens_known,
+       cost = a$cost + b$cost, cost_known = a$cost_known && b$cost_known)
+}
+
+#' A block header with the `tokens=` and `cost=` of a usage (doc_usage_add()): tokens when known
+#' and not zero, cost when known
+#' @noRd
+doc_usage_header = function(header, usage) {
+  if (usage$tokens_known && any(usage$tokens > 0)) {
+    header$tokens = sprintf("%.0f/%.0f", usage$tokens[1L], usage$tokens[2L])
+  }
+  if (usage$cost_known) header$cost = format(round(usage$cost, 4L), scientific = FALSE)
+  header
 }
 
 #' Header facts common to every block; a harness call's block names the harness it ran
@@ -1622,11 +1647,7 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   body = redact(body, "persist")
   last = tb$last
   model = if (!is.null(last)) paste0(last$provider, "/", last$model) else d$model
-  header = doc_header_common(site, call_ordinal, model)
-  if (tb$tokens_known && any(tb$tokens > 0)) {
-    header$tokens = sprintf("%.0f/%.0f", tb$tokens[1L], tb$tokens[2L])
-  }
-  if (tb$cost_known) header$cost = format(round(tb$cost, 4L), scientific = FALSE)
+  header = doc_usage_header(doc_header_common(site, call_ordinal, model), tb)
   header$session = d$id
   header$turn = as.integer(turn)
   header$value = tb$value
@@ -1641,7 +1662,8 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
 
 #' The lines of a team or fan-out block (IC-47): one `## Agent` line per child in name order;
 #' children with exports or a designated value get their code in a child overlay, plus one
-#' assignment per export; `children=` holds `<name>:<session id>[:<value name>]` per child
+#' assignment per export; `children=` holds `<name>:<session id>[:<value name>]` per child, and
+#' `tokens=` and `cost=` the children's sums
 #' @noRd
 doc_team_block_lines = function(team, site, call_ordinal) {
   d = session_data(team)
@@ -1651,6 +1673,7 @@ doc_team_block_lines = function(team, site, call_ordinal) {
   children = list()
   ids = character()
   secrets = FALSE
+  usage = doc_usage_none
   for (nm in nms) {
     cd = session_data(kids[[nm]])
     txt = cd$last_text
@@ -1664,6 +1687,7 @@ doc_team_block_lines = function(team, site, call_ordinal) {
                                              doc_one_line(first))))
     exports = as.character(cd$exports %||% character())
     code = doc_session_code(kids[[nm]])
+    usage = doc_usage_add(usage, attr(code, "usage"))
     value = attr(code, "value")
     if (length(exports) || !is.null(value)) {
       secrets = secrets || isTRUE(attr(code, "secrets"))
@@ -1679,7 +1703,7 @@ doc_team_block_lines = function(team, site, call_ordinal) {
   }
   if (secrets) body = c(doc_secret_flag, body)
   model = if (length(nms)) session_data(kids[[nms[1L]]])$model else d$model
-  header = doc_header_common(site, call_ordinal, model)
+  header = doc_usage_header(doc_header_common(site, call_ordinal, model), usage)
   header$session = d$id
   header$turn = 1L
   header$kind = d$kind

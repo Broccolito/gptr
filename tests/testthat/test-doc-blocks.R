@@ -923,6 +923,19 @@ test_that("a team block has one line per child, child overlays and export assign
   expect_identical(h$kind, "team")
   expect_identical(h$children, paste0("code:", code_id, ",stats:", stats_id))
   expect_named(attr(lines, "children"), c("code", "stats"))
+  # the block's usage is its members' (doc_test_turn(): 250 in, 30 out, no cost)
+  expect_identical(h[c("tokens", "cost")], list(tokens = "250/30", cost = "0"))
+  td$children$stats = kid("stats", "anthropic/claude-opus-5-5", "Looks fine.", code = "y = 1")
+  priced = doc_test_turn("z = 1")
+  priced[[4L]]$message$usage$cost$total = 0.25
+  td$children$fan = doc_test_session(list(priced))
+  h = attr(doc_block_lines(team, 1L, list(format = "r", template = "Review"), 1L), "header")
+  expect_identical(h[c("tokens", "cost")], list(tokens = "750/90", cost = "0.25"))
+  priced[[2L]]$message$usage = NULL
+  td$children$fan = doc_test_session(list(priced))
+  h = attr(doc_block_lines(team, 1L, list(format = "r", template = "Review"), 1L), "header")
+  expect_null(h$tokens)
+  expect_null(h$cost)
 })
 
 # ---- Task 3 adaptations (IC-48, IC-62, IC-74, G6 5.6; dev/DEVIATIONS.md D-068) ----------------
