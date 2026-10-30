@@ -280,7 +280,8 @@ risk_wipe_class = function(p, root) {
 #' @noRd
 risk_glob_paths = function(p, op) {
   lead = regmatches(p, regexpr("^([A-Za-z]:)?[/\\\\]*", p))
-  parts = strsplit(substring(p, nchar(lead) + 1L), "[/\\\\]")[[1L]]
+  # an empty component (`a//b`) names no directory
+  parts = Filter(nzchar, strsplit(substring(p, nchar(lead) + 1L), "[/\\\\]")[[1L]])
   wild = grepl("[$`*?]|\\[.+\\]|%[A-Za-z_]+%", parts)
   if (!any(wild)) return(p)
   k = max(which(wild))
@@ -288,7 +289,6 @@ risk_glob_paths = function(p, op) {
   rx = paste0("\\[[^]]*\\]|[*?]+|\\$\\{[^}]*\\}|\\$[A-Za-z_0-9@*#?$!-]*|`[^`]*`?|",
               "%[A-Za-z_]+%")
   stand = ifelse(wild, gsub(rx, "x", parts, perl = TRUE), parts)
-  stand[stand == ""] = "x"
   names = risk_guard_names
   if (!grepl("^[.[]", parts[k])) names = names[!startsWith(names, ".")]
   hit = !grepl("[$`%]", parts[k]) & risk_glob_match(parts[k], names)
@@ -2359,14 +2359,17 @@ risk_s3_args = function(e, fn) {
   }), error = function(err) list(as.list(e)[-1L]))
 }
 
-#' The expressions a call may pass as its path argument: the matched one; for `...` rows, a
-#' wrapper that passes `...` on or a call R cannot match, every unnamed argument
+#' The expressions a call may pass as its path argument: the matched one, or the one named in its
+#' `...`; else every argument in a `...` row's `...`, or every unnamed argument (attribute `one`
+#' when only one of them is the path: a named argument R did not match)
 #' @noRd
 risk_path_exprs = function(a, arg) {
-  v = if (arg != "...") risk_arg(a, arg, default = TRUE)
+  dots = a[["..."]]
+  v = if (arg != "...") risk_arg(a, arg, default = TRUE) %||% risk_arg(as.list(dots), arg)
   if (!is.null(v)) return(list(v))
-  nms = names(a) %||% rep("", length(a))
-  as.list(a[["..."]] %||% a[!nzchar(nms)])
+  ps = as.list(dots %||% a)
+  if (arg != "..." || is.null(dots)) ps = ps[!nzchar(names(ps) %||% rep("", length(ps)))]
+  structure(ps, one = arg != "...")
 }
 
 # The base functions the classifier reads as base's: the helpers risk_fold() folds, and c() and
@@ -2544,6 +2547,14 @@ risk_bound = function(exprs) {
     val <<- c(val, b)
     other <<- c(other, b)
     if (h %in% c("for", "function")) all <<- c(all, val)
+    # the names assign() and list2env() write out
+    fn = risk_head(e[[1L]])$name
+    if (fn %in% c("assign", "list2env")) {
+      x = risk_arg(risk_args(e, fn, "base"), "x", 1L)
+      x = if (is.character(x)) x else if (is.call(x)) setdiff(names(x), "")
+      all <<- c(all, x)
+      other <<- c(other, x)
+    }
     xs = as.list(e)
     for (i in seq_along(xs)) if (!identical(xs[[i]], quote(expr = ))) visit(xs[[i]])
   }
@@ -2716,6 +2727,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   # The worst of the paths `ps` a call of `category` at `level` may read, write or delete.
   add_path = function(ps, category, level, ctx, label, name) {
     best = list(level = -1L)
+    # of arguments one of which is the path (write.csv(x, "out.csv")), those the code computes
+    # count only when it computes all that name a path
+    read = vapply(ps, function(p) any(nzchar(fold(p, known))), NA)
+    if (isTRUE(attr(ps, "one")) && any(read)) ps = ps[read]
     for (p in ps) {
       v = fold(p, known)
       w = v[nzchar(v)]
@@ -2732,7 +2747,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       if (!is.null(v) && category %in% c("file_write", "file_delete", "network")) {
         add_tg("files", w)
       }
-      if (lv > best$level) {
+      # of two paths at one level, the worse class (risk_cmd_worst()) is the one shown
+      if (lv > best$level || (lv == best$level && risk_cmd_worst(c(best$pc, pc)) != best$pc)) {
         path = if (length(w)) w[match(pc, cls)] else v[1L] %||% NA_character_
         best = list(level = lv, path = path, pc = pc, sec = sec)
       }

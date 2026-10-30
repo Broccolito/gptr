@@ -272,6 +272,8 @@ test_that("the fence denies writes outside, moving away from the folder, install
   expect_identical(r(sprintf("peter$write('%s', 'x')", out)), "deny")
   expect_identical(r(sprintf("write.csv(mtcars, '%s')", inside)), "allow")
   expect_identical(r("write.csv(mtcars, 'sub/x.csv')"), "allow")
+  expect_identical(r("readr::write_csv(mtcars, 'x.csv')"), "allow")
+  expect_identical(r("file.remove('a', f)"), "deny")
   expect_identical(r(sprintf("x = read.csv('%s')", out)), "allow")
   # a change of working folder is allowed only to the run's folder, written out
   expect_identical(r(sprintf("setwd('%s')", run)), "allow")
@@ -330,6 +332,58 @@ test_that("the fence reads a folder changer's name as a move only where R calls 
   }
 })
 
+test_that("the fence refuses R code that writes to a path or calls a function it computes", {
+  run = path_norm(withr::local_tempdir())
+  withr::local_options(gptr.project_root = run)
+  withr::local_dir(run)
+  fence = function(code) {
+    child_fence(list(name = "r", input = list(code = code), risk = gptr_risk(code)), NULL)
+  }
+  # `d` was set by an earlier call, so this call cannot show where the file goes
+  expect_match(fence("writeLines('x', file.path(d, 'w.txt'))")$reason,
+               "it writes only to paths gptr can read", fixed = TRUE)
+  for (code in c("unlink(file.path(d, 'old'))",
+                 "write.csv(mtcars, file.path(d, 'x.csv'), fileEncoding = 'UTF-8')",
+                 "write.csv(mtcars, file.path(d, 'x.csv'), na = '')")) {
+    expect_identical(fence(code)$decision, "deny", label = code)
+  }
+  for (code in c("do.call(paste0('write', 'Lines'), list('x', '/tmp/w.txt'))",
+                 "do.call(paste0('set', 'wd'), list('/tmp'))", "eval(parse(text = code))")) {
+    expect_match(fence(code)$reason, "it runs only code gptr can read", fixed = TRUE,
+                 label = code)
+  }
+  for (code in c("write.csv(mtcars, 'out.csv', na = '')",
+                 "writeLines('x', file.path('sub', 'a.txt'))",
+                 "d = 'res'; saveRDS(mtcars, file.path(d, 'm.rds'))",
+                 "m = lapply(1:3, function(i) i + 1)", "fit = lm(mpg ~ wt, data = mtcars)",
+                 "purrr::map(1:3, ~ .x + 1)",
+                 "tryCatch(read.csv('data/x.csv'), finally = message('done'))")) {
+    expect_null(fence(code), label = code)
+  }
+})
+
+test_that("a coaching run cannot write through a path or a function it computes", {
+  skip_on_cran()
+  local_project()
+  far = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  fake = gptr_fake_provider(list(
+    fake_tool("r", code = sprintf("d = '%s'", far)),
+    fake_tool("r", code = "writeLines('x', file.path(d, 'w.txt'))"),
+    fake_tool("r", code = "write.csv(mtcars, file.path(d, 'na.csv'), na = '')"),
+    fake_tool("r", code = "do.call(paste0('write', 'Lines'), list('x', file.path(d, 'dyn.txt')))"),
+    fake_tool("r", code = "do.call(paste0('set', 'wd'), list(d))"),
+    fake_tool("r", code = "wd = getwd(); write.csv(mtcars, 'out.csv')"),
+    "done"), name = "dynfake")
+  res = child_local(list(id = "w", role = "run", prompt = "Save it.", args = list(mode = "auto"),
+                         model = fake))$res
+  expect_identical(res$status, "idle")
+  expect_identical(list.files(far), character())
+  expect_identical(nrow(res$refusals), 4L)
+  expect_true(all(grepl("fence", res$refusals$reason, fixed = TRUE)))
+  expect_true(path_inside(res$objects$wd, tempdir()))
+  expect_identical(res$files$path, "out.csv")
+})
+
 test_that("a run's child: a fresh folder, the fence in the run and its sub-agent, events", {
   skip_on_cran()
   local_project()
@@ -382,7 +436,7 @@ test_that("a run's child runs no R script and keeps its shell commands in its fo
     fake_tool("r", code = sprintf("writeLines(%s, 'x.R')",
                                   deparse1(sprintf("writeLines('x', '%s')", out)))),
     fake_tool("r", code = "peter$script('x.R')"),
-    # computed calls are judged on their actual input, even when a literal call lists the member
+    # a computed call is refused, even when a literal call lists the member
     fake_tool("r", code = "f = peter$script; f('x.R')"),
     fake_tool("r", code = sprintf(paste0("peter$sh('true'); a = list('echo x > %s', '%s'); ",
                                          "names(a) = c('', paste0('w', 'd')); ",
@@ -392,8 +446,8 @@ test_that("a run's child runs no R script and keeps its shell commands in its fo
                          model = fake))$res
   expect_identical(res$status, "idle")
   expect_false(file.exists(out))
-  expect_identical(nrow(res$refusals), 1L)
-  expect_gte(lengths(regmatches(res$transcript, gregexpr("fence", res$transcript))), 3L)
+  expect_identical(nrow(res$refusals), 3L)
+  expect_true(all(grepl("fence", res$refusals$reason, fixed = TRUE)))
 })
 
 test_that("a value without a label R can use is bound under a name of its own", {

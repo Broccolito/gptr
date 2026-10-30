@@ -1780,11 +1780,11 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' is level 3: that of `withr::with_dir()` or `xfun::in_dir()`, and one saved with a plain
 #' `owd = setwd()` or `owd = getwd()` in a branch or a loop (`if (p) owd = setwd("data")`), but only
 #' for `setwd(owd)` in the scope that saved it and only when the code binds that name no other way
-#' anywhere (to another value, as a loop variable or a function's argument, with `<<-` or
-#' `assign()`, or by an assignment in `eval()` or `with()`); otherwise `setwd(owd)` to a directory
-#' the code computes stays level 4. A relative directory after `withr::with_dir()` or
-#' `xfun::in_dir()` counts as one the code computes. A drive-relative path such as `D:data` counts
-#' as outside on every OS.
+#' anywhere (to another value, as a loop variable or a function's argument, with `<<-`,
+#' `assign()` or `list2env()`, or by an assignment in `eval()` or `with()`); otherwise
+#' `setwd(owd)` to a directory the code computes stays level 4. A relative directory after
+#' `withr::with_dir()` or `xfun::in_dir()` counts as one the code computes. A drive-relative path
+#' such as `D:data` counts as outside on every OS.
 #' The classifier does not follow the working directory changed in other ways (such as
 #' `usethis::local_project()`, `get("setwd")`, the `wd` of `callr::r()`, or `env` given `-C` among
 #' other short options, `env -iC DIR`, or as an abbreviated `--chdir`, `env --chd=DIR`), nor read

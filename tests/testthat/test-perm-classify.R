@@ -455,6 +455,15 @@ test_that("text encodings and long glob words are read safely (D-061)", {
   expect_identical(risk_glob_rx(strrep("[", 3L)), "^\\[\\[\\[\\z")
 })
 
+test_that("a doubled slash in a glob word names no directory of its own (review glob-1)", {
+  root = local_project()
+  for (cmd in c("cp x ./.gptr/sett*", "cp x .//.gptr//sett*", "tee .//.Renv* < x")) {
+    expect_identical(flags_level(risk_command(cmd, root)), 4L, label = cmd)
+  }
+  expect_identical(risk_glob_paths("/p/.//*", "delete"), risk_glob_paths("/p/./*", "delete"))
+  expect_identical(risk_glob_paths("a/*//b", "write"), risk_glob_paths("a/*/b", "write"))
+})
+
 # The arrow and magrittr's pipe are built, not typed: model code uses them, gptr's sources do not
 la = paste0("<", "-")
 mp = paste0("%", ">%")
@@ -1209,6 +1218,32 @@ test_that("an argument named in part is read while its namespace is not loaded (
   expect_identical(lv("fs::link_create(p = 'sub', n = 'lnk')"), 2L)
 })
 
+test_that("a path argument R cannot match is the literal one, a tie the worse class (F-58)", {
+  root = local_project()
+  pc = function(code) gptr_risk(code, root = root)$flagged$path_class
+  # write.csv()'s file is in its `...`, next to the data the code computes
+  for (code in c("write.csv(mtcars, 'out.csv')", "write.csv2(x, 'sub/x.csv')",
+                 "readr::write_csv(mtcars, 'x.csv')", "data.table::fwrite(mtcars, 'x.csv')",
+                 "write.csv(mtcars, file = 'out.csv')", "write.csv(mtcars, 'out.csv', na = '')",
+                 "write.csv(x = mtcars, 'out.csv')")) {
+    expect_identical(pc(code), "workspace", label = code)
+  }
+  # an option named in `...` is not the path, a path named there is the only one, and an empty
+  # literal names no path
+  for (code in c("write.csv(mtcars, f)", "write.csv(mtcars, file.path(d, 'a.csv'))",
+                 "file.remove('a', f)", "file.remove(f, 'a')",
+                 "write.csv(mtcars, file.path(d, 'a.csv'), fileEncoding = 'UTF-8')",
+                 "write.csv(mtcars, file = f, fileEncoding = 'UTF-8')",
+                 "write.csv2(mtcars, f, dec = ',')", "write.csv(mtcars, f, na = '')",
+                 "write.csv('a', file = f)", "readr::write_csv(mtcars, f, '')")) {
+    expect_identical(pc(code), "unknown", label = code)
+  }
+  expect_identical(gptr_risk("write.csv(mtcars, 'out.csv')", root = root)$level, 2L)
+  expect_identical(gptr_risk("write.csv(mtcars, f, na = '')", root = root)$level, 2L)
+  expect_identical(gptr_risk("readr::write_csv(mtcars, f, '')", root = root)$level, 2L)
+  expect_identical(gptr_risk("file.remove('a', f)", root = root)$level, 3L)
+})
+
 test_that("a move deletes its source in R, Python and the shell alike (D-293)", {
   root = local_project()
   p = file.path(withr::local_tempdir(tmpdir = dirname(tempdir())), "x")
@@ -1677,7 +1712,12 @@ test_that("here(), a restored directory and paths after a move are read (review 
                  "f = function() owd = getwd(); f(); setwd(owd)",
                  "owd = getwd(); f = function(owd) setwd(owd); f('/etc')",
                  "f = function(owd) { if (p) owd = getwd(); setwd(owd) }",
-                 "f = function() { if (p) owd = getwd(); setwd(owd) }; owd = '/etc'; f()")) {
+                 "f = function() { if (p) owd = getwd(); setwd(owd) }; owd = '/etc'; f()",
+                 # assign() and list2env() too, wherever they come in a loop
+                 "for (i in 1:2) { if (p) owd = getwd(); setwd(owd); assign('owd', f()) }",
+                 "repeat { if (p) owd = getwd(); setwd(owd); list2env(list(owd = f()), e) }",
+                 "f = function() { if (p) owd = getwd(); setwd(owd) }; assign('owd', '/'); f()",
+                 "d = 'data'; for (i in 1:2) { setwd(d); base::assign('d', '/etc') }")) {
     expect_identical(lv(code), 4L, label = code)
   }
   # a relative path after a move is one in the directory R moved to

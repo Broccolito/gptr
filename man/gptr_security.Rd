@@ -157,11 +157,11 @@ and in \code{tryCatch(finally = setwd(owd))}. A directory the code computes that
 is level 3: that of \code{withr::with_dir()} or \code{xfun::in_dir()}, and one saved with a plain
 \code{owd = setwd()} or \code{owd = getwd()} in a branch or a loop (\code{if (p) owd = setwd("data")}), but only
 for \code{setwd(owd)} in the scope that saved it and only when the code binds that name no other way
-anywhere (to another value, as a loop variable or a function's argument, with \verb{<<-} or
-\code{assign()}, or by an assignment in \code{eval()} or \code{with()}); otherwise \code{setwd(owd)} to a directory
-the code computes stays level 4. A relative directory after \code{withr::with_dir()} or
-\code{xfun::in_dir()} counts as one the code computes. A drive-relative path such as \code{D:data} counts
-as outside on every OS.
+anywhere (to another value, as a loop variable or a function's argument, with \verb{<<-},
+\code{assign()} or \code{list2env()}, or by an assignment in \code{eval()} or \code{with()}); otherwise
+\code{setwd(owd)} to a directory the code computes stays level 4. A relative directory after
+\code{withr::with_dir()} or \code{xfun::in_dir()} counts as one the code computes. A drive-relative path
+such as \code{D:data} counts as outside on every OS.
 The classifier does not follow the working directory changed in other ways (such as
 \code{usethis::local_project()}, \code{get("setwd")}, the \code{wd} of \code{callr::r()}, or \code{env} given \code{-C} among
 other short options, \verb{env -iC DIR}, or as an abbreviated \code{--chdir}, \code{env --chd=DIR}), nor read
