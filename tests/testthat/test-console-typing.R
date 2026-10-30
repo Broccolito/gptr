@@ -66,7 +66,7 @@ keys_once = function(batches, when) {
   }
 }
 
-char_mode = c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0", "paste")
+char_mode = c("-icanon", "-echo", "-iexten", "-isig", "noflsh", "min", "1", "time", "0", "paste")
 
 last_message = function(req) req$messages[[length(req$messages)]]
 
