@@ -940,7 +940,8 @@ child_objects = function(env, given) {
 }
 
 #' The files a run wrote or changed in its scratch folder (at most 100), with their text
-#' clipped; binary files have no text
+#' clipped; binary files have no text. A read that stops inside a character leaves its last
+#' bytes out.
 #' @noRd
 child_files = function(dir, before) {
   now = list.files(dir, recursive = TRUE, all.files = TRUE, full.names = TRUE)
@@ -948,8 +949,11 @@ child_files = function(dir, before) {
   now = utils::head(now[is.na(before[now]) | before[now] != sums], 100L)
   text = vapply(now, function(f) {
     b = readBin(f, "raw", n = 200000L)
-    txt = if (!any(b == 0)) rawToChar(b) else NA_character_
-    if (is.na(txt) || !validUTF8(txt)) NA_character_ else child_clip(as_utf8(txt), 50000L)
+    if (any(b == 0)) return(NA_character_)
+    cut = Find(function(k) validUTF8(rawToChar(utils::head(b, length(b) - k))),
+               if (file.size(f) > length(b)) 0:3 else 0L)
+    if (is.null(cut)) NA_character_ else
+      child_clip(as_utf8(rawToChar(utils::head(b, length(b) - cut))), 50000L)
   }, "", USE.NAMES = FALSE)
   data.frame(path = substring(now, nchar(dir) + 2L), bytes = file.size(now), text = text)
 }

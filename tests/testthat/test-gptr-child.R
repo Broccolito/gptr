@@ -520,6 +520,18 @@ test_that("a run's result R cannot encode keeps all but its value and objects", 
   expect_match(res$objects$big, "^<integer>")
 })
 
+test_that("a large UTF-8 file keeps its text when the read stops inside a character", {
+  dir = withr::local_tempdir()
+  # 300,001 bytes, the 200,000th of them the first byte of an e-acute
+  writeBin(c(charToRaw(strrep("a\u00e9", 1e5)), charToRaw("a")), file.path(dir, "big.csv"))
+  writeBin(as.raw(c(0x61, 0x00, 0x62)), file.path(dir, "nul.dat"))
+  files = child_files(dir, character())
+  expect_identical(files$text[files$path == "nul.dat"], NA_character_)
+  big = files$text[files$path == "big.csv"]
+  expect_identical(substr(big, 1L, 4L), "a\u00e9a\u00e9")
+  expect_match(big, "[... clipped: ", fixed = TRUE)
+})
+
 test_that("a run that needs approval ends blocked", {
   skip_on_cran()
   local_project()
