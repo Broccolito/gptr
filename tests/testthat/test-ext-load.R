@@ -218,6 +218,24 @@ test_that("gptr_reload() re-declares lazily activated plugins", {
   expect_equal(runs$n, 2L)
 })
 
+test_that("gptr_reload() retries an extension file that failed to load (F-114)", {
+  skip_on_cran()
+  local_user_dirs()
+  f = file.path(gptr_user_dir("config", create = TRUE), "extensions", "p17-typo.R")
+  dir.create(dirname(f))
+  writeLines("function(gptr) gptr$register(", f)
+  withr::defer(for (r in registry_candidates("command", "p17-typo", NULL)) registry_remove(r$id))
+  expect_warning(plugins_sync())
+  writeLines(c("function(gptr) {",
+               "  gptr$register(gptr::gptr_command(\"p17-typo\", function(args, ctx) \"ok\"))",
+               "}"), f)
+  plugins_sync()
+  expect_null(registry_get("command", "p17-typo"))
+  gptr_reload()
+  plugins_sync()
+  expect_identical(registry_get("command", "p17-typo")$handler("", NULL), "ok")
+})
+
 test_that("gptr_reload() is refused from model code during a run (IC-53)", {
   reg = local_registry()
   reg$executing = c(c1 = "u1")

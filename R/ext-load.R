@@ -331,7 +331,8 @@ ext_watch_unload = function(pkg, source = paste0("plugin:", pkg)) {
 #'
 #' Bumps the registry generation, so that extension API objects captured by old code signal
 #' `gptr_error_stale_api`, and re-declares lazily activated plugins from their manifests (their
-#' factories run again on first use). Discovery of declarative resources (skills, prompts, agents,
+#' factories run again on first use). Extension files that failed to load are loaded again at
+#' the next session start. Discovery of declarative resources (skills, prompts, agents,
 #' MCP configurations, plugin manifests) is keyed on the generation, so it runs again on next
 #' use. Sessions whose prompt is already frozen are not changed. Refused from model code while a
 #' run executes a tool, unless the user approved that call.
@@ -346,6 +347,8 @@ gptr_reload = function() {
   registry_enter(reg)
   on.exit(registry_leave(reg), add = TRUE)
   reg$generation = reg$generation + 1L
+  res = res_state()
+  res$loaded = Filter(isTRUE, res$loaded)
   for (eid in ls(reg$exts)) {
     info = get0(eid, envir = reg$exts, inherits = FALSE)
     if (is.null(info)) next

@@ -1371,7 +1371,9 @@ settings_model_warn = function(patch, scope) {
 #' `tools::R_user_dir("gptr", "config")/settings.json`; project settings live in `.gptr/`.
 #' A no-argument call always reads effective values, even when `.scope` is supplied. Inspect
 #' `attr(gptr_config(), "sources")` to see their origins. Named lists merge with lower layers;
-#' protected objects such as `providers` must be set as a whole named list.
+#' protected objects such as `providers` must be set as a whole named list. A `plugins` entry
+#' starting with `./` or `../`, like a relative `skills.paths` entry, is found from the project
+#' root, not from R's working directory.
 #'
 #' @section Choosing controls:
 #' Use settings for defaults such as `model`, `mode`, `context`, `budget`, `record`, `replay`

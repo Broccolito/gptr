@@ -12,7 +12,8 @@ The new registry generation (an integer), invisibly.
 \description{
 Bumps the registry generation, so that extension API objects captured by old code signal
 \code{gptr_error_stale_api}, and re-declares lazily activated plugins from their manifests (their
-factories run again on first use). Discovery of declarative resources (skills, prompts, agents,
+factories run again on first use). Extension files that failed to load are loaded again at
+the next session start. Discovery of declarative resources (skills, prompts, agents,
 MCP configurations, plugin manifests) is keyed on the generation, so it runs again on next
 use. Sessions whose prompt is already frozen are not changed. Refused from model code while a
 run executes a tool, unless the user approved that call.

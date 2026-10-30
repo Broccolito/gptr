@@ -820,7 +820,7 @@ kind_define = function(name, validate, resolve = c("first", "all"), fields = cha
 #' The definition of a kind, or gptr_error_unknown_kind (a gptr_error_invalid_spec)
 #' @noRd
 kind_get = function(name) {
-  ok = rlang::is_string(name)
+  ok = rlang::is_string(name) && nzchar(name)
   k = if (ok) get0(name, envir = kinds_env(), inherits = FALSE)
   if (is.null(k)) {
     label = if (ok) name else "?"
