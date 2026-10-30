@@ -386,8 +386,8 @@ worker_registry = function(sids) {
   list(specs = specs, plugins = plugins_enabled(), filters = reg$filters)
 }
 
-#' The values of the `objects =` names, read from `base` and its parents (a classed error names a
-#' missing one)
+#' The `objects =` names, each once, checked to exist in `base` or its parents (a classed error
+#' names a missing one)
 #' @noRd
 worker_ship_objects = function(names, base) {
   names = unique(as.character(names))
@@ -398,20 +398,23 @@ worker_ship_objects = function(names, base) {
                  "invalid_argument", arg = "objects", expected = "names of existing objects")
     }
   }
-  mget(names, envir = base, inherits = TRUE)
+  names
 }
 
-#' The worker spec `w` with the values of its objects, read from `home`, and, when they hold any,
-#' `secrets`: the parent's registered secrets whose values occur in those objects, so the child
-#' redacts them too (D-295). Only those values travel, as they already do inside the objects: a
-#' spec file carries no other key (IC-70).
+#' Saves the worker spec `w` to `path` with the values of its objects, read from `home` into a
+#' list cleared in place once saved, so the caller's objects are not left referenced (rule R6),
+#' and, when they hold any, `secrets`: the parent's registered secrets whose values occur in those
+#' objects, so the child redacts them too (D-295). Only those values travel, as they already do
+#' inside the objects: a spec file carries no other key (IC-70).
 #' @noRd
-worker_spec_values = function(w, home) {
-  w$objects = worker_ship_objects(w$object_names, home)
-  if (!length(w$objects)) return(w)
-  w$secrets = secrets_held(list(serialize(w$objects, NULL, ascii = FALSE,
-                                          refhook = worker_refhook)))
-  w
+worker_spec_save = function(w, home, path) {
+  w$objects = mget(worker_ship_objects(w$object_names, home), envir = home, inherits = TRUE)
+  on.exit(for (j in seq_along(w$objects)) w$objects[j] = list(NULL), add = TRUE)
+  if (length(w$objects)) {
+    w$secrets = secrets_held(list(serialize(w$objects, NULL, ascii = FALSE,
+                                            refhook = worker_refhook)))
+  }
+  save_rds(w, path, refhook = worker_refhook)
 }
 
 #' The provider whose key a worker gets in its environment: one registered for the process that
@@ -608,7 +611,7 @@ worker_spawn = function(st) {
   dir.create(st$dir, mode = "0700")
   spec_path = file.path(st$dir, "spec.rds")
   st$result_path = file.path(st$dir, "result.rds")
-  save_rds(worker_spec_values(w, st$home), spec_path, refhook = worker_refhook)
+  worker_spec_save(w, st$home, spec_path)
   marker = proc_marker_new()
   set = c(GPTR_WORKER = "1", GPTR_SUBAGENT_DEPTH = as.character(w$depth),
           GPTR_PROJECT_ROOT = w$settings$project_root)

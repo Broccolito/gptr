@@ -541,7 +541,10 @@ test_that("a worker selects the installed Rscript entry without shipping its fun
 test_that("objects are shipped by name from the caller's environment", {
   e = new.env()
   e$d = 1:3
-  expect_identical(worker_ship_objects("d", e), list(d = 1:3))
+  expect_identical(worker_ship_objects(c("d", "d"), e), "d")
+  path = withr::local_tempfile(fileext = ".rds")
+  worker_spec_save(list(object_names = "d"), e, path)
+  expect_identical(readRDS(path)$objects, list(d = 1:3))
   expect_error(worker_ship_objects("nope", e), class = "gptr_error_invalid_argument")
 })
 
@@ -657,9 +660,11 @@ test_that("a registered secret in a shipped object reaches the worker's model re
   key = "p19-cfg-value-fakefakefake0042"
   secret_register(key, "CFG_TOKEN")
   secret_register("p19-other-value-fakefake0043", "OTHER_TOKEN")
-  w = worker_spec_values(list(object_names = "cfg"), list2env(list(cfg = list(token = key))))
-  expect_identical(w$secrets, list(list(name = "CFG_TOKEN", value = key)))
-  expect_null(worker_spec_values(list(object_names = character()), emptyenv())$secrets)
+  path = withr::local_tempfile(fileext = ".rds")
+  worker_spec_save(list(object_names = "cfg"), list2env(list(cfg = list(token = key))), path)
+  expect_identical(readRDS(path)$secrets, list(list(name = "CFG_TOKEN", value = key)))
+  worker_spec_save(list(object_names = character()), emptyenv(), path)
+  expect_null(readRDS(path)$secrets)
   local_team_fake(eval(bquote(function(request) {
     if (!length(request$last_results)) return(list(tool = "r", input = list(code = "str(cfg)")))
     seen = paste(unlist(request$messages), collapse = "\n")
