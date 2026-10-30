@@ -1465,6 +1465,7 @@ codex_hook_command = function(args, event) {
 }
 
 test_that("a confined exec is ephemeral, read-only, without Codex's own tools, and hooked", {
+  local_mocked_bindings(pcli_is_windows = function() FALSE)
   withr::local_envvar(CODEX_HOME = withr::local_tempdir())
   head = c("exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
            "--skip-git-repo-check", "-m", "gpt-5.5", "-C", "/w")
