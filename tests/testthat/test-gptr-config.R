@@ -1353,6 +1353,24 @@ test_that("gptr_config() validates keys, scopes and values", {
   expect_identical(settings_get("egress")$corp, "ack")
 })
 
+test_that("object settings check the values of their known fields (F-115)", {
+  skip_on_cran()
+  local_gw()
+  bad = list(budget = list(cost = "cheap"), skills = list(budget = "x"),
+             mcp = list(exposure = "bogus"), subagents = list(max_depth = "two"),
+             plot = list(width = "wide"), doc = list(output_lines = "many"),
+             cache = list(ttl = "bogus"))
+  for (k in names(bad)) {
+    cnd = expect_error(do.call(gptr_config, c(bad[k], .scope = "session")),
+                       class = "gptr_error_invalid_argument")
+    expect_identical(cnd$arg, paste0(k, ".", names(bad[[k]])))
+  }
+  expect_identical(settings_read("session"), list())
+  gptr_config(budget = list(cost = 2, turns = NULL), mcp = list(exposure = "direct"),
+              .scope = "session")
+  expect_identical(settings_read("session")$budget, list(cost = 2, turns = NULL))
+})
+
 test_that("gptr_config(filters = ) applies the scope's filters to the registry (04 10.1)", {
   local_gw(workspace = FALSE)
   box = new.env()

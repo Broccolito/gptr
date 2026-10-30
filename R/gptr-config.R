@@ -27,13 +27,14 @@ gateway_state = function() {
 
 # ------------------------------------------------------------------ core settings (contract 11.2)
 
-#' The core settings of contract section 11.2 as plain records
+#' The core settings of contract section 11.2 as plain records; an object's `fields` give the
+#' type of each known field, then its choices
 #' @noRd
 settings_core = function() {
   rec = function(name, default, type, description, choices = NULL, tighten = NULL,
-                 scope = "both") {
+                 scope = "both", fields = NULL) {
     list(name = name, default = default, type = type, description = description,
-         choices = choices, tighten = tighten, scope = scope)
+         choices = choices, tighten = tighten, scope = scope, fields = fields)
   }
   list(
     rec("version", 1L, "int", "Settings file format version."),
@@ -55,22 +56,31 @@ settings_core = function() {
         choices = c("ask", "file", "active-document", "off")),
     rec("plugins", character(), "chrs", "Plugins enabled for every session."),
     rec("filters", character(), "chrs", "Registry filters such as -builtin:mcp."),
-    rec("skills", list(budget = 1500L), "object", "Skill paths and catalog budget."),
+    rec("skills", list(budget = 1500L), "object", "Skill paths and catalog budget.",
+        fields = list(paths = "chrs", budget = "int")),
     rec("mcp", list(exposure = "r", budget = 1500L,
                     import = c("claude-code", "claude-desktop", "codex", "cursor", "vscode", "pi")),
-        "object", "MCP exposure, catalog budget and imported configurations."),
+        "object", "MCP exposure, catalog budget and imported configurations.",
+        fields = list(exposure = c("choice", "r", "direct", "deferred", "hidden"),
+                      budget = "int", import = "chrs")),
     rec("subagents", list(max_depth = 1L, max_active = 8L, max_workers = NULL, max_cli = 4L,
-                          max_tasks = 8L), "object", "Sub-agent limits."),
+                          max_tasks = 8L), "object", "Sub-agent limits.",
+        fields = list(max_depth = "int", max_active = "int", max_workers = "int",
+                      max_cli = "int", max_tasks = "int")),
     rec("output_tokens", NULL, "int_or_null", "Maximum output tokens per request."),
     rec("plot", list(width = 768L, height = 512L, res = 120L), "object",
-        "Size of plots sent to the model."),
+        "Size of plots sent to the model.",
+        fields = list(width = "int", height = "int", res = "int")),
     rec("budget", list(tokens = 2000000, cost = 5, turns = NULL), "object",
-        "Budget per top-level call; null disables a limit."),
-    rec("cache", list(ttl = "gap"), "object", "Prompt-cache tail TTL policy."),
+        "Budget per top-level call; null disables a limit.",
+        fields = list(tokens = "num_or_null", cost = "num_or_null", turns = "int")),
+    rec("cache", list(ttl = "gap"), "object", "Prompt-cache tail TTL policy.",
+        fields = list(ttl = c("choice", "gap", "5m", "1h"))),
     rec("compactor", "checkpoint", "chr", "Compactor used at the threshold."),
     rec("compact_at", 200000, "num_or_null", "Compaction soft cap in tokens."),
     rec("checkpoint", "on", "choice", "Checkpoints for undo.", choices = c("on", "files", "off")),
-    rec("doc", list(outputs = TRUE, output_lines = 12L), "object", "Recorded output lines."),
+    rec("doc", list(outputs = TRUE, output_lines = 12L), "object", "Recorded output lines.",
+        fields = list(outputs = "flag", output_lines = "int")),
     rec("cache_commit", list(s1 = TRUE, s2 = FALSE), "object", "Which caches are committed."),
     rec("ui", NULL, "chr_or_null", "UI backend name."),
     rec("frontend", NULL, "chr_or_null", "Console front end name."),
@@ -88,10 +98,11 @@ settings_core = function() {
 
 #' A validator for one core setting (the `validate` field of its `setting` spec)
 #' @noRd
-setting_validator = function(name, type, choices = NULL) {
+setting_validator = function(name, type, choices = NULL, fields = NULL) {
   force(name)
   force(type)
   force(choices)
+  force(fields)
   function(value) {
     switch(type,
       int = as.integer(check_number(value, name, min = 0, int = TRUE)),
@@ -101,9 +112,10 @@ setting_validator = function(name, type, choices = NULL) {
       chr = check_string(value, name),
       chr_or_null = check_string(value, name, null = TRUE),
       ident = check_string(value, name, null = TRUE),
+      flag = check_flag(value, name),
       choice = gateway_choice(value, choices, name),
       chrs = as.character(check_strings(value, name)),
-      object = settings_check_object(value, name),
+      object = settings_check_object(value, name, fields),
       providers = settings_check_providers(value, name),
       value)
   }
@@ -113,12 +125,19 @@ setting_validator = function(name, type, choices = NULL) {
 #' @noRd
 settings_is_object = function(x) is.list(x) && !is.object(x) && (!length(x) || !is.null(names(x)))
 
-#' Checks that a setting value is a JSON object with non-empty names
+#' Checks that a setting value is a JSON object with non-empty names whose `fields` (type, then
+#' choices) hold valid values; a null field is kept (it removes the field from lower layers)
 #' @noRd
-settings_check_object = function(value, name) {
+settings_check_object = function(value, name, fields = NULL) {
   if (!settings_is_object(value) || !all(nzchar(names(value)))) {
     gptr_abort(paste0("The setting `", name, "` takes a named list (a JSON object)."),
                "invalid_argument", arg = name, expected = "a named list")
+  }
+  for (k in intersect(names(fields), names(value))) {
+    f = fields[[k]]
+    if (!is.null(value[[k]])) {
+      value[k] = list(setting_validator(paste0(name, ".", k), f[1L], f[-1L])(value[[k]]))
+    }
   }
   value
 }
@@ -141,7 +160,7 @@ settings_check_providers = function(value, name) {
 gateway_setting_specs = function() {
   lapply(settings_core(), function(x) {
     gptr_spec("setting", x$name, default = x$default, description = x$description,
-              scope = x$scope, validate = setting_validator(x$name, x$type, x$choices),
+              scope = x$scope, validate = setting_validator(x$name, x$type, x$choices, x$fields),
               tighten = x$tighten)
   })
 }
@@ -158,7 +177,7 @@ settings_core_spec = function(key) {
   for (x in settings_core()) {
     if (identical(x$name, key)) {
       return(list(name = x$name, default = x$default, scope = x$scope, tighten = x$tighten,
-                  validate = setting_validator(x$name, x$type, x$choices)))
+                  validate = setting_validator(x$name, x$type, x$choices, x$fields)))
     }
   }
   NULL
@@ -402,11 +421,14 @@ trust_record = function(root) {
   if (is.list(rec)) rec else NULL
 }
 
-#' Existing trust-gated files of a project (IC-52), including the .env files P03 discovers
+#' Existing trust-gated files of a project (IC-52), including the .env files P03 discovers and the
+#' project MCP files of other harnesses that gptr reads (mcp_config_sources())
 #' @noRd
 trust_gated_paths = function(root) {
   ws = file.path(root, ".gptr")
-  files = file.path(ws, c("settings.json", "mcp.json", "SYSTEM.md", "APPEND_SYSTEM.md"))
+  files = c(file.path(ws, c("settings.json", "mcp.json", "SYSTEM.md", "APPEND_SYSTEM.md")),
+            file.path(root, c(".mcp.json", ".codex/config.toml", ".cursor/mcp.json",
+                              ".vscode/mcp.json", ".pi/mcp.json")))
   found = c(files[file.exists(files) & !dir.exists(files)], dotenv_project_files(root))
   for (d in file.path(ws, c("extensions", "plugins", "agents"))) {
     if (dir.exists(d)) {
@@ -618,14 +640,16 @@ trust_resolve = function(root) {
 #' Record or read whether a project is trusted
 #'
 #' Trust decides whether gptr applies or runs what a project directory contains: project
-#' settings beyond tightening, `.gptr/extensions/` and project plugins, project MCP servers,
-#' `SYSTEM.md` and `APPEND_SYSTEM.md`, project `.env` discovery, provider base-URL overrides,
-#' project skills (`.gptr/skills/`, `.agents/skills/`, `.claude/skills/` and relative
-#' `skills.paths` entries), prompt templates (`.gptr/prompts/`), the tool and model fields of
-#' project agent files, and the authority of project instructions. The
-#' decision is kept in `tools::R_user_dir("gptr", "config")/trust.json` with a fingerprint of the
-#' trust-gated files; when they change, the project counts as untrusted again until you confirm.
-#' Called from model code during a run, recording a decision is refused.
+#' settings beyond tightening, `.gptr/extensions/` and project plugins, project MCP servers
+#' (`.gptr/mcp.json` and the `.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`,
+#' `.vscode/mcp.json` and `.pi/mcp.json` of other harnesses), `SYSTEM.md` and
+#' `APPEND_SYSTEM.md`, project `.env` discovery, provider base-URL overrides, project skills
+#' (`.gptr/skills/`, `.agents/skills/`, `.claude/skills/` and relative `skills.paths` entries),
+#' prompt templates (`.gptr/prompts/`), the tool and model fields of project agent files, and
+#' the authority of project instructions. The decision is kept in
+#' `tools::R_user_dir("gptr", "config")/trust.json` with a fingerprint of the trust-gated files;
+#' when they change, the project counts as untrusted again until you confirm. Called from model
+#' code during a run, recording a decision is refused.
 #'
 #' @param path A directory inside the project; its project root is used.
 #' @param trust `NULL` to read the decision, `TRUE` or `FALSE` to record one.
@@ -1371,7 +1395,9 @@ settings_model_warn = function(patch, scope) {
 #' `tools::R_user_dir("gptr", "config")/settings.json`; project settings live in `.gptr/`.
 #' A no-argument call always reads effective values, even when `.scope` is supplied. Inspect
 #' `attr(gptr_config(), "sources")` to see their origins. Named lists merge with lower layers;
-#' protected objects such as `providers` must be set as a whole named list.
+#' protected objects such as `providers` must be set as a whole named list. A `plugins` entry
+#' starting with `./` or `../`, like a relative `skills.paths` entry, is found from the project
+#' root, not from R's working directory.
 #'
 #' @section Choosing controls:
 #' Use settings for defaults such as `model`, `mode`, `context`, `budget`, `record`, `replay`
@@ -1639,7 +1665,10 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' asking, and still asks before deleting protected files, files outside the project or the
 #' project itself, moving the working directory out of the project, `rm(list = ls())`,
 #' `options(gptr.*)` and sending a secret over the network (see Secrets below); `plan` changes
-#' nothing. In every mode
+#' nothing, though a call it reads as read-only can still use the network or start a process:
+#' `gptr_models(refresh = TRUE)` downloads the model catalog, and `gptr_providers()` with
+#' `check = TRUE` or `check_login = TRUE` contacts the providers or starts the `claude` and
+#' `codex` status commands. In every mode
 #' `r` code that calls `q()`, `readline()` or another function that would end, pause or hang your R
 #' session is refused without a question. In `auto` and `yolo` mode a `system()` or `system2()`
 #' call (on Windows also `shell()` or `shell.exec()`) whose command the code computes is refused
@@ -1691,7 +1720,11 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' a name, a path or a command at run time, or reaches a function by another name, is read only
 #' as far as the classifier can see. Each form this page names as not read is of that kind, or is
 #' code in a file or a package, code another interpreter runs, or a call or argument the
-#' classifier has no rule for. Deny and ask `sh:` rules see a command computed at run time only in
+#' classifier has no rule for. A function it has no row for, such as `gptr_step()` or
+#' `gptr_wait()`, reads level 1, which `manual` asks about and `auto` runs (`gptr_export()` called
+#' from model code is refused when it runs). The code in the braces of a 'glue' or 'cli' template
+#' (`glue::glue("{unlink(d)}")`, `stringr::str_glue()`, `cli::cli_text()`) runs when the text is
+#' formatted and is not read. Deny and ask `sh:` rules see a command computed at run time only in
 #' a `peter$sh()` or `peter$bg()` call, which checks the command when it runs. So in `auto` and
 #' `yolo` mode a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command (for
 #' `system2()` also its arguments and `env`) is not a string the classifier can read, such as
@@ -1707,7 +1740,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' still run a computed command unchecked. A literal command is read when it is given to
 #' `system()`, `system2()`, `peter$sh()`, `processx::run()` (also as `callr::run()`),
 #' `sys::exec_wait()`, `sys::exec_internal()` or `sys::exec_background()`, not when it is given to
-#' `processx::process$new()`, which is level 3.
+#' `processx::process$new()`, which is level 3. A command line in a quoted string is read as one
+#' the code runs, so `system("echo 'rm -rf /'")` reads level 4, as `system("ssh host 'rm -rf ~'")`
+#' does.
 #'
 #' Paths are placed in the project: a relative path in R code is read in the project directory, and
 #' a command in the directory it runs in (after a `cd` or `env -C`, or the `wd` of `peter$sh()` or
@@ -1727,10 +1762,14 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `os.chdir("..")` in Python when each is a statement of its own on a line with no indentation, no
 #' `:` and no bracket left open, in code with no triple-quoted string (after any other `chdir()` a
 #' relative directory is read both in the directory R was in and in the one that `chdir()` names);
-#' before any move it is read in the project. `getwd()` and the directory `setwd()` returns are read
+#' before any move it is read in the project. Python's restore idiom
+#' `cwd = os.getcwd(); os.chdir("data"); os.chdir(cwd)` returns to a directory the code computes,
+#' so it asks even in `auto` and `yolo`.
+#' `getwd()` and the directory `setwd()` returns are read
 #' as the one the code has moved R to, starting from R's working directory when the classifier reads
 #' the code. A function body and the code of `local()` are read as code of their own: the names they
-#' assign are followed, a function's other names count as ones the code computes, and R starts where
+#' assign are followed (a name assigned with `<<-` or `assign()` counts, outside them, as one the
+#' code computes), a function's other names count as ones the code computes, and R starts where
 #' the code started or has moved it to. So `owd = setwd("data"); ...; setwd(owd)` stays in the
 #' project at the top level of the code, in a function (with `on.exit(setwd(owd))`) and in
 #' `local()`; a directory saved in a branch, a loop or another call's argument
@@ -1745,7 +1784,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `bash -c` as one word whose spaces are escaped with a backslash or written `$IFS`
 #' (`sh -c rm\ -f\ file`): such a command is level 3, which `auto` and `yolo` run without a question
 #' whatever it deletes. The `wd` of `processx::run()` is read when the call, or a name the code
-#' assigns, holds it as a string; a `wd` the code computes is read as the project directory.
+#' assigns, holds it as a string; a `wd` the code computes is read as the project directory. A
+#' delete function handed to `lapply()`, `Map()` or `purrr::walk()` reads its paths as ones the
+#' code computes, level 3, so `auto` runs `lapply("~/notes", unlink)` without a question.
 #'
 #' In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them only in
 #' projects you can restore (version control, backups, [gptr_rewind()] for recent turns), and run
@@ -1756,10 +1797,16 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' sub-agent in a separate R process that starts from gptr's reduced child environment (it does
 #' not read your `~/.Renviron`), but that process runs under your user account with your file
 #' permissions: the worker backend is not an isolation boundary. Its permission requests are
-#' sent to your session and classified again there. On the `codex` route Codex's own shell runs
-#' commands in every mode without passing gptr's gate, rules or secret guard: in `plan`, `manual`
-#' and `edits` its sandbox is read-only, so it can still read any file your account can read, and
-#' in `auto` and `yolo` it also changes and deletes files inside the project within its sandbox.
+#' sent to your session and classified again there. Your session reads a worker's result file
+#' with `readRDS()`: on R before 4.4 a crafted result file can run code in your session, and the
+#' objects a worker returns are R objects by design. [gptr_coach()] runs every run and every coach
+#' as an unattended session in its own R process under your account, which is not a sandbox
+#' either; a fence keeps a coaching run's writes in its own folder as far as the classifier sees
+#' them, and Codex's own shell is off in coaching sessions. Elsewhere, on the `codex` route Codex's
+#' own shell runs commands in every mode without passing gptr's gate, rules or secret guard: in
+#' `plan`, `manual` and `edits` its sandbox is read-only, so it can still read any file your
+#' account can read, and in `auto` and `yolo` it also changes and deletes files inside the project
+#' within its sandbox.
 #' MCP servers, the `claude` and `codex` command-line tools, shell
 #' commands started with `peter$sh()` and Shiny artifacts are ordinary processes of your account
 #' as well; artifacts start without any registered secret and listen
@@ -1798,7 +1845,10 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' same code reads that secret by name: the question for that read, or an `r(secret:NAME)` rule
 #' allowing it, covers the hand-over too. A name the code computes when it runs (with `paste0()`,
 #' through `get()` or `do.call()`, as a function's argument, or in a variable it sets otherwise or
-#' only to strings naming no secret) is read at level 3, which `auto` runs without asking. Sending
+#' only to strings naming no secret) is read at level 3, which `auto` runs without asking. Such a
+#' file read through `lapply()` or another function that calls the reader
+#' (`lapply(".env", readLines)`), or read from a copy (`file.copy(".env", "k.txt")`, then
+#' `readLines("k.txt")`), is not read as a secret read either. Sending
 #' a secret over the network asks in every mode, `yolo` included: code that reads a secret, here
 #' or in an earlier call, or hands one to a child through `env`, and calls an R network function
 #' such as `download.file()` or `httr2::req_perform()`, or holds a string naming a network program
@@ -1833,6 +1883,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #'   as `#< ` lines, what its prompt was sent with, whatever that option says: the head of each
 #'   `@file` (up to 40 lines) and the `!` code notes with their printed output. Review them before
 #'   sharing.
+#' - The block of a recorded [gptr_coach()] call keeps the coaching it chose (its note, skills,
+#'   review and rules), which coaches write from your runs and which can quote data values they
+#'   saw.
 #'
 #' @section Local servers:
 #' [gptr_mcp_serve()] exposes the live session to other agents over HTTP on `127.0.0.1` only,
@@ -1869,6 +1922,10 @@ NULL
 #' - Tool results: the printed output of R code the model ran, the parts of files it read, and
 #'   images of plots it made. In `manual` mode every action that is not known to be read-only
 #'   needs your approval before its result can be sent.
+#' - With [gptr_coach()], each coach gets the task, the current coaching and, for each run, its
+#'   answer, a summary of its value and objects, the text of the files it wrote and its
+#'   transcript, up to 50,000 characters each; the judge gets the task and what each final run
+#'   delivered. The coach model can differ from the runs' model.
 #'
 #' A System 1 question (a classifier model such as Jev) sends the inputs themselves: each
 #' element of a vector (text up to 100,000 characters), each row of a data frame as a record, a

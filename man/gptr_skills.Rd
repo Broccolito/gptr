@@ -29,7 +29,10 @@ Both only read files.
 A skill is a directory containing \code{SKILL.md} with a YAML \code{description} and optional \code{name}.
 Its body is read on demand, or preloaded with \code{peter(skills = "name")}.
 \code{disable-model-invocation: true} hides it from automatic catalog selection, while explicit
-preloading remains available. \code{allowed-tools} is metadata, not a permission rule.
+preloading remains available. \code{allowed-tools} is metadata, not a permission rule. An extension
+or a harness can also register a skill with
+\code{gptr_spec("skill", name, description = "...", text = "...")}; such a skill has no files, so
+\code{gptr_skills()}, which reads skill files, does not list it.
 }
 \examples{
 gptr_skills("packages")

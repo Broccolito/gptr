@@ -1230,6 +1230,41 @@ test_that("a session's plugin entries are forgotten at session_shutdown", {
                          NA)))
 })
 
+test_that("a user skill wins over a settings plugin's skill of the same name (F-113)", {
+  skip_on_cran()
+  withr::defer(res_prune("skills:", character()))
+  local_user_dirs()
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "tie-plug"}')
+  write_file(file.path(d, "skills", "p17-tie", "SKILL.md"),
+             c("---", "name: p17-tie", "description: The plugin's.", "---", "plugin body"))
+  write_file(file.path(gptr_user_dir("config"), "skills", "p17-tie", "SKILL.md"),
+             c("---", "name: p17-tie", "description: The user's.", "---", "user body"))
+  withr::defer(plugin_forget(d))
+  local_gptr_options(plugins = d)
+  plugins_sync()
+  skill_sync()
+  expect_match(skill_body("p17-tie")$text, "user body", fixed = TRUE)
+  sk = gptr_skills()
+  expect_identical(sk$source[sk$visible & sk$name == "p17-tie"], "user")
+})
+
+test_that("a relative plugins entry is found from the project root (F-118)", {
+  skip_on_cran()
+  files = list()
+  files[[".gptr/settings.json"]] = '{"plugins": ["./tools/labplug"]}'
+  files[["tools/labplug/plugin.json"]] = '{"name": "labplug"}'
+  files[["tools/labplug/skills/lab-rel/SKILL.md"]] =
+    "---\nname: lab-rel\ndescription: Found from the root.\n---\nx"
+  proj = local_project(trust = TRUE, files = files)
+  withr::defer(plugin_forget(file.path(proj, "tools", "labplug")))
+  dir.create(file.path(proj, "analysis"))
+  withr::local_dir(file.path(proj, "analysis"))
+  plugins_sync()
+  expect_false(is.null(registry_get("skill", "lab-rel")))
+  expect_true("labplug" %in% gptr_plugins()$name)
+})
+
 test_that("filter entries are skipped and a failing settings plugin is a diagnostic", {
   local_gptr_options(plugins = c("-builtin:mcp", "+plugin:x"))
   expect_identical(plugins_setting(), character())

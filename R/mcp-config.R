@@ -56,9 +56,17 @@ mcp_toml_read = function(file = NULL, text = NULL) {
     switch(e, b = "\b", t = "\t", n = "\n", f = "\f", r = "\r", `"` = "\"", `\\` = "\\",
            u = hex_char(4L), U = hex_char(8L), err(paste0("bad escape \\", e)))
   }
+  # the run of characters from i up to the next one of `stop`, pasted once (a string is read in
+  # time linear in its length)
+  read_run = function(stop) {
+    s = i
+    while (i <= n && !(ch[i] %in% stop)) i <<- i + 1L
+    paste(ch[seq.int(s, length.out = i - s)], collapse = "")
+  }
   read_basic = function() {
     out = character()
     repeat {
+      out[length(out) + 1L] = read_run(c("\"", "\\", "\n"))
       if (i > n) err("unterminated string")
       c1 = ch[i]
       if (c1 == "\"") {
@@ -66,13 +74,8 @@ mcp_toml_read = function(file = NULL, text = NULL) {
         break
       }
       if (c1 == "\n") err("newline in basic string")
-      if (c1 == "\\") {
-        i <<- i + 1L
-        out = c(out, read_escape())
-      } else {
-        out = c(out, c1)
-        i <<- i + 1L
-      }
+      i <<- i + 1L
+      out[length(out) + 1L] = read_escape()
     }
     paste(out, collapse = "")
   }
@@ -80,6 +83,7 @@ mcp_toml_read = function(file = NULL, text = NULL) {
     if (peek() == "\n") i <<- i + 1L
     out = character()
     repeat {
+      out[length(out) + 1L] = read_run(c("\"", "\\"))
       if (i > n) err("unterminated multi-line string")
       if (ch[i] == "\"" && peek(1L) == "\"" && peek(2L) == "\"") {
         i <<- i + 3L
@@ -98,10 +102,10 @@ mcp_toml_read = function(file = NULL, text = NULL) {
           next
         }
         i <<- i + 1L
-        out = c(out, read_escape())
+        out[length(out) + 1L] = read_escape()
         next
       }
-      out = c(out, ch[i])
+      out[length(out) + 1L] = ch[i]
       i <<- i + 1L
     }
     paste(out, collapse = "")
@@ -489,17 +493,21 @@ mcp_read_source = function(src, project) {
   out
 }
 
-#' Every configured server (contract 7.18): gptr's project file over gptr's user file (the other
-#' way round in an untrusted project) over the harnesses of setting `mcp.import`. A server with
-#' the same transport, command, args and url in several harnesses is listed once with `also_in`;
-#' a foreign name collision is renamed `<harness>_<name>`; project entries of an untrusted
+#' Every configured server (contract 7.18): gptr's project file over gptr's user file over the
+#' harnesses of setting `mcp.import`; in an untrusted project every project file comes after
+#' every user file. A server with the same transport, command, args, url, env, headers and cwd
+#' in several harnesses is listed once with `also_in`; another name collision is renamed
+#' `<harness>_<name>` (with a number when that is taken too); project entries of an untrusted
 #' project get `startable = FALSE`.
 #' @noRd
 mcp_config_all = function(project = project_root()) {
   import = mcp_map_chr(setting_get("mcp.import", default = mcp_harnesses))
   trusted = trust_ok(project)
   srcs = mcp_config_sources(project)
-  if (!trusted) srcs[1:2] = srcs[2:1]
+  if (!trusted) {
+    proj = vapply(srcs, function(s) identical(s$scope, "project"), NA)
+    srcs = c(srcs[!proj], srcs[proj])
+  }
   all = list()
   for (src in srcs) {
     if (!identical(src$harness, "gptr") && !src$harness %in% import) next
@@ -508,25 +516,34 @@ mcp_config_all = function(project = project_root()) {
       all[[length(all) + 1L]] = s
     }
   }
+  ids = c("transport", "command", "args", "url", "env", "headers", "cwd")
   fp = vapply(all, function(s) {
-    paste(s$transport, s$command %||% "", paste(s$args, collapse = " "), s$url %||% "", sep = "|")
+    x = s[intersect(ids, names(s))]
+    canonical_json(lapply(x[lengths(x) > 0L], as.list))
   }, "")
   keep = list()
   seen_fp = character()
   seen_name = character()
+  seen_own = character()
   for (j in seq_along(all)) {
     s = all[[j]]
     own = startsWith(s$source, "gptr:")
-    if (own && s$name %in% seen_name) next
+    if (own && s$name %in% seen_own) next
     if (!own && fp[j] %in% seen_fp) {
       w = match(fp[j], seen_fp)
       keep[[w]]$also_in = c(keep[[w]]$also_in, s$source)
       next
     }
-    if (s$name %in% seen_name) s$name = paste0(sub(":.*$", "", s$source), "_", s$name)
+    base = paste0(sub(":.*$", "", s$source), "_", s$name)
+    k = 1L
+    while (s$name %in% seen_name) {
+      s$name = if (k == 1L) base else paste0(base, "_", k)
+      k = k + 1L
+    }
     keep[[length(keep) + 1L]] = s
     seen_fp = c(seen_fp, fp[j])
     seen_name = c(seen_name, s$name)
+    if (own) seen_own = c(seen_own, s$name)
   }
   names(keep) = vapply(keep, function(s) s$name, "")
   keep
@@ -639,13 +656,16 @@ mcp_server_get = function(name, session = NULL) {
   s
 }
 
-#' The live connection of a server, connecting lazily (and again after an exit)
+#' The live connection of a server, connecting lazily (and again after an exit or a change of
+#' the server's configuration, which closes the old connection)
 #' @noRd
 mcp_conn_get = function(name, session = NULL) {
   conns = mcp_state()$conns
   conn = get0(name, envir = conns, inherits = FALSE)
-  if (!is.null(conn) && isTRUE(conn$alive)) return(conn)
-  conn = mcp_connect(mcp_server_get(name, session))
+  s = mcp_server_get(name, session)
+  if (!is.null(conn) && isTRUE(conn$alive) && identical(conn$spec, s)) return(conn)
+  if (isTRUE(conn$alive)) mcp_close(conn)
+  conn = mcp_connect(s)
   assign(name, conn, envir = conns)
   conn
 }
@@ -709,10 +729,14 @@ mcp_config_path = function(scope) {
 
 #' Read-modify-write gptr's mcp.json under the short mkdir lock (IC-71), atomically; unknown
 #' keys are preserved, mcpServers stays a JSON object, a blank file reads as empty and one that
-#' is not a JSON object is never replaced (as settings files)
+#' is not a JSON object is never replaced (as settings files). The project's trust is carried
+#' over gptr's own write of its trust-gated `.gptr/mcp.json` (trust_carry(); IC-52).
 #' @noRd
 mcp_file_update = function(path, fun) {
-  lock_with(path, function() {
+  root = project_root()
+  was = list(record = FALSE, live = FALSE)
+  bytes = NULL
+  x = lock_with(path, function() {
     txt = if (file.exists(path)) read_utf8(path)$text else ""
     x = json_obj()
     if (nzchar(trimws(txt))) x = tryCatch(json_decode(txt), error = function(e) NULL)
@@ -722,9 +746,13 @@ mcp_file_update = function(path, fun) {
     }
     x = fun(x)
     if (!length(x$mcpServers)) x$mcpServers = json_obj()
-    write_atomic(path, json_encode(x, pretty = TRUE))
-    invisible(x)
+    was <<- trust_holds(root)
+    bytes <<- charToRaw(paste0(as_utf8(json_encode(x, pretty = TRUE)), "\n"))
+    write_atomic(path, bytes)
+    x
   })
+  trust_carry(root, was, path, hash_sha256(bytes))
+  invisible(x)
 }
 
 #' Validate env/headers: a named character vector whose secret-looking values (a registered

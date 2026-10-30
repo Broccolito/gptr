@@ -182,6 +182,8 @@ test_that("gptr_spec() builds a classed spec carrying api_version", {
   expect_s3_class(err, "gptr_error_invalid_spec")
   expect_equal(err$kind, "widget")
   expect_error(gptr_spec(1, "w"), class = "gptr_error_invalid_argument")
+  expect_error(gptr_spec("", "w"), class = "gptr_error_unknown_kind")
+  expect_error(gptr_registry(""), class = "gptr_error_unknown_kind")
 })
 
 test_that("validators name the failing field and accept unknown fields", {
