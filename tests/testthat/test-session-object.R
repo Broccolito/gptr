@@ -1257,6 +1257,16 @@ test_that("session_replay_apply() advances the piped session in place; identical
   expect_identical(rep[[2L]]$data$mode, "replay")
 })
 
+# Added (FIX-37, F-128): a header without `mode` records mode replay, not its model (header$mode
+# partially matched header$model)
+test_that("replay_mark() reads the header's mode by its exact name", {
+  s = test_session()
+  withr::local_options(warnPartialMatchDollar = TRUE)
+  expect_no_warning(replay_mark(s, "a1b2c3", list(model = "fake/fake-1"), NULL, advance = TRUE))
+  rep = Filter(function(e) identical(e$custom_type, "gptr.replay"), session_data(s)$entries)
+  expect_identical(rep[[1L]]$data$mode, "replay")
+})
+
 test_that("a block already seen adds no turn and no entry", {
   s = test_session()
   session_replay_apply(s, "a1b2c3", list(turn = "1"))

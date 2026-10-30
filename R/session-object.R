@@ -1424,7 +1424,7 @@ replay_mark = function(s, block, header, text, advance) {
   if (block %in% d$seen) return(invisible(s))
   turn = if (advance && !replay_holds_block(d, block)) d$turns + 1L else d$turns
   session_append(s, entry_custom("gptr.replay", compact(list(
-    doc = header$doc %||% d$doc$path, block = block, mode = header$mode %||% "replay",
+    doc = header$doc %||% d$doc$path, block = block, mode = header[["mode"]] %||% "replay",
     turn = turn, value = header$value))))
   d$seen = c(d$seen, block)
   d$turns = turn
