@@ -37,7 +37,7 @@
 #' `gptr_error_max_turns`. A team (`agents =`) or fan-out (`parallel =`) takes the
 #' status of its first member that did not end idle, with `$reason` naming each such member; when
 #' no member ended idle it signals that member's condition with the team as `$session`. A call
-#' whose model cannot be reached (no egress acknowledgement, replay mode, a disabled provider, a
+#' whose model cannot be reached (no egress acknowledgment, replay mode, a disabled provider, a
 #' missing key) is refused before its run: no turn, no model or mode switch, no new
 #' [gptr_last()] and no `$session`. So is a call with an unknown plugin or `skills =` name,
 #' `.opts$images` its model does not take, or a secret-looking prompt you decline to send. A piped
