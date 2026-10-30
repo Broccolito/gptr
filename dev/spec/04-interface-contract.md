@@ -6786,10 +6786,14 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
   `match.fun()` or `get()` names it, or where the classifier reads it passed on as a value that
   leaves the project or goes to a folder the code computes, D-297), every `wd =` argument, and the
   target of each `cd`, `pushd`, `chdir` or `Set-Location` (in any letter case) in any string of the
-  code, inside `sh -c '...'` too (`child_cd()`); and classified file targets outside the temporary
-  folder, a relative one resolved against the run's folder (`project_root()`). Since the working
-  folder never moves, the targets the classifier resolves hold. It fences only what the classifier
-  sees.
+  code, inside `sh -c '...'` too (`child_cd()`); classified file targets outside the temporary
+  folder, a relative one resolved against the run's folder (`project_root()`); and R code with a
+  `dynamic` row (a function the code computes) or a `file_write` or `file_delete` row whose path
+  class is `unknown` (a path the code computes; F-58, FIX-49). Since the working folder never
+  moves, the targets the classifier resolves hold. It fences only what the classifier sees: where
+  R cannot place the path argument by position, a non-empty literal passed by position is read as
+  the path, so `write.csv('a', file.path(d, 'x.csv'))` reads a write in the run's folder and passes
+  (F-58's residual, a documented limit; 08 section 3.5 limit 4).
 - Result (`child_outcome()`): status, reason, last text, turns, usage rows, the value (`session_value_get()`), the
   objects created or changed in the run's environment (`child_objects()`, never forcing a promise or an active
   binding), the transcript (`child_transcript()`, clipped at 50,000 characters), risk, refusals, unmet ids (the

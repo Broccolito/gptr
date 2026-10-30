@@ -947,9 +947,11 @@ pick   = if (!length(ok)) NULL else if (length(ok) > 1) run_judge(ok) else ok[[1
 4. A run sees only the objects you pass in `...`, not the rest of your workspace or your attached
    packages. It starts in an empty folder, cannot install packages, cannot write outside its folder
    or move to another folder, and cannot run scripts with `peter$script()`, by the routes gptr
-   recognises. A write to a path the code computes, or through a function the code computes, is not
-   refused yet (D-297). Give it data as objects, name files by their full path, and install what it
-   needs first.
+   recognises. It refuses code that writes to a path the code computes or calls a function the code
+   computes (F-58, FIX-49). One case still passes: where R cannot tell which argument is the file, a
+   literal text passed by position is read as the file, so `write.csv('a', file.path(d, 'x.csv'))`
+   writes into `d` (D-297). Give it data as objects, name files by their full path, and install
+   what it needs first.
 5. A run that forges its own report can lower its reported risk or claim requirements met. The
    parent's safe-direction reading limits this but cannot rule it out. The kept coaching is still
    only text that you read.

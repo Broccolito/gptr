@@ -9412,20 +9412,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   goes to a folder the code computes. Ordinary code that only names one (`lapply(dirs, setwd)`
   aside) is no longer denied. `Set-Location` folds case on every OS. The `cd`-word string rule of
   D-284 stays as documented.
-- Rule (computed paths and functions, DEC-24, F-58: decided, held back): the decision is that the
-  fence denies `dynamic` rows and `file_write` or `file_delete` rows with `path_class` `unknown`,
-  coaching only. Commit `6879ea8d` did so and broke its own acceptance check:
-  `write.csv(x, "out.csv")`, `write.csv2()`, `readr::write_csv()` and `data.table::fwrite()` to a
-  literal path were refused, because the classifier reads a `...`-matched path from every unnamed
-  argument and keeps the worst. The classifier change that fixes it is in `R/perm-classify.R`, which
-  no item of this pass owned for it, so `d3bef645` reverts the rule and the fence is as before this
-  pass. To land it: a gate item applies the classifier half of the lane's cross-lane diff (a named
-  path argument that went unmatched marks `one`; computed candidates drop when some are read; a
-  level tie keeps the worse class), then `git revert d3bef645` and the diff's test half. Then
-  `Filter(Negate(is.null), l)`, `sapply(l, Negate(is.na))`, `fun = mean; fun(1:3)`,
-  `match.fun("mean")(1:3)` and `do.call(f, list(1))` would be refused as functions the code
-  computes. Until then IC-86 and 08 section 3.5 do not say that the fence refuses computed paths or
-  functions.
+- Rule (computed paths and functions, DEC-24, F-58; landed in FIX-49): the fence denies `dynamic`
+  rows and `file_write` or `file_delete` rows with `path_class` `unknown`, coaching only. Its first
+  commit `6879ea8d` refused `write.csv(x, "out.csv")` and its kin to a literal path, because the
+  classifier read every unnamed argument as a possible path and kept the worst, so `d3bef645`
+  reverted it. FIX-49 reads the literal path (an unmatched named path argument marks `one`, computed
+  candidates drop when some are read, a level tie keeps the worse class, a named option in `...` is
+  no path) and reverts `d3bef645` (`a0bbe5ed`). So `Filter(Negate(is.null), l)`,
+  `fun = mean; fun(1:3)` and `do.call(f, list(1))` are refused in coaching runs as functions the
+  code computes. Residual, a documented limit (IC-86, 08 section 3.5 limit 4): where R cannot
+  place the path argument by position, a non-empty literal passed by position is read as the path,
+  so `write.csv('a', file.path(d, 'x.csv'))` reads a workspace write and passes.
 - Rule (Codex hook, DEC-27, F-59): `inst/gptr/codex_hook.R` denies by printing Codex's `PreToolUse`
   decision (`hookSpecificOutput`, `permissionDecision` `"deny"` with its reason) on stdout and
   exiting with status 0, which no shell changes, and keeps its log line. Formerly it exited with
@@ -9445,10 +9442,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: 04 section 15.11 IC-83, IC-86 and IC-88 and the `model_refused` row of
   section 2.2; 08 sections 3.3, 3.5 and 3.7; `?gptr_tailor`.
 - Tests: test-gptr-child.R "the fence reads a folder changer's name as a move only where R calls
-  it"; test-cli-codex.R "the Codex hook writes its start line and lets a run use only gptr's tools",
+  it", "the fence refuses R code that writes to a path or calls a function it computes";
+  test-cli-codex.R "the Codex hook writes its start line and lets a run use only gptr's tools",
   "the hook command in the argv runs through the shell, logs its start, denies a tool";
   test-gptr-tailor.R "the notice names extension files, plugins and a replaced system prompt".
-  Evidence: progress/fixes.md FIX-41 and FIX-42.
+  Evidence: progress/fixes.md FIX-41, FIX-42 and FIX-49.
 
 ## D-298 - FIX-43 Output caps, checkpoint scope, lock age and the compaction wait (2026-10-29)
 - Rule (output cap, DEC-32, F-79): `proc_run()` and `bridge_run()` kill the process tree once a
