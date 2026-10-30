@@ -1130,14 +1130,15 @@ test_that("a name assigned outside a function body holds the paths it may hold (
 
 test_that("a for loop over a vector and a listing of a folder are read as its files (D-293)", {
   root = local_project()
+  o = deparse(withr::local_tempdir(tmpdir = dirname(tempdir())))
   lv = function(code) gptr_risk(code, envir = classify_env(), root = root)$level
-  for (code in c("file.remove(list.files('~', full.names = TRUE))",
+  for (code in c(paste0("file.remove(list.files(", o, ", full.names = TRUE))"),
                  "unlink(Sys.glob('~/*'), recursive = TRUE)",
-                 "unlink(dir('~', full.names = TRUE), recursive = TRUE)",
-                 "fs::file_delete(fs::dir_ls('~'))",
+                 paste0("unlink(dir(", o, ", full.names = TRUE), recursive = TRUE)"),
+                 paste0("fs::file_delete(fs::dir_ls(", o, "))"),
                  "for (f in c('/etc/gptr-a', 'b.csv')) unlink(f)",
-                 "for (f in list.files('~', full.names = TRUE)) file.remove(f)",
-                 "unlink(list.files('~', all.files = TRUE, full.names = TRUE))")) {
+                 paste0("for (f in list.files(", o, ", full.names = TRUE)) file.remove(f)"),
+                 paste0("unlink(list.files(", o, ", all.files = TRUE, full.names = TRUE))"))) {
     expect_identical(lv(code), 4L, label = code)
   }
   for (code in c("for (f in list.files(tempdir(), full.names = TRUE)) file.remove(f)",
