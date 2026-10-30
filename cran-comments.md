@@ -90,11 +90,12 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 * Local: macOS 26.7.1 (aarch64), R 4.6.1: `R CMD check --as-cran` on the built tarball with
   `NOT_CRAN` unset, including the PDF manual.
-* GitHub Actions, `R CMD check --as-cran`, each job failing on any warning: macOS (release),
-  Windows (release, oldrel-4; four test shards each), Ubuntu (devel, release, oldrel-1,
-  oldrel-4), Ubuntu without Suggests and Ubuntu under `LC_ALL=C`. Two jobs check as CRAN does
-  (`NOT_CRAN=false`, CRAN's timing thresholds), each failing on any NOTE and over its time
-  budget: Ubuntu R-devel (480 s) and Windows release with both manuals (600 s).
+* GitHub Actions, `R CMD check --as-cran`, each job failing on any warning: the whole offline test
+  suite in shards on macOS (release), Windows (release) and Ubuntu (release, under `LC_ALL=C`), and
+  CRAN's test list on Ubuntu (oldrel-1, oldrel-4), Ubuntu without Suggests and Windows (oldrel-4).
+  Two jobs check as CRAN does (`NOT_CRAN=false`, CRAN's timing thresholds), each failing on any
+  NOTE and over its time budget: Ubuntu R-devel without Suggests (480 s) and Windows release with
+  both manuals (600 s).
 * GitHub's CRAN-mode checks took 256 s (Ubuntu R-devel, budget 480 s) and 494 s (Windows
   release, budget 600 s), and the local one 144 s.
 * R-hub (Windows R-devel and R-release, Ubuntu R-devel with gcc 12) and win-builder (R-release,

@@ -180,28 +180,70 @@ test_that("the package loaded without load-time errors", {
   expect_length(the$load_errors, 0L)
 })
 
-test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-72, IC-73)", {
-  skip_on_cran()
+# A hosted workflow's jobs, read from the source tree
+ci_jobs = function(file) {
   description = source_file("DESCRIPTION")
   skip_if(is.null(description), "not running from the source tree")
-  path = file.path(dirname(description), ".github", "workflows", "R-CMD-check.yaml")
-  expect_true(file.exists(path))
-  jobs = yaml::read_yaml(path)$jobs
-  expect_setequal(
-    names(jobs),
-    c("R-CMD-check", "no-suggests", "c-locale", "cran-mode", "copy-safety", "connections", "bench")
+  yaml::read_yaml(file.path(dirname(description), ".github", "workflows", file))$jobs
+}
+
+# The check names a job reports: its name for each row of its matrix, with each `matrix.<path>`
+# expression (`a || b` takes the first one set) replaced by the row's value
+ci_job_names = function(job) {
+  m = job$strategy$matrix
+  grid = expand.grid(lapply(m, seq_along))
+  rows = if (is.null(m)) list(list()) else if (!is.null(m$include)) m$include else
+    lapply(seq_len(nrow(grid)), function(i) Map(function(v, j) v[[j]], m, grid[i, ]))
+  vapply(rows, function(row) {
+    name = job$name
+    for (x in regmatches(name, gregexpr("[$][{][{][^}]*[}][}]", name))[[1L]]) {
+      operands = strsplit(gsub("^[$][{][{]|[}][}]$", "", x), "||", fixed = TRUE)[[1L]]
+      paths = strsplit(trimws(operands), ".", fixed = TRUE)
+      values = lapply(paths, function(path) Reduce(function(v, key) v[[key]], path[-1L], row))
+      name = sub(x, as.character(Filter(Negate(is.null), values)[[1L]]), name, fixed = TRUE)
+    }
+    name
+  }, "")
+}
+
+test_that("each check main requires is the name of exactly one hosted job (CI-107)", {
+  skip_on_cran()
+  jobs = c(ci_jobs("R-CMD-check.yaml"), ci_jobs("Windows-check.yaml"))
+  names = unlist(lapply(jobs, ci_job_names), use.names = FALSE)
+  # negative control: a row's own value, else the next operand
+  job = list(name = "x (${{ matrix.c.n || matrix.c.r }}, ${{ matrix.s }})",
+             strategy = list(matrix = list(c = list(list(r = "a"), list(r = "b", n = "c")),
+                                           s = 1:2)))
+  expect_identical(ci_job_names(job), c("x (a, 1)", "x (c, 1)", "x (a, 2)", "x (c, 2)"))
+  required = c(
+    "connections left open", "copy-safety (devel)", "copy-safety (release)",
+    "macos-latest (release)", "token benchmark", "ubuntu-latest (devel)",
+    "ubuntu-latest (oldrel-1)", "ubuntu-latest (oldrel-4)", "ubuntu-latest (release)",
+    "ubuntu-latest (release, LC_ALL=C)", "ubuntu-latest (release, no Suggests)",
+    "windows-latest (oldrel-4)", "windows-latest (release)", "ubuntu-latest (devel, NOT_CRAN=false)"
   )
-  shards = yaml::read_yaml(file.path(dirname(path), "Windows-check.yaml"))$jobs$shards
-  combos = c(vapply(jobs[["R-CMD-check"]]$strategy$matrix$config, function(x) {
-    paste(x$os, x$r)
-  }, ""), paste(shards[["runs-on"]], unlist(shards$strategy$matrix$r)))
-  expect_true(all(c(
-    "macos-latest release", "windows-latest release", "windows-latest oldrel-4",
-    "ubuntu-latest devel", "ubuntu-latest release", "ubuntu-latest oldrel-1",
-    "ubuntu-latest oldrel-4"
-  ) %in% combos))
-  expect_false(jobs[["no-suggests"]]$env[["_R_CHECK_FORCE_SUGGESTS_"]])
+  for (name in required) expect_identical(sum(names == name), 1L, label = name)
+})
+
+test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-72, IC-73)", {
+  skip_on_cran()
+  jobs = ci_jobs("R-CMD-check.yaml")
+  expect_setequal(names(jobs), c("c-locale", "macos", "connections", "gates", "cran-check",
+                                 "cran-mode", "copy-safety", "bench"))
   expect_identical(jobs[["c-locale"]]$env[["LC_ALL"]], "C")
+  rows = jobs[["cran-check"]]$strategy$matrix$config
+  expect_identical(vapply(rows, function(x) x$r, ""), c("oldrel-1", "oldrel-4", "release"))
+  # Without Suggests (Depends and Imports, and what the check runs), so R CMD check must not demand
+  # them; R-devel's jobs install the same way, because a cold cache builds them from source
+  expect_identical(rows[[3L]]$dependencies, "\"hard\"")
+  expect_false(jobs[["cran-check"]]$env[["_R_CHECK_FORCE_SUGGESTS_"]])
+  expect_false(jobs[["cran-mode"]]$env[["_R_CHECK_FORCE_SUGGESTS_"]])
+  for (name in c("cran-mode", "copy-safety")) {
+    uses = vapply(jobs[[name]]$steps, function(s) s$uses %||% "", "")
+    deps = jobs[[name]]$steps[[which(startsWith(uses, "r-lib/actions/setup-r-dependencies@"))]]
+    expect_identical(deps$with$dependencies, "\"hard\"", label = name)
+  }
+  expect_false(jobs[["cran-check"]]$env[["NOT_CRAN"]])
   expect_false(jobs[["cran-mode"]]$env[["NOT_CRAN"]])
   expect_setequal(unlist(jobs[["copy-safety"]]$strategy$matrix$r), c("release", "devel"))
   copy_steps = vapply(jobs[["copy-safety"]]$steps, function(s) s$run %||% "", "")
@@ -212,37 +254,45 @@ test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-
   expect_true(any(grepl("dev/bench/tokens/run.R --check", bench_steps, fixed = TRUE)))
 })
 
-test_that("hosted CI jobs are bounded and a crashed R CMD check cannot pass", {
+test_that("hosted CI jobs and steps are bounded and a crashed R CMD check cannot pass (CI-107)", {
   skip_on_cran()
-  description = source_file("DESCRIPTION")
-  skip_if(is.null(description), "not running from the source tree")
-  path = file.path(dirname(description), ".github", "workflows", "R-CMD-check.yaml")
-  jobs = c(yaml::read_yaml(path)$jobs,
-           yaml::read_yaml(file.path(dirname(path), "Windows-check.yaml"))$jobs)
-  # A hung run fails at its job's limit instead of holding the runner until it is cancelled
+  check = ci_jobs("R-CMD-check.yaml")
+  windows = ci_jobs("Windows-check.yaml")
+  jobs = c(check, windows)
+  # A hung run fails at its job's limit: 20 minutes, and 5 for a gate
+  minutes = vapply(jobs, function(job) format(job[["timeout-minutes"]] %||% NA), "")
+  expect_identical(minutes, c(
+    `c-locale` = "20", macos = "20", connections = "20", gates = "5", `cran-check` = "20",
+    `cran-mode` = "20", `copy-safety` = "20", bench = "20",
+    shards = "20", gate = "5", `oldrel-4` = "20", cran = "20"
+  ))
+  # Each step that checks or runs R has its own, shorter limit, so a hang fails with its log
   for (name in names(jobs)) {
-    expect_false(is.null(jobs[[name]][["timeout-minutes"]]), label = name)
+    for (step in jobs[[name]]$steps) {
+      if (startsWith(step$uses %||% "", "r-lib/actions/check-r-package@") ||
+          grepl("Rscript", step$run %||% "", fixed = TRUE)) {
+        expect_lte(step[["timeout-minutes"]] %||% Inf, 16, label = paste(name, step$name))
+      }
+    }
   }
   # rcmdcheck reported success when R CMD check aborted before writing a status line
-  for (name in c("R-CMD-check", "no-suggests", "c-locale", "cran-mode", "shards", "cran")) {
+  for (name in c("c-locale", "macos", "cran-check", "cran-mode", "shards", "oldrel-4", "cran")) {
     steps = jobs[[name]]$steps
     uses = vapply(steps, function(s) s$uses %||% "", "")
     runs = vapply(steps, function(s) s$run %||% "", "")
-    check = which(startsWith(uses, "r-lib/actions/check-r-package@"))
+    check_step = which(startsWith(uses, "r-lib/actions/check-r-package@"))
     guard = which(grepl("check/gptr.Rcheck/00check.log", runs, fixed = TRUE) &
                     grepl("^Status:", runs, fixed = TRUE))
-    expect_length(check, 1L)
-    expect_true(length(guard) == 1L && all(guard > check), label = name)
+    expect_length(check_step, 1L)
+    expect_true(length(guard) == 1L && all(guard > check_step), label = name)
   }
   # Windows R before 4.5.0 has no file.info() owner columns, which this check variable needs
-  expect_true(jobs[["R-CMD-check"]]$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]])
-  expect_identical(jobs$shards$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]],
-                   "${{ matrix.things-in-other-dirs || 'true' }}")
-  expect_identical(jobs$shards$strategy$matrix$include,
-                   list(list(r = "oldrel-4", `things-in-other-dirs` = "false")))
+  expect_true(check[["c-locale"]]$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]])
+  expect_true(windows$shards$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]])
+  expect_false(windows[["oldrel-4"]]$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]])
 })
 
-test_that("Windows CI shards run each ordinary test file once, native ones in shard 1 (D-239)", {
+test_that("CI shards run each test file once, Windows native ones in shard 1 (D-239)", {
   skip_on_cran()
   shard = new.env(parent = baseenv())
   sys.source(test_path("ci-shard.R"), envir = shard)
@@ -255,6 +305,9 @@ test_that("Windows CI shards run each ordinary test file once, native ones in sh
     expect_error(shard$ci_shard(selector), label = selector)
   }
   expect_error(shard$ci_shard_files(files[1:3], c(1L, 4L)))
+  expect_identical(shard$ci_shard_filter(c("test-a.R", "test-b_2-c.r")), "^(a|b_2-c)$")
+  expect_error(shard$ci_shard_filter("test-a b.R"))
+  expect_error(shard$ci_shard_filter(c("test-a.R", "test-a.r")))
   # Unset, a check runs the whole suite
   withr::local_envvar(GPTR_CI_TEST_SHARD = NA)
   expect_identical(shard$ci_shard(), c(1L, 1L))
@@ -267,55 +320,41 @@ test_that("Windows CI shards run each ordinary test file once, native ones in sh
   }
 })
 
-test_that("each required Windows context gates the four shards of its own R version (D-239)", {
+test_that("each sharded lane's required context gates the latest attempt of its shards (CI-107)", {
   skip_on_cran()
-  description = source_file("DESCRIPTION")
-  skip_if(is.null(description), "not running from the source tree")
-  path = file.path(dirname(description), ".github", "workflows", "Windows-check.yaml")
-  jobs = yaml::read_yaml(path)$jobs
-  shards = jobs$shards
-  gate = jobs$gates
-  expect_identical(gate$name, "windows-latest (${{ matrix.r }})")
-  expect_identical(gate$strategy$matrix$r, shards$strategy$matrix$r)
-  expect_identical(unlist(shards$strategy$matrix$shard), 1:4)
-  expect_identical(shards$env$GPTR_CI_TEST_SHARD, "${{ matrix.shard }}/4")
-  # A skipped required check counts as passing, so the gate always runs and fails closed
-  expect_identical(gate[c("needs", "if")], list(needs = "shards", `if` = "always()"))
-  # Each attempt of a shard records its status, so a failed re-run replaces an earlier pass
-  record = rev(shards$steps)[1:2]
-  expect_identical(vapply(record, function(s) s[["if"]] %||% "", ""), c("always()", "always()"))
-  expect_identical(record[[2L]]$run,
-                   "echo '${{ job.status }}' > windows-status-${{ matrix.r }}-${{ matrix.shard }}")
-  expect_identical(record[[1L]]$with$name, "windows-status-${{ matrix.r }}-${{ matrix.shard }}")
-  expect_identical(gate$steps[[1L]]$with$pattern, "windows-status-${{ matrix.r }}-*")
-  expect_match(gate$steps[[2L]]$run, "for n in 1 2 3 4;", fixed = TRUE)
-  expect_match(gate$steps[[2L]]$run, 'grep -qsx success "windows-status-${{ matrix.r }}-$n"',
-               fixed = TRUE)
+  check = ci_jobs("R-CMD-check.yaml")
+  windows = ci_jobs("Windows-check.yaml")
+  lanes = c(check[c("c-locale", "macos", "connections")], windows["shards"])
+  for (lane in names(lanes)) {
+    n = length(lanes[[lane]]$strategy$matrix$shard)
+    expect_identical(unlist(lanes[[lane]]$strategy$matrix$shard), seq_len(n), label = lane)
+    expect_identical(lanes[[lane]]$env$GPTR_CI_TEST_SHARD, paste0("${{ matrix.shard }}/", n))
+    expect_true(endsWith(lanes[[lane]]$name, paste0("shard ${{ matrix.shard }}/", n, ")")),
+                label = lane)
+  }
+  # A skipped required check counts as passing, so a gate always runs and fails closed; a matrix
+  # job's result counts the latest attempt of each row. Ubuntu release's whole suite runs in the
+  # connection gate's shards, and R-devel's check in cran-mode.
+  gates = check$gates
+  expect_identical(gates$needs, c("c-locale", "macos", "connections", "cran-mode"))
+  expect_identical(gates[["if"]], "always()")
+  include = gates$strategy$matrix$include
+  expect_identical(
+    stats::setNames(vapply(include, function(x) x$result, ""), vapply(include, `[[`, "", "name")),
+    c(`ubuntu-latest (release)` = "${{ needs.connections.result }}",
+      `ubuntu-latest (release, LC_ALL=C)` = "${{ needs.c-locale.result }}",
+      `macos-latest (release)` = "${{ needs.macos.result }}",
+      `connections left open` = "${{ needs.connections.result }}",
+      `ubuntu-latest (devel)` = "${{ needs.cran-mode.result }}")
+  )
+  expect_identical(gates$steps[[1L]]$run, "test '${{ matrix.result }}' = success")
+  expect_identical(windows$gate[c("needs", "if")], list(needs = "shards", `if` = "always()"))
+  expect_identical(windows$gate$steps[[1L]]$run, "test '${{ needs.shards.result }}' = success")
   # read_yaml reads yes as TRUE, but R keeps package sources only for the string "yes"
-  expect_true("      R_KEEP_PKG_SOURCE: yes" %in% readLines(path))
-})
-
-test_that("the hosted jobs have time for the whole suite (CI-19)", {
-  description = source_file("DESCRIPTION")
-  skip_if(is.null(description), "not running from the source tree")
-  root = dirname(description)
-  path = file.path(root, ".github", "workflows", "R-CMD-check.yaml")
-  jobs = yaml::read_yaml(path)$jobs
-  shards = yaml::read_yaml(file.path(dirname(path), "Windows-check.yaml"))$jobs$shards
-  config = jobs[["R-CMD-check"]]$strategy$matrix$config
-  combos = vapply(config, function(x) paste(x$os, x$r), "")
-  minutes = vapply(config, function(x) as.numeric(x$minutes %||% 45), 0)
-  expect_identical(jobs[["R-CMD-check"]][["timeout-minutes"]],
-                   "${{ matrix.config.minutes || 45 }}")
-  # October 2026: 26-31 minutes on Ubuntu, 37-45 on macOS since P28's serial pty tests (CI-96),
-  # about 23 for the slowest Windows shard; since P29 the serial no-Suggests and C-locale lanes
-  # pass 45 minutes, connections reaches 60 and macOS 56 (CI-106)
-  expect_gte(shards[["timeout-minutes"]], 45)
-  expect_identical(unname(minutes[combos == "ubuntu-latest devel"]), 120)
-  expect_identical(unname(minutes[combos == "macos-latest release"]), 75)
-  expect_gte(jobs[["no-suggests"]][["timeout-minutes"]], 60)
-  expect_gte(jobs[["c-locale"]][["timeout-minutes"]], 60)
-  expect_gte(jobs$connections[["timeout-minutes"]], 75)
+  path = file.path(dirname(source_file("DESCRIPTION")), ".github", "workflows")
+  for (file in c("R-CMD-check.yaml", "Windows-check.yaml")) {
+    expect_true("      R_KEEP_PKG_SOURCE: yes" %in% readLines(file.path(path, file)), label = file)
+  }
 })
 
 # The `gptr::name` calls in the bodies and formals of the package's functions, where R CMD check's

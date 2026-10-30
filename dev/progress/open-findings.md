@@ -634,7 +634,8 @@ Rows the review of `f690afc7` and its fix pass add, each with its status.
   of 3. Status: open, as L-34 (CI-106).
 - **ci-20** (low; n/a). The four serial CI lanes take 42 to 61 minutes (no-Suggests 46.0, C locale
   42.5, connections 61.2, macOS 54.7 on `4cf922a4`), and the maintainer asked that no CI job run
-  longer than 20 minutes. Status: open: CI-107, a CI redesign by another agent.
+  longer than 20 minutes. Status: fixed by CI-107 (every job 20 minutes, a gate 5; the full suite
+  in gated shards), which has not yet run on GitHub.
 - **live-9** (step; n/a). This pass changed the fence, the Codex hook and the transport, so
   live-coach and live-cli run again (records-4), with one live request at the highest reasoning
   effort for the 90 s idle timeout (F-132, DEC-41) and the Windows job once on a host with Codex for
