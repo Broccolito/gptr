@@ -3824,3 +3824,37 @@ test_that("an open notebook is never written; gptr_doc(sync = TRUE) applies it (
   expect_match(cells[[4]]$id, "^gptr-[0-9a-f]{6}$")
   expect_identical(unlist(cells[[4]]$source), "m = mean(mtcars$mpg)")
 })
+
+# ---- comprehensive fix pass (FIX-37) -------------------------------------------------------------
+
+test_that("a harness definition after a direct R line is not part of that line's section", {
+  local_project()
+  def = c("# gptr: h_1a2b3c4d needs fixed arguments that are not recorded: extensions",
+          "h_1a2b3c4d = gptr_tailor(peter, coaching = list(note = \"Be terse.\"))")
+  lines = c(doc_direct_fixture(file.path(getwd(), "t.R"), undone = TRUE),
+            "", "# direct R (no model) created=q", "q = fit + 1", "", def,
+            "", "s_ab12cd |> h_1a2b3c4d(\"make y\")")
+  res = doc_direct_switch(lines)
+  expect_identical(utils::tail(res$lines, 7L),
+                   c("# direct R (no model; uses undone fit) created=q", "#~ q = fit + 1", "", def,
+                     "", "s_ab12cd |> h_1a2b3c4d(\"make y\")"))
+  e = new.env(parent = globalenv())
+  e$library = function(...) invisible(NULL)
+  e$peter = function(...) invisible(NULL)
+  e$gptr_tailor = function(...) function(...) "ran"
+  utils::capture.output(source(exprs = parse(text = res$lines, keep.source = FALSE), local = e))
+  expect_true(is.function(e$h_1a2b3c4d))
+})
+
+test_that("a name holding ') ' in a direct R line's header switches off no other line (V6T-1)", {
+  made = doc_format_kv(list(created = "a) created=zz,b", status = "undone"))
+  lines = c("library(gptr)",
+            paste0("# >>> gptr:aaaaaa model=fake/fake-1 prompt=000000000000 sha=00000000 ", made),
+            "#~ x = 1", "# <<< gptr:aaaaaa", "", "# direct R (no model)", "y = `a) created=zz` + b",
+            "", "# direct R (no model)", "w = zz")
+  once = doc_direct_switch(lines)
+  expect_identical(once$lines[6], "# direct R (no model; uses undone a<U+0029> created=zz, b)")
+  twice = doc_direct_switch(once$lines)
+  expect_identical(twice$changed, list())
+  expect_identical(utils::tail(twice$lines, 2L), c("# direct R (no model)", "w = zz"))
+})

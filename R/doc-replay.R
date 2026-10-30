@@ -1314,9 +1314,11 @@ doc_on_console_direct = function(event, ctx) {
 # a direct R line's header (doc_direct_header()): its reason and its key=value pairs
 doc_re_direct = "^# direct R \\(no model(?:; (.*?))?\\)(?: (.*))?$"
 # the first line of what the console appends after a direct R line (another one, a command
-# `# /<name> ...`, a session header, a turn's statement or block), which ends that line's section
+# `# /<name> ...`, a session header, a turn's statement or block, a harness's definition or its
+# flag line, doc_harness_def()), which ends that line's section
 doc_re_entry = paste0("^(# (direct R \\(|/[^[:space:]/]+( |$)|gptr session |machine log: |",
-                      ">>> gptr:)|", substring(doc_re_console, 2L), ")")
+                      ">>> gptr:|gptr: h_[0-9A-Za-z]+ )|h_[0-9A-Za-z]+ = gptr_tailor\\(|",
+                      substring(doc_re_console, 2L), ")")
 
 #' The lines of a direct R line's code as a transcript records them: a comment line that reads as
 #' the first line of another entry (doc_re_entry), such as `# /tmp is scratch`, so the line's
@@ -1399,7 +1401,9 @@ doc_direct_switch = function(lines) {
     }
     bad = intersect(uses, names(made)[!made])
     on = !length(bad)
-    new = c(doc_direct_header(if (!on) paste("uses undone", paste(ui_escape(bad), collapse = ", ")),
+    # a `)` in a name would end the reason early, so the rest would read as the header's keys
+    shown = gsub(")", "<U+0029>", ui_escape(bad), fixed = TRUE)
+    new = c(doc_direct_header(if (!on) paste("uses undone", paste(shown, collapse = ", ")),
                               created),
             if (on) raw else ifelse(nzchar(raw), paste0("#~ ", raw), raw))
     if (!identical(new, lines[c(i, seg)])) {
