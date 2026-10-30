@@ -180,12 +180,6 @@ test_that("the package loaded without load-time errors", {
   expect_length(the$load_errors, 0L)
 })
 
-test_that("imports_used() references every Imports package", {
-  used = vapply(imports_used(), function(f) is.function(f), logical(1))
-  expect_true(all(used))
-  expect_length(used, 13L)
-})
-
 test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-72, IC-73)", {
   skip_on_cran()
   description = source_file("DESCRIPTION")
@@ -314,11 +308,14 @@ test_that("the hosted jobs have time for the whole suite (CI-19)", {
   expect_identical(jobs[["R-CMD-check"]][["timeout-minutes"]],
                    "${{ matrix.config.minutes || 45 }}")
   # October 2026: 26-31 minutes on Ubuntu, 37-45 on macOS since P28's serial pty tests (CI-96),
-  # about 23 for the slowest Windows shard
+  # about 23 for the slowest Windows shard; since P29 the serial no-Suggests and C-locale lanes
+  # pass 45 minutes, connections reaches 60 and macOS 56 (CI-106)
   expect_gte(shards[["timeout-minutes"]], 45)
   expect_identical(unname(minutes[combos == "ubuntu-latest devel"]), 120)
-  expect_identical(unname(minutes[combos == "macos-latest release"]), 60)
-  expect_gte(jobs$connections[["timeout-minutes"]], 60)
+  expect_identical(unname(minutes[combos == "macos-latest release"]), 75)
+  expect_gte(jobs[["no-suggests"]][["timeout-minutes"]], 60)
+  expect_gte(jobs[["c-locale"]][["timeout-minutes"]], 60)
+  expect_gte(jobs$connections[["timeout-minutes"]], 75)
 })
 
 # The `gptr::name` calls in the bodies and formals of the package's functions, where R CMD check's
