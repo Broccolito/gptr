@@ -18,7 +18,7 @@ test_that("rel_child_env() removes credentials and redirects home and user direc
   expect_false(anyNA(env))
 })
 
-test_that("ex_run_all() passes clean examples and reports every kind of side effect", {
+test_that("ex_run_all() passes clean examples and reports every side effect and slow page", {
   root = file.path(tempfile("toyex-"), "toyex")
   dir.create(file.path(root, "R"), recursive = TRUE)
   writeLines(c("Package: toyex", "Title: Toy Package for the Example Runner", "Version: 0.0.1",
@@ -35,14 +35,20 @@ test_that("ex_run_all() passes clean examples and reports every kind of side eff
       "writeLines(\"x\", file.path(d, \"x.txt\"))")),
     conn = rd_page("conn", examples = "con = file(tempfile(), \"w\")"),
     cwd = rd_page("cwd", examples = "writeLines(\"x\", \"left-behind.txt\")"),
-    fails = rd_page("fails", examples = "stop(\"boom\")")
+    fails = rd_page("fails", examples = "stop(\"boom\")"),
+    slow = rd_page("slow", examples = "Sys.sleep(1)"),
+    gptr_coach = rd_page("gptr_coach", examples = c("\\donttest{", "Sys.sleep(1)", "}"))
   )), file.path(root, "man"))
-  run = ex_run_all(root, pkg = "toyex")
-  expect_setequal(run$results$page, c("clean", "conn", "cwd", "fails", "userdir"))
+  run = ex_run_all(root, pkg = "toyex", threshold = 0.5)
+  expect_setequal(run$results$page,
+                  c("clean", "conn", "cwd", "fails", "gptr_coach", "slow", "userdir"))
   expect_identical(run$results$status[run$results$page == "clean"], 0L)
   expect_false(any(startsWith(run$problems, "clean:")))
   expect_true(any(grepl("^userdir: wrote outside the session temp directory", run$problems)))
   expect_true(any(grepl("^conn: example failed .*connections left open", run$problems)))
   expect_true(any(grepl("^cwd: wrote into the working directory: left-behind.txt", run$problems)))
   expect_true(any(grepl("^fails: example failed .*boom", run$problems)))
+  expect_true(any(grepl("^slow: examples took", run$problems)))
+  # The \donttest page is exempt from the time limit (rel_donttest_pages())
+  expect_false(any(startsWith(run$problems, "gptr_coach:")))
 })

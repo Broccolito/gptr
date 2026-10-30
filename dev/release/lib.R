@@ -45,7 +45,7 @@ rel_rd_groups = function() {
 rel_example_exceptions = function() c("gptr_login", "gptr_mcp_serve")
 
 # The one page whose example sits in \donttest{}: coaching starts seven R processes and takes
-# several seconds (cran-comments.md says so).
+# several seconds, so ex_run_all() does not time it (cran-comments.md says so).
 rel_donttest_pages = function() "gptr_coach"
 
 # 04 section 3.1: every option, in table order.
@@ -355,7 +355,7 @@ rel_install = function(root, lib, env) {
 
 # Reports what R CMD check --as-cran would: a failing example, a connection or child process left
 # open, a file written outside the session temp directory or into the working directory, and a
-# page slower than `threshold` seconds.
+# page other than rel_donttest_pages() slower than `threshold` seconds.
 ex_run_all = function(root, pkg = "gptr", work = tempfile("rel-examples-"), threshold = 5) {
   dirs = rel_dirs(work)
   env = rel_child_env(dirs[["home"]], dirs[["tmp"]], dirs[["proj"]], lib = dirs[["lib"]],
@@ -402,7 +402,7 @@ ex_run_all = function(root, pkg = "gptr", work = tempfile("rel-examples-"), thre
       problems = c(problems, sprintf("%s: wrote into the working directory: %s", name,
                                      paste(basename(left), collapse = ", ")))
     }
-    if (!is.na(secs) && secs > threshold) {
+    if (!is.na(secs) && secs > threshold && !name %in% rel_donttest_pages()) {
       problems = c(problems, sprintf("%s: examples took %.1f s (limit %g s)", name, secs,
                                      threshold))
     }
