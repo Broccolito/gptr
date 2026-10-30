@@ -2509,12 +2509,14 @@ risk_head = function(h) {
 }
 
 #' Names the code binds: functions it defines (`fun`), names bound to values the code computes
-#' (`val`: formals, loop variables, results of calls, roots of replacement calls) and all
+#' (`val`: formals, loop variables, results of calls, roots of replacement calls), all, and those
+#' bound to anything but setwd()'s or getwd()'s value (`other`)
 #' @noRd
 risk_bound = function(exprs) {
   fun = character()
   val = character()
   all = character()
+  other = character()
   visit = function(e) {
     if (!is.call(e)) return(invisible())
     h = if (is.symbol(e[[1L]])) as.character(e[[1L]]) else ""
@@ -2531,15 +2533,20 @@ risk_bound = function(exprs) {
           val <<- c(val, nm)
         }
       }
+      if (is.call(e[[2L]]) || !is.call(rhs) ||
+          !risk_head(rhs[[1L]])$name %in% c("setwd", "getwd")) other <<- c(other, nm)
     }
-    if (h == "for" && is.symbol(e[[2L]])) val <<- c(val, as.character(e[[2L]]))
-    if (h == "function") val <<- c(val, names(e[[2L]]))
+    b = switch(h, `for` = if (is.symbol(e[[2L]])) as.character(e[[2L]]),
+               `function` = names(e[[2L]]))
+    val <<- c(val, b)
+    other <<- c(other, b)
     if (h %in% c("for", "function")) all <<- c(all, val)
     xs = as.list(e)
     for (i in seq_along(xs)) if (!identical(xs[[i]], quote(expr = ))) visit(xs[[i]])
   }
   for (x in as.list(exprs)) visit(x)
-  list(fun = setdiff(fun, val), val = unique(val), all = unique(c(all, fun)))
+  list(fun = setdiff(fun, val), val = unique(val), all = unique(c(all, fun)),
+       other = unique(other))
 }
 
 #' The one parse walk (IC-31): list(flags, targets, sizes, calls, values); `values` names the
@@ -2565,12 +2572,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   # a function's other names are ones the code computes and R is where the code started or has
   # moved it to, local()'s are the names around it. After them a move in them adds to R's
   # directory, and a name they assign with <<- or assign() (or inside eval(), evalq(), with() or
-  # within()) adds the values `sup` holds for it.
+  # within()) adds the values `sup` holds for it. A name a plain assignment of base setwd()'s or
+  # getwd()'s value binds in a scope (`known`'s attribute `saved`) holds a directory R was in
+  # there, unless the code binds the name any other way anywhere (`unsaved`).
   known = structure(list(), wd = wd, wd0 = wd)
   sup = list()
-  # names whose last assignment saved R's directory (the value of setwd() or getwd())
-  saved = character()
   bound = risk_bound(exprs)
+  unsaved = bound$other
   # A helper the code binds (to a function or a value it computes), or the session holds as
   # other than base's, is called as one the code computes: risk_fold() folds no call of it.
   other = vapply(risk_base_helpers, function(f) !identical(risk_fn_where(f, envir)$pkg, "base"), NA)
@@ -2890,7 +2898,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       if (pc %in% c("workspace", "temp")) return(FALSE)
       # a directory the code computes that R moves back from (with_dir(), in_dir(), a name the
       # code saved R's directory in) is 3
-      undo = name %in% c("with_dir", "in_dir") || (is.symbol(x) && as.character(x) %in% saved)
+      undo = name %in% c("with_dir", "in_dir") ||
+        (is.symbol(x) && as.character(x) %in% setdiff(attr(known, "saved"), unsaved))
       add(ctx, paste0(label, if (!length(v)) " (a directory the code computes)" else
         " (leaves the project)"), name, if (!length(v) && undo) 3L else 4L, "session",
         v[1L] %||% NA_character_, pc)
@@ -3021,9 +3030,14 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     nm = as.character(node)
     v = if (!is.call(target)) fold(value, known)
     h = if (is.call(value) && !is.call(target)) risk_head(value[[1L]])
-    save = !is.null(h) && h$name %in% c("setwd", "getwd") &&
+    save = op %in% c(risk_arrow, "=") && !isTRUE(ctx$outer) && !is.null(h) &&
+      h$name %in% c("setwd", "getwd") &&
       (identical(h$pkg, "base") || (is.na(h$pkg) && !h$name %in% masked))
-    saved <<- if (save) union(saved, nm) else setdiff(saved, nm)
+    if (save) {
+      attr(known, "saved") <<- union(attr(known, "saved"), nm)
+    } else {
+      unsaved <<- union(unsaved, nm)
+    }
     known[[nm]] <<- if (ctx$seq && op != "<<-" && !nm %in% tg$super) v %||% NA_character_ else
       unique(c(known[[nm]] %||% NA_character_, v %||% NA_character_))
     if (op %in% c("<<-", "assign") || isTRUE(ctx$outer)) {

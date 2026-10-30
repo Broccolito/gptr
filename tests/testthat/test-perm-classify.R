@@ -1655,6 +1655,23 @@ test_that("here(), a restored directory and paths after a move are read (review 
                  "if (p) owd = setwd('data'); owd = f(); setwd(owd)", "withr::local_dir(d)")) {
     expect_identical(lv(code), 4L, label = code)
   }
+  # so is a name the code binds to another value anywhere, by <<- or in with(), or in a loop, one
+  # it saved in another scope, and in a function body a formal or one saved in a branch
+  for (code in c("d = Sys.getenv('X'); local({ d = getwd() }); setwd(d)",
+                 "d = Sys.getenv('X'); f = function() d = getwd(); f(); setwd(d)",
+                 "d = Sys.getenv('X'); tryCatch(d <- getwd(), error = function(e) 1); setwd(d)",
+                 "owd = Sys.getenv('X'); if (FALSE) owd = getwd(); setwd(owd)",
+                 "if (p) owd = '/etc' else owd = getwd(); setwd(owd)",
+                 "owd = getwd(); local({ owd <<- Sys.getenv('X') }); setwd(owd)",
+                 "owd <<- getwd(); setwd(owd)", "with(df, owd <- getwd()); setwd(owd)",
+                 "for (i in 1:2) { if (i == 1) owd = getwd(); setwd(owd); owd = Sys.getenv('X') }",
+                 "local({ owd = getwd() }); setwd(owd)",
+                 "f = function() owd = getwd(); f(); setwd(owd)",
+                 "owd = getwd(); f = function(owd) setwd(owd); f('/etc')",
+                 "f = function(owd) { if (p) owd = getwd(); setwd(owd) }",
+                 "f = function() { if (p) owd = getwd(); setwd(owd) }; owd = '/etc'; f()")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
   # a relative path after a move is one in the directory R moved to
   r = gptr_risk("setwd(tempdir()); writeLines('x', 'a.txt')", root = root)
   expect_identical(r$flagged$path_class[r$flagged$fn == "writeLines"], "temp")
