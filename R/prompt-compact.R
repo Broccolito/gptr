@@ -379,8 +379,8 @@ compact_should = function(s, tokens, idle_s) {
   if (hit) structure(TRUE, reason = reason) else FALSE
 }
 
-#' The checkpoint compactor's trigger: the threshold (waiting for 20% growth of the window
-#' after a threshold compaction, or 20% of the finite cap for an unknown window, IC-71) or the
+#' The checkpoint compactor's trigger: the threshold (waiting, after a threshold compaction, for
+#' growth of 20% of the threshold, which is at most the window: IC-71, D-298) or the
 #' cold rule (idle beyond the tail TTL with at least `gptr.compact_cold_min` tokens). An unknown
 #' count or idle time is no evidence (IC-74). A CLI model never triggers: the CLI compacts its
 #' own conversation (D-202).
@@ -410,7 +410,7 @@ compact_checkpoint_should = function(session, ctx) {
     } else {
       if (is.na(after)) after = 0
       waits = waits && !is.na(window)
-      if (!waits || tokens >= after + 0.2 * window) return(structure(TRUE, reason = "threshold"))
+      if (!waits || tokens >= after + 0.2 * thr) return(structure(TRUE, reason = "threshold"))
     }
   }
   ttl = if (identical(prompt_cache_gap_state(session)$ttl, "1h")) 3600 else 300

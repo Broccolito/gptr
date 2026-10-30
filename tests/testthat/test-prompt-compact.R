@@ -1290,8 +1290,9 @@ test_that("finite-cap waiting leaves known-window cold and disabled-cap rules in
   expect_identical(attr(compact_should(s, tokens = 7000, idle_s = 400), "reason"), "cold")
   local_gptr_options(compact_at = 1500)
   target$window = 200000
-  expect_false(compact_should(s, tokens = 46999, idle_s = 0))
-  expect_true(compact_should(s, tokens = 47000, idle_s = 0))
+  # Changed (FIX-37, F-91, D-298): a known window also waits for 20% of the threshold, the cap
+  expect_false(compact_should(s, tokens = 7299, idle_s = 0))
+  expect_true(compact_should(s, tokens = 7300, idle_s = 0))
   expect_length(fake_requests(x$fake), 0L)
   expect_equal(nrow(session_data(s)$usage), 0L)
 })
