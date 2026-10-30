@@ -4612,6 +4612,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: perm-classify (a name assigned outside a function body; a straight-line reassignment; a
   value that uses the name; computed, branch-default, loop, `<<-` and named `assign()` forms stay
   3), perm-gate (auto asks a person). Evidence: progress/P26.md Task 14.
+- Amended by D-293 (F-9): a `for` variable takes the folded values of its sequence, and
+  `list.files()` and `dir()` with full names and `fs::dir_ls()` of a literal folder name a file in
+  it, so neither is a name the code computes.
 
 ## D-212 - P26 a fan-out child gets its element alone as `.x`; context "none" is refused (2026-10-18)
 - Rule: for every backend a fan-out child's element is bound alone in its overlay as
@@ -6856,6 +6859,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   that said nothing. Contract-visible: 04 section 15.10 (the pause menu's [b]). Tests:
   test-console-commands.R "/exit, /quit and /q end the REPL"; test-agent-background.R "gptr_cancel()
   aborts a background session and releases its job".
+- Amended by D-296 (F-93): the person's own `!code` output, messages and warnings print as R prints
+  them, live and at R's width; only the error row and the closing blank row use the margin.
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets
@@ -8009,6 +8014,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   Contract-visible: 03 section 6.8.1, 04 sections 15.4 IC-53 item 3 and IC-78, the `eval_guard()`
   bullet; `?gptr_security`; risk-functions.csv's three fs rows. Tests: test-risk-forms.R (review
   round 6). Evidence: progress/fixes.md FIX-27.
+- Amended by D-293 (F-20): `pipe()`, `processx::run()` and `data.table::fread(cmd =)` with a command
+  the code computes are refused in auto and yolo too.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`
@@ -8206,6 +8213,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (`<U+XXXX>`). Tests: test-doc-blocks.R "a header value escapes C1 controls and DEL too (review
   round 6)"; test-doc-replay.R "the undone names a direct R line uses are written escaped (review
   round 6)".
+- Status 2026-10-30 (FIX-48, ledger V6T-2): control characters inside the model's own code, in a
+  string or a comment, are kept, since the code must run as written, so a raw ESC or BEL there
+  reaches the transcript.
 - Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
   lines, the transcript row) and section 7.8 (call record binding `sent`); `?gptr_doc`,
   `?gptr_source`, `?gptr_export`, `?gptr_security`; vignette("script-as-history").
@@ -8219,7 +8229,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   again, also when it cannot be recorded"; test-doc-export.R "an export leaves out what a prompt
   was sent with, in both formats (FIX-33 DOC-7)" (formerly "a raw export leaves out what a prompt
   was sent with; the Peter format keeps it"); test-doc-blocks.R "a lone carriage return in sent
-  text ends a #< line, as R reads it (review round 3)". Evidence: progress/fixes.md FIX-29.
+  text ends a #< line, as R reads it (review round 3)"; test-console-repl.R "a !code note's lines
+  are those its transcript records, a lone CR too (review round 6)". Evidence: progress/fixes.md
+  FIX-29.
 
 ## D-265 - FIX-30 A console statement names the model and mode its re-ask needs (2026-10-26)
 - Rule: a console transcript statement `s_<hex> = peter(...)` or `s_<hex> |> peter(...)` ends,
@@ -8450,7 +8462,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   code that starts a process and holds a string naming a network program anywhere counts as a
   network sink, so a command vector held in a variable sends a secret in yolo only after a
   question; and an ask rule on a nested hand-over is asked in `perm_check()`'s one question with
-  the call's other reasons (`extra`), not before it.
+  the call's other reasons (`extra`), not before it. Status 2026-10-30 (FIX-48, ledger L-6): wider
+  than this entry said, a `Sys.getenv()` whose name the code computes counts as a secret read for
+  the network question even for an ordinary variable, so `v = 'PATH'; Sys.getenv(v)` beside
+  `system('echo hi')` and the string `'install curl first'` is level 4 and asks in auto too (3 on
+  `3cd3b146`).
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
@@ -8723,11 +8739,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   Constraints; Task 1's DESCRIPTION, its test and the Red step), P25 (Global Constraints, Task 5)
   and 05's P01 scope now state the new Title (#94). P01's Task 1 still writes its own first
   Description, which the shipped one had replaced before #92 (CI-104); this entry wins over it,
-  as over the Description 05 asks of P01 (per research report 13, section 3).
-- Why: the maintainer merged the PR as is and asked that its wording be the gold standard for the
-  rest of the repository (CI-105). The Title has 42 characters, is left unchanged by
-  `tools::toTitleCase()` and has no period; the Description opens with neither the Title nor the
-  package name.
+  as over the Description 05 asks of P01 (per research report 13, section 3). The maintainer merged
+  the PR as is and asked that its wording be the gold standard for the rest of the repository
+  (CI-105). The Title has 42 characters, is left unchanged by `tools::toTitleCase()` and has no
+  period; the Description opens with neither the Title nor the package name.
 - Contract-visible: DESCRIPTION's Title and Description, as CRAN, `citation("gptr")` and the
   package site show them; no section of 03 or 04 names either (IC-72 lists the fields P01 writes
   without them).
@@ -8746,7 +8761,24 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   retry, and the profile is removed only once the family is gone. Without a deadline (`seconds` 0:
   the startup unwind and the retained cleanup job, which record no helpers) nothing changes. This
   amends D-233 ("no bound, grace or deadline changes") and CI-64's measurement that the helpers
-  settle in 0.06-0.08 s, which holds on an idle machine only.
+  settle in 0.06-0.08 s, which holds on an idle machine only. The reason: under load the macOS
+  scheduler starves an orphaned Chrome renderer (parent 1, state RN, priority 4, the background band
+  Chrome sets for an idle renderer) after the browser stops, past the shared 10 s close deadline.
+  The round 4 flake investigation's logs (test-artifact-app.R, an open-and-close driver and a probe)
+  hold 13 such failures from 12 closes, one line being a close's retry 120 s later. In each the
+  marker tree was empty and readable and a recorded renderer, runnable at priority 4, lived on under
+  parent 1, in one beside an exiting helper. The families settled 20.6 to 169.5 s after the SIGTERM,
+  so a 30 s deadline would still have missed 8 of the 12 closes. The failures came at a load average
+  of 163 to 371: 11 of the 49 closes under 16 or 32 busy loops (16 cores, 22%) and 1 of the other
+  212, under another agent's check at 206; none of the 116 closes logged below 100 failed. Killing
+  the recorded helpers still running after the 2 s grace gave 0 failures in 28 closes under 32 busy
+  loops at a load average of 315 to 385 (Fisher p = 0.004 against the 11 of 49), each lingering
+  helper gone within 0.1 s of the kill. FIX-35's own measurement under 32 and 16 busy loops, the fix
+  and the base in alternate blocks: none of the fix's 40 closes (load average 103 to 362) ran out
+  `release()`'s deadline or ended "did not finish cleanup", 9 of them killing one helper, gone
+  within 0.085 s, though 3 ended "close timed out" before `release()` waited (F2); 4 of the base's
+  11 closes ran out that deadline, 3 with "did not finish cleanup" and one behind its check's
+  page-load timeout (Fisher p = 0.0013).
 - Rule: `artifact_browser()` first retries a pending lease (a startup whose cleanup close failed)
   with `artifact_browser_close()`, and raises "The pending headless browser must finish cleanup
   before opening another." only when that retry fails, the lease kept. Formerly it raised at once,
@@ -8757,28 +8789,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   cost: while the retry keeps failing, each call runs that close before it raises, up to the
   close's 10 s deadline and longer when F2's walks are slow (the closes that timed out in FIX-35's
   runs took 14.2 to 43.4 s), where formerly it raised at once.
-- Why: under load the macOS scheduler starves an orphaned Chrome renderer (parent 1, state RN,
-  priority 4, the background band Chrome sets for an idle renderer) after the browser stops, past
-  the shared 10 s close deadline. The round 4 flake investigation's logs (test-artifact-app.R, an
-  open-and-close driver and a probe) hold 13 such failures from 12 closes, one line being a
-  close's retry 120 s later. In each the marker tree was empty and readable and a recorded
-  renderer, runnable at priority 4, lived on under parent 1, in one beside an exiting helper. The
-  families settled 20.6 to 169.5 s after the SIGTERM, so a 30 s deadline would still have missed
-  8 of the 12 closes. The failures came at a load average of 163 to 371: 11 of the 49 closes under
-  16 or 32 busy loops (16 cores, 22%) and 1 of the other 212, under another agent's check at 206;
-  none of the 116 closes logged below 100 failed. Killing the recorded helpers still running after
-  the 2 s grace gave 0 failures in 28 closes under 32 busy loops at a load average of 315 to 385
-  (Fisher p = 0.004 against the 11 of 49), each lingering helper gone within 0.1 s of the kill.
-  FIX-35's own measurement under 32 and 16 busy loops, the fix and the base in alternate blocks:
-  none of the fix's 40 closes (load average 103 to 362) ran out `release()`'s deadline or ended
-  "did not finish cleanup", 9 of them killing one helper, gone within 0.085 s, though 3 ended
-  "close timed out" before `release()` waited (F2); 4 of the base's 11 closes ran out that
-  deadline, 3 with "did not finish cleanup" and one behind its check's page-load timeout (Fisher
-  p = 0.0013).
 - Not changed: at a load average of 260 and more the process-table walks of the close
   (`proc_children()`, `proc_tree()`) can take 12-28 s (at 280 and more in that investigation) and
   use up the deadline by themselves; in FIX-35's runs 4 of 33 closes under 32 busy loops ended
-  "close timed out" so, one after 14.0 s in `proc_children()` (FIX-35 F2, Open).
+  "close timed out" so, one after 14.0 s in `proc_children()` (FIX-35 F2; closed by D-300).
 - Contract-visible: none of 03 and 04 states the owned browser's close or its helpers (D-233's rows
   are `kill_all()`'s); a session check reports "HTTP-only check: the headless browser failed" less
   often, after a close or a failed startup under load.
@@ -9028,13 +9042,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   progress/P29.md Task 7.
 
 ## D-279 - P29 The coaching child reuses the worker's helpers through contract edges (2026-10-28)
-- Rule: `R/gptr-child.R` (area `gptr`, L6) starts each job through a new `child` entry of `proc_rscript()` beside
-  `worker_main()` and reuses P19's helpers instead of copying them: `subagent_schedule()`, `subagent_limit()`,
-  `worker_registry()`, `worker_registry_apply()`, `worker_spec_revive()` and `worker_key_provider()`, with P11's
-  `perm_rules_effective()`; `R/gptr-tailor.R` uses P11's `rule_hit()`, `rule_glob_re()` and `risk_table()` and
-  P10's `walk_tree()`. These 11 calls are contract edges of the layering test (`arch_contract_edges()`). The
-  worker's reader of its child's stdout is not reused: the child entry has its own line reader (`child_line()`),
-  because model code can print to that stream.
+- Rule: `R/gptr-child.R` (area `gptr`, L6) starts each job through a new `child` entry of
+  `proc_rscript()` beside `worker_main()` and reuses P19's helpers instead of copying them:
+  `subagent_schedule()`, `subagent_limit()`, `worker_registry()`, `worker_registry_apply()`,
+  `worker_spec_revive()` and `worker_key_provider()`, with P11's `perm_rules_effective()`;
+  `R/gptr-tailor.R` uses P11's `rule_hit()`, `rule_glob_re()` and `risk_table()` and P10's
+  `walk_tree()`. These 11 calls, with P17's `skill_discover()` (D-288) 12, are contract edges of the
+  layering test (`arch_contract_edges()`). The worker's reader of its child's stdout is not reused:
+  the child entry has its own line reader (`child_line()`), because model code can print to that
+  stream.
 - Contract-visible: 04 sections 12.2 and 15.11 IC-86; 03 section 3.2 (128 files).
 - Tests: test-arch-layers.R "the layer table lists the files of architecture section 3.2"; test-proc-rscript.R
   "the coaching child entry loads the installed namespace as a worker does (P29)". Evidence: progress/P29.md
@@ -9057,12 +9073,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   registry ships the rank-0 policies of the sessions' ancestors (08 3.2)". Evidence: progress/P29.md Task 3.
 
 ## D-281 - P29 Nested computed commands meet the coaching fence (2026-10-28)
-- Rule: `nested_rules()` also asks a coaching child's `fence` policy, so a nested `sh`, `bg`, `write` or `edit`
-  call whose command or path the outer code computes at run time (`cmd = paste('R CMD', toupper('install'), 'x');
-  peter$sh(cmd)`) meets the fence as the literal call would. The fence (`child_fence_why()`) denies writes and
-  edits outside the child's temporary folder, code gptr cannot read, installs, R child processes, `setwd()` away
-  from the folder, file targets outside it, and reads of the CLI login files and `find-generic-password`. It still
-  fences only what the classifier sees (08 honest limit 1).
+- Rule: `nested_rules()` also asks a coaching child's `fence` policy, so a nested `sh`, `bg`,
+  `script`, `write` or `edit` call whose command or path the outer code computes at run time
+  (`cmd = paste('R CMD', toupper('install'), 'x');
+  peter$sh(cmd)`) meets the fence as the literal call would. The fence (`child_fence_why()`) denies
+  writes and edits outside the child's temporary folder, code gptr cannot read, installs, R child
+  processes, every `peter$script()` row and `script` call, a change of working folder to anywhere
+  but the run's own folder (D-284, D-297), file targets outside it, and reads of the CLI login files
+  and `find-generic-password`. It still fences only what the classifier sees (08 honest limit 1).
 - Contract-visible: 04 sections 7.6 and 15.11 IC-86, IC-89; 03 section 6.8.4.
 - Tests: test-agent-dispatch.R "nested sh, bg, script, write and edit calls meet every rules-like policy" (the
   fence case); test-gptr-child.R "the fence denies writes outside, moving away from the folder, installs, R
@@ -9093,9 +9111,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   coaching. Formerly the route ignored the schema. The CLI has no native structured output, so gptr still reads and
   validates the reply itself; a coach reply that fails gets one retry (IC-84).
 - Contract-visible: 04 section 15.11 IC-88.
-- Tests: test-cli-claude.R "the claude route asks for `returns` at the end of the user line"; test-live-cli.R "a
-  claude coach has no tools, answers in one turn and saves nothing" (live, pending). Evidence: progress/P29.md
-  Task 5.
+- Tests: test-cli-claude.R "the claude route asks for `returns` at the end of the user line";
+  test-live-cli.R "a claude coach has no tools, answers in one turn and saves nothing" (live;
+  passes, 2026-10-28). Evidence: progress/P29.md Task 5.
 
 ## D-284 - P29 A coaching run keeps its working folder and runs no `peter$script()` (2026-10-28)
 - Rule (working folder): the fence (`child_fence_why()`) denies a change of working folder to anywhere but the
@@ -9120,6 +9138,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-gptr-child.R "the fence denies writes outside, moving away from the folder, installs, R processes",
   "a run's child runs no R script and keeps its shell commands in its folder"; test-agent-dispatch.R "nested sh,
   bg, script, write and edit calls meet every rules-like policy". Evidence: progress/P29.md Review fixes.
+- Amended by D-297 (F-54): a folder changer's name is a move only where R calls it, where
+  `do.call()`, `match.fun()` or `get()` names it, or where the classifier reads it passed on as a
+  value; `Set-Location` folds case on every OS.
 
 ## D-285 - P29 Process-tree markers stay in `tempdir()` while R CMD check runs examples (2026-10-28)
 - Rule: `proc_dir()` is `tempdir()/gptr-procs` while `check_running()` is `TRUE` and testthat is not running, else
@@ -9201,6 +9222,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: 04 section 15.11 IC-83; 08 section 3.1.
 - Tests: test-gptr-tailor.R "a harness that loads code or loosens checks says so when it is made", "dir = writes
   the harness for people to read and returns it invisibly". Evidence: progress/P29.md Review fixes.
+- Amended by D-297 (F-57, F-60): the notice always lists the fixed `extensions` and `plugins`, text
+  included, and a fixed `.opts` holding `system`; `prompt` cannot be fixed.
 
 ## D-290 - P29 A run's result reaches the parent within the reader's limits (2026-10-28)
 - Rule (encoding): `plain_encode()` keeps within `plain_decode()`'s limits: it counts depth from the result's
@@ -9224,3 +9247,312 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   wrong shape is refused, as a forged one is", "a run's result holds its first user message on its own";
   test-gptr-coach.R "the coaches and the judge see the starting run's whole first message as the task". Evidence:
   progress/P29.md Review fixes.
+
+## D-291 - P29 A keyed factory new to a frozen session refreezes its prompt (2026-10-29)
+- Rule: a keyed factory that `gateway_register()` loads into a session whose prompt is already
+  frozen (another harness on a continuation, or the same harness in a fork or resumed session this
+  process has not loaded it for) clears `.d$frozen` and sets `.d$refreeze`. The next request is then
+  composed afresh and carries every loaded harness's note and skills. A refused call restores both
+  (D-251). A continuation with a harness already loaded keeps the frozen prompt. A pending refreeze
+  is a stated break of the prompt cache: `gateway_continue_session()` calls `prefix_reset()`, so no
+  `cache_break` is recorded. The fresh composition uses the continuing call's preset and tool
+  modifiers. This is the one case where a session's frozen blocks change, an exception to 04
+  section 9.3. Formerly the second harness's note section never reached the frozen prompt, and a
+  later block naming it read stale (P29 commit `7655f88f`, review fix 11).
+- Rule (edge, DEC-28): a refreeze applies the continuing call's tool modifiers to the prompt only.
+  With `h2`'s fixed `tools = "-write"`, the refrozen prompt no longer lists `write`, while the tool
+  stays registered and callable, and `gateway_continue_session()` still says that tools cannot be
+  removed from a running conversation. Documented, no code change: a prompt that leaves out a tool
+  the session still has is the conservative side.
+- Contract-visible: 04 sections 9.3, 15.2 IC-52 (`gptr_resume(path)`) and 15.11 IC-85 (Factory); 03
+  section 6.19 (The call); 08 section 3.1 (Continuations).
+- Tests: test-gptr-tailor.R "continuing with another coached harness keeps both harnesses'
+  coaching". Evidence: progress/P29.md Review fixes item (11); progress/fixes.md FIX-48.
+
+## D-292 - FIX-37 A project inside a protected folder classes paths below its root (2026-10-29)
+- Rule (DEC-5, ledger L-1): `path_class_one()` classes a path inside the project by its part below
+  the project root, so a protected name (`.git`, `.claude`, `.aws`) counts only below the root.
+  Formerly a project inside a protected folder, such as Claude Code's `.claude/worktrees/<name>`,
+  made every path protected: every read was level 3, every delete level 4, and `setwd('.')` asked in
+  every mode. A protected folder inside the project is still protected, and so is every path outside
+  it. F-80's checkpoint filter (D-298) reads `path_class()`, so without this rule such a project
+  would capture nothing.
+- Contract-visible: `gptr_risk()`'s `path_class` and levels in such a project (03 section 6.8.1;
+  `?gptr_security`).
+- Tests: test-utils-paths.R "a project in a protected folder classes a path by its part below the
+  root (D-292)". Evidence: progress/fixes.md FIX-37 (F-10).
+
+## D-293 - FIX-37 Loops, listings, moves, working folders and computed commands (2026-10-29)
+- Rule (loops and listings, DEC-6, F-9; amends D-211): a `for` variable takes the folded values of
+  its sequence, so `for (f in c('/tmp/a')) unlink(f)` reads that path, and `list.files()` and
+  `dir()` with `full.names = TRUE` and `fs::dir_ls()` of a literal folder fold to a file in it
+  (`file.path(d, "x")`, the plan's glob `file.path(d, "*")` not needed), `Sys.glob()` to its
+  pattern. A deleter handed to `lapply()`, `Map()` or `purrr::walk()` stays a path the code computes
+  (level 3), as `?gptr_security` says. D-211's "a `for` variable" among the computed names no longer
+  holds for a loop over a vector the classifier folds.
+- Rule (computed commands, DEC-7, F-20; ledger L-3): `pipe()`, `processx::run()` and
+  `data.table::fread(cmd =)` with a command the code computes are refused in auto and yolo, as a
+  computed `system()` is (D-262); the rest of L-3 stays documented.
+- Rule (working directory, DEC-8, F-16, F-6, F-15): after the arguments of `withr::with_dir()` and
+  `xfun::in_dir()` the tracked directory is where R was, so a later relative `setwd()` is read
+  there. `here::here()` of literal parts folds to the project root. A computed directory that R
+  moves back to reads level 3: `with_dir()`, `in_dir()`, and `owd = setwd(d); ...; setwd(owd)` or
+  `owd = getwd()`, where the name counts as saved only in the scope that saved it (`local()`
+  restores the saved set, a function body starts with none) and only when the code binds it no other
+  way anywhere (another value, a loop variable, a formal, a replacement, `<<-`, `assign()`,
+  `list2env()`, an assignment inside `eval()`, `evalq()`, `with()` or `within()`, or a masked
+  `setwd` or `getwd`). `setwd(owd)` to any other computed directory stays level 4, and the branch
+  and loop forms of the idiom (`if (p) owd = setwd("data")`) read 3. Relative paths after a move are
+  read in the directory R is in. A directory with more than 64 candidates is one the code computes
+  (level 4, not the plan's 3), so the classifier's time no longer doubles with each branched
+  `setwd()`. Residual: `assign()` or `list2env()` rebinding a saved name inside a loop after the
+  read is seen in walk order only.
+- Rule (moves, DEC-9, F-19; ledger L-5): the source of `file.rename()`, `fs::file_move()`,
+  `os.rename()` and `shutil.move()` is a delete, as the shell's `mv` already was; one rule for every
+  language.
+- Rule (partial names, F-18; ledger W6-1): an argument named in part is matched by partial name
+  against the formals of the table's package functions when the namespace is not loaded, so a
+  reading no longer depends on load state; the plan proposed hand-written formals.
+- Contract-visible: `gptr_risk()` levels, paths and rows; the computed-command refusal
+  (`?gptr_security`, NEWS); 03 section 6.8.1.
+- Tests: test-perm-classify.R "a for loop over a vector and a listing of a folder are read as its
+  files (D-293)", "with_dir() and in_dir() leave R where it was (D-293)", "here(), a restored
+  directory and paths after a move are read (review F-6)", "more directories than a reading follows
+  are one the code computes (D-293)", "a move deletes its source in R, Python and the shell alike
+  (D-293)", "an argument named in part is read while its namespace is not loaded (review F-18)";
+  test-perm-gate.R "only auto and yolo refuse a computed command; a literal one is gated as before".
+  Evidence: progress/fixes.md FIX-37.
+
+## D-294 - FIX-37 Permission rules and the classifier's stated limits (2026-10-29)
+- Rule (`sh:` globs, DEC-2, F-4): an `sh:` glob matches the command as written, with `(?i)` on macOS
+  and Windows, as D-147's ignore rules do; options placed before a subcommand (`git -C dir push`)
+  are not matched. No second matching model on the classifier's (program, subcommand) reading.
+- Rule (relative `cd`, DEC-1, F-8): a relative `cd` target is joined to the directory the line moved
+  to last; later commands are still read in the union of the line's folders, so
+  `cd sub && rm -rf ../build` asks in auto and yolo (telling `&&` from `;` needs a new token kind).
+- Rule (Python text, DEC-4, F-17): `risk_python()` reads no comment and no `chdir(` inside a string;
+  code holding a triple-quoted string is read whole, with its comments, and the comment strip
+  honours backslash escapes. D-061's literal scan of command lines in quoted text stays, so
+  `system("echo 'rm -rf /'")` reads 4 (it catches `ssh host 'rm -rf ~'`).
+- Rule (tool-name rules, DEC-11, F-22; ledger V6S-3): a tool-name rule (`deny = "script"`) names a
+  tool the model calls, never a `peter$` member, served or not.
+- Rule (forms not read, DEC-3, F-88): `glue` and `cli` template braces are not read as code; the
+  classifier is advisory and such code is not written by accident. `?gptr_security` lists them with
+  the other limits this pass keeps.
+- Contract-visible: `?gptr_permissions`; `?gptr_security`; 04 section 15.4 IC-57.
+- Tests: test-perm-rules.R "sh: globs match in any case where file names do (D-294)";
+  test-perm-classify.R "a relative cd moves from the directory the line moved to last (D-294)",
+  "Python comments and a chdir( in a string are no code (D-294)". Evidence: progress/fixes.md FIX-37
+  and FIX-44.
+
+## D-295 - FIX-38 A failed secret scan asks; command lines are sources; children redact (2026-10-29)
+- Rule (fail closed, F-1): `risk_secret_scan()` returns no findings only for text that does not
+  parse, which never runs. When code parses and `secret_scan()` fails on it, the block gets one
+  guarded finding (rule `secret_scan_failed`) at level 4, not the plan's 3: yolo asks only for level
+  4 or a flow, and a failed scan cannot rule out a secret sent over the network.
+- Rule (command lines, DEC-14, F-28; ledger V6S-1): when the code starts a process (the process
+  functions or `peter$sh()`, `peter$bg()`, `peter$script()`), its strings are read with the
+  classifier's environment-name pattern `risk_env_name_re` (`$NAME`, `${NAME}`, `$env:NAME`,
+  `%NAME%`, `os.environ`, `getenv()`): a registered name, in any letter case, is
+  `secret_env_registered`, and each word `scan_env_file()` matches is a `secret_file`. Both are
+  sources for the secret-to-network question and taint the names they are assigned to, so a send
+  asks in every mode, also split over two `r` calls. Only registered names count.
+- Rule (gptr's store, DEC-12, F-29): `scan_env_file()` also matches a file named `auth.json`,
+  wherever `tools::R_user_dir()` puts it, so a read of gptr's credential store through a computed
+  path is guarded and asks in auto; `~/.codex/auth.json` is guarded too. Other secret files
+  (`~/.ssh`, `~/.aws`, `~/.netrc`) stay level 3 without the guard. The rest of gptr's config folder
+  holds no secret, so no rule covers it.
+- Rule (children, DEC-13, F-86, F-53): a worker's spec and a coaching child's spec carry, as
+  `secrets`, only the parent's registered redacting secrets whose values occur in the data the child
+  is sent (`secrets_held()`: the shipped objects, and for a coaching child its jobs and their
+  objects file), and the child registers them inactive (redaction only: no credential lookup, no
+  literal rewrite) before it starts. DEC-13 said to ship the parent's registered values; shipping
+  all of them would put provider keys in `spec.rds`, which IC-70 forbids (test-secrets-e2e.R "worker
+  spec and result files and worker output carry no key" failed with that version), and registering
+  them active let a child resolve a credential it was not given (fixed at integration, `c9a60b0c`).
+  Formerly a registered secret inside a shipped object reached the child's model raw.
+- Contract-visible: `?gptr_security` (secret reads, environment dumps, `auth.json`); 04
+  sections 15.8 IC-70 and 15.11 IC-86 (`secrets`); 08 section 3.3.
+- Tests: test-perm-classify.R "a secret scan that fails on code that parses is a guarded level 4
+  (D-295)"; test-perm-gate.R "a secret scan that fails asks a person in auto and yolo (D-295)";
+  test-auth-secrets.R "a command line that reads a registered secret or a .env file is a source
+  (FIX-37)", "gptr's credential store is a guarded read, through a computed path too (FIX-37)";
+  test-secrets-e2e.R "yolo asks before a command line's or ps_environ()'s secret is sent (FIX-37)",
+  "auto refuses a secret read beside an empty argument or of auth.json (FIX-37)";
+  test-subagent-worker.R "a registered secret in a shipped object reaches the worker's model
+  redacted"; test-gptr-coach.R "a registered secret in a run's objects reaches its child's model
+  redacted (D-295)". Evidence: progress/fixes.md FIX-37, FIX-38, FIX-42 and FIX-45.
+
+## D-296 - FIX-43 The person's own !code output prints as R prints it (2026-10-29)
+- Rule (DEC-16, F-93; amends D-245): the output, messages and warnings of the person's own `!code`
+  and `!!code` print as R prints them: live, at R's width and wrapped by the terminal. Only the
+  error row and the closing blank row use the console margin. The agent's `r` tool keeps the margin
+  and width 100. `eval_open()` echoes into the margin only for guarded (agent) code; no option.
+  Formerly the person's output was held until each top-level expression ended and cut at the console
+  width while R printed at width 100.
+- Contract-visible: D-245's output vocabulary for `!code`; `?peter` (the console paragraph);
+  `repl_passthrough()`'s note.
+- Tests: test-eval-core.R "the person's own code prints as R does, the agent's in the console margin
+  (D-296)"; the `!code` tests of test-console-repl.R. Evidence: progress/fixes.md FIX-43.
+
+## D-297 - FIX-41 Harnesses: the fence's folder rule, the Codex hook, the load notice (2026-10-29)
+- Rule (fence, DEC-30, F-54; amends D-284 and IC-86): a folder changer's name (`setwd`, `with_dir`,
+  `local_dir`, `in_dir`) is a move only where R calls it, where `do.call()`, `match.fun()` or
+  `get()` names it, or where the classifier reads it passed on as a value that leaves the project or
+  goes to a folder the code computes. Ordinary code that only names one (`lapply(dirs, setwd)`
+  aside) is no longer denied. `Set-Location` folds case on every OS. The `cd`-word string rule of
+  D-284 stays as documented.
+- Rule (computed paths and functions, DEC-24, F-58: decided, held back): the decision is that the
+  fence denies `dynamic` rows and `file_write` or `file_delete` rows with `path_class` `unknown`,
+  coaching only. Commit `6879ea8d` did so and broke its own acceptance check:
+  `write.csv(x, "out.csv")`, `write.csv2()`, `readr::write_csv()` and `data.table::fwrite()` to a
+  literal path were refused, because the classifier reads a `...`-matched path from every unnamed
+  argument and keeps the worst. The classifier change that fixes it is in `R/perm-classify.R`, which
+  no item of this pass owned for it, so `d3bef645` reverts the rule and the fence is as before this
+  pass. To land it: a gate item applies the classifier half of the lane's cross-lane diff (a named
+  path argument that went unmatched marks `one`; computed candidates drop when some are read; a
+  level tie keeps the worse class), then `git revert d3bef645` and the diff's test half. Then
+  `Filter(Negate(is.null), l)`, `sapply(l, Negate(is.na))`, `fun = mean; fun(1:3)`,
+  `match.fun("mean")(1:3)` and `do.call(f, list(1))` would be refused as functions the code
+  computes. Until then IC-86 and 08 section 3.5 do not say that the fence refuses computed paths or
+  functions.
+- Rule (Codex hook, DEC-27, F-59): `inst/gptr/codex_hook.R` denies by printing Codex's `PreToolUse`
+  decision (`hookSpecificOutput`, `permissionDecision` `"deny"` with its reason) on stdout and
+  exiting with status 0, which no shell changes, and keeps its log line. Formerly it exited with
+  status 2, which Windows PowerShell, Codex's shell there, reports as 1, a failed hook that does not
+  block. The Windows test runs the hook through `powershell.exe`; it has not run on a Windows host
+  with Codex (a release step).
+- Rule (load notice and `prompt`, DEC-26, F-57, F-60; amends D-289 and IC-83): the notice always
+  lists the fixed `extensions` and `plugins`, text included (a file path there is R code sourced on
+  every call), and a fixed `.opts` holding `system`, besides every fixed argument that is not plain
+  data and `mode = "yolo"`. `prompt` cannot be fixed: `harness_formals()` leaves it out, so
+  `gptr_tailor(peter, prompt = ...)` and a loaded spec that fixes it are
+  `gptr_error_invalid_argument`, while `gptr_coach(prompt = ...)` still takes it. A harness is
+  called exactly like `peter()`, and each call's prompt is its task.
+- Rule (hidden characters, DEC-25, F-71): coaching text keeps the one conservative rule, no format
+  character (zero-width joiners included), and `?gptr_tailor` says so: a script or emoji sequence
+  that needs U+200C or U+200D cannot appear in coaching.
+- Contract-visible: 04 section 15.11 IC-83, IC-86 and IC-88 and the `model_refused` row of
+  section 2.2; 08 sections 3.3, 3.5 and 3.7; `?gptr_tailor`.
+- Tests: test-gptr-child.R "the fence reads a folder changer's name as a move only where R calls
+  it"; test-cli-codex.R "the Codex hook writes its start line and lets a run use only gptr's tools",
+  "the hook command in the argv runs through the shell, logs its start, denies a tool";
+  test-gptr-tailor.R "the notice names extension files, plugins and a replaced system prompt".
+  Evidence: progress/fixes.md FIX-41 and FIX-42.
+
+## D-298 - FIX-43 Output caps, checkpoint scope, lock age and the compaction wait (2026-10-29)
+- Rule (output cap, DEC-32, F-79): `proc_run()` and `bridge_run()` kill the process tree once a
+  redirect file passes `proc_output_cap` (64 MiB per stream), checked in the existing 200 ms loop;
+  the text keeps the first 40% and the last 60% of the cap, cut at whole UTF-8 characters, and ends
+  with `[output exceeded 64 MB; process tree killed]`. No option. Formerly 150 MB of output cost 2.2
+  GB of memory and a spill file of that size.
+- Rule (checkpoint scope, DEC-33, F-80): `ckpt_files_baseline()` and `ckpt_capturable()` skip paths
+  whose `path_class()` is `protected` or `control`, so `.env`, `.Renviron`, `.Rprofile`, `renv.lock`
+  and keys are never stored and a rewind's row for one reads "no pre-image", as writing them is
+  already a level-4 question. It needs D-292. Cost: `path_class()` takes about 0.31 ms a path (5,000
+  files: 1.57 s of a 2.16 s baseline); classifying only the rows under the size cap was rejected,
+  since protected rows (copies under `.claude/worktrees`) would use up the budget first.
+- Rule (locks, DEC-38, F-104; amends IC-59): a lock holder that its pid and creation time prove
+  alive holds the lock whatever its heartbeat's age; a dead one is stale; the 24 h heartbeat age
+  applies only to a holder that cannot be checked (no creation time, or an unknown process state).
+  Formerly an idle attached session lost its lock after 24 h, and a second process could resume it
+  without `split_brain`. `ckpt_foreign_lock()` applies the same rule with the L0 process helpers, so
+  `ckpt_gc()` keeps the blobs of a live idle holder past 24 h (integration `0a3a6cd2`, `541ca003`).
+- Rule (compaction wait, F-91): after a threshold compaction on a known window the next one waits
+  until the context grew by 20% of the threshold (`min(window, threshold)`, which is the threshold),
+  as the unknown-window rule already measured against the cap; formerly 20% of the window, so
+  `compact_at = 20000` on a 1e6-token window let the context grow by about 200k.
+- Contract-visible: 04 sections 11.4 and 15.5 IC-59 (locks) and 15.8 (the compaction floor row);
+  `?gptr_rewind` and `?gptr_security` (protected files); the 64 MB status line.
+- Tests: test-proc-spawn.R "proc_run() output past 64 MiB keeps its head and tail and a status
+  line"; test-bridge-sh.R "peter$sh() output past 64 MiB ends with the status line";
+  test-ckpt-files.R "protected and control files are never stored; their rows have no pre-image";
+  test-session-live.R "a live holder keeps its lock after 24 h idle; an unverifiable one does not";
+  test-compaction-acceptance.R "compact_at bounds the context after the first compaction on a large
+  window". Evidence: progress/fixes.md FIX-43 and FIX-45.
+
+## D-299 - FIX-44 Extensions: plugin ranks and paths, reloads, MCP trust and merging (2026-10-29)
+- Rule (plugin rank, DEC-44, F-113): settings plugins enable and list at the plugin rank 5, not 3,
+  so a user skill wins over a settings plugin's skill of the same name, as the documented order
+  says; formerly they tied and the order of registration decided.
+- Rule (relative plugins, DEC-46, F-118): a `./` or `../` entry of the `plugins` setting is resolved
+  against the project root, as `skills.paths` is (`?gptr_config`).
+- Rule (reload, DEC-47, F-114): `gptr_reload()` keeps only the loaded (`TRUE`) entries of
+  `res_state()$loaded`, so an extension file that failed to load is tried again at the next session
+  start.
+- Rule (trust-gated MCP files, DEC-45, F-83): the project MCP files of other applications,
+  `.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`, `.vscode/mcp.json` and `.pi/mcp.json`, are
+  trust-gated paths (`trust_gated_paths()`, so `trust_resources_present()` too): a pulled change
+  asks again, and a project holding only `.mcp.json` asks the trust question.
+- Rule (gptr's own MCP writes, F-82): `gptr_mcp_add()` and `gptr_mcp_remove()` at project scope take
+  `trust_holds()` before the locked write of `.gptr/mcp.json` and `trust_carry()` with the sha256 of
+  the bytes written, as `settings_write()` does, so the project stays trusted. P18 (`mcp-config.R`,
+  L4) calls these two P08 (L6) functions, two contract edges of the layering test
+  (`arch_contract_edges()`).
+- Rule (merging foreign servers, F-109, F-110, F-111): foreign servers merge by transport, command,
+  args, url, env, headers and cwd, fields of zero length ignored, so an empty `env` or `headers`
+  object is the same server as none; their tool-list cache key adds env and cwd (stdio) or headers
+  (HTTP) only when present, so keys of servers without them are unchanged. A colliding name becomes
+  `<harness>_<name>`, then `_2`, `_3` until unique, and no entry is lost. In an untrusted project
+  every project source ranks after every user source, and gptr's own-file shadowing applies only
+  between gptr's two files.
+- Contract-visible: 04 sections 7.18 (`mcp_config_all()`), 10.1 (ranks), 11.9 (the MCP cache keys),
+  12.2 (`helper-arch.R`) and 15.2 IC-52; `?gptr_trust`, `?gptr_config`, `?gptr_reload`; NEWS.
+- Tests: test-ext-plugins.R "a user skill wins over a settings plugin's skill of the same name
+  (F-113)", "a relative plugins entry is found from the project root (F-118)"; test-ext-load.R
+  "gptr_reload() retries an extension file that failed to load (F-114)"; test-mcp-config.R "the MCP
+  files of other harnesses in a project are trust-gated (F-83)", "gptr's own project mcp.json writes
+  keep the project trusted (F-82)", "foreign servers that differ only in env, headers or cwd stay
+  apart (F-109)", "an empty env or headers object is the same server as none (F-109)", "colliding
+  foreign names are made unique; no entry is lost (F-110)", "an untrusted project's servers never
+  take a user server's name (F-111)". Evidence: progress/fixes.md FIX-44.
+
+## D-300 - FIX-48 Decisions of the comprehensive review taken without a code change (2026-10-29)
+- Rule (classifier costs, DEC-10; ledger L-62, L-63): the documented variable changes the classifier
+  does not read and the accepted false refusals and questions stay as they are.
+- Rule (console output, DEC-15; ledger R6-SS-6): output the console does not indent is not filtered
+  for secrets; only a tee that shows output at flush points could, which ends live output.
+- Rule (documents, DEC-19, DEC-20, DEC-22; F-43, F-46; ledger L-60): blocks stay independent:
+  regenerating a stale turn leaves later turns' blocks as they are, and a later turn that depends on
+  it is re-asked with `replay = "live"` on that call (the review proposed `"record"`, under which a
+  fresh block replays; `36badf5c`). Only blank lines may separate a call's statement from its
+  blocks; skipping comment lines would conflict with the `#~` undone statements and
+  `gptr_export()`'s run count. `gptr_source(model =)` stays, and applies to every `peter()` or
+  harness call the file asks again; `gptr_coach()`, team and fan-out calls keep their models.
+- Rule (provider timing and routes, DEC-41, DEC-43; F-132, F-165): the idle timeout stays 90 s;
+  `?gptr_options` and the language-models guide suggest `options(gptr.idle_timeout = 300)` for
+  high-effort reasoning on OpenAI or Google, and one live request at the highest effort is a release
+  step. System 1 classifier calls inside a coaching child are allowed and not gated by the model
+  gate: they send only the judged values and keep the egress check; 08 section 3.3 says every chat
+  model request is gated.
+- Rule (costs, DEC-49; F-121): on claude-cli models the dollar figures stay the CLI's API-equivalent
+  estimate, not a charge, and cost limits use them, as `?gptr_usage` says.
+- Rule (security texts, DEC-51, DEC-52, DEC-63; F-88; ledger records-7): `gptr_step()`,
+  `gptr_wait()` and `gptr_export()` get no row in `risk-functions.csv`: an unlisted function reads
+  level 1, and `gptr_export()` from model code is refused at run time (`doc_control_guard()`).
+  `gptr_models(refresh = TRUE)` and `gptr_providers(check =, check_login =)` stay level 0 in plan
+  mode (no key is sent; only gptr's cache is written), and `?gptr_security` says plan mode's
+  read-only does not mean no network or process. The worker reads its child's result with
+  `readRDS()` (R/subagent-worker.R:537; the CVE-2024-27322 pattern before R 4.4, and the exported
+  objects are R objects by design); `?gptr_security` says so, and a two-line R 4.4 guard is added
+  only if model code in a worker is shown to overwrite the result path under auto.
+- Rule (browser close, DEC-35; ledger FIX-35 F2 and F3): F3's retry stays, since it lets a pending
+  lease recover, and F2 is closed: the close fails closed at its 10 s deadline, and open and close
+  took 0.55 s and 0.40 s at loads of 30 to 60.
+- Rule (processx floor, DEC-36; ledger L-58): the floor stays 3.8.0 and a job's end time stays an
+  upper bound; raising it for `get_end_time()` would narrow the install base before the first
+  submission for a sub-second gain.
+- Rule (release, DEC-59, DEC-60, DEC-61, DEC-62): #93 merges first, then the pkgdown deploy (the
+  README links `articles/tailor-and-coach.html`), then the incoming check with remote URLs,
+  win-builder and R-hub on the final tarball, then the submission; no README workaround. No P29 test
+  file joins the CRAN test list, whose 35 files reach all but 12 R files. `cran-comments.md`'s
+  numbers are a submission-day checklist, with no test pinning them. The six pages of session S3
+  methods get no examples (registered methods, not exports).
+- Rule (records, DEC-64, DEC-65): FIX-27..FIX-36 and the long D-262, D-267 and D-272 entries are not
+  condensed (dev/ is outside the package, and the ledger cites them by line). P29h, the live
+  calibration of coached against starting harnesses (08 Part 4), is not part of 1.0: deferred, with
+  D-275's wording kept.
+- Contract-visible: `?gptr_doc`, `?gptr_source`, `?gptr_options`, `?gptr_usage`, `?gptr_security`;
+  08 sections 3.3 and 3.5 (limit 8) and Part 4; `cran-comments.md`; dev/HANDOFF.md's Remaining.
+- Tests: none (no code change). Evidence: progress/fixes.md FIX-40, FIX-43, FIX-44, FIX-45 and
+  FIX-48; progress/open-findings.md.
