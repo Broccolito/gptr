@@ -1209,6 +1209,23 @@ test_that("an argument named in part is read while its namespace is not loaded (
   expect_identical(lv("fs::link_create(p = 'sub', n = 'lnk')"), 2L)
 })
 
+test_that("a path argument R cannot match is the literal one, a tie the worse class (F-58)", {
+  root = local_project()
+  pc = function(code) gptr_risk(code, root = root)$flagged$path_class
+  # write.csv()'s file is in its `...`, next to the data the code computes
+  for (code in c("write.csv(mtcars, 'out.csv')", "write.csv2(x, 'sub/x.csv')",
+                 "readr::write_csv(mtcars, 'x.csv')", "data.table::fwrite(mtcars, 'x.csv')",
+                 "write.csv(mtcars, file = 'out.csv')")) {
+    expect_identical(pc(code), "workspace", label = code)
+  }
+  for (code in c("write.csv(mtcars, f)", "write.csv(mtcars, file.path(d, 'a.csv'))",
+                 "file.remove('a', f)", "file.remove(f, 'a')")) {
+    expect_identical(pc(code), "unknown", label = code)
+  }
+  expect_identical(gptr_risk("write.csv(mtcars, 'out.csv')", root = root)$level, 2L)
+  expect_identical(gptr_risk("file.remove('a', f)", root = root)$level, 3L)
+})
+
 test_that("a move deletes its source in R, Python and the shell alike (D-293)", {
   root = local_project()
   p = file.path(withr::local_tempdir(tmpdir = dirname(tempdir())), "x")
