@@ -965,6 +965,16 @@ test_that("secret rules come from P03's secret_scan() (G6 section 3.8)", {
   expect_identical(r$secrets, character())
 })
 
+test_that("a registered name that does not look secret is a secret read in a command (F-25)", {
+  root = local_project()
+  local_vault()
+  withr::local_envvar(F25_PLAIN = "plain-test-0000-f25")
+  secret_register("plain-test-0000-f25", "F25_PLAIN")
+  expect_false(is_secret_name("F25_PLAIN"))
+  r = gptr_risk("system('echo $F25_PLAIN')", root = root)
+  expect_identical(list(r$level, r$secret_guard, r$secrets), list(3L, TRUE, "F25_PLAIN"))
+})
+
 test_that("a secret scan that fails on code that parses is a guarded level 4 (D-295)", {
   root = local_project()
   local_mocked_bindings(secret_scan = function(...) stop("a scan bug"))
