@@ -22,7 +22,7 @@ concurrency:
 jobs:
   optional:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       max-parallel: 2

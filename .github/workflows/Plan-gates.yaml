@@ -19,7 +19,7 @@ concurrency:
 jobs:
   plans:
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 20
     env:
       SOURCE_SHA: ${{ github.event_name == 'push' && github.sha || inputs.source_sha }}
       GPTR_LIVE_TESTS: 'false'
@@ -147,7 +147,7 @@ jobs:
         id: checks
         if: ${{ !cancelled() && steps.identity.outcome == 'success' && steps.r_setup.outcome == 'success' && steps.dependencies.outcome == 'success' }}
         shell: bash
-        timeout-minutes: 42
+        timeout-minutes: 12
         run: |
           python -I -B dev/ci/check-plans.py --out plan-evidence/checks \
             > plan-evidence/controller.log 2>&1

@@ -16,7 +16,7 @@ jobs:
        (github.ref == 'refs/heads/codex/skipped-platform-tests' &&
         github.sha == vars.GPTR_PAGES_BOOTSTRAP_SHA))
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
     permissions:
       contents: read
       pages: read
@@ -99,7 +99,7 @@ jobs:
           Rscript --vanilla dev/release/check-files.R pkgdown
       - name: Build with the admitted Pandoc and strict warning gates
         shell: bash
-        timeout-minutes: 32
+        timeout-minutes: 15
         env:
           GITHUB_PAT: ''
           GITHUB_TOKEN: ''

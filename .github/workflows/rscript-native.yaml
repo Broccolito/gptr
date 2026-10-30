@@ -16,7 +16,7 @@ permissions:
 jobs:
   native:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       max-parallel: 2

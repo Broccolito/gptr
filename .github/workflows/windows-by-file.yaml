@@ -56,7 +56,9 @@ permissions: read-all
 jobs:
   by-file:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ inputs.supervisor_rss_comparison && 300 || inputs.optional && 45 || 300 }}
+    # The whole suite file by file took 87 minutes in October 2026; the RSS comparisons' own step
+    # takes up to 255
+    timeout-minutes: ${{ inputs.supervisor_rss_comparison && 300 || inputs.optional && 45 || 150 }}
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -131,22 +133,27 @@ jobs:
           PY
       - uses: r-lib/actions/setup-r@v2
         if: '!inputs.optional'
+        timeout-minutes: 10
         with:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         if: '!inputs.optional'
+        timeout-minutes: 20
         with:
           extra-packages: any::pkgload
       - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
         if: inputs.optional
+        timeout-minutes: 10
         with:
           r-version: ${{ inputs.startup_diagnostic && 'devel' || 'release' }}
           Ncpus: 1
           use-public-rspm: true
       - uses: ./.github/actions/system-libraries
         if: inputs.optional && runner.os == 'Linux'
+        timeout-minutes: 10
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
         if: inputs.optional
+        timeout-minutes: 20
         env:
           PKG_SYSREQS: 'false'
         with:
@@ -154,10 +161,12 @@ jobs:
           needs: check
       - uses: ./.github/actions/optional-dependencies
         if: inputs.optional
+        timeout-minutes: 10
       # R-CMD-check's Windows Python: bp_run() always starts the Windows no-follow observer
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         id: windows_python
         if: '!inputs.optional'
+        timeout-minutes: 10
         with:
           python-version: '3.12.10'
       - name: Provision the Windows private numerical Python and admit its native library
@@ -309,11 +318,13 @@ jobs:
             --run Rscript --vanilla dev/ci/lint-optional.R
       - name: Install the package
         if: '!inputs.optional'
+        timeout-minutes: 10
         shell: bash
         run: R CMD INSTALL .
       - name: Install the optional source for real child fixtures
         id: optional_install
         if: inputs.optional
+        timeout-minutes: 10
         shell: bash
         env:
           GITHUB_PAT: ''

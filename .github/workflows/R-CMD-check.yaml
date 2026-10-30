@@ -1,5 +1,9 @@
 # CRAN's check matrix plus the contract's jobs (IC-59, IC-72, IC-73); the Windows rows run in
-# Windows-check.yaml. rcmdcheck reports success when R CMD check aborts early, so every check job
+# Windows-check.yaml. A push's checks should finish in about 20 minutes: the whole offline suite
+# (NOT_CRAN=true) runs only on Ubuntu release, Ubuntu under LC_ALL=C, macOS and the connection
+# gate, each as shards behind a gate job that carries the required name, and the other rows check
+# as CRAN does. Every job and every step that checks or tests has a time limit, so a hang fails
+# fast with its log. rcmdcheck reports success when R CMD check aborts early, so every check job
 # also requires the log's Status line.
 on:
   push:
@@ -16,35 +20,29 @@ concurrency:
 permissions: read-all
 
 jobs:
-  R-CMD-check:
-    runs-on: ${{ matrix.config.os }}
-    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
-    timeout-minutes: ${{ matrix.config.minutes || 45 }}
+  release:
+    runs-on: ubuntu-latest
+    name: ubuntu-latest (release, shard ${{ matrix.shard }}/4)
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        config:
-          # macOS runs the suite serially (37-45 minutes since P28's pty tests, 56 since P29)
-          - {os: macos-latest, r: 'release', minutes: 75}
-          # R-devel installs every dependency from source (about 65 minutes on a cold cache)
-          - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release', minutes: 120}
-          - {os: ubuntu-latest, r: 'release'}
-          - {os: ubuntu-latest, r: 'oldrel-1'}
-          - {os: ubuntu-latest, r: 'oldrel-4'}
+        shard: [1, 2, 3, 4]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
       _R_CHECK_THINGS_IN_OTHER_DIRS_: true
       _R_CHECK_CRAN_INCOMING_: false
-      # Linux rows run test files in two testthat workers; every other check stays serial
-      TESTTHAT_PARALLEL: ${{ startsWith(matrix.config.os, 'ubuntu') }}
-    steps:
+      # Two testthat workers on Linux; macOS stays serial
+      TESTTHAT_PARALLEL: true
+      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/4
+      # Shard 1 checks the whole package; the others skip R's code analysis, vignettes and examples
+      _R_CHECK_USE_CODETOOLS_: ${{ matrix.shard == 1 }}
+    steps: &shard-steps
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
       - uses: r-lib/actions/setup-r@v2
         with:
-          r-version: ${{ matrix.config.r }}
-          http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
       - uses: ./.github/actions/system-libraries
         if: runner.os == 'Linux'
@@ -72,11 +70,21 @@ jobs:
             "$gptr_root_evidence" "$GITHUB_WORKSPACE/dev/ci/test-root-teardown-readback.py" \
             /usr/bin/python3 >> "$GITHUB_ENV"
       - uses: r-lib/actions/check-r-package@v2
+        timeout-minutes: 16
         with:
           upload-snapshots: true
-          build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
-          args: 'c("--no-manual", "--as-cran")'
+          artifact-name: ${{ github.job }}-results-${{ matrix.shard }}
+          snapshot-artifact-name: ${{ github.job }}-snapshots-${{ matrix.shard }}
+          build_args: 'c("--no-manual", if (${{ matrix.shard }} > 1) "--no-build-vignettes")'
+          args: >-
+            c("--no-manual", "--as-cran",
+            if (${{ matrix.shard }} > 1) c("--ignore-vignettes", "--no-examples"))
           error-on: '"warning"'
+      # check-r-package shows the test output itself, but not after the step's time limit
+      - name: Show the test output so far
+        if: failure()
+        shell: bash
+        run: cat check/gptr.Rcheck/tests/testthat.Rout* || true
       - name: Observe exact Linux suite roots and check-child exit
         if: always() && runner.os == 'Linux'
         shell: bash
@@ -87,78 +95,67 @@ jobs:
         if: always() && runner.os == 'Linux'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: linux-suite-root-${{ matrix.config.r }}
+          name: linux-suite-root-${{ github.job }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/gptr-test-root-evidence
           if-no-files-found: error
           retention-days: 5
       - name: Fail unless R CMD check wrote its status
         shell: bash
-        run: grep '^Status:' check/gptr.Rcheck/00check.log
-
-  no-suggests:
-    runs-on: ubuntu-latest
-    name: ubuntu-latest (release, no Suggests)
-    timeout-minutes: 60
-    env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-      _R_CHECK_FORCE_SUGGESTS_: false
-      _R_CHECK_CRAN_INCOMING_: false
-    steps:
-      - uses: actions/checkout@v6
-      - uses: r-lib/actions/setup-pandoc@v2
-      - uses: r-lib/actions/setup-r@v2
-        with:
-          use-public-rspm: true
-      - uses: ./.github/actions/system-libraries
-      - uses: r-lib/actions/setup-r-dependencies@v2
-        env:
-          PKG_SYSREQS: 'false'
-        with:
-          dependencies: '"hard"'
-          extra-packages: any::rcmdcheck any::testthat any::knitr any::rmarkdown
-          needs: check
-      - name: Prepare exact Linux suite-root evidence
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          gptr_root_evidence="$RUNNER_TEMP/gptr-test-root-evidence"
-          mkdir -m 700 "$gptr_root_evidence"
-          printf 'GPTR_TEST_ROOT_EVIDENCE=%s\nGPTR_TEST_ROOT_READER=%s\nGPTR_TEST_ROOT_PYTHON=%s\n' \
-            "$gptr_root_evidence" "$GITHUB_WORKSPACE/dev/ci/test-root-teardown-readback.py" \
-            /usr/bin/python3 >> "$GITHUB_ENV"
-      - uses: r-lib/actions/check-r-package@v2
-        with:
-          args: 'c("--no-manual", "--as-cran")'
-          error-on: '"warning"'
-      - name: Observe exact Linux suite roots and check-child exit
-        if: always() && runner.os == 'Linux'
-        shell: bash
-        run: |
-          /usr/bin/python3 -I -B dev/ci/test-root-teardown-readback.py \
-            child-exit "$RUNNER_TEMP/gptr-test-root-evidence"
-      - name: Retain Linux suite-root teardown evidence
-        if: always() && runner.os == 'Linux'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: linux-suite-root-noSuggests
-          path: ${{ runner.temp }}/gptr-test-root-evidence
-          if-no-files-found: error
-          retention-days: 5
-      - name: Fail unless R CMD check wrote its status
         run: grep '^Status:' check/gptr.Rcheck/00check.log
 
   c-locale:
     runs-on: ubuntu-latest
-    name: ubuntu-latest (release, LC_ALL=C)
-    timeout-minutes: 60
+    name: ubuntu-latest (release, LC_ALL=C, shard ${{ matrix.shard }}/4)
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       LC_ALL: C
       LANG: C
       _R_CHECK_CRAN_INCOMING_: false
+      TESTTHAT_PARALLEL: true
+      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/4
+      _R_CHECK_USE_CODETOOLS_: ${{ matrix.shard == 1 }}
+    steps: *shard-steps
+
+  macos:
+    runs-on: macos-latest
+    name: macos-latest (release, shard ${{ matrix.shard }}/5)
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+      _R_CHECK_CRAN_INCOMING_: false
+      # The pty console tests time against the runner's load (CI-96)
+      TESTTHAT_PARALLEL: false
+      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/5
+      # R's code analysis does not depend on the OS, and the Linux and Windows whole checks run it
+      _R_CHECK_USE_CODETOOLS_: false
+    steps: *shard-steps
+
+  # The full suite with the connection table compared before and after each shard's tests
+  # (devtools::test in one process, so serial)
+  connections:
+    runs-on: ubuntu-latest
+    name: connections left open (shard ${{ matrix.shard }}/9)
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/9
     steps:
       - uses: actions/checkout@v6
-      - uses: r-lib/actions/setup-pandoc@v2
       - uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true
@@ -167,10 +164,73 @@ jobs:
         env:
           PKG_SYSREQS: 'false'
         with:
-          extra-packages: any::rcmdcheck
+          extra-packages: any::devtools
+      - name: Prove the connection gate detects a leak
+        if: matrix.shard == 1
+        timeout-minutes: 5
+        run: Rscript --vanilla -e 'testthat::test_file("dev/ci/test-check-connections.R", stop_on_failure = TRUE)'
+      - name: This shard's tests with explicit connection cleanup check (all run, then both gates)
+        timeout-minutes: 16
+        run: Rscript --vanilla dev/ci/check-connections.R
+
+  gates:
+    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    needs: [release, c-locale, macos, connections]
+    # A skipped required check counts as passing, so each gate always runs and fails closed. A
+    # matrix job's result is success only when the latest attempt of each of its shards passed.
+    if: always()
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: 'ubuntu-latest (release)', result: '${{ needs.release.result }}'}
+          - {name: 'ubuntu-latest (release, LC_ALL=C)', result: '${{ needs.c-locale.result }}'}
+          - {name: 'macos-latest (release)', result: '${{ needs.macos.result }}'}
+          - {name: 'connections left open', result: '${{ needs.connections.result }}'}
+    steps:
+      - name: Fail unless every shard passed
+        run: test '${{ matrix.result }}' = success
+
+  # CRAN's own test list (tests/testthat.R), examples and vignettes
+  cran-check:
+    runs-on: ubuntu-latest
+    name: ubuntu-latest (${{ matrix.config.name || matrix.config.r }})
+    timeout-minutes: ${{ matrix.config.minutes || 20 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          # R-devel builds every dependency from source when its cache is cold (50-70 minutes
+          # after an R-devel internals change); a warm run takes about 6
+          - {r: 'devel', http-user-agent: 'release', minutes: 75}
+          - {r: 'oldrel-1'}
+          - {r: 'oldrel-4'}
+          - {r: 'release', name: 'release, no Suggests', dependencies: '"hard"'}
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      NOT_CRAN: false
+      R_KEEP_PKG_SOURCE: yes
+      _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+      _R_CHECK_CRAN_INCOMING_: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          http-user-agent: ${{ matrix.config.http-user-agent }}
+          use-public-rspm: true
+      - uses: ./.github/actions/system-libraries
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        env:
+          PKG_SYSREQS: 'false'
+        with:
+          dependencies: ${{ matrix.config.dependencies || '"all"' }}
+          extra-packages: any::rcmdcheck any::testthat any::knitr any::rmarkdown
           needs: check
       - name: Prepare exact Linux suite-root evidence
-        if: runner.os == 'Linux'
         shell: bash
         run: |
           gptr_root_evidence="$RUNNER_TEMP/gptr-test-root-evidence"
@@ -179,31 +239,34 @@ jobs:
             "$gptr_root_evidence" "$GITHUB_WORKSPACE/dev/ci/test-root-teardown-readback.py" \
             /usr/bin/python3 >> "$GITHUB_ENV"
       - uses: r-lib/actions/check-r-package@v2
+        timeout-minutes: 16
         with:
+          build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
           args: 'c("--no-manual", "--as-cran")'
           error-on: '"warning"'
       - name: Observe exact Linux suite roots and check-child exit
-        if: always() && runner.os == 'Linux'
+        if: always()
         shell: bash
         run: |
           /usr/bin/python3 -I -B dev/ci/test-root-teardown-readback.py \
             child-exit "$RUNNER_TEMP/gptr-test-root-evidence"
       - name: Retain Linux suite-root teardown evidence
-        if: always() && runner.os == 'Linux'
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: linux-suite-root-locale-C
+          name: linux-suite-root-cran-${{ matrix.config.r }}
           path: ${{ runner.temp }}/gptr-test-root-evidence
           if-no-files-found: error
           retention-days: 5
       - name: Fail unless R CMD check wrote its status
+        shell: bash
         run: grep '^Status:' check/gptr.Rcheck/00check.log
 
   cran-mode:
     runs-on: ubuntu-latest
     name: ubuntu-latest (devel, NOT_CRAN=false)
-    # R-devel installs every dependency from source (about 65 minutes on a cold cache)
-    timeout-minutes: 120
+    # R-devel's cold dependency cache, as in cran-check
+    timeout-minutes: 75
     # CRAN's timing thresholds; a NOTE fails, and so does a check over 480 s, under the 600 s at
     # which CRAN's pretest flags a package (CI-93)
     env:
@@ -242,6 +305,7 @@ jobs:
       - name: Start the check's clock
         run: echo "GPTR_CHECK_START=$(date +%s)" >> "$GITHUB_ENV"
       - uses: r-lib/actions/check-r-package@v2
+        timeout-minutes: 16
         with:
           build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
           args: 'c("--no-manual", "--as-cran")'
@@ -272,7 +336,8 @@ jobs:
   copy-safety:
     runs-on: ubuntu-latest
     name: copy-safety (${{ matrix.r }})
-    timeout-minutes: ${{ matrix.r == 'devel' && 120 || 30 }}
+    # R-devel's cold dependency cache, as in cran-check
+    timeout-minutes: ${{ matrix.r == 'devel' && 75 || 20 }}
     strategy:
       fail-fast: false
       matrix:
@@ -292,36 +357,15 @@ jobs:
         with:
           extra-packages: any::devtools
       - name: Copy-safety suites
+        timeout-minutes: 16
         run: |
           Rscript --vanilla -e 'stopifnot(capabilities("profmem"))'
           Rscript --vanilla -e 'devtools::test(filter = "copy", stop_on_failure = TRUE)'
 
-  connections:
-    runs-on: ubuntu-latest
-    name: connections left open
-    timeout-minutes: 75
-    env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: r-lib/actions/setup-r@v2
-        with:
-          use-public-rspm: true
-      - uses: ./.github/actions/system-libraries
-      - uses: r-lib/actions/setup-r-dependencies@v2
-        env:
-          PKG_SYSREQS: 'false'
-        with:
-          extra-packages: any::devtools
-      - name: Prove the connection gate detects a leak
-        run: Rscript --vanilla -e 'testthat::test_file("dev/ci/test-check-connections.R", stop_on_failure = TRUE)'
-      - name: Test suite with explicit connection cleanup check (all tests run, then both gates)
-        run: Rscript --vanilla dev/ci/check-connections.R
-
   bench:
     runs-on: ubuntu-latest
     name: token benchmark
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -336,10 +380,14 @@ jobs:
         with:
           extra-packages: any::rtiktoken any::pkgload
       - name: Token ratchet
+        timeout-minutes: 10
         run: Rscript --vanilla dev/bench/tokens/run.R --check
       - name: Polyglot token ratchet (B and C within 10%, P24)
+        timeout-minutes: 10
         run: Rscript --vanilla dev/bench/polyglot/run.R --check
       - name: Offline INFRA suite under 60 s (INFRA-24, P24)
+        timeout-minutes: 10
         run: Rscript --vanilla dev/bench/perf/infra-time.R
       - name: Development tests of dev/bench (P24)
+        timeout-minutes: 10
         run: Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", stop_on_failure = TRUE)'
