@@ -3,10 +3,11 @@
 # Codex runs `Rscript --vanilla codex_hook.R <mode> <log> <lib>` for its SessionStart and
 # PreToolUse events, with the event's JSON on stdin. SessionStart appends a start line to <log>.
 # PreToolUse allows a tool only in mode "run" and only when its name starts with mcp__gptr__.
-# Anything else is denied: a line with the tool's name and the time is appended to <log>, the
-# reason goes to stderr and the exit status is 2. The input is parsed with jsonlite, loaded from
-# <lib>, and never evaluated; input that cannot be read is denied with no tool name, so a hook
-# that cannot work fails closed.
+# Anything else is denied: a line with the tool's name and the time is appended to <log>, and
+# Codex's PreToolUse decision "deny" with its reason goes to stdout with exit status 0, which no
+# shell changes (Windows PowerShell, Codex's shell there, reports a status of 2 as 1, which does
+# not block). The input is parsed with jsonlite, loaded from <lib>, and never evaluated; input
+# that cannot be read is denied with no tool name, so a hook that cannot work fails closed.
 
 args = commandArgs(trailingOnly = TRUE)
 mode = args[1L]
@@ -39,6 +40,8 @@ if (identical(mode, "run") && identical(event, "PreToolUse") && !is.na(tool) &&
 }
 name = if (is.na(tool)) "null" else jsonlite::toJSON(substr(tool, 1L, 200L), auto_unbox = TRUE)
 log_line(paste0("{\"event\":\"deny\",\"tool_name\":", name, ",\"time\":\"", time, "\"}"))
-cat(if (identical(mode, "run")) "gptr: only gptr's own tools (mcp__gptr__*) may run here."
-    else "gptr: this session has no tools.", "\n", file = stderr())
-quit(save = "no", status = 2L)
+why = if (identical(mode, "run")) "gptr: only gptr's own tools (mcp__gptr__*) may run here." else
+  "gptr: this session has no tools."
+cat("{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",",
+    "\"permissionDecisionReason\":\"", why, "\"}}\n", sep = "")
+quit(save = "no", status = 0L)

@@ -1591,7 +1591,8 @@ test_that("strict form: every key required, optional keys nullable, no other key
                                  "\"additionalProperties\":false}"))
 })
 
-# Run gptr's Codex hook on `input` (text on stdin) as Codex does; its exit status, output and log
+# Run gptr's Codex hook on `input` (text on stdin) as Codex does; its exit status, output, log
+# and the permission decision it printed (NULL for none)
 run_codex_hook = function(input, mode = "run", log = tempfile("hook-", fileext = ".log"),
                           lib = dirname(system.file(package = "jsonlite"))) {
   inp = tempfile("hook-in-")
@@ -1600,7 +1601,17 @@ run_codex_hook = function(input, mode = "run", log = tempfile("hook-", fileext =
   res = processx::run(rscript_path(), c("--vanilla", hook, mode, log, lib), stdin = inp,
                       error_on_status = FALSE)
   rows = if (file.exists(log)) lapply(readLines(log, warn = FALSE), json_decode) else list()
-  list(status = res$status, stdout = res$stdout, stderr = res$stderr, rows = rows)
+  out = if (nzchar(trimws(res$stdout))) json_decode(res$stdout)$hookSpecificOutput
+  list(status = res$status, stdout = res$stdout, rows = rows, decision = out)
+}
+
+# A PreToolUse denial as Codex reads it from stdout, whatever the exit status of its shell
+expect_hook_denied = function(d) {
+  expect_identical(d$status, 0L)
+  expect_identical(d$decision$hookEventName, "PreToolUse")
+  expect_identical(d$decision$permissionDecision, "deny")
+  expect_match(d$decision$permissionDecisionReason, "^gptr: ")
+  expect_identical(d$rows[[1L]]$event, "deny")
 }
 pre_tool = function(tool, input = json_obj()) {
   json_encode(list(hook_event_name = "PreToolUse", tool_name = tool, tool_input = input,
@@ -1617,6 +1628,7 @@ test_that("the Codex hook writes its start line and lets a run use only gptr's t
   expect_length(start$rows, 1L)
   ok = run_codex_hook(pre_tool("mcp__gptr__r", list(code = "1 + 1")))
   expect_identical(ok$status, 0L)
+  expect_identical(ok$stdout, "")
   expect_length(ok$rows, 0L)
   marker = file.path(withr::local_tempdir(), "evaluated")
   denied = list(
@@ -1626,9 +1638,7 @@ test_that("the Codex hook writes its start line and lets a run use only gptr's t
     run_codex_hook(pre_tool("xmcp__gptr__r")),
     run_codex_hook(pre_tool("mcp__gptr__r"), mode = "auto"))
   for (d in denied) {
-    expect_identical(d$status, 2L)
-    expect_true(nzchar(trimws(d$stderr)))
-    expect_identical(d$rows[[1L]]$event, "deny")
+    expect_hook_denied(d)
     expect_true(nzchar(d$rows[[1L]]$time))
   }
   expect_identical(vapply(denied, function(d) d$rows[[1L]]$tool_name, ""),
@@ -1638,7 +1648,7 @@ test_that("the Codex hook writes its start line and lets a run use only gptr's t
   # input it cannot read is denied, with no tool name; so is everything without jsonlite
   for (d in list(run_codex_hook("not json {"), run_codex_hook("[1, 2]"),
                  run_codex_hook(pre_tool("mcp__gptr__r"), lib = withr::local_tempdir()))) {
-    expect_identical(d$status, 2L)
+    expect_hook_denied(d)
     expect_null(d$rows[[1L]]$tool_name)
   }
   nolib = run_codex_hook(json_encode(list(hook_event_name = "SessionStart")),
@@ -1646,21 +1656,36 @@ test_that("the Codex hook writes its start line and lets a run use only gptr's t
   expect_identical(nolib$rows[[1L]]$event, "deny")
   # a log it cannot write still denies
   lost = run_codex_hook(pre_tool("Bash"), log = file.path(tempfile(), "no", "hook.log"))
-  expect_identical(lost$status, 2L)
+  expect_identical(lost$status, 0L)
+  expect_identical(lost$decision$permissionDecision, "deny")
 })
 
-test_that("the hook command in the argv runs through the shell and logs its start", {
-  skip_on_cran()
-  skip_on_os("windows")
-  dir = withr::local_tempdir(pattern = "a dir with 'quotes' ")
+# Run the hook command of a confined coach in `dir` through a shell, as Codex does, on a start and
+# then on a tool call: the exit statuses and the decision printed for the tool call
+shell_codex_hook = function(dir, shell) {
   withr::local_envvar(CODEX_HOME = withr::local_tempdir())
   cmd = codex_hook_command(pcli_codex_args("gpt-5.5", "/w", "read-only", dir, role = "coach"),
                            "SessionStart")
-  inp = tempfile("hook-in-")
-  writeLines(json_encode(list(hook_event_name = "SessionStart", source = "startup")), inp)
-  res = processx::run("/bin/sh", c("-c", cmd), stdin = inp, error_on_status = FALSE)
-  expect_identical(res$status, 0L)
-  expect_identical(json_decode(readLines(file.path(dir, "hook.log")))$event, "start")
+  run = function(input) {
+    inp = withr::local_tempfile()
+    writeLines(input, inp)
+    processx::run(shell[[1L]], c(shell[-1L], cmd), stdin = inp, error_on_status = FALSE)
+  }
+  start = run(json_encode(list(hook_event_name = "SessionStart", source = "startup")))
+  tool = run(pre_tool("shell", list(command = "ls")))
+  list(cmd = cmd, status = c(start$status, tool$status),
+       decision = json_decode(tool$stdout)$hookSpecificOutput$permissionDecision,
+       log = vapply(readLines(file.path(dir, "hook.log")), function(l) json_decode(l)$event, ""))
+}
+
+test_that("the hook command in the argv runs through the shell, logs its start, denies a tool", {
+  skip_on_cran()
+  skip_on_os("windows")
+  dir = withr::local_tempdir(pattern = "a dir with 'quotes' ")
+  res = shell_codex_hook(dir, c("/bin/sh", "-c"))
+  expect_identical(res$status, c(0L, 0L))
+  expect_identical(res$decision, "deny")
+  expect_identical(unname(res$log), c("start", "deny"))
 })
 
 test_that("on Windows the hook command holds no quote: short paths, or a refusal", {
@@ -1677,21 +1702,17 @@ test_that("on Windows the hook command holds no quote: short paths, or a refusal
                "no short (8.3) name", fixed = TRUE, class = "gptr_error_model_refused")
 })
 
-test_that("on Windows the hook command runs through cmd.exe and logs its start", {
+test_that("on Windows the hook command runs through PowerShell, logs its start, denies a tool", {
   skip_on_cran()
   skip_if_not(pcli_is_windows())
   dir = withr::local_tempdir(pattern = "a dir ")
-  withr::local_envvar(CODEX_HOME = withr::local_tempdir())
   if (is.null(pcli_cmd_paths(dir))) skip("this volume gives no short (8.3) names")
-  cmd = codex_hook_command(pcli_codex_args("gpt-5.5", "/w", "read-only", dir, role = "coach"),
-                           "SessionStart")
-  expect_false(grepl("\"", cmd, fixed = TRUE))
-  inp = tempfile("hook-in-")
-  writeLines(json_encode(list(hook_event_name = "SessionStart", source = "startup")), inp)
-  res = processx::run(Sys.getenv("COMSPEC", "cmd.exe"), c("/d", "/c", cmd), stdin = inp,
-                      error_on_status = FALSE)
-  expect_identical(res$status, 0L)
-  expect_identical(json_decode(readLines(file.path(dir, "hook.log")))$event, "start")
+  # Codex's own shell on Windows, which reports a status of 2 as 1
+  res = shell_codex_hook(dir, c("powershell.exe", "-NoProfile", "-Command"))
+  expect_false(grepl("\"", res$cmd, fixed = TRUE))
+  expect_identical(res$status, c(0L, 0L))
+  expect_identical(res$decision, "deny")
+  expect_identical(unname(res$log), c("start", "deny"))
 })
 
 test_that("a confined coach keeps its reply: bypass warning, hook start, one message", {

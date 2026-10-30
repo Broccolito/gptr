@@ -72,9 +72,10 @@ pcli_codex_args = function(model_id, wd, sandbox, relay, resume = NULL, role = N
 
 #' gptr's hook (inst/gptr/codex_hook.R) for SessionStart, which writes the start line, and
 #' PreToolUse, which allows only gptr's tools in a run and nothing for a coach; its log is in the
-#' exec's private folder. The command runs through Codex's shell (`$SHELL -lc`, cmd.exe on
-#' Windows, which mangles a line holding more than two quotes, so there it has none: short
-#' paths); the bypass flag runs it without Codex's persisted hook trust (08 3.7).
+#' exec's private folder. The command runs through Codex's shell (`$SHELL -c`; PowerShell or
+#' cmd.exe on Windows, where a line with quotes does not run as written, so there it has none:
+#' short paths), and the hook denies on stdout with status 0, which no shell changes; the bypass
+#' flag runs it without Codex's persisted hook trust (08 3.7).
 #' @noRd
 pcli_codex_hooks = function(role, dir) {
   hook = system.file("gptr", "codex_hook.R", package = "gptr", mustWork = TRUE)
@@ -82,10 +83,11 @@ pcli_codex_hooks = function(role, dir) {
   win = pcli_is_windows()
   if (win) {
     paths = pcli_cmd_paths(paths) %||%
-      gptr_abort(paste0("gptr cannot coach on Codex here: cmd.exe runs gptr's hook, and a path ",
-                        "it needs (R, an R library or the session's temporary folder) holds a ",
-                        "space or a sign cmd.exe reads and has no short (8.3) name. Move it to ",
-                        "a path without them, or set TMPDIR to one."),
+      gptr_abort(paste0("gptr cannot coach on Codex here: Codex runs gptr's hook through ",
+                        "PowerShell or cmd.exe, and a path it needs (R, an R library or the ",
+                        "session's temporary folder) holds a space or a sign they read and has ",
+                        "no short (8.3) name. Move it to a path without them, or set TMPDIR to ",
+                        "one."),
                  "model_refused", reason = "cli_preflight", cli = "codex")
   }
   argv = c(paths[[1L]], "--vanilla", paths[[2L]], role, file.path(paths[[3L]], "hook.log"),
@@ -96,8 +98,8 @@ pcli_codex_hooks = function(role, dir) {
     "--dangerously-bypass-hook-trust")
 }
 
-#' Windows paths that an unquoted cmd.exe line keeps whole: their short (8.3) names with
-#' backslashes, or NULL when one still holds anything but letters, digits and `_.:\~-`
+#' Windows paths that an unquoted PowerShell or cmd.exe line keeps whole: their short (8.3)
+#' names with backslashes, or NULL when one still holds anything but letters, digits and `_.:\~-`
 #' @noRd
 pcli_cmd_paths = function(paths) {
   short = chartr("/", "\\", utils::shortPathName(paths))
