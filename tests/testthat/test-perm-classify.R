@@ -1224,14 +1224,23 @@ test_that("a path argument R cannot match is the literal one, a tie the worse cl
   # write.csv()'s file is in its `...`, next to the data the code computes
   for (code in c("write.csv(mtcars, 'out.csv')", "write.csv2(x, 'sub/x.csv')",
                  "readr::write_csv(mtcars, 'x.csv')", "data.table::fwrite(mtcars, 'x.csv')",
-                 "write.csv(mtcars, file = 'out.csv')")) {
+                 "write.csv(mtcars, file = 'out.csv')", "write.csv(mtcars, 'out.csv', na = '')",
+                 "write.csv(x = mtcars, 'out.csv')")) {
     expect_identical(pc(code), "workspace", label = code)
   }
+  # an option named in `...` is not the path, a path named there is the only one, and an empty
+  # literal names no path
   for (code in c("write.csv(mtcars, f)", "write.csv(mtcars, file.path(d, 'a.csv'))",
-                 "file.remove('a', f)", "file.remove(f, 'a')")) {
+                 "file.remove('a', f)", "file.remove(f, 'a')",
+                 "write.csv(mtcars, file.path(d, 'a.csv'), fileEncoding = 'UTF-8')",
+                 "write.csv(mtcars, file = f, fileEncoding = 'UTF-8')",
+                 "write.csv2(mtcars, f, dec = ',')", "write.csv(mtcars, f, na = '')",
+                 "write.csv('a', file = f)", "readr::write_csv(mtcars, f, '')")) {
     expect_identical(pc(code), "unknown", label = code)
   }
   expect_identical(gptr_risk("write.csv(mtcars, 'out.csv')", root = root)$level, 2L)
+  expect_identical(gptr_risk("write.csv(mtcars, f, na = '')", root = root)$level, 2L)
+  expect_identical(gptr_risk("readr::write_csv(mtcars, f, '')", root = root)$level, 2L)
   expect_identical(gptr_risk("file.remove('a', f)", root = root)$level, 3L)
 })
 

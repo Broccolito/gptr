@@ -342,13 +342,18 @@ test_that("the fence refuses R code that writes to a path or calls a function it
   # `d` was set by an earlier call, so this call cannot show where the file goes
   expect_match(fence("writeLines('x', file.path(d, 'w.txt'))")$reason,
                "it writes only to paths gptr can read", fixed = TRUE)
-  expect_identical(fence("unlink(file.path(d, 'old'))")$decision, "deny")
+  for (code in c("unlink(file.path(d, 'old'))",
+                 "write.csv(mtcars, file.path(d, 'x.csv'), fileEncoding = 'UTF-8')",
+                 "write.csv(mtcars, file.path(d, 'x.csv'), na = '')")) {
+    expect_identical(fence(code)$decision, "deny", label = code)
+  }
   for (code in c("do.call(paste0('write', 'Lines'), list('x', '/tmp/w.txt'))",
                  "do.call(paste0('set', 'wd'), list('/tmp'))", "eval(parse(text = code))")) {
     expect_match(fence(code)$reason, "it runs only code gptr can read", fixed = TRUE,
                  label = code)
   }
-  for (code in c("write.csv(mtcars, 'out.csv')", "writeLines('x', file.path('sub', 'a.txt'))",
+  for (code in c("write.csv(mtcars, 'out.csv', na = '')",
+                 "writeLines('x', file.path('sub', 'a.txt'))",
                  "d = 'res'; saveRDS(mtcars, file.path(d, 'm.rds'))",
                  "m = lapply(1:3, function(i) i + 1)", "fit = lm(mpg ~ wt, data = mtcars)",
                  "purrr::map(1:3, ~ .x + 1)",
@@ -364,6 +369,7 @@ test_that("a coaching run cannot write through a path or a function it computes"
   fake = gptr_fake_provider(list(
     fake_tool("r", code = sprintf("d = '%s'", far)),
     fake_tool("r", code = "writeLines('x', file.path(d, 'w.txt'))"),
+    fake_tool("r", code = "write.csv(mtcars, file.path(d, 'na.csv'), na = '')"),
     fake_tool("r", code = "do.call(paste0('write', 'Lines'), list('x', file.path(d, 'dyn.txt')))"),
     fake_tool("r", code = "do.call(paste0('set', 'wd'), list(d))"),
     fake_tool("r", code = "wd = getwd(); write.csv(mtcars, 'out.csv')"),
@@ -372,7 +378,7 @@ test_that("a coaching run cannot write through a path or a function it computes"
                          model = fake))$res
   expect_identical(res$status, "idle")
   expect_identical(list.files(far), character())
-  expect_identical(nrow(res$refusals), 3L)
+  expect_identical(nrow(res$refusals), 4L)
   expect_true(all(grepl("fence", res$refusals$reason, fixed = TRUE)))
   expect_true(path_inside(res$objects$wd, tempdir()))
   expect_identical(res$files$path, "out.csv")

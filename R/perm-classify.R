@@ -2359,15 +2359,17 @@ risk_s3_args = function(e, fn) {
   }), error = function(err) list(as.list(e)[-1L]))
 }
 
-#' The expressions a call may pass as its path argument: the matched one; for `...` rows, a
-#' wrapper that passes `...` on or a call R cannot match, every unnamed argument (attribute `one`
+#' The expressions a call may pass as its path argument: the matched one, or the one named in its
+#' `...`; else every argument in a `...` row's `...`, or every unnamed argument (attribute `one`
 #' when only one of them is the path: a named argument R did not match)
 #' @noRd
 risk_path_exprs = function(a, arg) {
-  v = if (arg != "...") risk_arg(a, arg, default = TRUE)
+  dots = a[["..."]]
+  v = if (arg != "...") risk_arg(a, arg, default = TRUE) %||% risk_arg(as.list(dots), arg)
   if (!is.null(v)) return(list(v))
-  nms = names(a) %||% rep("", length(a))
-  structure(as.list(a[["..."]] %||% a[!nzchar(nms)]), one = arg != "...")
+  ps = as.list(dots %||% a)
+  if (arg != "..." || is.null(dots)) ps = ps[!nzchar(names(ps) %||% rep("", length(ps)))]
+  structure(ps, one = arg != "...")
 }
 
 # The base functions the classifier reads as base's: the helpers risk_fold() folds, and c() and
@@ -2726,8 +2728,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   add_path = function(ps, category, level, ctx, label, name) {
     best = list(level = -1L)
     # of arguments one of which is the path (write.csv(x, "out.csv")), those the code computes
-    # count only when it computes them all
-    read = !vapply(ps, function(p) is.null(fold(p, known)), NA)
+    # count only when it computes all that name a path
+    read = vapply(ps, function(p) any(nzchar(fold(p, known))), NA)
     if (isTRUE(attr(ps, "one")) && any(read)) ps = ps[read]
     for (p in ps) {
       v = fold(p, known)
