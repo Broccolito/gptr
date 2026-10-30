@@ -200,15 +200,20 @@ perm_policy_protect = function(call, ctx) {
 }
 
 #' Channel `permissions:remember` (the UI wrapper of console-ui.R): store the rule for an answer
-#' the user chose to remember, recomputed from the call (never the payload's rule); rule_suggest()
-#' gives none for level 4, control, the ask tool or code it cannot read
+#' the user chose to remember, recomputed from the call in the run's environment, as call_risk()
+#' classified it, and only when it is the rule the question showed (the payload's rule is never
+#' trusted); rule_suggest() gives none for level 4, control, the ask tool or code it cannot read
 #' @noRd
 perm_on_remember = function(event, ctx) {
   if (!isTRUE(event$scope %in% c("session", "project"))) return(NULL)
   call = list(name = as.character(event$tool %||% "")[1L], input = event$input)
-  if (identical(call$name, "r")) call$risk = risk_classify(call$input$code)
+  if (identical(call$name, "r")) {
+    call$risk = risk_classify(call$input$code, envir = run_eval_env(perm_run(ctx)))
+  }
   rule = rule_suggest(call)
-  if (!is.null(rule)) perm_rules_update(event$scope, add = list(allow = rule))
+  if (!is.null(rule) && identical(rule, event$rule)) {
+    perm_rules_update(event$scope, add = list(allow = rule))
+  }
   NULL
 }
 

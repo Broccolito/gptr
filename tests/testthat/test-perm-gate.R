@@ -803,20 +803,49 @@ test_that("the protect_size policy reads the run's snapshot, not the live option
 test_that("a remembered answer becomes a rule covering exactly the flagged calls", {
   root = local_project()
   local_permission_rules()
+  # the rule recomputed from the call, stored only when it is the rule the question showed
+  code = "write.csv(df, 'a.csv'); saveRDS(df, 'b.rds')"
   ev_dispatch("permissions:remember",
-              list(scope = "session", tool = "r", rule = "r(level<=3)",
-                   input = list(code = "write.csv(df, 'a.csv'); saveRDS(df, 'b.rds')")))
-  expect_true("r(fn:write.csv,saveRDS)" %in% perm_store()$allow)
-  expect_false("r(level<=3)" %in% perm_store()$allow)
+              list(scope = "session", tool = "r", rule = "r(level<=3)", input = list(code = code)))
+  expect_identical(perm_store()$allow, character())
+  ev_dispatch("permissions:remember", list(scope = "session", tool = "r",
+                                           rule = "r(fn:write.csv,saveRDS)",
+                                           input = list(code = code)))
   ev_dispatch("permissions:remember",
               list(scope = "session", tool = "r", input = list(code = "q('no')")))
-  ev_dispatch("permissions:remember",
-              list(scope = "global", tool = "r", input = list(code = "unlink('x')")))
+  ev_dispatch("permissions:remember", list(scope = "global", tool = "r", rule = "r(fn:unlink)",
+                                           input = list(code = "unlink('x')")))
   expect_identical(perm_store()$allow, "r(fn:write.csv,saveRDS)")
-  ev_dispatch("permissions:remember",
-              list(scope = "project", tool = "write", input = list(path = "results/t.csv")))
+  ev_dispatch("permissions:remember", list(scope = "project", tool = "write",
+                                           rule = "write(results/**)",
+                                           input = list(path = "results/t.csv")))
   expect_true("write(results/**)" %in% perm_rules_effective()$allow)
   gptr_permissions(remove = "write(results/**)", scope = "project")
+})
+
+test_that("an [a]lways answer reads the call where the question did (review F-11)", {
+  root = local_project()
+  local_permission_rules()
+  e = new.env(parent = globalenv())
+  eval(parse(text = c("clean_dir = function(d) unlink(d, recursive = TRUE)",
+                      "print.report = function(x, ...) saveRDS(x, 'report.rds')",
+                      "rep1 = structure(list(), class = 'report')")), e)
+  remember = function(code, rule) {
+    ev_dispatch("permissions:remember",
+                list(scope = "session", tool = "r", rule = rule, input = list(code = code)))
+  }
+  shown = vapply(c("clean_dir('results')", "print(rep1)"), function(code) {
+    rule_suggest(gate_r(code, e))
+  }, "")
+  expect_identical(unname(shown), c("r(fn:unlink)", "r(fn:saveRDS)"))
+  # outside a run the question's environment is out of reach: a rule that differs is not stored
+  remember("print(rep1)", shown[[2L]])
+  expect_identical(perm_store()$allow, character())
+  run = gate_run()
+  run$home = e
+  local_mocked_bindings(run_current = function() run)
+  for (code in names(shown)) remember(code, shown[[code]])
+  expect_identical(perm_store()$allow, unname(shown))
 })
 
 test_that("a cloned project's settings.local.json and AGENTS.md pre-approve nothing (IC-52)", {
