@@ -153,6 +153,23 @@ test_that("children are reachable by name and by index; team text joins the repo
   expect_identical(team$text, "### stats (fake/fake-1)\np < 0.05")
 })
 
+# Added (FIX-37, F-127): a worker member's heading names the model its worker calls (its
+# gptr.subagent entry's), not its proxy session's worker/worker, as the console start line does
+test_that("a worker member's team heading names the model it calls", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(mode = "auto", model = "fake/fake-1")
+  local_fake_provider(list("unused"))
+  local_mocked_bindings(worker_spawn = function(st) {
+    st$result = list(type = "result", status = "idle", text = "w done", turns = 1L)
+    worker_on_exit(st, 0L)
+  })
+  team = peter("compute", agents = list(w = gptr_agent("w", backend = "worker")),
+               envir = new.env())
+  expect_identical(session_data(team$w)$model, "worker/worker")
+  expect_identical(team$text, "### w (fake/fake-1)\nw done")
+})
+
 test_that("[[ takes one child index or one name; anything else is a classed error", {
   team = test_session(kind = "team")
   expect_error(team[[1L]], class = "gptr_error_invalid_argument")
