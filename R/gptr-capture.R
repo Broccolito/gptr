@@ -941,14 +941,18 @@ ident_hyphen_name = function(expr) {
 #' was made from or, when it passed `nm` on through `...`, the frame of the first call up the chain
 #' that names it. An identifier is resolved there, so a function it makes keeps no frame that only
 #' forwarded it, nor that frame's forced dots (rule R2). Frames are read by number, never listed.
+#' A call made off the stack (from a do.call() envir, or a promise forced after its function
+#' returned) has its own frame number as parent, so the walk stops there at its parent.frame().
 #' @noRd
 ident_home = function(nm, n) {
   repeat {
     sc = sys.call(n)
-    n = sys.parents()[n]
-    if (n == 0L || nm %in% names(sc) || !any(vapply(as.list(sc), identical, NA, quote(...)))) {
-      return(sys.frame(n))
+    p = sys.parents()[n]
+    if (p >= n) return(do.call(parent.frame, list(), envir = sys.frame(n)))
+    if (p == 0L || nm %in% names(sc) || !any(vapply(as.list(sc), identical, NA, quote(...)))) {
+      return(sys.frame(p))
     }
+    n = p
   }
 }
 

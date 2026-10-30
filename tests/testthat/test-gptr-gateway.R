@@ -128,6 +128,30 @@ test_that("identifiers through the gateway, including a wrapper with a local m (
   expect_error(peter("p", model = mice), class = "gptr_error_invalid_identifier")
 })
 
+test_that("identifiers of a call made off the call stack resolve where it was made", {
+  # a do.call() envir, and a promise forced after its function returned, are not on the stack
+  local_gw()
+  box = local_probe()
+  e = new.env()
+  e$m = "haiku"
+  do.call(peter, list("p", model = quote(m)), envir = e)
+  expect_identical(box$ids$model, "haiku")
+  w = function(...) peter(...)
+  do.call(w, list("p", model = quote(m)), envir = e)
+  expect_identical(box$ids$model, "haiku")
+  lazy = function(x) function() x
+  mk = function() {
+    m2 = "sonnet"
+    lazy(peter("p", model = m2))
+  }
+  mk()()
+  expect_identical(box$ids$model, "sonnet")
+  m3 = "opus"
+  wl = function(...) lazy(peter(...))
+  wl("p", model = m3)()
+  expect_identical(box$ids$model, "opus")
+})
+
 test_that("a leading session is the continuation target; a named session is context", {
   local_gw()
   box = local_probe()
