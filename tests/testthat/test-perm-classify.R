@@ -33,6 +33,12 @@ test_that("gptr's configuration exports and hooks are level 4 control rows (IC-5
   }
   expect_identical(risk_lookup("setHook", NA_character_, tab)$category, "control")
   expect_identical(risk_lookup("assignInNamespace", "utils", tab)$level, 4L)
+  # trace() rewrites package code, gptr's too (review F-14)
+  for (code in c("trace('perm_check', quote(cat('x')), where = gptr::peter)",
+                 "trace(gptr::peter, quote(x))")) {
+    r = gptr_risk(code)
+    expect_identical(list(r$level, r$categories), list(4L, "control"), label = code)
+  }
   expect_identical(risk_lookup("q", NA_character_, tab)$category, "critical")
 })
 

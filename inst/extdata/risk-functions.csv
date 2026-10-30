@@ -603,7 +603,7 @@
 "base","tolower",0,"read","",""
 "base","topenv",0,"read","",""
 "base","toupper",0,"read","",""
-"base","trace",2,"session","",""
+"base","trace",4,"control","","rewrites package code"
 "base","traceback",0,"read","",""
 "base","transform",0,"read","",""
 "base","trigamma",0,"read","",""
