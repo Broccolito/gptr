@@ -194,8 +194,8 @@ non_retryable_pattern = paste(c(
   "insufficient_quota", "out of budget", "quota exceeded", "billing",
   "subscription_sharing_usage_limit_exceeded", plan_limit_pattern), collapse = "|")
 retryable_pattern = paste(c(
-  "overloaded", "currently experiencing high demand", "rate.?limit", "too many requests", "429",
-  "500", "502", "503", "504", "520", "524", "service.?unavailable", "server.?error",
+  "overloaded", "currently experiencing high demand", "rate.?limit", "too many requests",
+  "(?<![0-9])(?:429|500|502|503|504|520|524)(?![0-9])", "service.?unavailable", "server.?error",
   "internal.?error", "provider.?returned.?error",
   "exceeded request buffer limit while retrying upstream", "network.?error",
   "connection.?error", "connection.?refused", "connection.?lost", "other side closed",
@@ -1254,7 +1254,8 @@ run_response = function(run, msg) {
   }
   row = usage_row(msg, session = d$id, agent = run$opts$agent %||% "main",
                   parent_id = d$parent_id %||% NA_character_, started = run$request_started,
-                  seconds = as.numeric(difftime(Sys.time(), run$request_started, units = "secs")),
+                  seconds = max(0, as.numeric(difftime(Sys.time(), run$request_started,
+                                                       units = "secs"))),
                   multiplier = d$estimator$m %||% 1)
   row = usage_conform(row)
   row$request_id = run$request_id
@@ -1744,7 +1745,8 @@ run_abort_usage = function(run, msg) {
   msg$usage = usage_as(u)
   row = usage_row(msg, session = d$id, agent = run$opts$agent %||% "main",
                   parent_id = d$parent_id %||% NA_character_, started = run$request_started,
-                  seconds = as.numeric(difftime(Sys.time(), run$request_started, units = "secs")),
+                  seconds = max(0, as.numeric(difftime(Sys.time(), run$request_started,
+                                                       units = "secs"))),
                   multiplier = d$estimator$m %||% 1)
   row$cost = cost
   row = usage_conform(row)

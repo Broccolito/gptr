@@ -2575,3 +2575,36 @@ test_that("an interrupt during reactor registration releases the partially start
   expect_identical(ls(r$runs, all.names = TRUE), runs)
   expect_length(fake_requests(fake), 0L)
 })
+
+# Added (FIX-37, F-102): a backward wall-clock step during a request (an NTP step, a laptop
+# wake) makes the request seem to start in the future; its answer is kept with 0 seconds
+test_that("a backward clock step during a request keeps the answer with seconds 0", {
+  local_project()
+  fake = local_fake_provider(function(request) {
+    run = session_live(gptr_last())$run
+    run$request_started = Sys.time() + 30
+    "the answer"
+  })
+  s = peter("hi", model = fake, mode = "auto", envir = new.env())
+  expect_identical(s$status, "idle")
+  expect_identical(s$text, "the answer")
+  expect_equal(session_data(s)$usage$seconds, 0)
+})
+
+# Added (FIX-37, F-103): a status number in an error text counts only as a whole number, so a
+# definitive 400 that quotes max_tokens 1500 is not retried; a bare "503" still is
+test_that("status numbers in an error text match only as whole numbers", {
+  expect_false(retryable_error_text("invalid request: max_tokens 1500 is not allowed"))
+  expect_false(retryable_error_text("request id 4290017 failed validation"))
+  expect_true(retryable_error_text("upstream answered 503"))
+  expect_true(retryable_error_text("HTTP 429: slow down"))
+  expect_true(run_retryable(err_msg("503 Service Unavailable"), list()))
+  skip_on_cran()
+  local_project()
+  fake = local_fake_provider(list(
+    fake_error("invalid request: max_tokens 1500 is not allowed for this model", status = 400L)))
+  cnd = expect_error(peter("hi", model = fake, mode = "auto", envir = new.env()),
+                     class = "gptr_error")
+  expect_identical(cnd$session$status, "error")
+  expect_length(fake_requests(fake), 1L)
+})

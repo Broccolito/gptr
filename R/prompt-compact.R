@@ -458,7 +458,7 @@ compact_charge = function(s, target, context, msg, started, run, aborted = FALSE
   row = usage_conform(usage_row(
     msg, session = d$id, agent = run[["opts"]][["agent"]] %||% "main",
     parent_id = d$parent_id %||% NA_character_, started = started,
-    seconds = as.numeric(difftime(Sys.time(), started, units = "secs")),
+    seconds = max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))),
     multiplier = d$estimator$m %||% 1))
   row = usage_add_durable(s, row)
   ledger_mark_cached(s, context$request_id, row$cache_read)
