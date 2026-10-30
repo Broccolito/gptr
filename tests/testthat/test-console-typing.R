@@ -2077,10 +2077,13 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
   expect_gte(as.numeric(difftime(Sys.time(), sent, units = "secs")), 1)
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
-  # the relay, its typed word on the next row where the row is full
+  # the relay, whole: the answer's rows (indented) joined, as the row may end before the typed
+  # word or before END, with the live row drawn between them (over it, after a carriage return)
   expect_true(pty$wait(paste0("REQ operator: ", trimws(relay("")))))
-  expect_true(pty$wait(paste0(typed, " END")))
   expect_true(pty$wait("peter> "))
+  rows = strsplit(gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$all), "[\r\n]")[[1L]]
+  expect_match(paste(trimws(rows[startsWith(rows, "  ")]), collapse = " "),
+               paste0("REQ operator: ", relay(typed), " END"), fixed = TRUE)
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   # a sent draft leaves nothing to keep
