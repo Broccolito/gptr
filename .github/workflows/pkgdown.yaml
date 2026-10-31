@@ -121,7 +121,7 @@ jobs:
           assert site.is_dir() and not site.is_symlink()
           assert (site / 'index.html').is_file()
           guides = sorted(path.stem for path in pathlib.Path('vignettes').glob('*.Rmd'))
-          assert len(guides) == 14
+          assert len(guides) == 15
           assert all((site / 'articles' / (name + '.html')).is_file() for name in guides)
           entries, total = [], 0
           for path in sorted(site.rglob('*')):
