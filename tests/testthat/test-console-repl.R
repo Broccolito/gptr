@@ -1625,7 +1625,7 @@ test_that("a terminal: a run sent to the background shows again while the consol
   skip_if_not_installed("later")
   pty = local_pty_r(c(
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
-    "        gptr.history = FALSE, cli.width = 60L)",
+    "        gptr.history = FALSE, cli.width = 60L, cli.num_colors = 256L)",
     # a dark background, no answer to the probe: the band shows, in the terminal's 256 colours
     "Sys.setenv(COLORFGBG = '15;0')",
     "long = paste(c('BEGIN', sprintf('w%02dabc', 1:60), 'END'), collapse = ' ')",

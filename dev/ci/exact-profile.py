@@ -173,8 +173,8 @@ def verify_archive(archive, manifest, source, sha, repository):
     if type(manifest.get("r_source_count")) is not int or len(records) != manifest["r_source_count"] or \
             fingerprint != manifest.get("source_fingerprint_sha256"):
         raise ValueError("Dynamic source identity differs")
-    if manifest.get("guide_counts") != {".Rmd": 14, ".html": 14} or \
-            len(guide_sets["doc"]) != 14 or guide_sets["doc"] != guide_sets["vignettes"]:
+    if manifest.get("guide_counts") != {".Rmd": 15, ".html": 15} or \
+            len(guide_sets["doc"]) != 15 or guide_sets["doc"] != guide_sets["vignettes"]:
         raise ValueError("Guide source/rendered identity differs")
     if description is None:
         raise ValueError("Missing dependency metadata")
