@@ -52,7 +52,7 @@ This is the helper the model calls:
 ``` r
 library(gptr)
 peter$describe(head(mtcars), budget = 60L)
-#> <data.frame> 6 x 11, 2.9 KB
+#> <data.frame> 6 x 11, 2.7 KB
 #>   mpg:dbl cyl:dbl disp:dbl hp:dbl drat:dbl wt:dbl qsec:dbl vs:dbl am:dbl gear:dbl carb:dbl
 ```
 
@@ -117,7 +117,7 @@ require stronger permissions in model code.
 preset decides which forms are offered. The broader helper catalog stays callable inside R.
 For the console's `!` inline R and file references, see
 [Interactive console](interactive-console.html). To keep generated analysis code in a document,
-see [Script as history](script-as-history.html).
+see [Record, replay and export](script-as-history.html).
 
 ## Shell commands and scripts
 

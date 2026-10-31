@@ -61,6 +61,16 @@ test_that("a team started in a function frame does not keep the frame [R2]", {
     label = "team in a function frame")
 })
 
+test_that("a worker's shipped objects are not copied on the next edit (copy-2)", {
+  local_worker_lib()
+  expect_no_copy(
+    setup = c(subagent_copy_setup("n = length(big)"), "invisible(gptr_register(fake))"),
+    action = c("team = peter('Count big', model = fake, agents = list(a = agent(",
+               "  model = 'fake/fake-1', backend = 'worker', objects = 'big')))",
+               "stopifnot(identical(team$a$text, 'done'))"),
+    label = "a worker shipped big")
+})
+
 test_that("gptr_parallel() members read in place", {
   expect_no_copy(
     setup = subagent_copy_setup("s = sum(big)"),

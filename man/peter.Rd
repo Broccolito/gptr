@@ -131,7 +131,7 @@ Terminal statuses become conditions carrying the session as \verb{$session}: \co
 \code{gptr_error_max_turns}. A team (\verb{agents =}) or fan-out (\verb{parallel =}) takes the
 status of its first member that did not end idle, with \verb{$reason} naming each such member; when
 no member ended idle it signals that member's condition with the team as \verb{$session}. A call
-whose model cannot be reached (no egress acknowledgement, replay mode, a disabled provider, a
+whose model cannot be reached (no egress acknowledgment, replay mode, a disabled provider, a
 missing key) is refused before its run: no turn, no model or mode switch, no new
 \code{\link[=gptr_last]{gptr_last()}} and no \verb{$session}. So is a call with an unknown plugin or \verb{skills =} name,
 \code{.opts$images} its model does not take, or a secret-looking prompt you decline to send. A piped
@@ -178,11 +178,13 @@ backslash continues a line;
 
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 and \code{... } waits for Enter (text typed there is added); a pasted fence or \verb{"""} block is read
-up to its closer at once, and a block pasted at an approval or a choice is kept in the console
-history and the question asked again. A last pasted line without a newline waits for Enter at
-the next prompt, so a two-line paste without a final newline answers with its first line.
-Elsewhere (Homebrew or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted
-lines arrive one at a time; wrap a multi-line paste in \verb{"""}. Lines typed, pasted or run from a
+up to its closer at once, a block pasted at an approval or a choice is kept in the console
+history and the question asked again, and one pasted at the pause menu's \code{? Steer} or
+\code{? Follow-up} is the whole text. A last pasted line without a newline waits for Enter at the
+next prompt, so a two-line paste without a final newline answers a question with its first
+line. Elsewhere (Homebrew or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted
+lines arrive one at a time, as typed lines do (at a question the first one answers it); wrap a
+multi-line paste in \verb{"""}. Lines typed, pasted or run from a
 script before a question (an approval, a choice) appeared never answer it: while an answer
 runs they are queued for the agent as \code{type_ahead} says (below; a /command or !code line waits
 for the next prompt), otherwise they go to the console history. Answer after the prompt.
@@ -203,9 +205,10 @@ Rscript, pipes, knitr \tab nothing; \code{.stdin = TRUE} reads the pipe \tab non
 
 In terminal R and an IDE's Terminal tab what you type while peter works is a draft on the
 bottom row, under the transcript, so it never mixes into the answer; a block pasted there is
-one message. Enter sends it as a steer: the agent reads it at its next step boundary, when the
-response in flight ends after the results of all its tool calls (an answer about to end gets
-one more request), and it then shows as your own line. Tab sends it as a follow-up: the next
+one message where the terminal supports bracketed paste. Enter sends it as a steer: the agent
+reads it at its next step boundary, when the response in flight ends after the results of all
+its tool calls (an answer about to end gets one more request), and it then shows as your own
+line. Tab sends it as a follow-up: the next
 prompt, sent as its own run once the answer ends. \code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}})
 swaps the two keys. A draft that starts with \code{/} or \code{!} is always a follow-up, so \verb{/command}
 and \code{!code} lines run at the next prompt, in the order typed. The bottom row counts what is
@@ -213,9 +216,12 @@ queued; Up on an empty draft takes back the newest message not yet delivered, to
 again, and Ctrl-U clears the draft. A question (an approval, a choice) waits until typing
 pauses for a second, or three while the draft has text, and the draft stays: through
 questions, Ctrl-C and the pause menu, and to the next prompt, where Enter sends it. Keys typed
-while R code runs in this process (the \code{r} tool) show when it returns. A steer the answer did
-not take (it ended first) is the next prompt; after an abort or an error nothing queued is
-sent: the queued text and the draft go to the console history, and Up recalls them. Under
+while R code runs in this process (the \code{r} tool) show when it returns. Such code that reads
+the terminal through \code{readline()} or \code{menu()} inside another function shows only that read's
+prompt (the text printed before it shows when the code returns, the typed answer never), and
+Ctrl-C at that read aborts the answer instead of pausing it. A steer the answer did not take
+(it ended first) is the next prompt; after an abort or an error nothing queued is sent: the
+queued text and the draft go to the console history, and Up recalls them. Under
 TERM=dumb or in ESS a line typed with Enter is queued as \code{type_ahead} says. On the CLI routes
 (\code{claude-cli}, \code{codex}) the agent reads a steer after the CLI's answer, which is often the
 whole run.
@@ -255,7 +261,8 @@ Where an interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the 
 \verb{/exit}, two consecutive interrupts at the prompt or the end of piped input return the session
 invisibly, so \code{session = peter()} keeps the conversation. In a terminal the chat reads keys with
 the terminal's echo off and restores it on return, on an error, at an interrupt and at \code{q()};
-if R is killed or crashes while peter works, type \verb{stty sane} and press Enter to get it back.
+if R is killed or crashes while peter works, type \code{reset} and press Enter to get the terminal
+back.
 
 Options: \code{gptr.verbose} (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}

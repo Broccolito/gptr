@@ -12,6 +12,7 @@ IRkernel
 JSONL
 Jev
 Jupyter
+KiB
 MCP
 Naur
 Naur's
@@ -126,7 +127,6 @@ repr
 Groq
 MiniMax
 Rterm
-acknowledgement
 gcc
 gpt
 oldrelease
@@ -134,3 +134,8 @@ oss
 pak
 stringi
 xAI
+reticulate
+unsets
+unsetting
+cli
+subcommand

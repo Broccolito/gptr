@@ -277,3 +277,32 @@ test_that("the registered callback logs real top-level expressions in a fresh R 
   expect_true("REGISTERED: TRUE " %in% out)
   expect_false(grepl("Error", res$stderr, fixed = TRUE))
 })
+
+test_that("gptr_coach() and calls of a harness bound in the global environment are filtered", {
+  local_history()
+  local_mocked_bindings(env_harness_bound = function(name, envir) {
+    identical(name, "survey_peter") && identical(envir, globalenv())
+  })
+  user_log_push(str2lang("x = gptr_coach('p')"))
+  user_log_push(str2lang("gptr::gptr_coach('p')"))
+  user_log_push(str2lang("survey_peter('p')"))
+  user_log_push(str2lang("other_peter('p')"))
+  expect_equal(user_expr_log(), "other_peter(\"p\")")
+})
+
+test_that("a harness whose name has non-ASCII letters is filtered too", {
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]))
+  local_mocked_bindings(env_harness_bound = function(name, envir) identical(name, "étude"))
+  expect_true(user_log_gptr_head(as.name("étude")))
+})
+
+test_that("env_harness_bound() finds a harness binding and forces no promise", {
+  e = new.env()
+  e$h = structure(function(...) NULL, class = c("gptr_harness", "function"))
+  e$f = function(...) NULL
+  delayedAssign("lazy", stop("forced"), assign.env = e)
+  expect_true(env_harness_bound("h", new.env(parent = e)))
+  expect_false(env_harness_bound("f", e))
+  expect_false(env_harness_bound("lazy", e))
+  expect_false(env_harness_bound("not_bound_anywhere", e))
+})

@@ -203,12 +203,35 @@ proc_input_file = function(input) {
   f
 }
 
-#' Read a redirect file and decode it as UTF-8 with the code-page fallback
+#' The most a redirect file of proc_run() or bridge_run() may hold before the tree is killed
+#' @noRd
+proc_output_cap = 64 * 1024^2
+
+#' Read a redirect file and decode it as UTF-8 with the code-page fallback; one over the cap
+#' gives its first 40% and last 60% of the cap and a status line, as proc_run() and bridge_run()
+#' kill the tree at the cap
 #' @noRd
 proc_read_text = function(path) {
   size = if (file.exists(path)) file.size(path) else 0
   if (is.na(size) || size == 0) return(raw_to_utf8(raw(0)))
-  raw_to_utf8(readBin(path, "raw", size))
+  if (size <= proc_output_cap) return(raw_to_utf8(readBin(path, "raw", size)))
+  con = file(path, open = "rb")
+  on.exit(close(con), add = TRUE)
+  head = readBin(con, "raw", floor(0.4 * proc_output_cap))
+  n = floor(0.6 * proc_output_cap)
+  seek(con, size - n)
+  tail = readBin(con, "raw", n)
+  # whole UTF-8 characters at each cut: one split character would send the text to the code page
+  whole = function(b) {
+    end = utils::tail(b, 3L)
+    lead = max(c(0L, which(end >= as.raw(0xc0))))
+    need = sum(end[lead] >= as.raw(c(0xc0, 0xe0, 0xf0)))
+    if (length(end) - lead < need) b[seq_len(length(b) - length(end) + lead - 1L)] else b
+  }
+  start = tail[1:3] < as.raw(0x80) | tail[1:3] >= as.raw(0xc0)
+  tail = tail[seq.int(match(TRUE, start, nomatch = 4L), length(tail))]
+  text = raw_to_utf8(c(whole(head), whole(tail)))
+  paste0(text, if (!endsWith(text, "\n")) "\n", "[output exceeded 64 MB; process tree killed]\n")
 }
 
 #' Echo the complete new lines of a redirect file to stderr; returns the new byte offset
@@ -243,8 +266,9 @@ proc_echo = function(path, shown, redactor, final = FALSE) {
 #'
 #' stdout and stderr go to temp files (deleted on exit), stdin is the null device unless
 #' `input` is given (chr or raw, through a temp file: large inputs never go on the command
-#' line, whose Windows limit is 32,767 characters), a `p$wait(200)` loop enforces `timeout`,
-#' and `on.exit()` kills the whole tree on error or interrupt. Never processx's run().
+#' line, whose Windows limit is 32,767 characters), a `p$wait(200)` loop enforces `timeout` and
+#' `proc_output_cap`, and `on.exit()` kills the whole tree on error or interrupt. Never
+#' processx's run().
 #' @return `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1),
 #'   elapsed = num(1))`, decoded as UTF-8 with the code-page fallback; line ends stay as the
 #'   child wrote them (CRLF from a Windows child's text-mode output), for the caller to normalise
@@ -267,6 +291,10 @@ proc_run = function(command, args = character(), input = NULL, timeout = 120, en
   repeat {
     p$wait(200L)
     if (echo) shown = proc_echo(out_f, shown, echo_redactor)
+    if (any(file.size(c(out_f, err_f)) > proc_output_cap, na.rm = TRUE)) {
+      kill_all(p, grace = 0)
+      break
+    }
     if (!p$is_alive()) break
     if (reactor_now() - t0 > timeout) {
       timed_out = TRUE
@@ -1180,13 +1208,13 @@ proc_writer_ack = function(st, b) {
     acks = list.files(st$dir, pattern = pattern, full.names = TRUE)
     if (length(acks)) {
       if (!proc_writer_valid(st$dir, st$canonical, st$marker, acks)) {
-        gptr_abort("Invalid stdin writer acknowledgement.", "io", operation = "write", path = NULL)
+        gptr_abort("Invalid stdin writer acknowledgment.", "io", operation = "write", path = NULL)
       }
       sizes = file.size(acks)
       pos = as.numeric(sub(".*-", "", basename(acks[[length(acks)]])))
       if (anyNA(sizes) || any(sizes != 0) || !is.finite(pos) ||
           pos < st$pending$accepted || pos > st$pending$size) {
-        gptr_abort("The stdin writer acknowledgement is not empty or out of range.",
+        gptr_abort("The stdin writer acknowledgment is not empty or out of range.",
                    "io", operation = "write", path = NULL)
       }
       b$pos = b$pos + pos - st$pending$accepted

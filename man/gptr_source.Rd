@@ -8,7 +8,8 @@ gptr_source(
   file,
   replay = getOption("gptr.replay", "auto"),
   envir = parent.frame(),
-  echo = FALSE
+  echo = FALSE,
+  model = NULL
 )
 }
 \arguments{
@@ -22,6 +23,13 @@ variable, then the \code{replay} setting, then \code{"auto"}.}
 \item{envir}{Environment in which the expressions are evaluated.}
 
 \item{echo}{\code{TRUE} prints each expression before it is evaluated.}
+
+\item{model}{\code{NULL}, or a model name or reference string (\code{"sonnet"},
+\code{"anthropic/claude-sonnet-5-5"}, or one of a provider you registered), not a provider spec
+object: every \code{peter()} or harness call the file asks again (each one under
+\code{replay = "live"}) uses it instead of the model it names or its session has, so a recorded
+analysis can be re-asked with your own model. A \code{gptr_coach()} call and a team or fan-out call
+(\verb{agents =}, \verb{parallel =}) keep the models they name. A block that replays asks no model.}
 }
 \value{
 Invisibly, the \code{gptr_blocks} listing of the file after the run with an extra column
@@ -31,13 +39,28 @@ is \code{ran} and keeps its status.
 }
 \description{
 Evaluates \code{file} top-level expression by expression in \code{envir}, like \code{\link[=source]{source()}}. An expression
-that names \code{peter()} keeps its source references, which locate the call; the others run without
-them, so the functions and calls they make hold no part of the document, as at the console. A
+that names \code{peter()} or \code{gptr_coach()}, or calls a harness bound in \code{envir}, keeps its source
+references, which locate the call; the others run without them, so the functions and calls
+they make hold no part of the document, as at the console. A
 \code{peter()} call whose block is fresh replays without calling a model and the block's code then
 runs as ordinary R. A call whose block is stale (its prompt or the values interpolated into it
 changed), or every call under \code{replay = "live"} (an undone block runs without being rewritten;
 \code{replay = "record"} regenerates it), asks the model again and rewrites its block in place, and
-the old block is skipped, which base \code{source()} cannot do.
+the old block is skipped, which base \code{source()} cannot do. Only that block is regenerated: a
+later turn of the same session keeps its block, answered in the old turn's context, so re-ask
+it with \code{replay = "live"} on that call when it depends on the turn that changed. Only blank
+lines may separate a call from its blocks (see \code{\link[=gptr_doc]{gptr_doc()}}). A console turn is asked again with
+what the console sent with it, from its block's \verb{#< } lines (the \verb{@file} heads and \code{!} notes;
+see \code{\link[=gptr_doc]{gptr_doc()}}): the request is the same even when the file changed or is gone. It is asked
+with the model and in the mode its statement names, else those its session has from the turns
+before, else the \code{model} and \code{mode} settings of the session that re-asks: a statement names
+them only where they differed from what it gets without them (see \code{\link[=gptr_doc]{gptr_doc()}}). A named model
+must be available there; \code{model} asks a \code{peter()} or harness call with another one. A re-ask
+does not send the \verb{## Steer:} and \verb{## Follow-up:} lines of a turn or the text of an approval
+answered \verb{n <text>}, and the new block does not keep them. Direct R lines a transcript turned
+off are comments and do not run. A block is written only with write consent (see
+\code{\link[=gptr_doc]{gptr_doc()}}); a call that cannot be recorded still runs, and under \code{replay = "record"} a
+notice says that gptr did not record it.
 }
 \details{
 Replay executes the recorded R code, including its ordinary side effects. It does not

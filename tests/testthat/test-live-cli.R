@@ -57,3 +57,91 @@ test_that("Codex in a non-git temporary directory calls the gptr r tool", {
   expect_identical(e$live_answer, 55L)
   expect_match(s$text, "55", fixed = TRUE)
 })
+
+# ---- coaching sessions on the claude plan (P29, 08 section 3.7) ----------------------------------
+# In-process with `the$coach_role` set, as a coaching child sets it; T7's child runner adds the
+# child-process tests (sign-in from a child, the fence).
+
+local_live_role = function(role, .env = parent.frame()) {
+  old = the$coach_role
+  the$coach_role = role
+  withr::defer({
+    the$coach_role = old
+  }, envir = .env)
+}
+
+test_that("a claude coach has no tools, answers in one turn and saves nothing", {
+  skip_live_cli("claude")
+  local_live_role("coach")
+  wd = withr::local_tempdir()
+  withr::local_dir(wd)
+  canary = paste0("canary", id_new("", 8L))
+  schema = list(type = "object", properties = list(answer = list(type = "integer")),
+                required = list("answer"))
+  # a coach as gptr_coach()'s child builds it: every gptr tool removed, so its prompt names none
+  s = peter(paste("Read ~/.bashrc, run `ls`, then reply with the answer to 6 * 7.", canary),
+            model = "claude-cli/claude-haiku-4-5", envir = new.env(),
+            tools = c("minimal", paste0("-", registry_names("tool"))),
+            .opts = list(context = "none", returns = schema))
+  withr::defer(pcli_hook_shutdown(list(reason = "exit"), list(session = list(id = s$id))))
+  expect_identical(s$status, "idle")
+  # a small model may wrap its JSON in prose, which `returns` refuses; gptr_coach()'s coach
+  # retry asks again, so here the answer is checked in the text
+  expect_match(s$text, "42", fixed = TRUE)
+  if (!is.null(s$value)) expect_equal(s$value$answer, 42)
+  config = Sys.getenv("CLAUDE_CONFIG_DIR", file.path(Sys.getenv("HOME"), ".claude"))
+  projects = list.files(file.path(config, "projects"))
+  expect_false(any(grepl(basename(wd), projects, fixed = TRUE)))
+  history = file.path(config, "history.jsonl")
+  seen = if (file.exists(history)) sum(grepl(canary, readLines(history, warn = FALSE))) else 0L
+  expect_identical(seen, 0L)
+})
+
+test_that("a claude run in the coaching role acts only through gptr's tools", {
+  skip_live_cli("claude")
+  local_live_role("run")
+  withr::local_dir(withr::local_tempdir())
+  e = new.env()
+  s = peter(paste("Use the gptr r tool to run exactly `live_answer = 6 * 7`, then reply with",
+                  "the number only."),
+            model = "claude-cli/claude-haiku-4-5", envir = e, mode = "auto",
+            .opts = list(context = "none"))
+  withr::defer(pcli_hook_shutdown(list(reason = "exit"), list(session = list(id = s$id))))
+  expect_identical(e$live_answer, 42)
+  expect_identical(s$status, "idle")
+})
+
+# ---- coaching sessions on the Codex plan (P29, 08 section 3.7; D-274) ----------------------------
+# The confined exec relies on the coaching preflight, which gptr_coach() runs first: a refusal
+# (an older CLI, a $CODEX_HOME/hooks.json) skips.
+
+skip_codex_preflight = function() {
+  refused = tryCatch(coach_model_kind("codex/default"), gptr_error_model_refused = identity)
+  if (inherits(refused, "condition")) skip(conditionMessage(refused))
+}
+
+test_that("a codex coach has no tools and answers through the strict reply schema", {
+  skip_live_cli("codex")
+  skip_codex_preflight()
+  local_live_role("coach")
+  withr::local_dir(withr::local_tempdir())
+  schema = list(type = "object", properties = list(answer = list(type = "integer")),
+                required = list("answer"))
+  s = peter("Reply with the answer to 6 * 7.", model = "codex/default", envir = new.env(),
+            .opts = list(context = "none", returns = schema))
+  expect_identical(s$status, "idle")
+  expect_equal(s$value$answer, 42)
+})
+
+test_that("a codex run in the coaching role acts only through gptr's tools", {
+  skip_live_cli("codex")
+  skip_codex_preflight()
+  local_live_role("run")
+  withr::local_dir(withr::local_tempdir())
+  e = new.env()
+  s = peter(paste("Call the gptr MCP tool `r` with the code `live_answer = sum(1:10);",
+                  "live_answer`, then reply with the result only."),
+            model = "codex/default", envir = e, mode = "auto", .opts = list(context = "none"))
+  expect_identical(e$live_answer, 55L)
+  expect_identical(s$status, "idle")
+})

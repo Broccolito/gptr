@@ -131,9 +131,9 @@ objects and arbitrary side effects require their usual care; see
 
 ## Stopping instead of guessing
 
-In `manual` mode a change needs approval unless an allow rule already permits it. When nobody
-can answer (an `Rscript` job, a knitted report), the run stops with a classed condition that says
-how to allow the action:
+In `manual` mode a change needs approval unless a permission rule applies (an allow rule never
+approves a critical action). When nobody can answer (an `Rscript` job, a knitted report), the run
+stops with a classed condition that says how to allow the action:
 
 ```{r}
 careful = gptr_fake_provider(list(
@@ -196,9 +196,10 @@ policy are covered in [Configuration](configuration.html).
 - [Language models](language-models.html): connect a route and use sessions in functions and scripts.
 - [Interactive console](interactive-console.html): all built-in commands and inline R.
 - [Configuration](configuration.html): scopes, settings, options and credentials.
-- [System 1 decisions](system-one.html): typed decisions inside `if`, `for` and `while`.
-- [Script as history](script-as-history.html): documents that record and replay agent work.
+- [Typed decisions](system-one.html): System 1 answers inside `if`, `for` and `while`.
+- [Record, replay and export](script-as-history.html): documents that record and replay agent work.
 - [Extending gptr](extending-gptr.html): tools, policies, hooks and plugins.
+- [Harnesses and coaching](tailor-and-coach.html): your own peter, improved by running your task.
 - [Token efficiency](token-efficiency.html): costs, budgets and compact context.
 - `?gptr_security`, `?gptr_egress` and `?gptr_options`.
 

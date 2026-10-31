@@ -752,3 +752,46 @@ test_that("unpaired metrics and ordinary tool widths restore the caller width", 
     expect_identical(showConnections(all = TRUE), connections)
   }
 })
+
+test_that("the console shows the output it indents with registered secrets redacted (round 6)", {
+  skip_on_cran()
+  local_vault()
+  key = "sk-test-0000-r6r6"
+  secret_register(key, "R6_FAKE_KEY")
+  home = new.env()
+  home$k = key
+  code = "print(k); cat(k, '\\n'); message(k); warning(k); k"
+  local_mocked_bindings(console_pad = function() "  ")
+  res = NULL
+  err = utils::capture.output(type = "message", {
+    out = utils::capture.output({
+      res = eval_r(code, home, plots = "none", tee = TRUE)
+    })
+  })
+  shown = c(out, err)
+  expect_false(any(grepl(key, shown, fixed = TRUE)))
+  expect_identical(sum(grepl("[secret:R6_FAKE_KEY]", shown, fixed = TRUE)), 5L)
+  # the result keeps what the code printed; it is redacted where it is sent or written
+  expect_true(any(grepl(key, unlist(res$outputs), fixed = TRUE)))
+  # without the margin R prints the output as it comes; gptr writes the warning, redacted
+  local_mocked_bindings(console_pad = function() "")
+  err = utils::capture.output(type = "message", {
+    utils::capture.output(eval_r("warning(k)", home, plots = "none", tee = TRUE))
+  })
+  expect_match(err, "Warning: [secret:R6_FAKE_KEY]", fixed = TRUE)
+})
+
+test_that("the person's own code prints as R does, the agent's in the console margin (D-296)", {
+  skip_on_cran()
+  local_mocked_bindings(console_pad = function() "  ")
+  withr::local_options(width = 63L)
+  e = new.env()
+  code = "w = getOption('width'); 1:3"
+  out = utils::capture.output(invisible(eval_r(code, e, plots = "none", tee = TRUE, guard = FALSE)))
+  expect_identical(e$w, 63L)
+  expect_identical(out, "[1] 1 2 3")
+  out = utils::capture.output(invisible(eval_r(code, e, plots = "none", tee = TRUE)))
+  expect_identical(e$w, 100L)
+  expect_true(any(grepl("    [1] 1 2 3", out, fixed = TRUE)))
+  expect_identical(getOption("width"), 63L)
+})

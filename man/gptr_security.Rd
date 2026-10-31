@@ -32,19 +32,61 @@ including a change to a file or an object, asks first with a one-line prompt. Th
 is advisory, not a security boundary (see below). \code{edits} also allows file edits inside the
 project and still asks before R code that is not known to be read-only; \code{auto}
 asks only for level-4 actions (for example deleting the project directory or a file outside the
-project, where a system temporary directory such as \verb{/tmp} counts as outside, or changing gptr's
-own configuration) and for reads of registered secrets; \code{yolo}, which only you can select (a
-project setting or model code in another mode cannot), also runs gptr's own configuration
-functions, writes to R startup files such as \verb{~/.Rprofile} (which can change gptr's options in
-the next R process) and secret reads without asking, and still asks before deleting protected
-files, files outside the project or the project itself, \code{rm(list = ls())}, quitting R,
-\verb{options(gptr.*)} and sending a secret over the network; \code{plan} changes nothing. When nobody
-can answer a question (Rscript, knitr, a scheduled job) the run stops with status \code{blocked}
-and a \code{gptr_error_permission} condition that says how to allow the action, unless you set
-\code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate off or loosen
-it during a run: the safety options are copied when the run starts. Only the option
+project, where a system temporary directory such as \verb{/tmp} counts as outside, moving R's working
+directory out of the project, or changing gptr's own configuration) and for reads of registered
+secrets; \code{yolo}, which only you can select (a project setting or model code in another mode
+cannot), also runs gptr's own configuration functions, writes to R startup files such as
+\verb{~/.Rprofile} (which can change gptr's options in the next R process) and secret reads without
+asking, and still asks before deleting protected files, files outside the project or the
+project itself, moving the working directory out of the project, \code{rm(list = ls())},
+\verb{options(gptr.*)} and sending a secret over the network (see Secrets below); \code{plan} changes
+nothing, though a call it reads as read-only can still use the network or start a process:
+\code{gptr_models(refresh = TRUE)} downloads the model catalog, and \code{gptr_providers()} with
+\code{check = TRUE} or \code{check_login = TRUE} contacts the providers or starts the \code{claude} and
+\code{codex} status commands. In every mode
+\code{r} code that calls \code{q()}, \code{readline()} or another function that would end, pause or hang your R
+session is refused without a question. In \code{auto} and \code{yolo} mode a \code{system()}, \code{system2()},
+\code{pipe()}, \code{processx::run()} or \code{data.table::fread(cmd =)} call (on Windows also \code{shell()} or
+\code{shell.exec()}) whose command the code computes is refused (see below). When nobody can answer a
+question (Rscript, knitr, a scheduled job) the run stops with status \code{blocked} and a
+\code{gptr_error_permission} condition that says how to allow the action, unless you set
+\code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate
+off or loosen it during a run: the safety options are copied when the run starts. Only the option
 \code{gptr.unsafe_no_permissions}, set by you outside a run, removes the gate, and it is meant for
 disposable sandboxes.
+
+Changing gptr's own configuration includes model code that sets or unsets an environment
+variable gptr reads as configuration: a key or base-URL variable of a provider gptr has
+registered (such as \code{AWS_REGION}, which places Bedrock's endpoint), a variable gptr keeps for
+the \code{claude} or \code{codex} command-line tool (its login, its folder or the path of Git Bash, such
+as \code{CODEX_HOME}), or one that moves its configuration folder or your home directory, such as
+\code{HOME}; \link{gptr_options} lists them. The
+classifier reads such a change in \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} and
+\code{withr::with_envvar()}, where a name it cannot read counts as one (also one built with \code{paste0()}
+or another helper of base R whose bare name the code binds with \code{=}, \verb{<-} or \verb{<<-}, as a
+function's argument or as a \code{for} variable, or that your session holds as other than base
+R's, and the names passed to a setter handed to \code{lapply()}, \code{Map()}, \code{do.call()} or another
+function the classifier knows calls it, such as \code{sapply()} or \code{purrr::map()};
+\code{do.call()} of a \code{list()} or \code{c()} written out and \code{rlang::exec()} are read as the call they
+make, so \code{do.call(Sys.setenv, list(TZ = "UTC"))} is \code{Sys.setenv(TZ = "UTC")}), in
+\code{readRenviron()} and \code{dotenv::load_dot_env()}, and in an
+\code{os.environ} write in the code of \code{peter$py()} or \code{peter$knit("python", code)} that names one in
+a string or an upper-case word, or whose name (a subscript, or the first argument of
+\code{putenv()}, \code{unsetenv()} or \code{pop()}) is not a plain string literal. It does not read code in a
+file R runs (\code{source()}, \code{sys.source()}, \code{eval(parse(file = ))}); \code{Sys.setenv()},
+\code{Sys.unsetenv()}, \code{withr::local_envvar()} or \code{withr::with_envvar()} reached by a computed name,
+through a list or an environment, or handed to a function the classifier does not know calls it
+(\code{get("Sys.unsetenv")}, \code{baseenv()$Sys.setenv}, \code{asNamespace("withr")$local_envvar},
+\code{with(list(f = withr::with_envvar), ...)}, \code{assign("f", Sys.unsetenv)},
+\code{identity(withr::local_envvar)}); a name built with a helper the code binds otherwise (with
+\code{assign()}, \code{delayedAssign()}, \code{makeActiveBinding()}, \code{list2env()} or \code{attach()}, in a list
+given to \code{with()} or \code{within()}, or into an environment, \code{e$paste0 = f} or
+\code{.GlobalEnv[["paste0"]] = f}), which is read as base R's helper builds it; a Python write that
+reaches \code{os.environ} by another name (\code{e = os.environ}, \code{getattr(os, "environ")}) or through
+\code{ctypes}, or that passes \code{os.environ.update()} a mapping the code computes, a mapping whose names
+are not plain string literals (\code{{'\\x48OME': d}}, \verb{\{'H' 'OME': d\}}) or keyword names not all in
+upper case (on Windows \code{os.environ.update(home = d)} sets \code{HOME}); or Python run through
+'reticulate': such code is level 3 or lower, which \code{auto} runs without asking.
 }
 
 \section{What the gate cannot do}{
@@ -52,12 +94,89 @@ disposable sandboxes.
 The risk levels come from a static classifier (\code{\link[=gptr_risk]{gptr_risk()}}). It is advisory and it is not a
 security boundary: R code can compute function names, call compiled code or load packages
 whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
-session. Deny and ask \verb{sh:} rules see a command computed at run time only in a \code{peter$sh()} or
-\code{peter$bg()} call, so \verb{cmd = paste("rm", "-rf", "build"); system(cmd)} runs in \code{auto} and
-\code{yolo} mode despite a deny rule \verb{r(sh:rm *)}. In \code{auto} and \code{yolo} mode a model can delete or
-overwrite files and objects. Use them only in projects you can restore (version control,
-backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run untrusted prompts or untrusted projects in
-a disposable container or virtual machine.
+session. The classifier reads code as written and does not run it, so code that builds a call,
+a name, a path or a command at run time, or reaches a function by another name, is read only
+as far as the classifier can see. Each form this page names as not read is of that kind, or is
+code in a file or a package, code another interpreter runs, or a call or argument the
+classifier has no rule for. A function it has no row for, such as \code{gptr_step()} or
+\code{gptr_wait()}, reads level 1, which \code{manual} asks about and \code{auto} runs (\code{gptr_export()} called
+from model code is refused when it runs). The code in the braces of a 'glue' or 'cli' template
+(\code{glue::glue("{unlink(d)}")}, \code{stringr::str_glue()}, \code{cli::cli_text()}) runs when the text is
+formatted and is not read. Deny and ask \verb{sh:} rules see a command computed at run time only in
+a \code{peter$sh()} or \code{peter$bg()} call, which checks the command when it runs. So in \code{auto} and
+\code{yolo} mode a \code{system()}, \code{system2()}, \code{shell()}, \code{shell.exec()}, \code{pipe()}, \code{processx::run()}
+or \code{data.table::fread(cmd =)} call whose command (for \code{system2()} also its arguments and \code{env})
+is not a string the classifier can read, such as
+\verb{cmd = paste("rm", "-rf", "build"); system(cmd)}, is refused, and the model is told to run the
+command with \code{peter$sh()}; \code{manual} and \code{edits} ask. An allow rule such as \code{r(fn:system)} lets
+such calls run, unchecked by \verb{sh:} rules. Neither the rules nor the refusal read what a shell
+reads when it runs: its standard input (\code{system("sh", input = cmd)},
+\code{peter$sh("sh", input = cmd)}), variables it expands (\verb{sh -c "$X"}, \code{eval $X}) or a script file.
+The refusal covers only calls the classifier resolves to these functions: a function reached by
+a computed name or through a list or an environment (\code{get("system")(cmd)},
+\code{baseenv()$system(cmd)}) or handed to a function of your own (\code{g(system)}), \code{eval(parse())}, a
+sourced file, package code and other command runners such as \code{processx::process$new()} or
+\code{sys::exec_wait()} still run a computed command unchecked. A literal command is read when it is
+given to \code{system()}, \code{system2()}, \code{peter$sh()}, \code{processx::run()} (also as \code{callr::run()}),
+\code{sys::exec_wait()}, \code{sys::exec_internal()} or \code{sys::exec_background()}, not when it is given to
+\code{processx::process$new()}, which is level 3. A command line in a quoted string is read as one
+the code runs, so \code{system("echo 'rm -rf /'")} reads level 4, as \code{system("ssh host 'rm -rf ~'")}
+does.
+
+Paths are placed in the project: a relative path in R code is read in the project directory, and
+a command in the directory it runs in (after a \code{cd} or \code{env -C}, or the \code{wd} of \code{peter$sh()} or
+\code{processx::run()}), the code a shell or Python runs there (\code{sh -c}, \code{cmd /c}, \code{pwsh -Command},
+\code{python3 -c}) included; running a command in a directory outside the project reads that
+directory, so \code{manual} asks. \code{setwd()}, \code{withr::local_dir()}, \code{withr::with_dir()} and
+\code{xfun::in_dir()} to a directory outside the project and R's session temporary directory (which
+\code{tempdir()}, \code{tempfile()}, \code{withr::local_tempdir()} and \code{withr::local_tempfile()} name), and
+\code{setwd()} and \code{withr::local_dir()} to one the code computes (such as \code{here::here(d)};
+\code{here::here()} of literal parts is read in the project), are level 4, because a relative path
+would then name a file outside the project, and so are \code{file.symlink()}, \code{file.link()},
+\code{Sys.junction()} and \code{fs::link_create()} of a path outside the project, as \code{ln} of one is;
+\code{chdir()} in the code of \code{peter$py()} or
+\code{peter$knit("python", code)} (\code{os.chdir()}, \code{os.fchdir()}, \code{contextlib.chdir()}), which moves
+R's working directory too, is read as \code{setwd()} is. After the code has moved R, a relative
+directory given to these functions is read in the directory R is in, so
+\verb{setwd("data"); ...; setwd("..")} returns to the project, as do \code{os.chdir("data")} and
+\code{os.chdir("..")} in Python when each is a statement of its own on a line with no indentation, no
+\code{:} and no bracket left open, in code with no triple-quoted string (after any other \code{chdir()} a
+relative directory is read both in the directory R was in and in the one that \code{chdir()} names);
+before any move it is read in the project. Python comments are not read as code, except in
+code with a triple-quoted string, which is read with its comments. Python's restore idiom
+\verb{cwd = os.getcwd(); os.chdir("data"); os.chdir(cwd)} returns to a directory the code computes,
+so it asks even in \code{auto} and \code{yolo}.
+\code{getwd()} and the directory \code{setwd()} returns are read
+as the one the code has moved R to, starting from R's working directory when the classifier reads
+the code. A function body and the code of \code{local()} are read as code of their own: the names they
+assign are followed (a name assigned with \verb{<<-} or \code{assign()} counts, outside them, as one the
+code computes), a function's other names count as ones the code computes, and R starts where
+the code started or has moved it to. So \verb{owd = setwd("data"); ...; setwd(owd)} stays in the
+project at the top level of the code, in a function (with \code{on.exit(setwd(owd))}), in \code{local()}
+and in \code{tryCatch(finally = setwd(owd))}. A directory the code computes that R moves back from
+is level 3: that of \code{withr::with_dir()} or \code{xfun::in_dir()}, and one saved with a plain
+\code{owd = setwd()} or \code{owd = getwd()} in a branch or a loop (\code{if (p) owd = setwd("data")}), but only
+for \code{setwd(owd)} in the scope that saved it and only when the code binds that name no other way
+anywhere (to another value, as a loop variable or a function's argument, with \verb{<<-},
+\code{assign()} or \code{list2env()}, or by an assignment in \code{eval()} or \code{with()}); otherwise
+\code{setwd(owd)} to a directory the code computes stays level 4. A relative directory after
+\code{withr::with_dir()} or \code{xfun::in_dir()} counts as one the code computes. A drive-relative path
+such as \code{D:data} counts as outside on every OS.
+The classifier does not follow the working directory changed in other ways (such as
+\code{usethis::local_project()}, \code{get("setwd")}, the \code{wd} of \code{callr::r()}, or \code{env} given \code{-C} among
+other short options, \verb{env -iC DIR}, or as an abbreviated \code{--chdir}, \code{env --chd=DIR}), nor read
+the code another interpreter runs (\code{Rscript -e}, \code{perl -e}, \code{node -e}, \code{pwsh -CommandWithArgs} or
+\code{-cwa}), a path the shell computes (\verb{rm "$f"} in a loop, \verb{xargs rm}) or code handed to \code{sh -c} or
+\code{bash -c} as one word whose spaces are escaped with a backslash or written \verb{$IFS}
+(\verb{sh -c rm\\ -f\\ file}): such a command is level 3, which \code{auto} and \code{yolo} run without a question
+whatever it deletes. The \code{wd} of \code{processx::run()} is read when the call, or a name the code
+assigns, holds it as a string; a \code{wd} the code computes is read as the project directory. A
+delete function handed to \code{lapply()}, \code{Map()} or \code{purrr::walk()} reads its paths as ones the
+code computes, level 3, so \code{auto} runs \code{lapply("~/notes", unlink)} without a question.
+
+In \code{auto} and \code{yolo} mode a model can delete or overwrite files and objects. Use them only in
+projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run
+untrusted prompts or untrusted projects in a disposable container or virtual machine.
 }
 
 \section{Sub-agents, workers and child processes}{
@@ -66,9 +185,17 @@ Inline sub-agents run in your session and see its objects. The worker backend ru
 sub-agent in a separate R process that starts from gptr's reduced child environment (it does
 not read your \verb{~/.Renviron}), but that process runs under your user account with your file
 permissions: the worker backend is not an isolation boundary. Its permission requests are
-sent to your session and classified again there. On the \code{codex} route in \code{auto} and \code{yolo}
-mode, Codex's own shell changes and deletes files inside the project within Codex's sandbox,
-without passing gptr's gate. MCP servers, the \code{claude} and \code{codex} command-line tools, shell
+sent to your session and classified again there. Your session reads a worker's result file
+with \code{readRDS()}: on R before 4.4 a crafted result file can run code in your session, and the
+objects a worker returns are R objects by design. \code{\link[=gptr_coach]{gptr_coach()}} runs every run and every coach
+as an unattended session in its own R process under your account, which is not a sandbox
+either; a fence keeps a coaching run's writes in its own folder as far as the classifier sees
+them, and Codex's own shell is off in coaching sessions. Elsewhere, on the \code{codex} route Codex's
+own shell runs commands in every mode without passing gptr's gate, rules or secret guard: in
+\code{plan}, \code{manual} and \code{edits} its sandbox is read-only, so it can still read any file your
+account can read, and in \code{auto} and \code{yolo} it also changes and deletes files inside the project
+within its sandbox.
+MCP servers, the \code{claude} and \code{codex} command-line tools, shell
 commands started with \code{peter$sh()} and Shiny artifacts are ordinary processes of your account
 as well; artifacts start without any registered secret and listen
 on the loopback interface, and each launch gets an access token in its address (on Windows
@@ -89,11 +216,38 @@ pull, gptr asks again.
 
 \section{Secrets}{
 
-Keys are held in a private vault and appear in sessions, logs and errors only as markers such
-as \verb{[secret:ANTHROPIC_API_KEY]}. Values are redacted before anything is written or sent: the
-session files, documents, caches, spill files, wire logs and the output of child processes.
+Keys are held in a private vault and appear in sessions, logs, errors and permission questions
+only as markers such as \verb{[secret:ANTHROPIC_API_KEY]}. Values are redacted before anything is
+written or sent: the session files, documents, caches, spill files, wire logs and the output of
+child processes.
+Their URL-encoded, JSON-escaped and base64 forms are redacted too; a copy the code changes in
+another way, such as reversed or cut, is no longer recognized and is not redacted. The console
+shows what model code prints with registered secrets redacted where it indents that output under
+the call, and so are the warnings it shows; where it does not indent it (a console that cannot
+redraw a line, or \code{gptr.verbose} below 2), R prints the output itself, a registered secret
+included, on your screen only.
 gptr never reads the credential files of other tools. Reading a registered secret from model
-code asks even in \code{auto} mode. A key registered after it already appeared in a file (for
+code asks even in \code{auto} mode: \code{Sys.getenv()} of its name in any letter case, or of a variable
+the code only ever sets to strings one of which is its name; \verb{$NAME} or \verb{$\{NAME\}} in a command
+line (\code{system()}, \code{processx::run()}, \code{peter$sh()} and the others above) and \code{os.environ} or
+\code{getenv()} in Python; an environment dump (\code{Sys.getenv()}, \code{ps::ps_environ()}); and a read of a
+\code{.env} or \code{.Renviron} file (\code{.env}, \code{.env.local} or \code{name.env}), of a file named \code{auth.json}
+(gptr's credential store) or of a file \code{\link[=gptr_env]{gptr_env()}} loaded, by a function that reads its text
+such as \code{readLines()}, or in a command line or Python. So does handing one to a child process
+through the \code{env} of \code{peter$sh()} or \code{peter$script()}, by its name or in a value, unless the
+same code reads that secret by name: the question for that read, or an \code{r(secret:NAME)} rule
+allowing it, covers the hand-over too. A name the code computes when it runs (with \code{paste0()},
+through \code{get()} or \code{do.call()}, as a function's argument, or in a variable it sets otherwise or
+only to strings naming no secret) is read at level 3, which \code{auto} runs without asking. Such a
+file read through \code{lapply()} or another function that calls the reader
+(\code{lapply(".env", readLines)}), or read from a copy (\code{file.copy(".env", "k.txt")}, then
+\code{readLines("k.txt")}), is not read as a secret read either. Sending
+a secret over the network asks in every mode, \code{yolo} included: code that reads a secret, here
+or in an earlier call, or hands one to a child through \code{env}, and calls an R network function
+such as \code{download.file()} or \code{httr2::req_perform()}, or holds a string naming a network program
+such as \code{curl}, \code{wget} or \code{ssh} and starts a process with \code{system()}, \code{system2()},
+\code{processx::run()}, \code{peter$sh()}, \code{peter$bg()} or \code{peter$script()}; a program name the code
+builds from pieces is not read. A key registered after it already appeared in a file (for
 example pasted into a prompt) can be removed from the files with \code{\link[=gptr_scrub]{gptr_scrub()}}; run
 \code{gptr_scrub(error = TRUE)} before committing to fail when any registered secret remains.
 }
@@ -115,11 +269,19 @@ keeps a \code{.gitignore} in \verb{cache/s1/}), or clear it with \code{gptr_cach
 committing.
 \item \verb{.gptr/cache/s2/} (answer text for replay), \verb{.gptr/transcripts/} (console transcripts),
 \verb{.gptr/checkpoints/} (pre-images of objects and files) and the data snapshots of artifacts
-(\verb{.gptr/artifacts/<id>/v<n>/data/}) are excluded from git by default.
+(\verb{.gptr/artifacts/<id>/v<n>/data/}) are excluded from git by default. The checkpoints never
+hold a copy of a protected file or one that configures R or gptr (\code{.env}, \code{.Renviron}, keys
+under \verb{.ssh/}).
 \item \verb{.gptr/plans/} (plans proposed in \code{plan} mode) and the \code{app.R} of each artifact are
 committed by default; they can quote data values the model saw.
 \item Documents you record into keep the model's code and up to \code{gptr.doc_output_lines} lines of
-printed output per step, which can contain data values. Review them before sharing.
+printed output per step, which can contain data values. A console turn's block also keeps,
+as \verb{#< } lines, what its prompt was sent with, whatever that option says: the head of each
+\verb{@file} (up to 40 lines) and the \code{!} code notes with their printed output. Review them before
+sharing.
+\item The block of a recorded \code{\link[=gptr_coach]{gptr_coach()}} call keeps the coaching it chose (its note, skills,
+review and rules), which coaches write from your runs and which can quote data values they
+saw.
 }
 }
 

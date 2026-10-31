@@ -1351,7 +1351,7 @@ catalog_local_only_abort = function(ref, origin, why) {
   gptr_abort(paste0("Local-only Ollama inference refused ", ref, ": ", why, ". gptr never ",
                     "falls back to a cloud route; a remote or cloud-backed Ollama model needs ",
                     "local-only turned off in your own user or session configuration and the ",
-                    "usual egress acknowledgement."),
+                    "usual egress acknowledgment."),
              "untrusted", what = "ollama local-only inference", path = ref,
              origin = origin %||% NA_character_)
 }
@@ -1711,7 +1711,7 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   }
   ctg = catalog_get()
   idx = ctg$index
-  keep = rep(TRUE, nrow(idx))
+  keep = !idx$provider %in% provider_internal()
   if (!is.null(provider)) keep = keep & idx$provider == provider
   first = character()
   if (!is.null(query)) {

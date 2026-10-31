@@ -127,11 +127,12 @@ bridge_out_session = function() {
 }
 
 #' Emit bridge_call (04 10.4) into the running run, where P10 collects the digest into
-#' `details$bridge` (04 4.4), else at process level; `cmd` is redacted before it is cut
+#' `details$bridge` (04 4.4), else at process level; `cmd` is redacted before it is cut, and the
+#' digest is one line, as text the model chose (a job's name, an error) may hold a line end
 #' @noRd
 bridge_emit = function(payload) {
   payload$cmd = substr(redact_hook(paste(payload$cmd, collapse = " "), "persist"), 1L, 500L)
-  payload$digest = paste0("#> ", payload$digest)
+  payload$digest = paste0("#> ", as_utf8(gsub("[\r\n]+", " ", payload$digest, useBytes = TRUE)))
   run = run_current()
   if (is.null(run)) {
     ev_dispatch("bridge_call", do.call(ev_new, c("bridge_call", payload)))
@@ -201,6 +202,10 @@ bridge_run = function(target, input, wd, timeout, env, merge) {
   timed_out = FALSE
   repeat {
     p$wait(200L)
+    if (isTRUE(file.size(out_f) > proc_output_cap)) {
+      kill_all(p, grace = 0)
+      break
+    }
     if (!p$is_alive()) break
     if (reactor_now() - t0 > timeout) {
       timed_out = TRUE
@@ -770,29 +775,56 @@ bridge_strings = function(description) {
 
 # ---- builtin:bridges -----------------------------------------------------------------------------
 
-#' Risk of peter$sh(): the command classifier on the actual command (G5 levels); passing a
-#' variable through to the child (an unnamed `env` element) reads a secret, level 3
+#' The registered secrets an `env` hands a child: those an unnamed element passes by name
+#' (child_env() matches names in any case) and those the redactor finds in a value the child gets,
+#' a variable passed through or a value set
+#' @noRd
+bridge_env_secrets = function(env) {
+  named = nzchar(names(env) %||% character(length(env)))
+  pass = toupper(env[!named])
+  amb = Sys.getenv()
+  vals = as_utf8(c(unname(env[named]), unname(amb[toupper(names(amb)) %in% pass])))
+  st = secrets_state()
+  held = vapply(st$lits, function(l) any(grepl(l, vals, fixed = TRUE, useBytes = TRUE)), NA,
+                USE.NAMES = FALSE)
+  reg = secret_registered_names()
+  unique(c(reg[toupper(reg) %in% pass], sub("^\\[secret:(.*)\\]$", "\\1", st$marks[held])))
+}
+
+#' A member's risk `r` with the `env` its child gets: passing a variable through (an unnamed
+#' element) reads a secret, level 3; handing over a registered secret is a guarded read of it, as
+#' `Sys.getenv()` of its name is (G6)
+#' @noRd
+bridge_risk_env = function(r, env) {
+  env = bridge_chr(env)
+  s = bridge_env_secrets(env)
+  if (all(nzchar(names(env) %||% character(length(env)))) && !length(s)) return(r)
+  list(level = max(3L, as.integer(r$level)), categories = unique(c(r$categories, "secret")),
+       paths = as.character(r$paths), secret_guard = length(s) > 0L || isTRUE(r$secret_guard),
+       secrets = unique(c(as.character(r$secrets), s)))
+}
+
+#' Risk of peter$sh(): the command classifier on the actual command (G5 levels), read as run in
+#' its `wd` (cmd_in_wd()), with its `env`
 #' @noRd
 bridge_risk_sh = function(input, ctx) {
-  r = bridge_risk(bridge_chr(input$cmd), "command")
-  env = bridge_chr(input$env)
-  if (all(nzchar(names(env) %||% character(length(env))))) return(r)
-  list(level = max(3L, as.integer(r$level)), categories = unique(c(r$categories, "secret")),
-       paths = as.character(r$paths))
+  bridge_risk_env(bridge_risk(cmd_in_wd(bridge_chr(input$cmd), input$wd), "command"), input$env)
 }
 
-#' Risk of peter$script(): 3 (contract 9.4; the script body is not read)
+#' Risk of peter$script(): 3 (contract 9.4; the script body is not read), with its `env`
 #' @noRd
 bridge_risk_script = function(input, ctx) {
-  list(level = 3L, categories = "process", paths = as.character(input$path))
+  bridge_risk_env(list(level = 3L, categories = "process", paths = as.character(input$path)),
+                  input$env)
 }
 
-#' Risk of peter$bg(): 3, or the command's level when that is higher
+#' Risk of peter$bg(): 3, or the command's level when that is higher, with its secret reads
 #' @noRd
 bridge_risk_bg = function(input, ctx) {
   r = bridge_risk(bridge_chr(input$cmd), "command")
   list(level = max(3L, as.integer(r$level)), categories = unique(c("process", r$categories)),
-       paths = as.character(r$paths))
+       paths = as.character(r$paths), secret_guard = isTRUE(r$secret_guard),
+       secrets = as.character(r$secrets))
 }
 
 #' Risk of peter$jobs(): 0 to list, 3 to kill

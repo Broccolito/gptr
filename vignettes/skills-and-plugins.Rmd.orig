@@ -81,6 +81,30 @@ gptr_config(skills = list(paths = "training/skills"), .scope = "project")
 gptr_reload()
 ```
 
+## Skills and rules in a harness
+
+A harness made with `gptr_tailor()` is called like `peter()` and can carry skills as text, with
+no `SKILL.md` file, beside a note, a review step and hard rules. During a call, peter opens a
+skill when it needs one. A `never` rule refuses every matching call in every mode, sub-agents
+included. A `require` rule names a call, a plot or a file that peter should make before it
+finishes; if it has not, gptr reminds it at most twice and then reports the rule as unmet.
+Rules are permission patterns such as `r(fn:name)`, `r(category:install)` or
+`write(data/raw/**)` (see `gptr_permissions()`), and they can only forbid or require more. They
+read the code before it runs, so a name or path that the code computes can slip past them. Your
+own rules go in `rules =`, which `gptr_coach()` never changes; it changes only the coaching, which
+can hold rules of its own.
+
+```{r, eval = FALSE}
+survey_peter = gptr_tailor(peter, coaching = list(skills = list(list(
+  name = "survey-weights", description = "Use when a survey has design weights.",
+  text = "Use the weight column in every mean and model; report weighted sample sizes."))),
+  rules = list(never = list(list(rule = "r(category:install)",
+                                 why = "Use the installed packages."))))
+survey_peter("Estimate mean income by region.", survey)
+```
+
+See [Harnesses and coaching](tailor-and-coach.html).
+
 ## Prompt templates and project instructions
 
 Save a prompt template as `.gptr/prompts/review.md`, or under the user's gptr `prompts/` directory.
@@ -239,7 +263,8 @@ session = peter("Report a distance of 3 metres.", extensions = units)
 session
 ```
 
-For recorded workflows that others can replay, see [Script as history](script-as-history.html).
+For recorded workflows that others can replay, see
+[Record, replay and export](script-as-history.html).
 
 ```{r cleanup, include = FALSE}
 options(old_options)

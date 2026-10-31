@@ -32,13 +32,15 @@ ui_get = function(session = NULL) {
   ui_wrap(ui)
 }
 
-#' Wrap a UI so that its permission answers are normalised and a remembered one is sent to
-#' builtin:permissions
+#' Wrap a UI so that it is given a request with registered secrets redacted (no question shows
+#' one: its code, change rows, flagged calls and paths, reason, hint and rule), its permission
+#' answers are normalised and a remembered one is sent to builtin:permissions
 #' @noRd
 ui_wrap = function(ui) {
   ask = ui$permission
   ui$permission = function(request) {
-    ans = ui_answer_norm(tryCatch(ask(request), error = function(e) NULL), request)
+    shown = redact(request, "context")
+    ans = ui_answer_norm(tryCatch(ask(shown), error = function(e) NULL), request)
     if (!is.null(ans$remember)) {
       ev_dispatch("permissions:remember",
                   list(scope = ans$remember, tool = request$tool, input = request$input,
@@ -76,7 +78,8 @@ ui_answer_norm = function(ans, request) {
 }
 
 #' Why an approval of this request cannot become a rule (IC-77 item 3), else NULL: never for
-#' level 4, control or the ask tool, nor without a suggested rule
+#' level 4, control or the ask tool, nor without a suggested rule, where a policy that asks it
+#' without one says why (`no_rule`, an ask rule's reason, escaped as the `?` view's reason is)
 #' @noRd
 ui_no_rule = function(request) {
   risk = request$risk
@@ -84,7 +87,11 @@ ui_no_rule = function(request) {
         "control" %in% c(risk$categories, risk$flagged$category)) {
     return("level-4 and control actions are approved one call at a time")
   }
-  if (!rlang::is_string(request$suggested_rule)) "no rule covers these calls"
+  if (rlang::is_string(request$suggested_rule)) return(NULL)
+  if (rlang::is_string(request$no_rule)) {
+    return(paste0(ui_escape(request$no_rule), "; an always rule would not stop it"))
+  }
+  "no rule covers these calls"
 }
 
 #' The escaped lines a request shows: its code, else its path (an absolute one normalised, relative
@@ -100,8 +107,8 @@ ui_request_lines = function(request) {
 #' The change a request with a path and no code makes, as escaped diff rows from its input alone
 #' (the file is never read): each edit's oldText as `-` rows and newText as `+` rows (also given at
 #' the input's top level), `@@` between edits; a patch envelope (`patch`, or carried in `edits`) as
-#' its own lines; a write's content as `+` rows; another tool's other fields as JSON; character()
-#' for any other shape
+#' its own lines; a write's content as `+` rows; another tool's other fields as redacted JSON (a
+#' script's `env` may hand a child a secret); character() for any other shape
 #' @noRd
 ui_request_change = function(request) {
   input = request$input
@@ -133,7 +140,7 @@ ui_request_change = function(request) {
          {
            rest = input[setdiff(names(input), "path")]
            if (!length(rest)) return(character())
-           console_lines(tryCatch(json_encode(rest), error = function(e) ""))
+           console_lines(redact(tryCatch(json_encode(rest), error = function(e) ""), "context"))
          })
 }
 
@@ -235,8 +242,8 @@ ui_call_shown = function(request) {
 #' console before (+N more lines), D-187) unless the console printed it (ui_call_shown()), at most
 #' 12 rows of the change a path tool makes (ui_request_change()) as a diff, then dim at column 4
 #' the flagged calls one per line, fitted, at most 5 (D-222), and why an `ask_human` request asks
-#' in every mode, then the question, and under its text the keys (a and p only with a rule,
-#' ui_keys())
+#' even in auto mode (yolo runs secret reads), then the question, and under its text the keys (a
+#' and p only with a rule, ui_keys())
 #' @noRd
 ui_permission_lines = function(request) {
   sym = console_style()
@@ -271,7 +278,7 @@ ui_permission_lines = function(request) {
       }), width))
     },
     if (identical(request$tier, "ask_human") && rlang::is_string(why) && nzchar(why)) {
-      sym$dim(console_wrap(paste0("    asks in every mode: ", ui_escape(why)), width))
+      sym$dim(console_wrap(paste0("    asks even in auto mode: ", ui_escape(why)), width))
     },
     paste0("  ", ui_question(ui_permission_question(request), width - 2L)),
     ui_keys(keys, what, width))

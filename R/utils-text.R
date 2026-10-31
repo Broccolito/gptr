@@ -10,6 +10,11 @@ text_lines = function(text) {
   strsplit(paste(x, collapse = "\n"), "\n", fixed = TRUE)[[1L]]
 }
 
+#' Text as the frozen hashes read it (prompt_hash(), coaching_hash()): UTF-8, trimmed, CRLF as LF
+#' and no spaces or tabs around a newline
+#' @noRd
+text_norm = function(x) gsub("[ \t]*\r?\n[ \t]*", "\n", trimws(as_utf8(x)))
+
 #' deparse() of code gptr did not build, with the `backtick` base R's default would compute.
 #' That default calls mode(), which deparses a call's head with the same default: R recursion
 #' once per head of a chain such as f(1)(1)...(1), up to the C stack or expressions limit (CI-82).
@@ -256,8 +261,11 @@ clean_terminal = function(x) {
   text = gsub("\033\\[[0-?]*[ -/]*[@-~]", "", text, perl = TRUE)
   text = gsub("\033\\][^\a\033]*(\a|\033\\\\)", "", text, perl = TRUE)
   text = gsub("\r+(\n|$)", "\\1", text, perl = TRUE)
-  text = gsub("[^\n\r]*\r", "", text, perl = TRUE)
-  cap_lines(strsplit(text, "\n", fixed = TRUE)[[1L]], 400L)
+  lines = strsplit(text, "\n", fixed = TRUE)[[1L]]
+  # the last frame of each line, without a regex: [^\n\r]*\r is quadratic on one long line
+  cr = grepl("\r", lines, fixed = TRUE)
+  lines[cr] = vapply(strsplit(lines[cr], "\r", fixed = TRUE), function(p) p[length(p)], "")
+  cap_lines(lines, 400L)
 }
 
 #' Cut lines longer than `max_chars`, noting how many characters were dropped

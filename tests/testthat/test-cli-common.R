@@ -845,3 +845,84 @@ test_that("gptr_providers() lists both plan routes without starting a process", 
   expect_identical(pr$api[pr$id == "claude-cli"], "cli-claude")
   expect_true(pr$status[pr$id == "codex"] %in% c("found", "not found", "shim refused"))
 })
+
+# ---- coaching: model kinds and the CLI preflight (P29, 08 sections 1.5 and 3.7) ---------------
+
+# The reason of the gptr_error_model_refused that coach_model_kind(model) signals
+refusal = function(model) {
+  err = expect_error(coach_model_kind(model), class = "gptr_error_model_refused")
+  err$reason
+}
+
+test_that("coach_model_kind() names API, fake and plan routes and refuses the rest", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  expect_identical(coach_model_kind("anthropic/claude-sonnet-5-5"), "api")
+  expect_identical(coach_model_kind(model_resolve("anthropic/claude-sonnet-5-5")), "api")
+  expect_identical(coach_model_kind(gptr_fake_provider(list("hi"))), "fake")
+  expect_identical(refusal("router:pick"), "router")
+  expect_identical(refusal(gptr_router("pick", function(...) "x")), "router")
+  expect_identical(refusal(gptr_fake_provider(list("a"), type = "classifier")), "classifier")
+  # a process adapter registered by the user, even one that drives gptr's claude adapter
+  f = local_fake_cli("claude", "text")
+  expect_identical(refusal(f$model), "process")
+  # the fake CLI reports claude 2.1.261, older than the oldest version coaching was tested with
+  err = expect_error(coach_model_kind("claude_code"), class = "gptr_error_model_refused")
+  expect_identical(err$reason, "cli_version")
+  expect_match(conditionMessage(err), "2.1.296", fixed = TRUE)
+})
+
+test_that("a plan CLI's preflight runs once per path and version; a newer one gets a notice", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  local_fake_cli_path("claude", "text")
+  local_fake_cli_path("codex", "text")
+  local_gptr_options(quiet = FALSE)
+  seen = new.env()
+  seen$version = c(claude = "2.1.296", codex = "0.157.1")
+  seen$checks = 0L
+  local_mocked_bindings(
+    pcli_probe = function(path) list(version = seen$version[[pcli_identity(path)]]),
+    pcli_codex_preflight = function(path) {
+      seen$checks = seen$checks + 1L
+      invisible(TRUE)
+    })
+  expect_identical(coach_model_kind("claude_code"), "claude")
+  expect_identical(coach_model_kind(model_resolve("codex/default")), "codex")
+  expect_identical(coach_model_kind("codex/default"), "codex")
+  expect_identical(seen$checks, 1L)
+  seen$version[["codex"]] = "0.158.2"
+  expect_message(expect_identical(coach_model_kind("codex/default"), "codex"),
+                 "0.158.2", class = "gptr_message_notice")
+  expect_identical(seen$checks, 2L)
+  expect_no_message(coach_model_kind("codex/default"))
+  seen$version[["claude"]] = "2.1.295"
+  expect_identical(refusal("claude_code"), "cli_version")
+  # a failed check is refused and never cached
+  seen$version[["codex"]] = "0.159.0"
+  local_mocked_bindings(pcli_codex_preflight = function(path) {
+    seen$checks = seen$checks + 1L
+    gptr_abort("hooks is off", "model_refused", reason = "cli_preflight")
+  })
+  expect_identical(refusal("codex/default"), "cli_preflight")
+  expect_identical(refusal("codex/default"), "cli_preflight")
+  expect_identical(seen$checks, 4L)
+  # a CLI that cannot be found fails the preflight
+  withr::local_options(gptr.cli_path = list(claude = file.path(tempdir(), "no-claude")))
+  expect_identical(refusal("claude_code"), "cli_preflight")
+})
+
+test_that("the plan status keeps the overage fields of a rate-limit event", {
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  rec = pcli_plan_set("claude-cli", list(status = "allowed", isUsingOverage = TRUE,
+                                         overageStatus = "allowed", errorCode = "credits_required"))
+  expect_identical(rec[c("overage", "overage_status", "error_code")],
+                   list(overage = TRUE, overage_status = "allowed",
+                        error_code = "credits_required"))
+  odd = pcli_plan_set("claude-cli", list(isUsingOverage = "yes", errorCode = 1L))
+  expect_identical(odd[c("overage", "overage_status", "error_code")],
+                   list(overage = NA, overage_status = NA_character_, error_code = NA_character_))
+})

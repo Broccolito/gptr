@@ -679,6 +679,26 @@ test_that("undo closes only the connection the turn opened, in this R process", 
   expect_true(as.integer(con) %in% getAllConnections())
 })
 
+test_that("rewinding the turn that first started the process supervisor leaves it working", {
+  skip_on_cran()
+  dir = withr::local_tempdir()
+  script = file.path(dir, "rewind.R")
+  writeLines(c(
+    tracemem_loader(),
+    "options(gptr.supervise = TRUE)",
+    "code = \"x = 1; peter$sh('echo first')\"",
+    "fake = gptr_fake_provider(list(list(tool = 'r', input = list(code = code)), 'done'))",
+    "s = peter('go', model = fake, mode = 'auto', envir = new.env())",
+    "invisible(gptr_rewind(s, turn = 0))",
+    "res = get('proc_run', asNamespace('gptr'))('echo', 'again')",
+    "cat('RESULT', res$status, res$stdout)"
+  ), script)
+  libs = paste(.libPaths(), collapse = .Platform$path.sep)
+  out = processx::run(rscript_path(), c("--vanilla", script), wd = dir, error_on_status = FALSE,
+                      env = c("current", R_LIBS = libs), timeout = 120)
+  expect_match(out$stdout, "RESULT 0 again", fixed = TRUE)
+})
+
 test_that("options created while namespaces load stay; a failed restore does not stop the undo", {
   skip_on_cran()
   skip_if("splines" %in% loadedNamespaces())

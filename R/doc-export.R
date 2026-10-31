@@ -7,12 +7,15 @@ doc_export_refuse = function(reason) {
 }
 
 #' Count a literal Peter-only chain after R's native pipe rewrite, which may start from one of the
-#' session `handles` (a console transcript's later turns); no argument is evaluated.
+#' session `handles` (a console transcript's later turns); after the prompt an argument may also be
+#' an unnamed object name (a console turn's @objects); a call of one of `heads` (doc_heads():
+#' harnesses too) counts as Peter's. No argument is evaluated. A chain refused for a named argument
+#' that is not one literal is 0 with that name as attribute `arg`.
 #' @noRd
-doc_export_chain = function(expr, handles = character(), depth = 0L) {
+doc_export_chain = function(expr, handles = character(), depth = 0L, heads = "peter") {
   if (!is.call(expr) || depth > doc_sidecar_bounds()$depth) return(0L)
   head = expr[[1L]]
-  named = identical(head, as.name("peter")) ||
+  named = (is.symbol(head) && as.character(head) %in% heads) ||
     identical(doc_call_norm(head), quote(gptr::peter))
   if (!named) return(0L)
   args = as.list(expr)[-1L]
@@ -20,14 +23,31 @@ doc_export_chain = function(expr, handles = character(), depth = 0L) {
   for (i in seq_along(args)) {
     if (is.symbol(args[[i]]) && !nzchar(as.character(args[[i]]))) return(0L)
   }
-  inner = if (is.call(args[[1L]])) doc_export_chain(args[[1L]], handles, depth + 1L) else 0L
+  inner = if (is.call(args[[1L]])) doc_export_chain(args[[1L]], handles, depth + 1L, heads) else 0L
   handle = is.symbol(args[[1L]]) && as.character(args[[1L]]) %in% handles
   rest = if (inner || handle) args[-1L] else args
-  literal = vapply(rest, function(x) {
-    is.null(x) || (is.atomic(x) && length(x) == 1L && !is.na(x))
+  named = nzchar(names(rest) %||% character(length(rest)))
+  literal = vapply(seq_along(rest), function(i) {
+    x = rest[[i]]
+    is.null(x) || (is.atomic(x) && length(x) == 1L && !is.na(x)) ||
+      (i > 1L && is.symbol(x) && !named[i])
   }, NA)
-  if (!all(literal) || !any(vapply(rest, is.character, NA))) return(0L)
+  if (!all(literal) || !any(vapply(rest, is.character, NA))) {
+    bad = c(attr(inner, "arg"), names(rest)[!literal & named])
+    return(structure(0L, arg = if (length(bad)) bad[[1L]]))
+  }
   1L + inner
+}
+
+#' The names in code, less each `peter$<member>`: a member call runs as ordinary R, a nested Peter
+#' call does not
+#' @noRd
+doc_export_names = function(e) {
+  if (is.call(e) && identical(e[[1L]], as.name("$")) && identical(e[[2L]], as.name("peter"))) {
+    return(character())
+  }
+  if (is.symbol(e)) return(as.character(e))
+  if (is.recursive(e)) unlist(lapply(as.list(e), doc_export_names)) else character()
 }
 
 #' Read-only pending-write admission: exporting must not recover or discard pending records.
@@ -38,9 +58,12 @@ doc_export_pending = function(path) {
   any(doc_sidecar_exists(c(doc_sidecar_path(path), doc_sidecar_legacy_path(path))))
 }
 
-#' Preserve body code and ordinary notes, with a fixed readable bound on captured output.
+#' Preserve body code and ordinary notes, with a fixed readable bound on captured output, without
+#' the run of `#< ` lines that opens a body, what a console prompt was sent with (IC-49), which no
+#' exported call sends.
 #' @noRd
 doc_export_body = function(body, format, indent = "") {
+  body = body[seq_along(body) > doc_sent_n(body)]
   output = grepl("^[ \t]*#>", body)
   comment = grepl("^[ \t]*#", body)
   unsafe = comment & grepl("[[:cntrl:]]", body)
@@ -112,12 +135,16 @@ doc_export_bind = function(expr, path) {
 doc_export_lines = function(lines, format, path, target) {
   blocks = doc_find_blocks(lines)
   if (isTRUE(attr(blocks, "malformed"))) doc_export_refuse("malformed record markers")
+  if (any(vapply(blocks$header, function(h) identical(h[["kind"]], "coach"), NA))) {
+    doc_export_refuse("a coach block has no session turn to export")
+  }
+  heads = doc_heads(lines)
   if (nrow(blocks) > doc_sidecar_bounds()$upserts) doc_export_refuse("too many records")
   parsed = tryCatch(doc_parse_text(lines), error = function(e) NULL)
   if (is.null(parsed)) doc_export_refuse("invalid R source")
   refs = attr(parsed, "srcref")
   tokens = utils::getParseData(parsed)
-  calls = doc_scan_parse(lines, 0L)
+  calls = doc_scan_parse(lines, 0L, heads)
   calls$block = vapply(calls$line1, function(line) {
     i = which(line > blocks$start & line < blocks$end)
     if (length(i)) blocks$id[i[1L]] else NA_character_
@@ -144,8 +171,11 @@ doc_export_lines = function(lines, format, path, target) {
       binding = as.character(expr[[2L]])
       expr = expr[[3L]]
     }
-    if (!identical(doc_export_chain(expr, unlist(bound)), as.integer(length(rows)))) {
-      doc_export_refuse("mixed or non-literal Peter expressions")
+    n = doc_export_chain(expr, unlist(bound), heads = heads)
+    if (!identical(as.integer(n), length(rows))) {
+      arg = attr(n, "arg")
+      doc_export_refuse(paste0("mixed or non-literal Peter expressions",
+                               if (!is.null(arg)) paste0(" (argument `", ui_escape(arg), "`)")))
     }
     overlap = vapply(refs, function(r) r[1L] <= sr[3L] && r[3L] >= sr[1L], NA)
     if (sum(overlap) != 1L) doc_export_refuse("shared-line Peter statements")
@@ -174,7 +204,8 @@ doc_export_lines = function(lines, format, path, target) {
       body = doc_block_body(lines, b)
       if (!is.null(h[["status"]]) || !rlang::is_string(h[["sha"]]) ||
           !grepl("^[0-9a-f]{8}$", h[["sha"]]) ||
-          !identical(doc_block_status(h, body, hit$ph, h[["args"]]), "fresh")) {
+          !identical(doc_block_status(h, body, hit$ph, h[["args"]], doc_head_harness(h, hit$head)),
+                     "fresh")) {
         doc_export_refuse("missing, stale, edited or undone record")
       }
       if (!rlang::is_string(h[["session"]]) || !nzchar(h[["session"]]) ||
@@ -184,7 +215,7 @@ doc_export_lines = function(lines, format, path, target) {
       if (!is.null(h[["args"]])) doc_export_refuse("interpolated inputs need review")
       if (any(grepl(doc_secret_flag, body, fixed = TRUE))) doc_export_refuse("secret-marked record")
       code = tryCatch(doc_parse_text(body, keep_source = FALSE), error = function(e) NULL)
-      if (is.null(code) || any(all.names(code) %in% c("peter", "gptr_return"))) {
+      if (is.null(code) || any(doc_export_names(code) %in% c(heads, "gptr_return"))) {
         doc_export_refuse("unresolved control calls in recorded code")
       }
       indent = if (separate) {
@@ -211,7 +242,14 @@ doc_export_lines = function(lines, format, path, target) {
                                         lines = paste0("# ", lines[sr[1L]:sr[3L]]))
     }
   }
-  if (length(claimed) != nrow(blocks)) doc_export_refuse("unowned recorded blocks")
+  # an undone block no statement owns (a console turn's, under its `#~ ` statement) is left out
+  for (i in setdiff(seq_len(nrow(blocks)), claimed)) {
+    if (!identical(blocks$header[[i]][["status"]], "undone")) {
+      doc_export_refuse("unowned recorded blocks")
+    }
+    edits[[length(edits) + 1L]] = list(start = blocks$start[i], end = blocks$end[i],
+                                       lines = character())
+  }
   # A session handle is live from its peter() statement until ordinary code assigns the name; a
   # function reads names when it is called, so one naming any handle of the document is refused.
   live = character()
@@ -242,7 +280,12 @@ doc_export_lines = function(lines, format, path, target) {
       edits[[length(edits) + 1L]] = list(start = sr[1L], end = sr[3L], lines = stmt)
       next
     }
-    if ("peter" %in% all.names(expr)) doc_export_refuse("unresolved Peter references")
+    # a harness definition, `<name> = gptr_tailor(...)`, is ordinary code (08 section 3.6)
+    def = doc_assign_parts(expr)$value
+    if (!(is.call(def) && identical(doc_call_head(def), "gptr_tailor")) &&
+        any(heads %in% doc_export_names(expr))) {
+      doc_export_refuse("unresolved Peter references")
+    }
     set = NULL
     if (is.call(expr) && as.character(expr[[1L]])[1L] %in% c("=", "<-") && length(expr) == 3L &&
         is.symbol(expr[[2L]])) {
@@ -278,9 +321,16 @@ doc_export_lines = function(lines, format, path, target) {
 #' @return Invisibly, the normalized destination path.
 #' @details Only bare or symbol-assigned literal Peter calls and Peter-only native pipelines
 #' are admitted; a pipeline may start from a session handle an earlier Peter statement assigned,
-#' as the later turns of a console transcript do. Distinct statements sharing a line (including
-#' semicolon-separated statements), mixed pipelines, nested or computed calls, pending writes,
-#' missing or edited blocks, secret markers and interpolated-input hashes are refused.
+#' as the later turns of a console transcript do, and after its prompt a call may name objects
+#' without argument names, as a console turn's `@objects` are written. Every named argument must
+#' be one literal (a string, number, logical or `NULL`), so a call with `agents = list(...)`,
+#' `budget = list()` or `envir = new.env()` is refused, and the refusal names that argument.
+#' A harness definition, `<name> = gptr_tailor(...)`, is ordinary code. Distinct statements sharing
+#' a line (including semicolon-separated statements), mixed pipelines, nested or computed calls,
+#' pending writes, missing or edited blocks, secret markers and interpolated-input hashes are
+#' refused. An undone block that no statement owns, a console turn that `/undo` or `/retry` undid
+#' under its `#~ ` statement, is left out. Code that calls a `peter$` member, such as
+#' `peter$sh()`, exports as ordinary R; code that calls `peter()` is refused.
 #' Raw exports also refuse ordinary code that reads a session handle after its Peter statement
 #' and before ordinary code assigns that name again, and a function that names any session handle
 #' of the document, wherever it is defined, as it reads the name when called. The Peter format
@@ -305,7 +355,9 @@ doc_export_lines = function(lines, format, path, target) {
 #' effects cannot be reconstructed. External files, objects and package versions must still
 #' be supplied. Remaining user code may use gptr or perform network and filesystem operations.
 #' Captured `#>` output is limited to twelve lines per block and eighty characters per line;
-#' outputs are comments. Encoding, line endings and the final newline follow the input file.
+#' outputs are comments. Neither format keeps a console turn's `#< ` lines (what the console sent
+#' with its prompt, see [gptr_doc()]), so an exported call is asked without them. Encoding, line
+#' endings and the final newline follow the input file.
 #' A UTF-8 byte order mark is preserved; source that exported file with
 #' `source(to, encoding = "UTF-8-BOM")`.
 #' @seealso [gptr_doc()], [gptr_source()], [gptr_blocks()]
@@ -319,7 +371,7 @@ doc_export_lines = function(lines, format, path, target) {
 #' unlink(c(input, output))
 gptr_export = function(file, to, format = c("r", "peter")) {
   doc_control_guard("gptr_export")
-  format = match.arg(format)
+  format = check_choice(format, c("r", "peter"), "format")
   path = doc_file_arg(file, "r", "an existing .R document")
   check_string(to, "to")
   if (!identical(doc_format_of(to), "r") || any(doc_sidecar_exists(to))) {

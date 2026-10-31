@@ -501,13 +501,117 @@ test_that("the end of a refused call says why it did not run; an error's does no
   expect_null(ends[[2L]]$refused)
   expect_identical(msg_text(tool_results(s)[[1L]]),
                    paste0("Permission denied: denied by the rule r(fn:writeLines). Explain what ",
-                          "you need or choose another approach."))
+                          "you need or choose another approach. Nothing in this call ran."))
   local_permissive()
   local_tool("echo", function(input, ctx) "ran")
   local_hook("tool_call", function(event, ctx) list(decision = "block", reason = "held"))
   s = test_session()
   dispatch(s, list(tc("echo")))
   expect_identical(ev(s)[[1L]]$refused, "blocked by a hook: held")
+})
+
+test_that("a refused call says none of it ran; a nested denial mid-run does not (FIX-32)", {
+  skip_on_cran()
+  local_project()
+  local_permission_rules()
+  gptr_permissions(deny = "r(sh:rm *)")
+  fake = local_fake_provider(list(fake_tool("r", code = "x1 = 1; system(paste(cmd))"),
+                                  fake_tool("r", code = "x2 = 2; a = 'x'; peter$sh(c('rm', a))"),
+                                  "done"))
+  e = new.env()
+  peter("go", model = fake, envir = e, mode = "auto")
+  res = vapply(fake_requests(fake)[2:3], function(r) msg_text(r$last_results[[1L]]), "")
+  expect_true(endsWith(res[[1L]], paste0("refused in auto mode; use peter$sh(). Explain what ",
+                                         "you need or choose another approach. Nothing in this ",
+                                         "call ran.")))
+  expect_false(exists("x1", envir = e, inherits = FALSE))
+  expect_match(res[[2L]], "denied by the rule r(sh:rm *)", fixed = TRUE)
+  expect_false(grepl("Nothing in this call ran", res[[2L]], fixed = TRUE))
+  expect_identical(e$x2, 2)
+})
+
+test_that("an r(secret:) deny or ask rule stops a member handing a child the secret (round 6)", {
+  skip_on_cran()
+  local_project(files = list(s.sh = "whoami", s.R = "cat('ok')"))
+  local_permission_rules()
+  local_vault()
+  withr::local_envvar(R6_FAKE_KEY = "sk-test-0000-r6")
+  secret_register("sk-test-0000-r6", "R6_FAKE_KEY")
+  # commands that do not read the secret by name: only the hand-over meets the rule
+  calls = c("peter$sh('whoami', env = 'R6_FAKE_KEY')$stdout",
+            "peter$script('s.sh', env = 'R6_FAKE_KEY')$stdout")
+  run = function(code, mode, answers = list()) {
+    ui = local_scripted_ui(answers)
+    fake = local_fake_provider(list(fake_tool("r", code = paste("x =", code)), "done"))
+    e = new.env()
+    peter("go", model = fake, envir = e, mode = mode)
+    list(x = e$x, asked = sum(ui$log$method == "permission"),
+         text = msg_text(fake_requests(fake)[[2L]]$last_results[[1L]]))
+  }
+  gptr_permissions(deny = "r(secret:R6_FAKE_KEY)")
+  for (code in calls) {
+    for (case in list(list("yolo", list()), list("auto", list()), list("manual", list("y")))) {
+      res = run(code, case[[1L]], case[[2L]])
+      label = paste(case[[1L]], code)
+      expect_null(res$x)
+      expect_identical(res$asked, length(case[[2L]]), label = label)
+      expect_match(res$text, "denied by the rule r(secret:R6_FAKE_KEY)", fixed = TRUE,
+                   label = label)
+    }
+  }
+  gptr_permissions(remove = "r(secret:R6_FAKE_KEY)")
+  gptr_permissions(ask = "r(secret:R6_FAKE_KEY)")
+  for (code in calls) {
+    res = run(code, "yolo", list("n"))
+    expect_null(res$x)
+    expect_identical(res$asked, 1L, label = code)
+  }
+  # a person's yes to the rule's question approves the hand-over, so the secret guard does not
+  # ask again; manual asks for the code first, as without the rule (verification of round 6)
+  for (code in c("peter$sh('echo ok', env = 'R6_FAKE_KEY')$stdout",
+                 "peter$script('s.R', env = 'R6_FAKE_KEY')$stdout")) {
+    res = run(code, "auto", list("y", "y", "y"))
+    expect_match(res$x, "ok", fixed = TRUE, label = code)
+    expect_identical(res$asked, 1L, label = code)
+    expect_identical(run(code, "manual", list("y", "y", "y"))$asked, 2L, label = code)
+  }
+})
+
+test_that("a request and a blocked run's condition carry its flagged rows redacted (round 6)", {
+  skip_on_cran()
+  local_project()
+  local_permission_rules()
+  local_vault()
+  withr::local_envvar(R6_FAKE_KEY = "sk-test-0000-r6")
+  secret_register("sk-test-0000-r6", "R6_FAKE_KEY")
+  gptr_permissions(ask = "r(sh:echo *)")
+  # a command the code computes holds the key; nobody can answer, so the run stops blocked
+  code = "v = Sys.getenv(paste0('R6_FAKE', '_KEY')); x = peter$sh(c('echo', 'k', v))$stdout"
+  seen = new.env()
+  off = gptr_register(gptr_hook("permission_request", function(event, ctx) {
+    seen$risk = event$risk
+    NULL
+  }))
+  withr::defer(off())
+  fake = local_fake_provider(list(fake_tool("r", code = code), "done"))
+  err = tryCatch(peter("go", model = fake, envir = new.env(), mode = "auto"),
+                 gptr_error_permission = function(e) e)
+  expect_s3_class(err, "gptr_error_permission")
+  for (risk in list(err$risk, seen$risk)) {
+    expect_true(any(grepl("[secret:R6_FAKE_KEY]", risk$flagged$call, fixed = TRUE)))
+    expect_false(any(grepl("sk-test-0000-r6", unlist(risk), fixed = TRUE)))
+  }
+  expect_false(grepl("sk-test-0000-r6", err$action, fixed = TRUE))
+  # the summary the condition's `action` carries is redacted in each of its forms: code lines, a
+  # path, a command and other inputs as JSON (verification of review round 6)
+  inputs = list(list(code = "x = nchar('sk-test-0000-r6')"), list(path = "d/sk-test-0000-r6.txt"),
+                list(cmd = c("echo", "sk-test-0000-r6"), env = "R6_FAKE_KEY"),
+                list(text = "sk-test-0000-r6"))
+  for (input in inputs) {
+    shown = perm_summary(list(name = "r", input = input))
+    expect_false(any(grepl("sk-test-0000-r6", shown, fixed = TRUE)), label = names(input)[1L])
+    expect_true(any(grepl("[secret:R6_FAKE_KEY]", shown, fixed = TRUE)), label = names(input)[1L])
+  }
 })
 
 test_that("the UI answers asks when the run's snapshot can prompt", {
@@ -557,7 +661,7 @@ test_that("a denial with the person's text tells the model it is theirs (cheat-s
   expect_identical(told(ui$answer),
                    paste0("The user declined this call and said: \"use the other file\". This is ",
                           "the user's own instruction: do that instead; any call it needs is ",
-                          "approved separately."))
+                          "approved separately. Nothing in this call ran."))
   expect_match(told(ui_answer("deny")), "^Permission denied: the user declined\\. ")
   # a denial gptr writes itself is a reason, never the person's words
   expect_match(told(ui_answer("deny", reason = "no valid answer was given at the approval prompt")),
@@ -831,6 +935,16 @@ test_that("input fields are matched exactly, never by a prefix", {
   call = list(name = "w", input = list(code_path = "R/a.R", pathway = "p", questionsx = list()))
   expect_identical(perm_summary(call),
                    "{\"code_path\":\"R/a.R\",\"pathway\":\"p\",\"questionsx\":[]}")
+  # a nested peter$sh() or peter$bg() ask shows its command, not JSON (FIX-32)
+  expect_identical(perm_summary(list(name = "sh", input = list(cmd = c("touch", "a b.txt")))),
+                   "touch a b.txt")
+  expect_identical(perm_summary(list(name = "bg", input = list(cmd = list("sleep", "1")))),
+                   "sleep 1")
+  # and its other inputs, which the command alone does not show (review round 2)
+  expect_identical(perm_summary(list(name = "sh", input = list(cmd = "sh", input = "rm -rf x",
+                                                               wd = "../o"))),
+                   "sh {\"input\":\"rm -rf x\",\"wd\":\"../o\"}")
+  expect_match(perm_summary(list(name = "w", input = list(cmdx = "ls"))), "^\\{")
   expect_identical(perm_ask_questions(list(questions_old = list(list(question = "Q?")))),
                    character())
   v = tool_validate(gptr_tool("t", "t", execute = function(input, ctx) NULL),
@@ -1013,4 +1127,90 @@ test_that("a blocked call's hint names where its mode came from (finding 16)", {
   how = hint()$how_to_allow
   expect_false(grepl("run interactively", how, fixed = TRUE))
   expect_match(how, "knitting cannot ask", fixed = TRUE)
+})
+
+# --------------------------------------------------------------- policies reach sub-agents (08 3.2)
+
+# An extension whose policy denies r code that assigns `touched`
+no_touch = function(gptr) {
+  gptr$register(gptr_policy("no_touch", function(call, ctx) {
+    if (grepl("touched", call$input$code %||% "", fixed = TRUE)) {
+      list(decision = "deny", reason = "no touching")
+    }
+  }))
+}
+
+test_that("a person's extensions = policy binds every session started under theirs", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(mode = "auto", model = "fake/fake-1")
+  local_fake_provider(function(request) {
+    if (length(request$last_results)) return("done")
+    if (!identical(request$last_user, "outer")) return(fake_tool("r", code = "touched = 1"))
+    fake_tool("r", code = paste0("nest = peter('inner')\n",
+                                 "rev = peter('inner', agents = list(a = agent(system = 'Do.')))\n",
+                                 "fan = peter('inner', list(p = 1), parallel = 1)"))
+  })
+  e = new.env()
+  s = peter("outer", envir = e, extensions = no_touch)
+  # an inline sub-agent whose parent is the person's session itself
+  h = subagent_start(list(agent = gptr_agent("b", description = "d", model = "fake/fake-1"),
+                          prompt = "inner", parent = s, base = new.env()), NULL)
+  expect_true(run_wait(list(h$run), timeout = 30))
+  for (x in list(e$nest, e$rev$a, e$fan$p, h$session)) {
+    expect_match(msg_text(tool_results(x)[[1L]]), "no touching", fixed = TRUE)
+    expect_false(exists("touched", envir = x$envir, inherits = FALSE))
+  }
+})
+
+test_that("nested sh, bg, script, write and edit calls meet every rules-like policy", {
+  skip_on_cran()
+  root = local_project(files = list("notes.md" = "a"))
+  local_gptr_options(mode = "auto", model = "fake/fake-1")
+  local_permission_rules()
+  gptr_permissions(deny = c("r(sh:rm *)", "write(secret.txt)"), ask = "r(sh:echo *)")
+  ui = local_scripted_ui()
+  # stand-ins for the coaching and harness_rules policies of a harness
+  rules_like = function(gptr) {
+    gptr$register(gptr_policy("coaching", function(call, ctx) {
+      if (grepl("echo", call$input$code %||% "", fixed = TRUE)) {
+        list(decision = "deny", reason = "coached")
+      } else {
+        list(decision = "allow", reason = "fine")
+      }
+    }))
+    gptr$register(gptr_policy("harness_rules", function(call, ctx) {
+      if (identical(call$input$path, "notes.md")) list(decision = "deny", reason = "your rule")
+    }))
+    # a coaching child's fence (P29, D-281); a nested sh, bg or script call reaches it as its
+    # literal r call (nested_literal()), a sh call's working folder as a cd in its command
+    gptr$register(gptr_policy("fence", function(call, ctx) {
+      if (grepl("INSTALL|\"cd |peter\\$script\\(\"x\\.R\"\\)", call$input$code %||% "")) {
+        list(decision = "deny", reason = "fenced")
+      }
+    }))
+  }
+  cases = list(
+    # the person's deny rule holds against the coaching policy's allow
+    c("cmd = paste('rm', '-rf', 'build'); peter$sh(cmd)", "denied by the rule r(sh:rm *)"),
+    # a coaching deny beats the person's ask rule: nobody is asked
+    c("cmd = paste('echo', 'hi'); peter$bg(cmd)", "coached"),
+    c("p = paste0('secret', '.txt'); peter$write(p, 'x')", "denied by the rule write(secret.txt)"),
+    c("p = paste0('notes', '.md'); peter$edit(p, list(list(oldText = 'a', newText = 'b')))",
+      "your rule"),
+    c("cmd = paste('R CMD', toupper('install'), 'x.tar.gz'); peter$sh(cmd)", "fenced"),
+    c("cmd = paste('true'); peter$sh(cmd, wd = 'sub')", "fenced"),
+    # the literal call lists peter$script at the outer call's level: the computed one is still
+    # judged on its actual input
+    c("writeLines('cat(1)', 'x.R'); f = peter$script; f('x.R'); peter$script('y.R')", "fenced"))
+  for (i in seq_along(cases)) {
+    fake = local_fake_provider(list(fake_tool("r", code = cases[[i]][[1L]]), "Done."),
+                               name = paste0("nest", i))
+    s = peter("Go.", model = fake, envir = new.env(), extensions = rules_like)
+    expect_match(msg_text(tool_results(s)[[1L]]), cases[[i]][[2L]], fixed = TRUE,
+                 label = cases[[i]][[1L]])
+  }
+  expect_false(file.exists(file.path(root, "secret.txt")))
+  expect_identical(readLines(file.path(root, "notes.md")), "a")
+  expect_identical(sum(ui$log$method == "permission"), 0L)
 })

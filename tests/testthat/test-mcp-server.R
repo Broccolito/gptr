@@ -55,7 +55,8 @@ test_that("a served r call evaluates in the session's environment with its mode 
   res = mcp_dispatch_local(r_call("a = 2", modern = FALSE), y$session)$result
   expect_true(res$isError)
   expect_match(res$content[[1L]]$text, "Permission denied", fixed = TRUE)
-  expect_match(res$content[[1L]]$text, "gptr_permissions(allow", fixed = TRUE)
+  expect_match(res$content[[1L]]$text, "gptr_permissions(allow = ...). Nothing in this call ran.",
+               fixed = TRUE)
   expect_false(exists("a", envir = y$envir, inherits = FALSE))
   rd = mcp_dispatch_local(mcp_test_msg("tools/call", list(name = "read",
                                                           arguments = list(path = "nope.txt"))),
@@ -189,6 +190,34 @@ test_that("the end of a served call that was refused says why it did not run (co
   end = Filter(function(e) identical(e$tool_call_id, "mcp_6"), seen$events)[[2L]]
   expect_true(end$is_error)
   expect_identical(end$refused, "denied by the rule r(fn:writeLines)")
+})
+
+test_that("a blocked run refuses every further served call at once (P29, 08 section 3.7)", {
+  local_gptr_options(interactive = FALSE, noninteractive_ask = "stop")
+  seen = new.env()
+  seen$ends = list()
+  offs = list(
+    gptr_register(gptr_hook("before_request", function(event, ctx) {
+      if (is.null(seen$first)) {
+        seen$first = mcp_dispatch_local(r_call("writeLines('x', 'y.txt')", id = 7L),
+                                        ctx$session)$result
+        seen$second = mcp_dispatch_local(r_call("1 + 1", id = 8L), ctx$session)$result
+      }
+      NULL
+    })),
+    gptr_register(gptr_hook("tool_execution_end", function(event, ctx) {
+      seen$ends[[length(seen$ends) + 1L]] = event
+      NULL
+    })))
+  withr::defer(for (off in offs) off())
+  expect_error(peter("hello", model = local_fake_provider(list("ok")), envir = new.env(),
+                     mode = "manual"),
+               class = "gptr_error_permission")
+  expect_true(seen$first$isError)
+  expect_true(seen$second$isError)
+  expect_match(seen$second$content[[1L]]$text, "no further tool call runs", fixed = TRUE)
+  end = Filter(function(e) identical(e$tool_call_id, "mcp_8"), seen$ends)[[1L]]
+  expect_match(end$refused, "blocked", fixed = TRUE)
 })
 
 test_that("code served in a live run shows what it prints, as the r tool does (Task 31)", {
@@ -387,6 +416,141 @@ test_that("a served call asks a person only while a pump runs (IC-57)", {
   local_mocked_bindings(reactor_depth = function() 1L)
   expect_identical(mcp_serve_gate(list(name = "r"), run, NULL, "s1")$decision, "allow")
   expect_identical(seen$perm, 1L)
+})
+
+test_that("a nested sh or bg call in served R meets the rules and the critical guard (FIX-32)", {
+  skip_on_cran()
+  root = local_project(files = list("build/a.o" = "x"))
+  local_permission_rules()
+  gptr_permissions(deny = "r(sh:rm *)")
+  codes = paste0("cmd = paste('rm', '-rf', 'build'); peter$", c("sh", "bg"), "(cmd)")
+  serve = function(target) lapply(codes, function(x) mcp_dispatch_local(r_call(x), target)$result)
+  # served while the run's pump runs (the CLI routes), and to an idle session
+  res = c(serve_in_run(function(event, ctx) serve(ctx$session))$out,
+          serve(local_served_session("auto")$session))
+  for (r in res) {
+    expect_true(r$isError)
+    expect_match(r$content[[1L]]$text, "denied by the rule r(sh:rm *)", fixed = TRUE)
+  }
+  expect_true(file.exists(file.path(root, "build", "a.o")))
+  # a computed command outside the project needs a person: asked while the pump runs, refused
+  # when idle; one no rule or guard stops runs
+  gptr_permissions(remove = "r(sh:rm *)")
+  ui = local_scripted_ui(list("n"))
+  codes = c("x = '/gptr-none'; peter$sh(c('rm', '-rf', x))",
+            "x = peter$sh(paste('echo', 'hi'))$stdout")
+  seen = serve_in_run(function(event, ctx) serve(ctx$session))
+  idle = local_served_session("auto")
+  local_gptr_options(quiet = FALSE)
+  out = serve(idle$session)
+  expect_identical(ui$log$method, "permission")
+  expect_identical(vapply(c(seen$out, out), function(r) r$isError, NA),
+                   c(TRUE, FALSE, TRUE, FALSE))
+  expect_match(out[[1L]]$content[[1L]]$text, "nobody can approve it", fixed = TRUE)
+  # the denial tells the model; the console notice for the person is not in its result (round 2)
+  expect_false(grepl("An MCP client asked", out[[1L]]$content[[1L]]$text, fixed = TRUE))
+  expect_identical(trimws(c(seen$envir$x, idle$envir$x)), c("hi", "hi"))
+})
+
+test_that("idle served R reads a nested sh call as run in its wd (review round 4)", {
+  skip_on_cran()
+  root = local_project()
+  # a directory beyond the project and the session's tempdir() is outside
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  dir.create(file.path(out, "build"))
+  writeLines("x", file.path(out, "build", "a.o"))
+  for (mode in c("auto", "yolo")) {
+    idle = local_served_session(mode)
+    for (cmd in c("c('rm', '-rf', 'build')", "'rm -rf build'")) {
+      code = paste0("peter$sh(", cmd, ", wd = ", deparse(out), ")")
+      res = mcp_dispatch_local(r_call(code), idle$session)$result
+      expect_true(res$isError, label = paste(mode, cmd))
+      expect_match(res$content[[1L]]$text, "a critical action (level 4)", fixed = TRUE)
+    }
+  }
+  expect_true(file.exists(file.path(out, "build", "a.o")))
+})
+
+test_that("served R meets the secret guard when env hands a child a secret (review round 5)", {
+  skip_on_cran()
+  local_project()
+  local_vault()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  # the child builds the name: naming it would read the secret by name (review round 6)
+  child = deparse1(c(rscript_path(), "-e", "cat(nzchar(Sys.getenv(paste0('R5_FAKE', '_KEY'))))"))
+  code = function(env) paste0("x = peter$sh(", child, ", env = ", env, ")$stdout")
+  serve = function(target, env) mcp_dispatch_local(r_call(code(env)), target)$result
+  # served while the run's pump runs (a person answers) and to an idle session (nobody can)
+  ui = local_scripted_ui(list("n"))
+  seen = serve_in_run(function(event, ctx) serve(ctx$session, "'R5_FAKE_KEY'"))
+  expect_identical(ui$log$method, "permission")
+  expect_true(seen$out$isError)
+  expect_null(seen$envir$x)
+  idle = local_served_session("auto")
+  res = serve(idle$session, "'R5_FAKE_KEY'")
+  expect_true(res$isError)
+  expect_match(res$content[[1L]]$text, "reads a registered secret", fixed = TRUE)
+  expect_null(idle$envir$x)
+  # yolo hands it over as it reads one; an ordinary env runs in auto
+  yolo = local_served_session("yolo")
+  expect_false(serve(yolo$session, "'R5_FAKE_KEY'")$isError)
+  expect_identical(yolo$envir$x, "TRUE")
+  expect_false(serve(idle$session, "c('PATH', LANG = 'C')")$isError)
+  expect_identical(idle$envir$x, "FALSE")
+  expect_identical(nrow(ui$log), 1L)
+})
+
+test_that("an r(secret:) rule covers an idle served hand-over if the code reads it (round 6)", {
+  skip_on_cran()
+  local_project()
+  local_vault()
+  local_permission_rules()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  gptr_permissions(allow = "r(secret:R5_FAKE_KEY)")
+  serve = function(target, code) mcp_dispatch_local(r_call(code), target)$result
+  hand = "peter$sh('whoami', env = 'R5_FAKE_KEY')$stdout"
+  # a level-0 command: the rule allows `r` code, never the member that hands the child the key
+  idle = local_served_session("auto")
+  res = serve(idle$session, paste("x =", hand))
+  expect_true(res$isError)
+  expect_match(res$content[[1L]]$text, "reads a registered secret", fixed = TRUE)
+  expect_null(idle$envir$x)
+  # the same code reading the secret by name: the rule allowing that read covers the hand-over
+  res = serve(idle$session, paste("invisible(Sys.getenv('R5_FAKE_KEY')); y =", hand))
+  expect_false(res$isError)
+  expect_true(nzchar(idle$envir$y))
+  # a deny rule for the secret stops the hand-over, in yolo too
+  gptr_permissions(deny = "r(secret:R5_FAKE_KEY)")
+  yolo = local_served_session("yolo")
+  res = serve(yolo$session, paste("z =", hand))
+  expect_true(res$isError)
+  expect_match(res$content[[1L]]$text, "denied by the rule r(secret:R5_FAKE_KEY)", fixed = TRUE)
+  expect_null(yolo$envir$z)
+})
+
+test_that("a deny r(secret:) rule stops a served hand-over in a run and in a script (round 6)", {
+  skip_on_cran()
+  local_project(files = list(s.sh = "whoami"))
+  local_vault()
+  local_permission_rules()
+  withr::local_envvar(R6_FAKE_KEY = "sk-test-0000-r6")
+  secret_register("sk-test-0000-r6", "R6_FAKE_KEY")
+  gptr_permissions(deny = "r(secret:R6_FAKE_KEY)")
+  serve = function(target, code) mcp_dispatch_local(r_call(code), target)$result
+  codes = c("x = peter$sh('whoami', env = 'R6_FAKE_KEY')$stdout",
+            "x = peter$script('s.sh', env = 'R6_FAKE_KEY')$stdout")
+  # served while the run's pump runs (a person could answer), and to an idle yolo session
+  seen = serve_in_run(function(event, ctx) lapply(codes, function(x) serve(ctx$session, x)))
+  yolo = local_served_session("yolo")
+  res = c(seen$out, lapply(codes, function(x) serve(yolo$session, x)))
+  for (r in res) {
+    expect_true(r$isError)
+    expect_match(r$content[[1L]]$text, "denied by the rule r(secret:R6_FAKE_KEY)", fixed = TRUE)
+  }
+  expect_null(seen$envir$x)
+  expect_null(yolo$envir$x)
 })
 
 test_that("inside a running session the claude route gates through perm_check once", {

@@ -38,11 +38,15 @@ perm_is_control = function(call, risk) {
     ((call$name %||% "") %in% c("write", "edit") && identical(perm_path_class(call), "control"))
 }
 
-#' A policy decision; a question carries the rule an `[a]lways` answer would add (04 7.11)
+#' A policy decision; a question carries the rule an `[a]lways` answer would add (04 7.11), unless
+#' an ask rule (`rule`) asks it, as no allow rule wins over one: then `no_rule`, its reason, says
+#' why it offers none
 #' @noRd
 perm_decision = function(decision, reason, call, rule = NULL) {
+  ask = decision %in% c("ask", "ask_human")
   list(decision = decision, reason = reason, rule = rule,
-       suggested_rule = if (decision %in% c("ask", "ask_human")) rule_suggest(call))
+       suggested_rule = if (ask && is.null(rule)) rule_suggest(call),
+       no_rule = if (ask && !is.null(rule)) reason)
 }
 
 #' Edits mode approves write/edit inside the project and, as Claude Code's acceptEdits does,
@@ -59,8 +63,25 @@ perm_edits_ok = function(call, risk) {
           fl$category == "file_write" & fl$path_class %in% c("workspace", "temp"))
 }
 
-#' Policy `mode`: the mode x level table with allow rules folded in; yolo allows everything;
-#' control is the critical guard's, which asks a person in every other mode
+#' The first of system(), system2(), shell(), shell.exec(), pipe(), processx::run() and
+#' data.table::fread(cmd =) whose command the code computes (a `dynamic` row that is no reading
+#' of a command), unless an `r(fn:)` allow rule covers all such rows (D-262); NULL when there is
+#' none
+#' @noRd
+perm_computed_cmd = function(call) {
+  fl = call$risk$flagged
+  fl = fl[fl$fn %in% c("system", "system2", "shell", "shell.exec", "pipe", "run", "fread") &
+            fl$category == "dynamic" & rule_code_text(fl) == fl$call, , drop = FALSE]
+  if (!nrow(fl)) return(NULL)
+  allow = rule_match(perm_rules_effective(), list(name = call$name, risk = risk_new(fl)))$allow
+  if (!any(vapply(allow, function(r) rule_parse(r)$kind == "fn", NA))) fl$fn[1L]
+}
+
+#' Policy `mode`: the mode x level table with allow rules folded in; r code the evaluator's guard
+#' never runs (eval_guard(): q(), readline(), standard input, a secret marker) is refused in every
+#' mode, so no person is asked to approve it (D-269); auto and yolo refuse a computed system
+#' command (D-262), and yolo allows everything else; control is the critical guard's, which asks a
+#' person in every other mode
 #' @noRd
 perm_policy_mode = function(call, ctx) {
   call$risk = risk_norm(call$risk, call$tool)
@@ -71,6 +92,22 @@ perm_policy_mode = function(call, ctx) {
     q = vapply(call$input$questions, function(x) x$question, "")
     return(perm_decision("ask_human", paste0("the ask tool needs a person to answer: ",
                                              paste(q, collapse = " | ")), call))
+  }
+  code = if (identical(call$name, "r")) call$input$code
+  parsed = if (rlang::is_string(code)) eval_parse(code)
+  if (is.expression(parsed)) {
+    guard = eval_guard(parsed, ctx$envir)$reason
+    if (!is.null(guard)) {
+      # the console's row says "not run" and the denial ends "Nothing in this call ran." (D-267)
+      guard = gsub("(^|\n)Not run: ", "\\1", gsub(" Nothing was evaluated.", "", guard,
+                                                  fixed = TRUE))
+      return(perm_decision("deny", sub("[.]$", "", guard), call))
+    }
+  }
+  fn = if (mode %in% c("auto", "yolo")) perm_computed_cmd(call)
+  if (!is.null(fn)) {
+    return(perm_decision("deny", paste0(fn, "() with a computed command is refused in ", mode,
+                                        " mode; use peter$sh()"), call))
   }
   if (identical(mode, "yolo")) return(perm_decision("allow", "mode yolo", call))
   if (perm_is_control(call, call$risk)) return(NULL)
@@ -164,15 +201,20 @@ perm_policy_protect = function(call, ctx) {
 }
 
 #' Channel `permissions:remember` (the UI wrapper of console-ui.R): store the rule for an answer
-#' the user chose to remember, recomputed from the call (never the payload's rule); rule_suggest()
-#' gives none for level 4, control, the ask tool or code it cannot read
+#' the user chose to remember, recomputed from the call in the run's environment, as call_risk()
+#' classified it, and only when it is the rule the question showed (the payload's rule is never
+#' trusted); rule_suggest() gives none for level 4, control, the ask tool or code it cannot read
 #' @noRd
 perm_on_remember = function(event, ctx) {
   if (!isTRUE(event$scope %in% c("session", "project"))) return(NULL)
   call = list(name = as.character(event$tool %||% "")[1L], input = event$input)
-  if (identical(call$name, "r")) call$risk = risk_classify(call$input$code)
+  if (identical(call$name, "r")) {
+    call$risk = risk_classify(call$input$code, envir = run_eval_env(perm_run(ctx)))
+  }
   rule = rule_suggest(call)
-  if (!is.null(rule)) perm_rules_update(event$scope, add = list(allow = rule))
+  if (!is.null(rule) && identical(rule, event$rule)) {
+    perm_rules_update(event$scope, add = list(allow = rule))
+  }
   NULL
 }
 

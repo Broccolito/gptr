@@ -77,7 +77,10 @@ model and mode.
 ## Enter prompts, objects and your own R
 
 Ask in ordinary language. `@x` attaches a visible R object by name, and `@analysis.R` adds the
-beginning of a text file. Quote a path containing spaces as `@"analysis notes.txt"`.
+beginning of a text file. A path of letters and digits in any script, `.`, `_`, `-`, `~` and
+`/` needs no quotes; quote any other path, such as `@"analysis notes.txt"` (Tab leaves the
+quotes to you). When no file or object has the whole name, a mention reads its leading ASCII
+letters, digits, `.`, `_`, `-`, `~` and `/`, so `@x` may run into text written without spaces.
 A mention is a word that starts with `@`, so `me@example.org` stays text.
 Files take precedence when a mention matches both a file and an object. A file mention sends
 at most its first 40 lines, and the files of one prompt share about 2,000 tokens; binary files
@@ -128,11 +131,13 @@ input limit; use an `@file` or a multiline prompt instead.
 
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 and `... ` waits for Enter, where text you type is added. A pasted fence or `"""` block is read up
-to its closer at once, and a block pasted at an approval or a choice is kept in the console
-history and the question asked again. A last pasted line without a newline waits for Enter at
-the next prompt, so a two-line paste without a final newline answers with its first line.
-Homebrew or conda R, Linux terminals, RStudio, R.app, Positron and Windows deliver pasted lines
-one at a time, so wrap a multi-line paste in `"""` there. Lines typed, pasted or run from a
+to its closer at once, a block pasted at an approval or a choice is kept in the console history
+and the question asked again, and one pasted at the pause menu's `? Steer` or `? Follow-up` is
+the whole text. A last pasted line without a newline waits for Enter at the next prompt, so a
+two-line paste without a final newline answers a question with its first line. Homebrew or
+conda R, Linux terminals, RStudio, R.app, Positron and Windows deliver pasted lines one at a
+time, as typed lines (at a question the first one answers it), so wrap a multi-line paste in
+`"""` there. Lines typed, pasted or run from a
 script before a question appears (an approval, a choice) never answer it: while an answer runs
 they are queued for the agent as `type_ahead` says (a `/command` or `!code` line waits for the
 next prompt), otherwise they go to the console history. Answer after the prompt.
@@ -182,7 +187,7 @@ commands available in the current session, including any supplied by plugins or 
 | `/mcp` | List MCP servers. |
 | `/permissions` | Show the permission rules. |
 | `/permissions allow|ask|deny|remove <rule>` | Change a rule for this R process, for example `/permissions allow r(fn:saveRDS)`. |
-| `/retry` | Undo the last turn and send its recovered prompt again; may make a model request. |
+| `/retry` | Undo the last turn and send its recovered prompt again, with the `!` notes it was sent with when it is the latest message sent; may make a model request. |
 | `/undo` | Undo the last turn's restorable objects, files and conversation. |
 | `/redo` | Redo what the last rewind undid. |
 | `/rewind [k]` | Offer a rewind menu, or retain turns 1 through `k`. |
@@ -194,9 +199,10 @@ on restoration.
 
 ## Approve changes
 
-In `manual`, known read-only actions and actions covered by existing allow rules run directly;
-other changes ask for approval under the call they gate, and you type the answer on the row
-below. The question lists the flagged calls, riskiest first (at most five; `?` shows all), and
+In `manual`, known read-only actions run directly and changes ask for approval under the call
+they gate, unless a permission rule applies (an allow rule never approves a critical action); you
+type the answer on the row below. The question lists the flagged calls, riskiest first (at most
+five; `?` shows all), and
 offers `y` for this action, `a` for a session rule covering them when one can be written (`p` for
 the same rule in this project), `n` to deny, and `?` for details. `n <text>` (or `no, <text>`)
 denies the action and gives the agent your text as its instruction. A sub-agent's question names
@@ -227,7 +233,8 @@ that pauses Peter, depend on the console:
 | Windows Rgui, Jupyter | the next input | none: the key stops the answer |
 
 In terminal R and an IDE's Terminal tab what you type is a draft on the bottom row, under the
-transcript, so it never mixes into the answer; a block pasted there is one message. The row also
+transcript, so it never mixes into the answer; a block pasted there is one message where the
+terminal supports bracketed paste. The row also
 shows what Peter is doing and how many messages are queued. Enter sends the draft as a steer,
 and it shows as your own line where the agent reads it. Tab sends it as a follow-up, which
 appears at the next `peter>` prompt. With `gptr_config(type_ahead = "follow_up", .scope =
@@ -235,7 +242,7 @@ appears at the next `peter>` prompt. With `gptr_config(type_ahead = "follow_up",
 `/commands` and `!code` run at the next prompt, in the order typed. Up on an empty draft takes
 back the newest message not yet delivered, to edit and send again; Ctrl-U clears the draft. A
 recording document keeps what you sent, steers included
-([Script as history](script-as-history.html)).
+([Record, replay and export](script-as-history.html)).
 
 A question (an approval, a choice) waits until you stop typing for a second, or three seconds
 while the draft has text, so a key meant for the draft never answers it. The draft stays through
@@ -286,8 +293,8 @@ still occupy the same R process while they execute.
 At the chat prompt, one interrupt prints a hint; two consecutive interrupts leave the chat.
 Where an interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the answer instead.
 In a terminal the chat reads keys with the echo off and restores it when it returns, on an
-error, at an interrupt and at `q()`. If R is killed or crashes while Peter works, type
-`stty sane` and press Enter to get the echo back.
+error, at an interrupt and at `q()`. If R is killed or crashes while Peter works, type `reset`
+and press Enter to get the terminal back, its echo and its paste mode.
 
 The equivalent session verbs work from R:
 
@@ -300,7 +307,7 @@ gptr_cancel(session)
 
 For persistent conversation storage, initialize a project with `gptr_init(path)` and review its
 trust decision. `gptr_sessions()` lists stored sessions, and `gptr_resume(id)` recovers one.
-[Script as history](script-as-history.html) covers document recording, replay and
+[Record, replay and export](script-as-history.html) covers document recording, replay and
 transcripts; [Language models](language-models.html) covers scripted calls that need no
 interactive console.
 

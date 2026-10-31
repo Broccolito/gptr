@@ -98,7 +98,7 @@ require stronger permissions in model code.
 preset decides which forms are offered. The broader helper catalog stays callable inside R.
 For the console's `!` inline R and file references, see
 [Interactive console](interactive-console.html). To keep generated analysis code in a document,
-see [Script as history](script-as-history.html).
+see [Record, replay and export](script-as-history.html).
 
 ## Shell commands and scripts
 

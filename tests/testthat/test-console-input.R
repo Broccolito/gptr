@@ -82,6 +82,8 @@ test_that("an escape sequence cut short is held for 50 ms, then dropped", {
   expect_identical(csi$state$t, 0)
   r = compose("5C", state = csi$state, now = 0.045)
   expect_identical(r$state[c("draft", "esc")], list(draft = "abc", esc = ""))
+  # its rest at 1 s is typed, the sequence dropped
+  expect_identical(compose("5C", state = csi$state, now = 1)$state$draft, "abc5C")
   # at 60 ms a lone Esc is dropped: the next key is text, not part of a sequence
   r = compose("", state = esc$state, now = 0.06)
   expect_identical(r$state[c("draft", "esc")], list(draft = "abc", esc = ""))
@@ -92,7 +94,7 @@ test_that("an escape sequence cut short is held for 50 ms, then dropped", {
   expect_null(r$action)
   # a batch ending in a new sequence holds it from now
   r = compose("x\033[", "abc", now = 1)
-  expect_identical(r$state, list(draft = "abcx", esc = "\033[", t = 1))
+  expect_identical(r$state, list(draft = "abcx", esc = "\033[", t = 1, bracket = FALSE))
 })
 
 test_that("Up on an empty draft takes back; as a batch of its own or its end (review)", {
@@ -141,6 +143,123 @@ test_that("a batch read on the polling beat that ends in text is a paste: one dr
     list("\r", "!x = 1\ny = 2", "", sent("follow_up", "!x = 1\ny = 2")),
     list("\r", "one\ntwo", "", sent("steer", "one\ntwo"))
   ), paste = TRUE)
+})
+
+test_that("a bracketed paste is text: its newlines stay and its keys do not act (D-263)", {
+  cases = list(
+    list("\033[200~a\rb\rc\r\033[201~", "", "a\nb\nc\n", NULL),
+    list("\033[200~two\rlines\033[201~\r", "abc ", "abc two\nlines\n", NULL),
+    list("x\r\033[200~p\rq\033[201~", "", "p\nq", sent("steer", "x")),
+    list("\033[200~\r\rfoo\033[201~", "", "foo", NULL),
+    list("\033[200~/mode\033[201~\r", "", "/mode\n", NULL),
+    # keys before the markers are typed, also on the polling beat; a newline after a paste's
+    # end in its read is text, so only a later Enter sends
+    list("\033[200~a\rb\033[201~\rc", "", "a\nb\nc", NULL),
+    list("\033[200~@mt\t", "", "@mt\t", NULL)
+  )
+  expect_keys(cases)
+  expect_keys(cases, paste = TRUE)
+})
+
+test_that("pasted text holding an end marker cannot send what follows it (review round 1)", {
+  # a terminal that does not filter pastes lets the text hold the markers
+  expect_keys(list(
+    list("\033[200~\033[201~\r!file.create('X')\r\033[201~", "", "!file.create('X')\n", NULL),
+    list("\033[200~early\033[201~\rmore\r\033[200~x\033[201~", "", "early\nmore\nx", NULL)
+  ))
+  r = compose("\r", state = compose("\033[200~early\033[201~\rmore\033[201~")$state)
+  expect_identical(r$action, sent("steer", "early\nmore"))
+})
+
+test_that("a lone end marker ends a paste: the text before it is pasted (review round 3)", {
+  # the rest of a paste after a read that ended at an end marker its text holds, then the
+  # terminal's own end marker
+  expect_keys(list(
+    list("\r!file.create('X')\r\033[201~", "early", "early\n!file.create('X')\n", NULL),
+    list("\r!file.create('X')\r\033[201~", "", "!file.create('X')\n", NULL)
+  ))
+  r = compose("\r!cat(1)\r\033[201~", state = compose("\033[200~x\033[201~")$state, now = 1)
+  expect_null(r$action)
+  expect_identical(r$state$draft, "x\n!cat(1)\n")
+  expect_identical(compose("\r", state = r$state, now = 2)$action, sent("steer", "x\n!cat(1)\n"))
+})
+
+test_that("a bracketed paste spans reads; its end marker is held however late (D-263)", {
+  r = compose("\033[A", state = compose("\033[200~", now = 0)$state, now = 1)
+  expect_null(r$action)
+  r = compose("\033[200~one\rtw", now = 0)
+  expect_true(r$state$bracket)
+  expect_identical(r$state$draft, "one\ntw")
+  expect_null(r$action)
+  r = compose("o\t", state = r$state, now = 5)
+  expect_identical(r$state$draft, "one\ntwo\t")
+  expect_null(r$action)
+  r = compose("\r\033[20", state = r$state, now = 10)
+  expect_identical(r$state$esc, "\033[20")
+  r = compose("1~", state = r$state, now = 20)
+  expect_identical(r$state[c("draft", "esc", "bracket")],
+                   list(draft = "one\ntwo\t\n", esc = "", bracket = FALSE))
+  r = compose("\r", state = r$state, now = 20)
+  expect_identical(r$action, sent("steer", "one\ntwo\t\n"))
+  # after the paste a lone Esc is dropped after 50 ms again
+  r = compose("\033", state = r$state, now = 21)
+  expect_identical(compose("x", state = r$state, now = 21.1)$state$draft, "x")
+})
+
+test_that("a marker cut at a read's end joins its rest however late (D-263)", {
+  for (cut in c("\033", "\033[", "\033[20")) {
+    rest = paste0(substring("\033[200~", nchar(cut) + 1L), "a\rb")
+    r = compose(rest, state = compose(cut, "x", now = 0)$state, now = 1)
+    expect_null(r$action)
+    expect_identical(r$state[c("draft", "esc", "bracket")],
+                     list(draft = "xa\nb", esc = "", bracket = TRUE))
+  }
+  # cut at every byte, each read a second after the last: held while a marker may still follow
+  r = compose("\033", "x", now = 0)
+  for (i in 2:6) r = compose(substr("\033[200~", i, i), state = r$state, now = i)
+  r = compose("a\rb", state = r$state, now = 7)
+  expect_identical(r$state[c("draft", "esc", "bracket")],
+                   list(draft = "xa\nb", esc = "", bracket = TRUE))
+  # FIX-28's probe: cut after the Esc and after `[2`, read 1 s and 10 ms later
+  r = compose("[2", state = compose("\033", now = 0)$state, now = 1)
+  expect_identical(r$state[c("draft", "esc", "t")], list(draft = "", esc = "\033[2", t = 0))
+  r = compose("00~a\rb", state = r$state, now = 1.01)
+  expect_null(r$action)
+  expect_identical(r$state[c("draft", "esc", "bracket")],
+                   list(draft = "a\nb", esc = "", bracket = TRUE))
+  # once no marker can follow, a late start is a lone Esc, dropped, and keys typed
+  r = compose("[2", state = compose("\033", now = 0)$state, now = 1)
+  expect_identical(compose("x", state = r$state, now = 2)$state$draft, "[2x")
+  expect_identical(compose("\r", state = r$state, now = 2)$action, sent("steer", "[2"))
+  r = compose("[", state = compose("\033", "a", now = 0)$state, now = 1)
+  expect_identical(r$state[c("draft", "esc")], list(draft = "a", esc = "\033["))
+  expect_identical(compose("1, 2]", state = r$state, now = 2)$state$draft, "a[1, 2]")
+})
+
+test_that("Esc then Tab, or a cut sequence then Up, in one read is the key (FIX-28)", {
+  expect_keys(list(
+    list("\033\t", "use base", "", sent("follow_up", "use base")),
+    list("\033[\033[A", "", "", list(type = "take_back")),
+    list("\033O\t", "x", "", sent("follow_up", "x"))
+  ))
+  expect_identical(compose("\t", state = compose("\033", "x", now = 0)$state, now = 0.01)$action,
+                   sent("follow_up", "x"))
+})
+
+test_that("a Tab after a bracketed paste in one read is the key: its newlines are text (FIX-34)", {
+  cases = list(
+    list("\033[200~summarise it\rin two lines\033[201~\t", "", "",
+         sent("follow_up", "summarise it\nin two lines")),
+    list("\033[200~@mt\rx\033[201~\t", "use ", "", sent("follow_up", "use @mt\nx")),
+    # a newline typed outside the paste still makes the Tab text
+    list("x\r\033[200~p\rq\033[201~\t", "", "p\nq\t", sent("steer", "x"))
+  )
+  expect_keys(cases)
+  expect_keys(cases, paste = TRUE)
+  # a paste open since an earlier read
+  r = compose("o\rthree\033[201~\t", state = compose("\033[200~one\rtw", now = 0)$state, now = 1)
+  expect_identical(r$action, sent("follow_up", "one\ntwo\nthree"))
+  expect_identical(r$state[c("draft", "bracket")], list(draft = "", bracket = FALSE))
 })
 
 test_that("/ and ! drafts are follow-ups, whatever the key", {
@@ -576,6 +695,12 @@ test_that("a console write clears the live row and redraws it after its whole li
   the$live_row$sinks = sink.number() + 1L
   expect_identical(writes("x\n"), "x\n")
   expect_identical(draw(), row)
+  # a terminal mode's control alone shows nothing and leaves the row (D-263)
+  expect_identical(writes("\033[?2004h"), "\033[?2004h")
+  expect_true(the$live_row$shown)
+  expect_true(the$live_row$on)
+  # bytes that are not UTF-8 are written as they are, with no warning
+  expect_no_warning(writes("\xff\n"))
   expect_identical(writes("  a notice\n"), paste0("\r\033[K", "  a notice\n", row))
   expect_true(the$live_row$shown)
   # a partial line leaves the row cleared until the run next waits
@@ -590,6 +715,12 @@ test_that("a console write clears the live row and redraws it after its whole li
   the$live_row$sinks = sink.number() + 1L
   draw()
   expect_identical(writes("  one\n", "  two\n"),
+                   paste0("\r", strrep(" ", 39L), "\r  one\n  two\n"))
+  expect_false(the$live_row$on)
+  # so does one write of several strings
+  the$live_row$on = TRUE
+  draw()
+  expect_identical(writes(c("  one\n", "  two\n")),
                    paste0("\r", strrep(" ", 39L), "\r  one\n  two\n"))
   expect_false(the$live_row$on)
   # text written into another sink (a capture in the agent's code) leaves the row alone
@@ -665,7 +796,7 @@ idle_read = function(draft, keys, answers = character()) {
        draft = rd$compose$draft)
 }
 
-keys_mode = "-icanon -echo -iexten -isig min 1 time 0"
+keys_mode = "-icanon -echo -iexten -isig noflsh min 1 time 0 paste"
 
 ctrl_c = function() {
   signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
@@ -681,7 +812,7 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
                                                       fixed = TRUE))), 4L)
   expect_identical(r$prompts, character())
   expect_identical(r$kept, character())
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
   expect_identical(r$draft, "")
   # a Tab at a batch's end off a trigger word does nothing here either; Enter sends
   r = idle_read("and label", list(" it\t", "\r"))
@@ -729,6 +860,59 @@ test_that("a draft at the prompt completes a trigger word; several are listed ab
   expect_identical(r$x, "use the mt")
 })
 
+test_that("a bracketed paste at the prompt's editor stays in the draft until Enter (D-263)", {
+  r = idle_read("note:", list("\033[200~a\rb\r\033[201~", " c\r"))
+  expect_identical(r$x, "note:a\nb\n c")
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  # one whose end marker never comes keeps Enter adding lines; Ctrl-C hands the draft over
+  r = idle_read("x", list("\033[200~a\r", "\r", ctrl_c), "next")
+  expect_identical(r$x, "next")
+  expect_identical(r$kept, "\"\"\"\nxa\n\n\n\"\"\"")
+  expect_null(r$draft)
+  # a Tab after a paste, in its read or in a later one, does nothing here (FIX-34)
+  r = idle_read("x", list("\033[200~a\rb\033[201~\t", "\r"))
+  expect_identical(r$x, "xa\nb")
+  r = idle_read("x", list("\033[200~a\r", "b\rc\033[201~\t", "\r"))
+  expect_identical(r$x, "xa\nb\nc")
+})
+
+test_that("a Ctrl-C or cursor key inside a paste at the prompt's editor is text (review round 6)", {
+  # a paste holding a Ctrl-C byte keeps all its text, and Enter sends it as one message
+  r = idle_read("a", list("\033[200~b\003c\r!cat(1)\r\033[201~", "\r"), "next")
+  expect_identical(r$x, "abc\n!cat(1)\n")
+  expect_identical(r$kept, character())
+  # a cursor key in it is dropped as a paste's escapes are, also in a later read of the paste
+  r = idle_read("a", list("\033[200~b\001c\033[D", "d\005\033[201~", "\r"), "next")
+  expect_identical(r$x, "abcd")
+  # outside the paste, in its read, the key hands the draft over
+  r = idle_read("a", list("\033[200~b\033[201~\003c"), "next")
+  expect_identical(r$kept, "ab")
+  expect_identical(r$x, "next")
+  # in a paste left open, a Ctrl-C read more than 2 s after its last read hands over, as in a run
+  now = 0
+  local_mocked_bindings(reactor_now = function() now)
+  later = function(t, keys) {
+    function() {
+      now <<- t
+      keys
+    }
+  }
+  # (were it dropped, the zz after it would join the draft)
+  r = idle_read("a", list("\033[200~b\r", later(1, "\003c"), later(3.5, "\003zz")), "next")
+  expect_identical(r$kept, "\"\"\"\nab\nc\n\"\"\"")
+  expect_identical(r$x, "next")
+})
+
+test_that("readline's read at the prompt starts the composer afresh (FIX-28)", {
+  # a run ended with a paste open and no draft: its next run's Enter steers again
+  local_readline("next")
+  rd = console_reader()
+  rd$compose = compose("\033[200~\r", now = 0)$state
+  expect_true(rd$compose$bracket)
+  written(function() expect_identical(rd$read("peter> "), "next"))
+  expect_null(rd$compose)
+})
+
 test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C keeps it first", {
   testthat::local_reproducible_output(unicode = TRUE)
   r = idle_read("ab", list("\177", "\025"), "/exit")
@@ -736,7 +920,7 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
   expect_identical(r$rows, "")
   expect_identical(r$prompts, "peter> ")
   expect_identical(r$kept, character())
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
   # Ctrl-C adds the draft to the history and lists it, as Codex clears its composer
   r = idle_read("and plot", list(ctrl_c), "next")
   expect_identical(r$x, "next")
@@ -745,7 +929,7 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
   expect_identical(r$prompts, "peter> ")
   expect_identical(r$kept, "and plot")
   expect_null(r$draft)
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
   # in character mode Ctrl-C is a key read like any other; the keys before it count (review)
   r = idle_read("and plot", list(" it\003x"), "next")
   expect_identical(r$rows, c(kept_line("and plot it"), "", ""))
@@ -795,7 +979,7 @@ test_that("a hand-over keeps the editor's modes until readline is called, which 
   expect_false(is.null(the$tty))
   expect_identical(rd$handed, the$tty)
   written(function() expect_identical(rd$read("peter> "), "X"))
-  expect_identical(at_read$stty, c("-g", keys_mode, "SAVED"))
+  expect_identical(at_read$stty, c("-g", keys_mode, "SAVED -paste"))
   expect_null(at_read$tty)
   expect_identical(at_read$prompt, "\001\r\033[K\002peter> ")
   expect_null(the$tty)
@@ -803,7 +987,7 @@ test_that("a hand-over keeps the editor's modes until readline is called, which 
   # where R's readline does not read the tty the editor restores at once, and the prompt is plain
   local_mocked_bindings(console_readline_tty = function() FALSE)
   expect_null(idle("\025"))
-  expect_identical(stty, c("-g", keys_mode, "SAVED"))
+  expect_identical(stty, c("-g", keys_mode, "SAVED -paste"))
   expect_null(rd$handed)
   written(function() rd$read("peter> "))
   expect_identical(at_read$prompt, "peter> ")
@@ -811,7 +995,7 @@ test_that("a hand-over keeps the editor's modes until readline is called, which 
   local_mocked_bindings(console_readline_tty = function() TRUE)
   at_read = NULL
   expect_identical(idle("x\r"), "and colourx")
-  expect_identical(stty, c("-g", keys_mode, "SAVED"))
+  expect_identical(stty, c("-g", keys_mode, "SAVED -paste"))
   expect_null(rd$handed)
   expect_null(at_read)
 })

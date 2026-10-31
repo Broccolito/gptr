@@ -277,7 +277,9 @@ worker_watch_tick = function(io, run) {
 #'
 #' Answers come from the parent through the `worker` UI (so a human is assumed present); nothing
 #' is rendered; replay mode and project root are the parent's. The agent's system text and the
-#' isolation policy arrive with the proxy session's rank-0 records in `spec$registry`.
+#' isolation policy arrive with the proxy session's rank-0 records in `spec$registry`. The
+#' parent's secrets that the shipped objects hold are registered inactive, so they are redacted
+#' and the child resolves no credential it did not get in its environment (D-295).
 #' @param spec_path The spec file (save_rds()).
 #' @param result_path Where the status and the exports are saved.
 #' @return The final status, invisibly.
@@ -288,6 +290,9 @@ worker_main = function(spec_path, result_path) {
   old = options(gptr.interactive = TRUE, gptr.ui = "worker", gptr.quiet = TRUE,
                 gptr.verbose = 0L, gptr.replay = st$replay, gptr.project_root = st$project_root)
   on.exit(options(old), add = TRUE)
+  secret_register_batch("parent", function() {
+    for (x in spec$secrets) secret_register(x$value, x$name, source = "parent", active = FALSE)
+  })
   io = worker_io_open()
   on.exit(close(io$input), add = TRUE)
   io$parent = spec$parent
@@ -355,16 +360,19 @@ worker_unserialisable = function(x, seen = new.env(parent = emptyenv()), depth =
 }
 
 #' The records a worker registers again (IC-69): the rank-0 records of the sessions `sids` (the
-#' parent and the proxy) and the user records in registration order, the enabled plugins and the
-#' filters of each scope. A record that cannot be serialised fails the worker with a classed error
-#' naming it.
+#' parent and the proxy), the rank-0 policies of their ancestors (which bind them in process,
+#' registry_all_recs()) and the user records in registration order, the enabled plugins and the
+#' filters of each scope. A record that cannot be serialised fails the worker with a classed
+#' error naming it.
 #' @noRd
 worker_registry = function(sids) {
   reg = registry_env()
+  up = setdiff(unlist(lapply(sids, registry_session_ancestors)), sids)
   recs = registry_recs(reg, ls(reg$recs))
   specs = list()
   for (rec in recs[order(vapply(recs, function(r) as.numeric(r$order), 0))]) {
-    scoped = isTRUE(rec$session %in% sids) && identical(rec$rank, 0L)
+    scoped = identical(rec$rank, 0L) && (isTRUE(rec$session %in% sids) ||
+                                           (isTRUE(rec$session %in% up) && rec$kind == "policy"))
     user = is.null(rec$session) && identical(rec$source, "user")
     if (identical(rec$state, "lazy") || !(scoped || user)) next
     if (worker_unserialisable(rec$spec)) {
@@ -378,8 +386,8 @@ worker_registry = function(sids) {
   list(specs = specs, plugins = plugins_enabled(), filters = reg$filters)
 }
 
-#' The values of the `objects =` names, read from `base` and its parents (a classed error names a
-#' missing one)
+#' The `objects =` names, each once, checked to exist in `base` or its parents (a classed error
+#' names a missing one)
 #' @noRd
 worker_ship_objects = function(names, base) {
   names = unique(as.character(names))
@@ -390,7 +398,23 @@ worker_ship_objects = function(names, base) {
                  "invalid_argument", arg = "objects", expected = "names of existing objects")
     }
   }
-  mget(names, envir = base, inherits = TRUE)
+  names
+}
+
+#' Saves the worker spec `w` to `path` with the values of its objects, read from `home` into a
+#' list cleared in place once saved, so the caller's objects are not left referenced (rule R6),
+#' and, when they hold any, `secrets`: the parent's registered secrets whose values occur in those
+#' objects, so the child redacts them too (D-295). Only those values travel, as they already do
+#' inside the objects: a spec file carries no other key (IC-70).
+#' @noRd
+worker_spec_save = function(w, home, path) {
+  w$objects = mget(worker_ship_objects(w$object_names, home), envir = home, inherits = TRUE)
+  on.exit(for (j in seq_along(w$objects)) w$objects[j] = list(NULL), add = TRUE)
+  if (length(w$objects)) {
+    w$secrets = secrets_held(list(serialize(w$objects, NULL, ascii = FALSE,
+                                            refhook = worker_refhook)))
+  }
+  save_rds(w, path, refhook = worker_refhook)
 }
 
 #' The provider whose key a worker gets in its environment: one registered for the process that
@@ -587,8 +611,7 @@ worker_spawn = function(st) {
   dir.create(st$dir, mode = "0700")
   spec_path = file.path(st$dir, "spec.rds")
   st$result_path = file.path(st$dir, "result.rds")
-  save_rds(c(w, list(objects = worker_ship_objects(w$object_names, st$home))), spec_path,
-           refhook = worker_refhook)
+  worker_spec_save(w, st$home, spec_path)
   marker = proc_marker_new()
   set = c(GPTR_WORKER = "1", GPTR_SUBAGENT_DEPTH = as.character(w$depth),
           GPTR_PROJECT_ROOT = w$settings$project_root)

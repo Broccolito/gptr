@@ -485,10 +485,11 @@ bp_run = function(case, declared_links = list()) {
           dead = tryCatch({
             began = proc.time()[["elapsed"]]
             confirmed = isFALSE(proc_handle_alive(handle))
+            # An exiting macOS process denies its memory until it is a zombie, longer under load
             if (!confirmed) {
-              for (target in c(1, 5, 10, 25, 50)) {
+              for (target in c(1, 5, 10, 25, 50, 100, 250, 500, 1000)) {
                 elapsed = proc.time()[["elapsed"]] - began
-                if (elapsed >= 0.05) break
+                if (elapsed >= 1) break
                 remaining = target / 1000 - elapsed
                 if (remaining > 0) Sys.sleep(remaining)
                 if (isFALSE(proc_handle_alive(handle))) {

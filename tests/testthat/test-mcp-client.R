@@ -87,6 +87,17 @@ test_that("placeholders expand at connect time; secret-like values are registere
   expect_false(is.null(secret_lookup("MCP_T_ARG_TOKEN")))
 })
 
+test_that("a literal env value under a secret-like name is registered (F-117)", {
+  skip_on_cran()
+  local_vault()
+  value = paste0("Zk3jd8", "sL0pQwXy")
+  ex = mcp_expand_spec(list(command = "srv", env = list(MY_API_KEY = value, LOG = "infoinfo")),
+                       "/proj")
+  expect_identical(ex$env[["MY_API_KEY"]], value)
+  expect_false(grepl(value, redact(paste("key", value)), fixed = TRUE))
+  expect_identical(redact("infoinfo"), "infoinfo")
+})
+
 test_that("era and tool caches live in the user cache with their keys and expiry (11.9)", {
   skip_on_cran()
   withr::local_envvar(R_USER_CACHE_DIR = withr::local_tempdir("gptr-cache-"))
@@ -255,6 +266,38 @@ test_that("a stale cached era is probed again once, in both directions, over bot
   }
 })
 
+test_that("an ordinary tools/call error is not read as a stale era (F-107)", {
+  local_user_dirs()
+  fx = local_mcp_fixture("legacy", "stdio")
+  mcp_era_put(fx$spec, "legacy", "2025-11-25")
+  conn = mcp_connect(fx$spec)
+  expect_true(conn$era_from_cache)
+  err = expect_error(mcp_request(conn, "tools/call", list(name = "nope", arguments = json_obj())),
+                     class = "gptr_error_mcp_protocol")
+  expect_identical(err$code, -32602L)
+  log = fx$log()
+  expect_identical(sum(log$method == "tools/call"), 1L)
+  expect_identical(sum(log$method == "initialize"), 1L)
+  expect_false("server/discover" %in% log$method)
+  mcp_close(conn)
+})
+
+test_that("a listed tool without a name is dropped with a diagnostic (F-108)", {
+  local_user_dirs()
+  local_mocked_bindings(mcp_request = function(conn, method, params = NULL, ...) {
+    list(tools = list(list(description = "No name."), list(name = "", description = "Empty."),
+                      list(name = 3, description = "A number."),
+                      list(name = "ok", description = "Fine.")))
+  })
+  conn = structure(list2env(list(name = "x", spec = list(name = "x", command = "srv"),
+                                 transport = "stdio", era = "modern")), class = "gptr_mcp_conn")
+  tools = mcp_tools(conn)
+  expect_identical(vapply(tools, function(t) t$name, ""), "ok")
+  expect_identical(mcp_tools_cache_get(conn$spec)$tools[[1L]]$name, "ok")
+  d = gptr_registry(diagnostics = TRUE)
+  expect_true(any(grepl("3 tools without a name", d$message, fixed = TRUE)))
+})
+
 test_that("a modern server that answers the probe late is probed again after refusing initialize", {
   withr::local_options(gptr.mcp_probe_timeout = 2)
   fx = local_mcp_fixture("modern", "stdio", delay = 4)
@@ -292,12 +335,14 @@ test_that("progress re-arms the idle timer; without progress a call times out an
   expect_false("initialize" %in% fx$log()$method)
   seen = new.env()
   seen$n = 0L
-  res = mcp_call(conn, "slow", list(steps = 4L, step_ms = 600L), timeout = 1,
+  # 8 steps of 0.6 s outlast the 3 s idle timeout only because progress re-arms it; each step
+  # leaves a late runner 2.4 s
+  res = mcp_call(conn, "slow", list(steps = 8L, step_ms = 600L), timeout = 3,
                  on_progress = function(p) seen$n = seen$n + 1L)
   expect_identical(res$text, "done")
-  expect_identical(seen$n, 4L)
-  expect_error(mcp_call(conn, "slow", list(steps = 2L, step_ms = 1500L, progress = FALSE),
-                        timeout = 1), class = "gptr_error_timeout")
+  expect_identical(seen$n, 8L)
+  expect_error(mcp_call(conn, "slow", list(steps = 2L, step_ms = 4000L, progress = FALSE),
+                        timeout = 3), class = "gptr_error_timeout")
   reactor_pump(until = function() "notifications/cancelled" %in% fx$log()$method, timeout = 10)
   expect_true("notifications/cancelled" %in% fx$log()$method)
   expect_identical(mcp_call(conn, "echo", list(text = "still alive"))$text, "still alive")

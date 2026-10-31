@@ -162,6 +162,52 @@ test_that("a console turn after an undone first turn assigns the session again",
   expect_false(any(startsWith(t2, "s_ab12cd |> peter(")))
 })
 
+test_that("a console statement names the model and mode its turn ran with if they differ (D-265)", {
+  local_gptr_options(model = "fake/fake-1", mode = "auto")
+  site = list(console = TRUE, session_id = "sab12cd3456", template = "fit mpg on weight",
+              context_labels = "mtcars", path = file.path(withr::local_tempdir(), "log.R"))
+  at = function(text, ...) doc_console_statement(text, utils::modifyList(site, list(...)))
+  fake = c(model = "fake/fake-1", mode = "auto")
+  other = c(model = "fake2/fake2-1", mode = "plan")
+  # an assignment: against the settings, the model kept when the call named none
+  expect_identical(at(character(), ran_with = c(model = "fake/fake-1", mode = "plan"),
+                      default_model = TRUE),
+                   "s_ab12cd = peter(\"fit mpg on weight\", mtcars, mode = \"plan\")")
+  expect_identical(at(character(), ran_with = c(model = "fake2/fake2-1", mode = "auto"),
+                      default_model = TRUE),
+                   "s_ab12cd = peter(\"fit mpg on weight\", mtcars)")
+  expect_identical(at(character(), ran_with = c(model = "fake2/fake2-1", mode = "auto")),
+                   "s_ab12cd = peter(\"fit mpg on weight\", mtcars, model = \"fake2/fake2-1\")")
+  # a pipe: against its session's previous turn, else the settings
+  live = "s_ab12cd = peter(\"x\")"
+  expect_identical(at(live, ran_before = fake, ran_with = other),
+                   paste0("s_ab12cd |> peter(\"fit mpg on weight\", mtcars, ",
+                          "model = \"fake2/fake2-1\", mode = \"plan\")"))
+  expect_identical(at(live, ran_before = other, ran_with = other),
+                   "s_ab12cd |> peter(\"fit mpg on weight\", mtcars)")
+  expect_identical(at(live, ran_with = c(model = "fake2/fake2-1", mode = "auto")),
+                   "s_ab12cd |> peter(\"fit mpg on weight\", mtcars, model = \"fake2/fake2-1\")")
+  expect_identical(at(live, ran_with = fake), "s_ab12cd |> peter(\"fit mpg on weight\", mtcars)")
+  # the base follows the statement form: an assignment after an undone one is a new session
+  expect_identical(at("#~ s_ab12cd = peter(\"x\")", ran_before = other, ran_with = other),
+                   paste0("s_ab12cd = peter(\"fit mpg on weight\", mtcars, ",
+                          "model = \"fake2/fake2-1\", mode = \"plan\")"))
+  # a site without the values writes today's statement
+  expect_identical(c(at(character()), at(live)),
+                   c("s_ab12cd = peter(\"fit mpg on weight\", mtcars)",
+                     "s_ab12cd |> peter(\"fit mpg on weight\", mtcars)"))
+  block = doc_render_block("a1b2c3", list(model = "m"), "fit = 1")
+  rmd = doc_rmd_upsert_fn("rmd")("# Notes", utils::modifyList(site, list(ran_with = other)),
+                                 block, "a1b2c3")
+  expect_identical(rmd[3:5], c("```{r}", paste0("s_ab12cd = peter(\"fit mpg on weight\", mtcars, ",
+                                                "model = \"fake2/fake2-1\", mode = \"plan\")"),
+                               "```"))
+  # an unset model setting names the model of a call that named one
+  local_gptr_options(model = NULL)
+  expect_identical(at(character(), ran_with = fake),
+                   "s_ab12cd = peter(\"fit mpg on weight\", mtcars, model = \"fake/fake-1\")")
+})
+
 test_that("a transcript names the machine log only when it outlives R (.gptr/)", {
   console_turn = function(proj) {
     t = file.path(proj, "log.R")

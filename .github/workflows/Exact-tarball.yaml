@@ -44,7 +44,7 @@ jobs:
   producer:
     if: ${{ !inputs.original_profiles_only }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 20
     env:
       SOURCE_SHA: ${{ inputs.source_sha }}
     outputs:
@@ -199,7 +199,8 @@ jobs:
     needs: producer
     runs-on: ${{ matrix.config.os }}
     name: Exact tarball (${{ matrix.config.os }}, ${{ matrix.config.r }})
-    timeout-minutes: 180
+    # Up to 37 minutes on Windows in October 2026, before CRAN's test list (D-240) shortened it
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -370,6 +371,8 @@ jobs:
     if: ${{ always() && !cancelled() && (inputs.original_profiles_only || (inputs.dependency_profiles && needs.producer.result == 'success' && needs.check.result == 'success')) }}
     needs: [producer, check]
     runs-on: ubuntu-latest
+    # Each profile's controller has a 7500-second deadline (dev/ci/exact-profile.py) that must
+    # expire first, so it can publish its evidence; the network installs have shorter limits
     timeout-minutes: 300
     permissions:
       contents: read
@@ -388,6 +391,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v6
+        timeout-minutes: 10
         with:
           python-version: '3.12.10'
       - name: Check pure profile ownership, deadline and sequence controls
@@ -448,7 +452,9 @@ jobs:
             --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
             --repository controller --output metadata/gptr
       - uses: r-lib/actions/setup-pandoc@v2
+        timeout-minutes: 10
       - uses: r-lib/actions/setup-r@v2
+        timeout-minutes: 10
         with:
           r-version: release
           Ncpus: 1
@@ -460,8 +466,10 @@ jobs:
           Rscript --vanilla controller/dev/ci/test-profile-publication.R \
             controller/dev/ci/exact-profile.R
       - uses: ./controller/.github/actions/system-libraries
+        timeout-minutes: 10
       - uses: r-lib/actions/setup-r-dependencies@v2
         id: profile_dependencies
+        timeout-minutes: 20
         env:
           PKG_SYSREQS: 'false'
         with:
@@ -470,9 +478,11 @@ jobs:
           extra-packages: any::rcmdcheck
           needs: check
       - uses: r-lib/actions/setup-tinytex@v2
+        timeout-minutes: 10
         env:
           TINYTEX_INSTALLER: TinyTeX
       - name: Install HTML Tidy for complete manual checks
+        timeout-minutes: 10
         shell: bash
         run: |
           set -euo pipefail

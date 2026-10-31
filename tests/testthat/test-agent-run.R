@@ -265,6 +265,21 @@ test_that("session quota errors stop retries without classifying successful cont
   expect_identical(success$stop_reason, "stop")
 })
 
+test_that("weekly and model-family plan limits and gptr's refusals are never retried", {
+  err = list(class = "rate_limit", status = 429L)
+  for (notice in c("You've hit your weekly limit \u00b7 resets Mon 12:00am",
+                   "You've hit your Opus limit", "You've hit your Opus 4.5 limit",
+                   "You\u2019ve hit your usage limit")) {
+    msg = err_msg(paste0("The claude CLI ended the turn: ", notice))
+    expect_false(run_retryable(msg, err), info = notice)
+  }
+  expect_true(run_retryable(err_msg("You've hit your rate limit, try again shortly"), err))
+  for (k in c("plan_limit", "cli_check", "model_refused")) {
+    expect_false(run_retryable(err_msg("Try again shortly"), list(class = k, status = 429L)))
+    expect_identical(provider_classes(list(class = k)), c(k, "provider"))
+  }
+})
+
 test_that(oracle_title(recovery_recs, "R09"), {
   expect_false(run_retryable(err_msg("invalid x-api-key"), list(status = 401L)))
   expect_identical(provider_classes(list(status = 401L)), c("auth", "provider"))
@@ -2559,4 +2574,52 @@ test_that("an interrupt during reactor registration releases the partially start
   expect_null(box$run$home)
   expect_identical(ls(r$runs, all.names = TRUE), runs)
   expect_length(fake_requests(fake), 0L)
+})
+
+# Added (FIX-37, F-102): a backward wall-clock step during a request (an NTP step, a laptop
+# wake) makes the request seem to start in the future; its answer is kept with 0 seconds
+test_that("a backward clock step during a request keeps the answer with seconds 0", {
+  local_project()
+  fake = local_fake_provider(function(request) {
+    run = session_live(gptr_last())$run
+    run$request_started = Sys.time() + 30
+    "the answer"
+  })
+  s = peter("hi", model = fake, mode = "auto", envir = new.env())
+  expect_identical(s$status, "idle")
+  expect_identical(s$text, "the answer")
+  expect_equal(session_data(s)$usage$seconds, 0)
+})
+
+# Added (FIX-37, F-103): a status number in an error text counts only as a whole number, so a
+# definitive 400 that quotes max_tokens 1500 is not retried; a bare "503" still is
+test_that("status numbers in an error text match only as whole numbers", {
+  expect_false(retryable_error_text("invalid request: max_tokens 1500 is not allowed"))
+  expect_false(retryable_error_text("request id 4290017 failed validation"))
+  expect_true(retryable_error_text("upstream answered 503"))
+  expect_true(retryable_error_text("HTTP 429: slow down"))
+  expect_true(run_retryable(err_msg("503 Service Unavailable"), list()))
+  skip_on_cran()
+  local_project()
+  fake = local_fake_provider(list(
+    fake_error("invalid request: max_tokens 1500 is not allowed for this model", status = 400L)))
+  cnd = expect_error(peter("hi", model = fake, mode = "auto", envir = new.env()),
+                     class = "gptr_error")
+  expect_identical(cnd$session$status, "error")
+  expect_length(fake_requests(fake), 1L)
+})
+
+# Added (FIX-50, L4): a turn that ends at the model's output limit ends the run normally, with a
+# notice; a turn that ends otherwise has none
+test_that("a turn cut at the output limit says so in one notice", {
+  local_project()
+  local_gptr_options(quiet = FALSE)
+  fake = local_fake_provider(list(list(text = "The mean of x is", stop = "length"), "Done."))
+  said = function(code) sum(grepl("output limit", testthat::capture_messages(code), fixed = TRUE))
+  s = NULL
+  expect_identical(said({
+    s = peter("Average x.", model = fake, envir = new.env())
+  }), 1L)
+  expect_identical(s$status, "idle")
+  expect_identical(said(peter(s, "Again.")), 0L)
 })

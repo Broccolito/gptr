@@ -24,7 +24,9 @@ A \code{gptr_risk} object: a list with \code{level} (integer 0-4), \code{label},
 \code{flagged} (a data frame with columns \code{call}, \code{fn}, \code{level}, \code{category}, \code{path},
 \code{path_class}), \code{paths}, \code{secret}, \code{secret_guard}, \code{assigned}, \code{dynamic}, and the additive
 fields \code{sizes} (bytes of overwritten objects, by name), \code{secrets} (guarded secret names),
-\code{kind} and \code{parse_error}.
+\code{kind}, \code{parse_error}, \code{calls} (every function the code calls, including through the
+functions it reads in \code{envir}) and \code{targets} (\code{files}: the files the code writes, deletes
+or downloads to, as permission rules see paths).
 }
 \description{
 \code{gptr_risk()} is the advisory static classifier behind gptr's permission prompts. It reads
@@ -39,10 +41,19 @@ or the files \code{source()} reads: it decides when gptr asks you, it is not a s
 \details{
 Paths are classified relative to \code{root} (\code{workspace}, \code{temp}, \code{outside}, \code{protected},
 \code{control}, \code{instructions}, \code{critical}, \code{url}, \code{wildcard}, \code{unknown}). Calls of
-\code{peter$sh()}, \code{system()}, \code{system2()} and \code{processx::run()} with literal commands are
-classified with the command table (\code{inst/extdata/risk-commands.csv}), \code{peter$sql()} by its
-statements and \code{peter$py()} by a token scan. Plugins and users extend both tables with
-\code{risk_rule} records.
+\code{peter$sh()}, \code{system()}, \code{system2()} (its \code{env} as the start of the command line),
+\code{processx::run()} (also as \code{callr::run()}) and \code{sys::exec_wait()}, \code{sys::exec_internal()} and
+\code{sys::exec_background()} with literal commands are classified with the command table
+(\code{inst/extdata/risk-commands.csv}), \code{peter$sql()} by its statements and \code{peter$py()} by a token
+scan. A command the code computes, or a \code{shell.exec()} file it computes, is a \code{dynamic} row at
+level 3. A path, command or variable name built with \code{c()}, \code{list()}, \code{paste0()},
+\code{file.path()} or another helper of base R counts as one the code computes when the code binds
+that helper's bare name with \code{=}, \verb{<-} or \verb{<<-}, as a function's argument or as a \code{for}
+variable, or when the helper found from \code{envir} (the global environment when \code{NULL}) is not
+base R's; a helper the code binds otherwise (with \code{assign()}, \code{delayedAssign()},
+\code{makeActiveBinding()}, \code{list2env()} or \code{attach()}, in a list given to \code{with()} or \code{within()},
+or into an environment, \code{e$paste0 = f} or \code{.GlobalEnv[["paste0"]] = f}) is read as base R's.
+Plugins and users extend both tables with \code{risk_rule} records.
 }
 \examples{
 gptr_risk("unlink('data', recursive = TRUE)")$level

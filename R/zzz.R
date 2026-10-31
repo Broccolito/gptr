@@ -27,18 +27,3 @@
   on_unload_run()
   invisible(NULL)
 }
-
-#' Imports used by later layers
-#'
-#' P01 writes the final Imports once (conventions section 8). Referencing each Imports package
-#' here keeps `R CMD check` from reporting declared-but-unused Imports before the plans that use
-#' them exist (curl, processx and ps in P04, yaml in P17, the graphics packages in
-#' P09, methods in P16). The function is never called.
-#' @noRd
-imports_used = function() {
-  list(
-    cli::cli_verbatim, curl::new_handle, graphics::par, grDevices::dev.cur,
-    jsonlite::toJSON, methods::slotNames, processx::poll, ps::ps_handle, rlang::hash,
-    stats::setNames, tools::R_user_dir, utils::head, yaml::yaml.load
-  )
-}

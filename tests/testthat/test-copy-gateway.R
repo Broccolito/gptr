@@ -107,3 +107,45 @@ for (label in names(copy_rows)) {
     expect_no_copy(c(copy_setup, row[[1L]]), row[[2L]], label = label, in_run_edit = row[[3L]])
   })
 }
+
+test_that("no copy of big after a harness call, direct and through a wrapper that combines", {
+  setup = c(copy_setup, "f1 = function(gptr) NULL",
+            "h = suppressMessages(gptr_tailor(peter, model = fake, extensions = f1))")
+  expect_no_copy(setup, "s = h('describe', big)", label = "a harness")
+  expect_no_copy(setup, c("w = function(...) h(...)", "s = w('describe', big, extensions = f1)"),
+                 label = "a harness through a wrapper whose extensions combine")
+})
+
+# copy-1: an identifier expression a wrapper forwards is evaluated where it was written, so the
+# kept function holds no wrapper frame and its forced dots
+test_that("no copy of big after an inline function forwarded through a wrapper (copy-1)", {
+  setup = c(copy_setup, "h0 = suppressMessages(gptr_tailor(peter, model = fake))",
+            paste("h1 = suppressMessages(gptr_tailor(peter, model = fake,",
+                  "extensions = function(g) NULL))"))
+  call = "s = w('describe', big, extensions = function(gptr) NULL)"
+  expect_no_copy(setup, c("w = function(...) peter(..., model = fake)", call),
+                 label = "peter() through a wrapper")
+  expect_no_copy(setup, c("w = function(...) h0(...)", call), label = "a harness through a wrapper")
+  expect_no_copy(setup, c("w = function(...) h1(...)", call),
+                 label = "a harness through a wrapper whose extensions combine")
+})
+
+# gptr_coach() refuses gptr.unsafe_no_permissions, so its row has a setup of its own; its runs
+# are R processes, called directly and through a wrapper
+test_that("no copy of big after gptr_coach('Count big.', big)", {
+  local_worker_lib()
+  setup = c("big = runif(5e6)",
+            paste0("solver = gptr_fake_provider(function(request) ",
+                   "if (length(request$last_results)) 'Done.' else ",
+                   "list(tool = 'r', input = list(code = 'gptr_return(length(big))')), ",
+                   "name = 'solver')"),
+            paste0("coach = gptr_fake_provider(list('{\"note\": \"n\", \"notes\": \"n\"}'), ",
+                   "name = 'coach')"),
+            "options(gptr.quiet = TRUE)")
+  call = "gptr_coach('Count big.', big, model = solver, mode = 'auto', coach = coach, check = NULL)"
+  expect_no_copy(setup, paste("h =", call), label = "gptr_coach()")
+  wrapped = c("w = function(...) gptr_coach(...)", paste("h =", sub("gptr_coach", "w", call)))
+  expect_no_copy(setup, wrapped, label = "a wrapper of gptr_coach()")
+  inline = c(wrapped[1L], sub(")$", ", extensions = function(gptr) NULL)", wrapped[2L]))
+  expect_no_copy(setup, inline, label = "a wrapper of gptr_coach() with an inline function")
+})

@@ -153,6 +153,23 @@ test_that("children are reachable by name and by index; team text joins the repo
   expect_identical(team$text, "### stats (fake/fake-1)\np < 0.05")
 })
 
+# Added (FIX-37, F-127): a worker member's heading names the model its worker calls (its
+# gptr.subagent entry's), not its proxy session's worker/worker, as the console start line does
+test_that("a worker member's team heading names the model it calls", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(mode = "auto", model = "fake/fake-1")
+  local_fake_provider(list("unused"))
+  local_mocked_bindings(worker_spawn = function(st) {
+    st$result = list(type = "result", status = "idle", text = "w done", turns = 1L)
+    worker_on_exit(st, 0L)
+  })
+  team = peter("compute", agents = list(w = gptr_agent("w", backend = "worker")),
+               envir = new.env())
+  expect_identical(session_data(team$w)$model, "worker/worker")
+  expect_identical(team$text, "### w (fake/fake-1)\nw done")
+})
+
 test_that("[[ takes one child index or one name; anything else is a classed error", {
   team = test_session(kind = "team")
   expect_error(team[[1L]], class = "gptr_error_invalid_argument")
@@ -521,6 +538,10 @@ test_that("yolo is the loosest mode; entering it says once what still asks (IC-7
   rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
   withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
   expect_message(test_session(mode = "yolo"), "not a sandbox", class = "gptr_message_notice")
+  # and what it refuses outright (FIX-32)
+  rm(list = "message:mode_yolo", envir = the$once)
+  expect_message(test_session(mode = "yolo"),
+                 "shell.exec() calls with a command the code computes are refused", fixed = TRUE)
   expect_no_message(session_set_mode(test_session(mode = "manual"), "yolo"))
   rm(list = "message:mode_yolo", envir = the$once)
   expect_message(session_set_mode(test_session(mode = "manual"), "yolo"), "not a sandbox",
@@ -1234,6 +1255,16 @@ test_that("session_replay_apply() advances the piped session in place; identical
   expect_identical(rep[[2L]]$data$block, "d4e5f6")
   expect_identical(rep[[2L]]$data$turn, 2L)
   expect_identical(rep[[2L]]$data$mode, "replay")
+})
+
+# Added (FIX-37, F-128): a header without `mode` records mode replay, not its model (header$mode
+# partially matched header$model)
+test_that("replay_mark() reads the header's mode by its exact name", {
+  s = test_session()
+  withr::local_options(warnPartialMatchDollar = TRUE)
+  expect_no_warning(replay_mark(s, "a1b2c3", list(model = "fake/fake-1"), NULL, advance = TRUE))
+  rep = Filter(function(e) identical(e$custom_type, "gptr.replay"), session_data(s)$entries)
+  expect_identical(rep[[1L]]$data$mode, "replay")
 })
 
 test_that("a block already seen adds no turn and no entry", {

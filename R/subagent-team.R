@@ -181,14 +181,19 @@ parallel_start = function(m, nm, backend, team, cur, caller) {
 #' printing) is the team's own answer, `team$value` its own value once a turn designates one,
 #' and each member's answer stays at `team$<name>$text`.
 #'
-#' Members evaluate R code in their own environment (`envir =`) with their own random-number
-#' stream, and share one budget, as one `peter()` call does. A member's `tools =`, `budget =` and
-#' the run options in its `.opts` (such as `max_turns`) are not applied.
+#' Members evaluate R code in the environment their `envir =` names, with their own
+#' random-number stream, and share one budget, as one `peter()` call does. A member without
+#' `envir =` runs in the caller's environment, which it shares with the other members, so members
+#' that assign the same name overwrite each other: give each its own `envir = new.env()`. A
+#' member's `tools =`, `budget =` and the run options in its `.opts` (such as `max_turns`) are not
+#' applied.
 #'
 #' Use `peter(..., agents = list(...))` for named roles on one task, or `parallel =` for one
-#' task per input element. Those routes start new foreground children and cannot be deferred
-#' as members here. A team report is model-generated output; inspect child statuses and
-#' workspace results before continuing the team with a synthesis prompt.
+#' task per input element. Those routes start new foreground children, cannot be deferred as
+#' members here, and make a recorded team; the members of `gptr_parallel()` are nested calls that
+#' record nothing, so a history document (see [gptr_doc()]) that holds one cannot replay or
+#' export it. A team report is model-generated output; inspect child statuses and workspace
+#' results before continuing the team with a synthesis prompt.
 #'
 #' @param ... Named [peter()] calls (or sessions created with `.run = FALSE`).
 #' @param .list A named list of sessions created with `.run = FALSE`.
@@ -199,8 +204,8 @@ parallel_start = function(m, nm, backend, team, cur, caller) {
 #' @return A team session (`kind = "team"`).
 #' @examples
 #' fake = gptr_fake_provider(list("ok"))
-#' session = gptr_parallel(planner = peter("Plan it", model = fake),
-#'                         review = peter("Review it", model = fake))
+#' session = gptr_parallel(planner = peter("Plan it", model = fake, envir = new.env()),
+#'                         review = peter("Review it", model = fake, envir = new.env()))
 #' names(session$children)
 #' @export
 gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("return", "stop")) {
@@ -614,7 +619,7 @@ subagent_fanout_element = function(call, target, i) {
 
 #' `run()` of the fan-out route: a replayed block (IC-47), else gptr_map(). Each replayed child
 #' gets its element bound as `.x` in its home, as a live child has it, so the child code the
-#' block records (`local({ ... }, envir = gptr_resume(block =, child =)$envir)`) runs again.
+#' block records (`local({ ... }, envir = gptr::gptr_resume(block =, child =)$envir)`) runs again.
 #' @noRd
 route_fanout_run = function(call) {
   subagent_route_checks(call)

@@ -66,7 +66,7 @@ keys_once = function(batches, when) {
   }
 }
 
-char_mode = c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0")
+char_mode = c("-icanon", "-echo", "-iexten", "-isig", "noflsh", "min", "1", "time", "0", "paste")
 
 last_message = function(req) req$messages[[length(req$messages)]]
 
@@ -708,9 +708,9 @@ test_that("a T console's call reads keys in character mode; its modes return aft
   # Ctrl-C is a key the composer reads; opost stays on; `min 1` keeps a tool that reads stdin
   # blocking
   expect_identical(during[[1L]], list(log = c("-g", char_mode), saved = "SAVED"))
-  expect_identical(during[[2L]]$log, c("-g", char_mode, "SAVED", "-g", char_mode))
+  expect_identical(during[[2L]]$log, c("-g", char_mode, "SAVED", "-paste", "-g", char_mode))
   expect_true(any(startsWith(err, "Error: ")))
-  expect_identical(tty$log, rep(c("-g", char_mode, "SAVED"), 2L))
+  expect_identical(tty$log, rep(c("-g", char_mode, "SAVED", "-paste"), 2L))
   expect_null(the$tty)
   # a D console (TERM=dumb, Emacs) reads whole lines with the echo off (D-221), and SIGINT leaves a
   # line being typed in place, for the pause menu to keep (visual round 2)
@@ -734,7 +734,7 @@ test_that("a terminal call's modes return after an interrupt, also one while stt
   })
   res = typing_console(slow, c("go", "/exit"))
   expect_true("aborted - the session is kept" %in% res$out)
-  expect_identical(tty$log, c("-g", char_mode, "SAVED"))
+  expect_identical(tty$log, c("-g", char_mode, "SAVED", "-paste"))
   expect_null(the$tty)
   tty$log = character()
   local_mocked_bindings(tty_modes = function(modes = "-g") {
@@ -748,7 +748,7 @@ test_that("a terminal call's modes return after an interrupt, also one while stt
   fake = gptr_fake_provider(list("ok"))
   res = typing_console(fake, c("go", "/exit"))
   expect_true("interrupted" %in% res$out)
-  expect_identical(tty$log, c("-g", char_mode, "SAVED"))
+  expect_identical(tty$log, c("-g", char_mode, "SAVED", "-paste"))
   expect_null(the$tty)
 })
 
@@ -772,7 +772,7 @@ test_that("a question during a terminal call reads with the saved modes, then th
   }
   the$tty = list2env(list(saved = "SAVED", set = char_mode))
   expect_identical(gptr_readline("allow? ", read), "y")
-  expect_identical(tty$log, c("SAVED", "read allow? ", char_mode))
+  expect_identical(tty$log, c("SAVED", "-paste", "read allow? ", char_mode))
   the$tty = NULL
   tty$log = character()
   expect_identical(gptr_readline("peter> ", read), "y")
@@ -786,8 +786,9 @@ test_that("a question during a terminal call reads with the saved modes, then th
   tty_question(TRUE)
   expect_identical(c(gptr_readline("\u203a ", read), gptr_readline("\u203a ", read)), c("y", "y"))
   tty_question(FALSE)
-  expect_identical(tty$log, c("SAVED", "-echo", "SAVED", paste0("read \001\r\033[K\002", "\u203a "),
-                              "read \u203a ", char_mode))
+  expect_identical(tty$log, c("SAVED", "-echo", "-paste", "SAVED",
+                              paste0("read \001\r\033[K\002", "\u203a "), "read \u203a ",
+                              char_mode))
 })
 
 test_that("a terminal call's question reads in the saved modes from before its rows (review)", {
@@ -804,8 +805,8 @@ test_that("a terminal call's question reads in the saved modes from before its r
   })
   expect_identical(ans$decision, "allow")
   stty = grep("^<stty", out)
-  expect_identical(out[stty], c("<stty SAVED >", paste("<stty", paste(char_mode, collapse = " "),
-                                                      ">")))
+  expect_identical(out[stty], c("<stty SAVED -paste >",
+                                paste("<stty", paste(char_mode, collapse = " "), ">")))
   # the saved modes come before the question's first row, the call's after its answer
   expect_lt(stty[[1L]], min(grep("Allow r?", out, fixed = TRUE)))
   expect_identical(stty[[2L]], length(out))
@@ -814,7 +815,24 @@ test_that("a terminal call's question reads in the saved modes from before its r
   local_mocked_bindings(console_readline_tty = function() TRUE)
   rl = local_readline("y")
   out = utils::capture.output(ui_console_permission(req))
-  expect_identical(out[grep("^<stty", out)][[1L]], "<stty SAVED -echo >")
+  expect_identical(out[grep("^<stty", out)][[1L]], "<stty SAVED -echo -paste >")
+})
+
+test_that("tty_modes() turns bracketed paste on after stty and off before it (D-263)", {
+  # no stty runs, on any OS
+  withr::local_envvar(PATH = withr::local_tempdir())
+  expect_identical(written(function() tty_modes("paste")), "\033[?2004h")
+  expect_identical(written(function() tty_modes(c("SAVED", "-paste"))), "\033[?2004l")
+  expect_identical(written(function() tty_modes("-g")), "")
+  expect_null(tty_modes("-g"))
+  # alone they run no stty (a stub that answers when run; Windows has no sh to run it)
+  skip_on_os("windows")
+  bin = withr::local_tempdir()
+  writeLines(c("#!/bin/sh", "echo RAN"), file.path(bin, "stty"))
+  Sys.chmod(file.path(bin, "stty"), "0755")
+  withr::local_envvar(PATH = bin)
+  expect_identical(tty_modes("-g"), "RAN")
+  expect_identical(written(function() expect_null(tty_modes("paste"))), "\033[?2004h")
 })
 
 test_that("a T console's keys edit the draft on the live row; Enter steers (D-242, D-243)", {
@@ -946,7 +964,28 @@ test_that("in-process R code runs with isig on, so Ctrl-C interrupts it (review)
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "zz = 1")), "done"))
   tty = local_keys(function() "")
   typing_console(fake, c("go", "/exit"))
-  expect_identical(tty$log, c("-g", char_mode, "isig", "-isig", "SAVED"))
+  # then bracketed paste is on again, which GNU readline 8.1+ turns off as a read of the code ends
+  # (FIX-28)
+  expect_identical(tty$log, c("-g", char_mode, "isig", "-isig", "paste", "SAVED", "-paste"))
+})
+
+test_that("after in-process R code the toggle reaches the console, never the result (FIX-28)", {
+  skip_on_cran()
+  local_console_test()
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "zz = 1")), "done"))
+  local_keys(function() "")
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    if ("paste" %in% modes) cat("<paste on>\n")
+    if (identical(modes, "-g")) "SAVED"
+  })
+  res = typing_console(fake, c("go", "/exit"))
+  expect_identical(sum(grepl("<paste on>", res$out, fixed = TRUE)), 2L)
+  result = msg_text(last_message(fake_requests(fake)[[2L]]))
+  expect_false(grepl("paste on", result, fixed = TRUE))
+  # a D console's call writes none
+  local_live_console("D")
+  res = typing_console(fake, c("go", "/exit"))
+  expect_false(any(grepl("<paste on>", res$out, fixed = TRUE)))
 })
 
 test_that("Up takes back the newest message the person queued, of either kind (D-242)", {
@@ -1080,6 +1119,200 @@ test_that("a batch is timed by its last key read, not the reader's wait after it
     expect_identical(steers(), "a\nbc")
     expect_identical(rs$reader$compose$draft, "de")
   })
+})
+
+test_that("a bracketed paste stays one draft however late its reads (FIX-28, D-263)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$reader = console_reader()
+  rs$sending = quote(peter())
+  clock = 0
+  local_mocked_bindings(reactor_now = function() clock)
+  read = function(t, chars) {
+    clock <<- t
+    .gptr_repl = rs
+    console_keys(rs$reader, s, chars)
+  }
+  steers = function() vapply(session_data(s)$queue$steer, function(it) it$text, "")
+  utils::capture.output({
+    read(0, "")
+    # read 2 s late, which timing calls typed
+    read(2, "\033[200~a\rb\rc\033[201~")
+    expect_identical(steers(), character())
+    expect_identical(rs$reader$compose$draft, "a\nb\nc")
+    read(2.05, "\r")
+    expect_identical(steers(), "a\nb\nc")
+    # split over late reads, its end marker cut
+    read(5, "\033[200~d\re")
+    read(8, "f\rg\033[20")
+    read(11, "1~")
+    expect_identical(rs$reader$compose$draft, "d\nef\ng")
+    expect_identical(steers(), "a\nb\nc")
+    read(11.05, "\r")
+    expect_identical(steers(), c("a\nb\nc", "d\nef\ng"))
+    # without markers the timing rule decides, as before
+    read(14, "h\ri")
+    expect_identical(steers(), c("a\nb\nc", "d\nef\ng", "h"))
+    expect_identical(rs$reader$compose$draft, "i")
+  })
+  expect_false(any(grepl("\033", steers(), fixed = TRUE)))
+})
+
+test_that("a Ctrl-C byte inside a bracketed paste is pasted text, not the key (review round 1)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$reader = console_reader()
+  rs$sending = quote(peter())
+  local_mocked_bindings(reactor_now = function() 0)
+  read = function(chars) {
+    .gptr_repl = rs
+    console_keys(rs$reader, s, chars)
+  }
+  utils::capture.output({
+    read("\033[200~etx\003s\rTEXT\r")
+    read("x\003a\r\033[201~")
+  })
+  expect_identical(rs$reader$compose$draft, "etxs\nTEXT\nxa\n")
+  expect_identical(rs$reader$after_interrupt %||% "", "")
+  expect_length(session_data(s)$queue$steer, 0L)
+})
+
+test_that("a batch holding a paste marker holds no Ctrl-C key (review round 3)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$sending = quote(peter())
+  local_mocked_bindings(reactor_now = function() 0)
+  read = function(chars) {
+    .gptr_repl = rs
+    tryCatch({
+      console_keys(rs$reader, s, chars)
+      "read"
+    }, interrupt = function(e) "interrupted")
+  }
+  # pasted text that ends the paste early, then a Ctrl-C byte and the menu's answers; a paste's
+  # start cut at a read's end; the rest of a paste after a read that ended at an early end marker
+  pastes = list(list("\033[200~x\033[201~\003f\n!cat(1)\n\033[201~"),
+                list("\033[20", "0~x\003f\n!cat(1)\n\033[201~"),
+                list("\033[200~x\033[201~", "\003f\n!cat(1)\n\033[201~"))
+  for (keys in pastes) {
+    rs$reader = console_reader()
+    res = character()
+    utils::capture.output(for (k in keys) res = c(res, read(k)))
+    label = encodeString(paste(keys, collapse = " | "))
+    expect_identical(res, rep("read", length(keys)), label = label)
+    expect_identical(rs$reader$after_interrupt %||% "", "", label = label)
+    expect_identical(rs$reader$compose$draft, "xf\n!cat(1)\n", label = label)
+    expect_length(session_data(s)$queue$steer, 0L)
+    expect_length(rs$reader$typed, 0L)
+  }
+})
+
+test_that("a read right after a paste's marker holds no Ctrl-C key (review round 4)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$sending = quote(peter())
+  local_mocked_bindings(reactor_now = function() 0)
+  read = function(chars) {
+    .gptr_repl = rs
+    tryCatch({
+      console_keys(rs$reader, s, chars)
+      "read"
+    }, interrupt = function(e) "interrupted")
+  }
+  # a paste whose text ends it early, split right after that marker and again before its own end
+  # marker (twice in the second case), each read on the beat after the one before; the reads
+  # between send at their newline, as D-263's Limits say, a steer the model reads
+  pastes = list(list("\033[200~x\033[201~", "\003f\n!cat(1)\n", "\033[201~"),
+                list("\033[200~x\033[201~", "y\003", "\003f\n!cat(1)\n", "\033[201~"))
+  for (keys in pastes) {
+    rs$reader = console_reader()
+    res = character()
+    utils::capture.output(for (k in keys) res = c(res, read(k)))
+    label = encodeString(paste(keys, collapse = " | "))
+    expect_identical(res, rep("read", length(keys)), label = label)
+    expect_identical(rs$reader$after_interrupt %||% "", "", label = label)
+    expect_length(rs$reader$typed, 0L)
+  }
+  steers = vapply(session_data(s)$queue$steer, function(it) it$text, "")
+  expect_identical(steers, c("xf\n!cat(1)", "xyf\n!cat(1)"))
+  # an empty read between ends the paste's reads: a Ctrl-C read after it is the key
+  rs$reader = console_reader()
+  res = character()
+  utils::capture.output(for (k in c("\033[200~x\033[201~", "", "\003")) res = c(res, read(k)))
+  expect_identical(res, c("read", "read", "interrupted"))
+})
+
+test_that("a read off the beat after a paste's marker holds a Ctrl-C key (round 4 verification)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$sending = quote(peter())
+  rs$reader = console_reader()
+  now = 0
+  local_mocked_bindings(reactor_now = function() now)
+  read = function(chars) {
+    .gptr_repl = rs
+    tryCatch({
+      console_keys(rs$reader, s, chars)
+      "read"
+    }, interrupt = function(e) "interrupted")
+  }
+  # the next read comes 30 s later, as after a reactor an in-process tool held: no paste lasts that
+  # long, so its Ctrl-C is the key (D-263: within about 0.1 s of the paste's marker)
+  res = character()
+  utils::capture.output({
+    res = read("\033[200~x\033[201~")
+    now = 30
+    res = c(res, read("\003"))
+  })
+  expect_identical(res, c("read", "interrupted"))
+  # on the beat it is still pasted text
+  rs$reader = console_reader()
+  utils::capture.output({
+    res = read("\033[200~x\033[201~")
+    now = 30.1
+    res = c(res, read("\003"))
+  })
+  expect_identical(res, c("read", "read"))
+})
+
+test_that("an open paste holds no Ctrl-C key for 2 s after its last read (review round 6)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$sending = quote(peter())
+  now = 0
+  local_mocked_bindings(reactor_now = function() now)
+  read = function(t, chars) {
+    now <<- t
+    .gptr_repl = rs
+    tryCatch({
+      console_keys(rs$reader, s, chars)
+      "read"
+    }, interrupt = function(e) "interrupted")
+  }
+  # a paste whose end marker another reader took (a question asked mid-paste) stays open: a Ctrl-C
+  # byte read within 2 s of its last read is pasted text, one read later is the key, which pauses
+  # the run, with the reader polling in between or not
+  for (polls in c(TRUE, FALSE)) {
+    rs$reader = console_reader()
+    res = character()
+    utils::capture.output({
+      res = read(0, "\033[200~pasted head\r")
+      if (polls) for (t in seq(0.1, 1.9, by = 0.1)) read(t, "")
+      res = c(res, read(1.95, "\003x"))
+      if (polls) for (t in seq(2, 4.5, by = 0.1)) read(t, "")
+      res = c(res, read(60, "\003"))
+    })
+    expect_identical(res, c("read", "read", "interrupted"), info = paste("polls:", polls))
+    expect_true(rs$reader$compose$bracket)
+    expect_identical(rs$reader$compose$draft, "pasted head\nx", info = paste("polls:", polls))
+    expect_length(session_data(s)$queue$steer, 0L)
+  }
 })
 
 test_that("a draft a run left waits for the follow-ups, then continues at the prompt (D-243)", {
@@ -1269,7 +1502,8 @@ test_that("a terminal: a paste during a run is one draft; Enter sends it as one 
   pty$send("ONE\r")
   expect_true(pty$wait("thinking"))
   # on the polling beat, as the run goes; more keys than a person types in 0.2 s, so only the
-  # beat's bound decides
+  # beat's bound decides; pty$send is a terminal that ignores bracketed paste: the timing rule
+  # decides (FIX-28's fallback)
   Sys.sleep(0.5)
   pty$send("one\rtwo\rthree")
   expect_true(pty$wait(paste0(person, " one two three")))
@@ -1281,6 +1515,99 @@ test_that("a terminal: a paste during a run is one draft; Enter sends it as one 
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("REQ "), 1L)
+})
+
+test_that("a terminal: a paste during an r call is one draft; no marker shows (FIX-28)", {
+  skip_on_cran()
+  # processx ptys are Unix-only; a Windows console is class L, with no composer
+  skip_on_os("windows")
+  # the fake answers the steer whichever request carries it: under load Enter is read before the
+  # run's step boundary (L-72)
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
+    "fake = gptr_fake_provider(function(req) {",
+    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  if (length(ops)) {",
+    "    text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
+    "    return(paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']'))",
+    "  }",
+    "  if (req$n == 1L) {",
+    "    return(list(text = 'run', tool = 'r', input = list(code = 'Sys.sleep(3); zz = 1')))",
+    "  }",
+    "  list(text = 'second', delay = 4)",
+    "})",
+    "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
+  ), term = "xterm")
+  person = if (l10n_info()[["UTF-8"]]) "›" else ">>"
+  expect_true(pty$wait("peter> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("Allow r?"))
+  expect_true(endsWith(pty$pending(), pty_asked()))
+  # GNU readline 8.1+ brackets the answer itself; readline 5.2 and libedit get it plain
+  pty$paste("y")
+  pty$send("\r")
+  # pasted while r runs, so read 3 s late: bracketed, as gptr turned the mode on after the question
+  expect_true(pty$wait("keys show when r returns"))
+  pty$paste("one\rtwo\rthree")
+  expect_true(pty$wait(paste0(person, " one two three")))
+  expect_identical(pty$seen("queued"), 0L)
+  pty$send("\r")
+  expect_true(pty$wait("1 queued"))
+  expect_true(pty$wait("REQ 1 [one/two/three]"))
+  expect_true(pty$wait("peter> "))
+  pty$paste("/exit")
+  pty$send("\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(c(pty$seen("200~"), pty$seen("201~"), pty$seen("REQ "), pty$seen(pty_reask())),
+                   c(0L, 0L, 1L, 0L))
+})
+
+test_that("a terminal: after r code reads through readline a paste is one draft (FIX-28)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
+    "ask = function() {",
+    "  x = readline('name? ')",
+    "  # as GNU readline 8.1+ does when its read ends (macOS R's readline 5.2 does not)",
+    "  system(\"printf '\\\\033[?2004l'\")",
+    "  x",
+    "}",
+    "fake = gptr_fake_provider(function(req) {",
+    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  if (length(ops)) {",
+    "    text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
+    "    return(paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']'))",
+    "  }",
+    "  if (req$n == 1L) return(list(text = 'run', tool = 'r', input = list(code = 'x = ask()')))",
+    "  if (req$n == 2L) {",
+    "    return(list(text = 'NAPPING', tool = 'r', input = list(code = 'Sys.sleep(3); zz = 1')))",
+    "  }",
+    "  list(text = 'second', delay = 4)",
+    "})",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "xterm")
+  person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("name? "))
+  pty$send("abc\r")
+  # GNU readline 8.1+ turned the mode off as its read ended and the call turned it on again as that
+  # r call returned, so a paste made while the next r call sleeps is bracketed (FIX-28)
+  expect_true(pty$wait("NAPPING"))
+  expect_true(pty$wait("keys show when r returns"))
+  pty$paste("one\rtwo\rthree")
+  expect_true(pty$wait(paste0(person, " one two three")))
+  expect_identical(pty$seen("queued"), 0L)
+  pty$send("\r")
+  expect_true(pty$wait("1 queued"))
+  expect_true(pty$wait("REQ 1 [one/two/three]"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(c(pty$seen("200~"), pty$seen("201~"), pty$seen("REQ ")), c(0L, 0L, 1L))
 })
 
 test_that("a terminal: during a sub-agent the row ticks and steers; its r call waits (review)", {
@@ -1449,9 +1776,10 @@ test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (vi
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
     "        gptr.history = TRUE)",
     "long = paste(c('BEGIN', sprintf('w%02d', 1:99), 'END'), collapse = ' ')",
-    "fake = gptr_fake_provider(function(req) list(text = long, chunk = 8L, gap = 0.1))",
+    "fake = gptr_fake_provider(function(req) list(text = long, chunk = 8L, gap = 0.5))",
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
   ), term = "dumb")
+  # a stream of about 25 s outlasts any reaction time; the abort ends it
   expect_true(pty$wait("peter[auto]> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
@@ -1749,10 +2077,13 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
   expect_gte(as.numeric(difftime(Sys.time(), sent, units = "secs")), 1)
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
-  # the relay, its typed word on the next row where the row is full
+  # the relay, whole: the answer's rows (indented) joined, as the row may end before the typed
+  # word or before END, with the live row drawn between them (over it, after a carriage return)
   expect_true(pty$wait(paste0("REQ operator: ", trimws(relay("")))))
-  expect_true(pty$wait(paste0(typed, " END")))
   expect_true(pty$wait("peter> "))
+  rows = strsplit(gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$all), "[\r\n]")[[1L]]
+  expect_match(paste(trimws(rows[startsWith(rows, "  ")]), collapse = " "),
+               paste0("REQ operator: ", relay(typed), " END"), fixed = TRUE)
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   # a sent draft leaves nothing to keep

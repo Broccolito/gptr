@@ -128,6 +128,30 @@ test_that("identifiers through the gateway, including a wrapper with a local m (
   expect_error(peter("p", model = mice), class = "gptr_error_invalid_identifier")
 })
 
+test_that("identifiers of a call made off the call stack resolve where it was made", {
+  # a do.call() envir, and a promise forced after its function returned, are not on the stack
+  local_gw()
+  box = local_probe()
+  e = new.env()
+  e$m = "haiku"
+  do.call(peter, list("p", model = quote(m)), envir = e)
+  expect_identical(box$ids$model, "haiku")
+  w = function(...) peter(...)
+  do.call(w, list("p", model = quote(m)), envir = e)
+  expect_identical(box$ids$model, "haiku")
+  lazy = function(x) function() x
+  mk = function() {
+    m2 = "sonnet"
+    lazy(peter("p", model = m2))
+  }
+  mk()()
+  expect_identical(box$ids$model, "sonnet")
+  m3 = "opus"
+  wl = function(...) lazy(peter(...))
+  wl("p", model = m3)()
+  expect_identical(box$ids$model, "opus")
+})
+
 test_that("a leading session is the continuation target; a named session is context", {
   local_gw()
   box = local_probe()
@@ -500,6 +524,30 @@ test_that("a continuation's newer spec replaces the session's older spec of the 
   s = peter("a", model = old, envir = new.env())
   s |> peter("b", model = new)
   expect_identical(s$text, "new answer")
+})
+
+test_that("a keyed factory loads once per session; an unkeyed one on every call (08 3.1)", {
+  local_gw()
+  fake = local_fake_provider(list("one", "two", "three"))
+  n = new.env()
+  counting = function(what) {
+    function(gptr) {
+      n[[paste0(what, "_loads")]] = (n[[paste0(what, "_loads")]] %||% 0L) + 1L
+      gptr$register(gptr_hook("agent_start", function(event, ctx) {
+        n[[what]] = (n[[what]] %||% 0L) + 1L
+        NULL
+      }))
+    }
+  }
+  keyed = structure(counting("keyed"), gptr_key = "coaching:1")
+  plain = counting("plain")
+  s = peter("a", model = fake, extensions = list(keyed, plain), envir = new.env())
+  s |> peter("b", extensions = list(keyed, plain))
+  expect_identical(mget(c("keyed_loads", "keyed", "plain_loads", "plain"), n),
+                   list(keyed_loads = 1L, keyed = 2L, plain_loads = 2L, plain = 3L))
+  # the key is per session
+  peter("c", model = fake, extensions = keyed, envir = new.env())
+  expect_identical(c(n$keyed_loads, n$keyed), c(2L, 3L))
 })
 
 test_that("peter('a', mice) and mice |> peter('a') create sessions labelled mice", {

@@ -1,5 +1,5 @@
 test_that("the contract constants have the documented sizes", {
-  expect_length(rel_exports(), 64L)
+  expect_length(rel_exports(), 66L)
   expect_false(anyDuplicated(rel_exports()) > 0L)
   expect_true("gptr_export" %in% rel_export_groups()[["Documents and artifacts"]])
   expect_length(rel_options(), 90L)
@@ -8,6 +8,12 @@ test_that("the contract constants have the documented sizes", {
   expect_true(all(names(rel_rd_groups()) %in% rel_exports()))
   expect_true(all(rel_example_exceptions() %in% rel_exports()))
   expect_setequal(names(rel_topics()), c("gptr_security", "gptr_egress", "gptr_options"))
+  expect_true(all(rel_donttest_pages() %in% rel_exports()))
+})
+
+test_that("the export groups name exactly the exports of NAMESPACE", {
+  root = gptr_root()
+  expect_setequal(rel_exports(), parseNamespaceFile(basename(root), dirname(root))$exports)
 })
 
 test_that("rel_finish() prints only the summary line when there are no problems", {
@@ -90,10 +96,20 @@ test_that("docs_problems() passes a complete manual and reports each kind of def
   for (case in cases) {
     out = docs_problems(rd_read_dir(toy_man(utils::modifyList(clean, case$pages))),
                         exports = c("f", "g"), groups = list(f = c("f", "g")),
-                        topics = list(t1 = c("gptr.max_turns", "PHI")), exceptions = character())
+                        topics = list(t1 = c("gptr.max_turns", "PHI")), exceptions = character(),
+                        donttest = character())
     if (!length(case$expect)) expect_identical(out, character())
     for (pattern in case$expect) expect_match(out, pattern, all = FALSE)
   }
+})
+
+test_that("docs_problems() accepts \\donttest{} only on the pages allowed it", {
+  pages = utils::modifyList(clean, list(f = rd_page("f", aliases = c("f", "g"),
+    examples = c("g(1)", "\\donttest{", "f(1)", "}", "\\dontrun{", "f(2)", "}"))))
+  out = docs_problems(rd_read_dir(toy_man(pages)), exports = c("f", "g"),
+                      groups = list(f = c("f", "g")), topics = list(t1 = "PHI"),
+                      exceptions = character(), donttest = "f")
+  expect_identical(out, "f: uses \\dontrun{}")
 })
 
 test_that("docs_problems() requires ?peter to link every help topic", {

@@ -58,6 +58,14 @@ os_bytes = function(x) {
   x
 }
 
+#' Path handed to base file-system functions: UTF-8 bytes without a mark in non-UTF-8 Unix locales
+#' (a marked non-ASCII path fails there with "unable to translate"; report 01 E4)
+#' @noRd
+fs_path = function(p) {
+  if (.Platform$OS.type != "windows" && !isTRUE(l10n_info()[["UTF-8"]])) Encoding(p) = "unknown"
+  p
+}
+
 #' Parse R text so that parse-data columns and getParseText() (which cuts source lines with
 #' substr()) count the same unit (IC-62). In a UTF-8 locale marked UTF-8 is parsed: nothing is
 #' translated and both count characters. Elsewhere the parser would translate marked text to the
@@ -82,6 +90,11 @@ raw_to_utf8 = function(x, fallback = "CP1252") {
   if (validUTF8(text)) {
     Encoding(text) = "UTF-8"
     return(text)
+  }
+  # the five bytes CP1252 lacks become `?` first, as Windows' iconv() reads them as C1 controls
+  if (identical(fallback, "CP1252")) {
+    x[x %in% as.raw(c(0x81, 0x8d, 0x8f, 0x90, 0x9d))] = as.raw(0x3f)
+    text = rawToChar(x)
   }
   out = iconv(text, from = fallback, to = "UTF-8", sub = "?")
   if (is.na(out)) out = iconv(text, from = "latin1", to = "UTF-8", sub = "?")

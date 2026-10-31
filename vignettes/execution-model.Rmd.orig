@@ -86,7 +86,7 @@ compact descriptions that can include schema, sample values and summaries. The f
 object remains available to R code. Printed tool output is bounded, with an output handle for
 long results, and captured plots can be sent as images. Those previews and results may contain
 data values; the permission and egress controls still apply. System 1 decisions instead send
-encoded input states under their own size rules; see [System 1 decisions](system-one.html).
+encoded input states under their own size rules; see [Typed decisions](system-one.html).
 
 `context = "names"` reduces workspace context to names and attachments to headers;
 `context = "none"` omits both built-in workspace and attached-object descriptions. These settings
@@ -143,7 +143,7 @@ as.data.frame(session$history)
 
 Without an initialized project workspace, session files use a temporary directory.
 `gptr_init()` creates `.gptr/` for project storage. Recording an R document is a separate choice;
-see [Script as history](script-as-history.html).
+see [Record, replay and export](script-as-history.html).
 
 A history document records executed code, decisions and bounded output. It does not
 automatically archive the full input dataset. Replay runs the recorded R procedure again;
@@ -161,7 +161,11 @@ hour and in another mode, whatever that call asks: a script runs the plan with
 `options(gptr.plan_handoff = FALSE)` turns the hand-off off. Critical, secret and control guards
 remain separate. `yolo`, which only you can select, also runs gptr's own configuration functions and
 secret reads; deleting protected files, files outside the project or the project itself,
-`options(gptr.*)` and sending a secret over the network still ask.
+moving the working directory out of the project, `rm(list = ls())`, `options(gptr.*)` and
+sending a secret over the network still ask.
+In `auto` and `yolo`, a `system()` or `system2()` call whose command the code computes is refused:
+the model is told to run the command with `peter$sh()`, whose command the permission rules check
+when it runs.
 A permission gate is not an isolation boundary. External CLIs also have their own sandbox
 and tool controls; live R requests still pass through gptr's MCP gate. Use [Configuration](configuration.html)
 and `?gptr_security` to choose a mode and understand its limits.

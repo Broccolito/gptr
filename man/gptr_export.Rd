@@ -25,9 +25,16 @@ comments, so it is not executed a second time. User R and comments keep their so
 \details{
 Only bare or symbol-assigned literal Peter calls and Peter-only native pipelines
 are admitted; a pipeline may start from a session handle an earlier Peter statement assigned,
-as the later turns of a console transcript do. Distinct statements sharing a line (including
-semicolon-separated statements), mixed pipelines, nested or computed calls, pending writes,
-missing or edited blocks, secret markers and interpolated-input hashes are refused.
+as the later turns of a console transcript do, and after its prompt a call may name objects
+without argument names, as a console turn's \verb{@objects} are written. Every named argument must
+be one literal (a string, number, logical or \code{NULL}), so a call with \code{agents = list(...)},
+\code{budget = list()} or \code{envir = new.env()} is refused, and the refusal names that argument.
+A harness definition, \verb{<name> = gptr_tailor(...)}, is ordinary code. Distinct statements sharing
+a line (including semicolon-separated statements), mixed pipelines, nested or computed calls,
+pending writes, missing or edited blocks, secret markers and interpolated-input hashes are
+refused. An undone block that no statement owns, a console turn that \verb{/undo} or \verb{/retry} undid
+under its \verb{#~ } statement, is left out. Code that calls a \verb{peter$} member, such as
+\code{peter$sh()}, exports as ordinary R; code that calls \code{peter()} is refused.
 Raw exports also refuse ordinary code that reads a session handle after its Peter statement
 and before ordinary code assigns that name again, and a function that names any session handle
 of the document, wherever it is defined, as it reads the name when called. The Peter format
@@ -52,7 +59,9 @@ verified execution or a complete session. Ordinary console input and \code{recor
 effects cannot be reconstructed. External files, objects and package versions must still
 be supplied. Remaining user code may use gptr or perform network and filesystem operations.
 Captured \verb{#>} output is limited to twelve lines per block and eighty characters per line;
-outputs are comments. Encoding, line endings and the final newline follow the input file.
+outputs are comments. Neither format keeps a console turn's \verb{#< } lines (what the console sent
+with its prompt, see \code{\link[=gptr_doc]{gptr_doc()}}), so an exported call is asked without them. Encoding, line
+endings and the final newline follow the input file.
 A UTF-8 byte order mark is preserved; source that exported file with
 \code{source(to, encoding = "UTF-8-BOM")}.
 }

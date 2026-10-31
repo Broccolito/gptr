@@ -323,3 +323,23 @@ test_that("a file under another key or with broken JSON is a miss; a malformed k
     expect_error(s1_cache_put(k, list()), class = "gptr_error_invalid_argument")
   }
 })
+
+test_that("an unwritable cache keeps the answers and the usage row of the call", {
+  skip_on_cran()
+  skip_on_os("windows")
+  dir = s1_fresh(gptr = TRUE)
+  cache = file.path(dir, ".gptr", "cache", "s1")
+  dir.create(cache, recursive = TRUE)
+  Sys.chmod(cache, "0555", use_umask = FALSE)
+  withr::defer(Sys.chmod(cache, "0755", use_umask = FALSE))
+  skip_if(file.access(cache, 2L) == 0L, "a read-only directory is writable here (root)")
+  old = the$s1_log
+  withr::defer(assign("s1_log", old, envir = the))
+  judge = local_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
+  n = nrow(usage_log())
+  d = s1_call(s1_test_call("Is it about dogs?", text = c(a = "A puppy.", b = "A car."),
+                           model = judge))
+  expect_identical(as.logical(d), c(a = TRUE, b = FALSE))
+  expect_identical(nrow(usage_log()), n + 1L)
+  expect_identical(list.files(cache, all.files = TRUE, no.. = TRUE), character())
+})

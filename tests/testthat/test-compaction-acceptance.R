@@ -511,3 +511,33 @@ test_that("compaction event fixtures remove every hook on return and error", {
   expect_s3_class(attr(user, "srcref"), "srcref")
   expect_identical(user(NULL, NULL), "unrelated user hook")
 })
+
+# Added (FIX-37, F-91, D-298): after a threshold compaction the next one waits for 20% of the
+# threshold, not of the window, so compact_at = 20000 on a 1e6-token window compacts again near
+# 1.2 x 20000 tokens (it used to wait for 20% of the window, about 200k tokens more, which 30
+# turns of about 5k tokens do not reach). The turn of each compaction depends on the size of the
+# system prompt, which differs with the packages installed, so the test runs until the second.
+test_that("compact_at bounds the context after the first compaction on a large window", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(compact_at = 20000)
+  answer = paste(rep("word", 4000), collapse = " ")
+  fake = gptr_fake_provider(function(request) {
+    asked = grepl("compaction_request", paste(unlist(request$messages), collapse = " "),
+                  fixed = TRUE)
+    if (asked) "## Goal\n- keep going" else answer
+  }, name = "bigwin")
+  fake$models[[1L]]$context = 1e6
+  fake$models[[1L]]$max_output = 8000
+  off = gptr_register(fake)
+  withr::defer(off())
+  s = peter("turn 1", model = "bigwin/bigwin-1", mode = "auto", envir = new.env())
+  i = 1L
+  while (length(compaction_entries(s)) < 2L && i < 30L) {
+    i = i + 1L
+    s = peter(s, paste("turn", i))
+  }
+  before = vapply(compaction_entries(s), function(e) as.numeric(e$tokens_before), 0)
+  expect_length(before, 2L)
+  expect_true(all(before < 1.3 * 20000))
+})

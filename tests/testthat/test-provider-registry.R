@@ -799,6 +799,39 @@ test_that("transport failures and normaliser errors end the stream exactly once"
   expect_true("t2" %in% r$cancelled)
 })
 
+test_that("a 200 reply that is not an event stream ends with its text and is not retried", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  reply = function(text) {
+    log = local_stream_log()
+    provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+    t = r$http[[length(r$http)]]
+    t$on_headers(200L, list())
+    t$on_bytes(charToRaw(text))
+    t$on_done(200L, list())
+    log
+  }
+  body = '{"error":{"message":"no route for model m1","type":"invalid_model"}}'
+  log = reply(body)
+  expect_equal(log$types(), "error")
+  err = log$events[[1]]$error
+  expect_equal(err$class, "gptr_error_provider")
+  expect_equal(err$status, 200L)
+  expect_equal(log$done[[1]]$error_message,
+               paste("The provider's reply is not an event stream:", body))
+  expect_false(run_retryable(log$done[[1]], err))
+  expect_length(r$retries, 0L)
+  # keep-alive comments alone are an event stream that sent no event yet
+  expect_equal(reply(": PROCESSING\n\n: PROCESSING\n\n")$types(), "done")
+})
+
+test_that("the Mistral profile sends max_tokens, as Mistral's reference documents", {
+  model = list(id = "mistral-medium-3", provider = "mistral", api = "openai-completions")
+  body = json_decode(completions_build(model, stream_context(), list())$body)
+  expect_identical(body$max_tokens, 100L)
+  expect_null(body$max_completion_tokens)
+})
+
 test_that("a retry hint the reactor neither re-sends nor fails keeps its parent class", {
   r = local_mock_reactor()
   # P04 already forgot the transfer (a hint flushed at on_done, or any http_json body)
@@ -1084,6 +1117,90 @@ test_that("an aborted inprocess stream ends with stop_reason aborted", {
   signal$aborted = TRUE
   expect_true(reactor_pump(until = function() length(log$done) > 0L, timeout = 5))
   expect_equal(log$done[[1]]$stop_reason, "aborted")
+})
+
+# ---- provider_stream(): the model gate (08 section 3.3, P29 interface 5) ---------------------
+
+# the$model_gate set for the calling test and restored when it ends
+local_model_gate = function(gate, .env = parent.frame()) {
+  old = the$model_gate
+  the$model_gate = gate
+  withr::defer({
+    the$model_gate = old
+  }, envir = .env)
+}
+
+# A gate that counts its calls, keeps the model it saw and refuses every model
+refusing_gate = function(seen) {
+  seen$n = 0L
+  function(model) {
+    seen$n = seen$n + 1L
+    seen$model = model
+    gptr_abort(paste0("Model ", model$ref, " is refused in this test."), "model_refused")
+  }
+}
+
+test_that("a model gate sees the resolved model record; without one nothing changes", {
+  fake = local_fake_provider(list("one", "two"))
+  model = model_resolve("fake/fake-1")
+  local_model_gate(NULL)
+  log = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_true(reactor_pump(until = function() length(log$done) > 0L, timeout = 5))
+  expect_equal(msg_text(log$done[[1]]), "one")
+  seen = new.env()
+  local_model_gate(function(model) {
+    seen$model = model
+    "ignored"
+  })
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_true(reactor_pump(until = function() length(log$done) > 1L, timeout = 5))
+  expect_identical(seen$model, model)
+  expect_equal(msg_text(log$done[[2]]), "two")
+  expect_length(fake_requests(fake), 2L)
+})
+
+test_that("a gate that aborts stops provider_stream() before any request", {
+  fake = local_fake_provider(list("never sent"))
+  seen = new.env()
+  local_model_gate(refusing_gate(seen))
+  log = local_stream_log()
+  err = expect_error(provider_stream(model_resolve("fake/fake-1"), stream_context(), list(),
+                                     emit = log$emit, done = log$finish),
+                     class = "gptr_error_model_refused")
+  expect_match(conditionMessage(err), "fake/fake-1", fixed = TRUE)
+  expect_identical(seen$n, 1L)
+  expect_length(fake_requests(fake), 0L)
+  expect_length(log$events, 0L)
+  expect_length(log$done, 0L)
+})
+
+test_that("a gate that aborts stops a chat run before any request", {
+  local_gw()
+  local_gptr_options(interactive = FALSE, record = "off")
+  fake = local_fake_provider(list("never sent"))
+  seen = new.env()
+  local_model_gate(refusing_gate(seen))
+  expect_error(peter("go", model = fake, envir = new.env()), class = "gptr_error_model_refused")
+  expect_gte(seen$n, 1L)
+  expect_identical(seen$model$ref, "fake/fake-1")
+  expect_length(fake_requests(fake), 0L)
+})
+
+test_that("a gate that aborts stops an emulated System 1 call before any request", {
+  local_project(gptr = FALSE)
+  local_gptr_options(quiet = TRUE)
+  chat = local_fake_provider(list(list(json = list(answers = list(answer = 0.8)))), name = "emu")
+  seen = new.env()
+  local_model_gate(refusing_gate(seen))
+  q = list(answer = s1_question("Ok?", "x")$wire)
+  expect_error(s1_emulate(model_resolve("emu/emu-1"), list(list(x = "a")), q),
+               class = "gptr_error_model_refused")
+  expect_error(s1_emulate_classify(model_resolve("emu/emu-1"), list(x = "a"), q, list()),
+               class = "gptr_error_model_refused")
+  expect_identical(seen$n, 2L)
+  expect_identical(seen$model$ref, "emu/emu-1")
+  expect_length(fake_requests(chat), 0L)
 })
 
 # ---- provider_stream(): process_jsonl on scripted process functions -------------------------
@@ -1980,6 +2097,12 @@ test_that("gptr_providers() lists providers with fingerprints and no I/O", {
   expect_false(grepl("p05list", printed, fixed = TRUE))
   expect_equal(count$transfers, 0L)
   expect_error(gptr_providers(check = "yes"), class = "gptr_error_invalid_argument")
+})
+
+test_that("the sub-agent worker proxy is listed neither as a provider nor as a model", {
+  expect_false(is.null(provider_get("worker")))
+  expect_false("worker" %in% gptr_providers()$id)
+  expect_identical(nrow(gptr_models(provider = "worker")), 0L)
 })
 
 test_that("gptr_providers(check = TRUE) probes models endpoints without credentials", {

@@ -106,8 +106,9 @@ compact_user_sources = c("prompt", "pipe", "steer", "follow_up", "repl", "parent
                          "imported")
 
 #' Harness state for the checkpoint (contract 7.7), merged with the latest compaction's state
-#' Files and skills come from `read`/`write`/`edit` calls and `skill_content` blocks in order; a
-#' call whose result is an error contributes nothing (one without a result counts).
+#' Files and skills come from `read`/`write`/`edit` calls and `skill_content` blocks in order (an
+#' edit's files from its result's `details$files` when it holds them: a patch envelope); a call
+#' whose result is an error contributes nothing (one without a result counts).
 #' @noRd
 extract_state = function(entries) {
   todo = prompt_since_compaction(entries)
@@ -176,6 +177,17 @@ extract_state = function(entries) {
         hit = which(f_open & !is.na(f_id) & f_id == id)
         f_open[hit] = FALSE
         f_ok[hit] = !isTRUE(m$is_error)
+        # an edit given as a patch envelope names its files in its result, not in `path`
+        files = m$details$files
+        if (length(hit) && isTRUE(f_ok[hit[1L]]) && is.character(files) && length(files)) {
+          f_ok[hit] = FALSE
+          k = length(files)
+          f_id = c(f_id, rep(id, k))
+          f_what = c(f_what, rep(f_what[hit[1L]], k))
+          f_value = c(f_value, path_rel(files))
+          f_open = c(f_open, rep(FALSE, k))
+          f_ok = c(f_ok, rep(TRUE, k))
+        }
       }
       if (!identical(m$tool_name, "r") || isTRUE(m$is_error)) next
       dt = m$details
@@ -379,8 +391,8 @@ compact_should = function(s, tokens, idle_s) {
   if (hit) structure(TRUE, reason = reason) else FALSE
 }
 
-#' The checkpoint compactor's trigger: the threshold (waiting for 20% growth of the window
-#' after a threshold compaction, or 20% of the finite cap for an unknown window, IC-71) or the
+#' The checkpoint compactor's trigger: the threshold (waiting, after a threshold compaction, for
+#' growth of 20% of the threshold, which is at most the window: IC-71, D-298) or the
 #' cold rule (idle beyond the tail TTL with at least `gptr.compact_cold_min` tokens). An unknown
 #' count or idle time is no evidence (IC-74). A CLI model never triggers: the CLI compacts its
 #' own conversation (D-202).
@@ -410,7 +422,7 @@ compact_checkpoint_should = function(session, ctx) {
     } else {
       if (is.na(after)) after = 0
       waits = waits && !is.na(window)
-      if (!waits || tokens >= after + 0.2 * window) return(structure(TRUE, reason = "threshold"))
+      if (!waits || tokens >= after + 0.2 * thr) return(structure(TRUE, reason = "threshold"))
     }
   }
   ttl = if (identical(prompt_cache_gap_state(session)$ttl, "1h")) 3600 else 300
@@ -458,7 +470,7 @@ compact_charge = function(s, target, context, msg, started, run, aborted = FALSE
   row = usage_conform(usage_row(
     msg, session = d$id, agent = run[["opts"]][["agent"]] %||% "main",
     parent_id = d$parent_id %||% NA_character_, started = started,
-    seconds = as.numeric(difftime(Sys.time(), started, units = "secs")),
+    seconds = max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))),
     multiplier = d$estimator$m %||% 1))
   row = usage_add_durable(s, row)
   ledger_mark_cached(s, context$request_id, row$cache_read)

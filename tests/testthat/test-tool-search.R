@@ -371,6 +371,11 @@ test_that("a skipped file over 20 MB is reported with or without rows, in the te
                    c("No matches found", paste0("[1 file(s) larger than 20MB skipped. t", why)))
   # find carries no skipped_big attribute and prints no note
   expect_identical(utils::capture.output(print(search_find("*.txt", td))), "small.txt")
+  # Added (FIX-37, F-84): one named file over the cap is skipped with the same note, not read
+  # (above 2^31 - 1 bytes readChar() fails and the file would answer "No matches found" silently)
+  one = search_grep("needle", file.path(td, "big.log"))
+  expect_identical(attr(one, "skipped_big"), 1L)
+  expect_identical(grep_tool_text(one), paste0("No matches found\n\n", note))
 })
 
 # Added (D-057, review round 3): PCRE2 reads a "+" after a quantifier as possessive even when

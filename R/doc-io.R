@@ -7,10 +7,10 @@
 
 #' Push a gptr_source() frame (document key, blocks to skip, action log); returns its depth
 #' @noRd
-doc_source_push = function(path) {
+doc_source_push = function(path, model = NULL) {
   st = doc_state()
   st$sources[[length(st$sources) + 1L]] = list(key = path_key(path), skip = character(),
-                                               log = list())
+                                               log = list(), model = model)
   length(st$sources)
 }
 
@@ -20,6 +20,15 @@ doc_source_pop = function(depth) {
   st = doc_state()
   st$sources = st$sources[seq_len(depth - 1L)]
   invisible(NULL)
+}
+
+#' The model gptr_source(model =) gave the innermost gptr_source() frame when it sources `path`,
+#' else NULL
+#' @noRd
+doc_source_model = function(path) {
+  st = doc_state()
+  n = length(st$sources)
+  if (n && identical(st$sources[[n]]$key, path_key(path))) st$sources[[n]]$model
 }
 
 #' Record a block action in the innermost gptr_source() frame when it sources `path`
@@ -75,6 +84,7 @@ doc_eol_of = function(txt) {
 }
 
 #' Read a document as lines, keeping its EOL, BOM, final newline and md5 (report 14 doc_read).
+#' A line ends at `\r\n`, `\n` or a lone `\r`, as readLines() and source() read it.
 #' The md5 is that of exactly the bytes read (the same hex as tools::md5sum() of the file), so
 #' any change made on disk during or after the read makes the next checked write a conflict
 #' instead of being overwritten. Signals gptr_error_doc_write (reason "missing" for a missing
@@ -103,10 +113,10 @@ doc_read = function(path) {
   }
   Encoding(txt) = "UTF-8"
   eol = doc_eol_of(txt)
-  final_nl = !nzchar(txt) || endsWith(txt, "\n")
+  final_nl = !nzchar(txt) || grepl("[\r\n]$", txt)
   lines = character()
   if (nzchar(txt)) {
-    l = strsplit(paste0(txt, "\001"), "\r?\n")[[1L]]
+    l = strsplit(paste0(txt, "\001"), "\r\n?|\n")[[1L]]
     l[length(l)] = sub("\001$", "", l[length(l)])
     lines = if (final_nl) l[-length(l)] else l
   }
@@ -628,8 +638,9 @@ doc_sidecar_meta_ok = function(meta) {
   all(vapply(meta[intersect(c("call", "turn"), names(meta))], ordinal, NA))
 }
 
-#' Decode one call identity, never evaluate it: one peter() call, bare or gptr-qualified.
-#' Nested calls and computed arguments are kept for notebook identity matching.
+#' Decode one call identity, never evaluate it: one call whose head is a syntactic name (peter()
+#' or a harness, 08 section 3.6) or gptr-qualified peter(). Nested calls and computed arguments
+#' are kept for notebook identity matching.
 #' @noRd
 doc_sidecar_call = function(text) {
   if (!rlang::is_string(text) ||
@@ -642,7 +653,8 @@ doc_sidecar_call = function(text) {
   qualified = is.call(head) && length(head) == 3L &&
     (identical(head[[1L]], as.name("::")) || identical(head[[1L]], as.name(":::"))) &&
     identical(head[[2L]], as.name("gptr")) && identical(head[[3L]], as.name("peter"))
-  if (identical(head, as.name("peter")) || isTRUE(qualified)) call else NULL
+  named = is.symbol(head) && identical(make.names(as.character(head)), as.character(head))
+  if (named || isTRUE(qualified)) call else NULL
 }
 
 #' The versioned JSON data of an in-memory record. Runtime sites are narrowed to recovery
@@ -665,7 +677,7 @@ doc_sidecar_data = function(rec) {
         stop("Unsupported call identity")
       }
       a = list(ph = nullable(a$ph), th = nullable(a$th), j = a$j, block = nullable(a$block),
-               label = nullable(a$label), call0 = text)
+               label = nullable(a$label), head = nullable(a$head), call0 = text)
     }
     meta = attr(u$lines, "meta", exact = TRUE)
     if (!is.null(meta) && !doc_sidecar_meta_ok(meta)) {
@@ -723,14 +735,16 @@ doc_sidecar_decode = function(x, path) {
         !string(s$prompt_hash) || !string(s$args_hash)) return(NULL)
     a = s$anchor
     if (!is.null(a)) {
-      if (!object(a, c("ph", "th", "j", "block", "label", "call0")) ||
-          !all(vapply(a[c("ph", "th", "block", "label", "call0")], string, NA)) ||
+      keys = c("ph", "th", "j", "block", "label", "head", "call0")
+      # an earlier build wrote anchors without `head`
+      if (!(object(a, keys) || object(a, setdiff(keys, "head"))) ||
+          !all(vapply(a[c("ph", "th", "block", "label", "head", "call0")], string, NA)) ||
           !positive(a$j)) return(NULL)
       call0 = if (!is.null(a$call0)) doc_sidecar_call(a$call0)
       if (!is.null(a$call0) && is.null(call0)) return(NULL)
       s$anchor = list(ph = a$ph %||% NA_character_, th = a$th %||% NA_character_,
                       j = as.integer(a$j), block = a$block %||% NA_character_,
-                      label = a$label %||% NA_character_, call0 = call0)
+                      label = a$label %||% NA_character_, head = a$head, call0 = call0)
     }
     meta = u$meta
     if (!is.null(meta) && (!identical(fmt, "ipynb") || !doc_sidecar_meta_ok(meta) ||

@@ -6,7 +6,7 @@ test_that("pkgdown_yaml() lists every page once, secondary group members never",
   expect_false(anyDuplicated(listed) > 0L)
   expect_false(any(c("gptr_logout", "gptr_agents", "gptr_mcp_remove", "gptr_resume",
                      "gptr_last", "gptr_checkpoints") %in% listed))
-  expect_length(listed, 64L - 6L + 4L)
+  expect_length(listed, 66L - 6L + 4L)
   expect_true(all(c("peter", "gptr_login", "gptr_sessions", "gptr_export",
                     "gptr_security") %in% listed))
   expect_setequal(unlist(lapply(parsed$articles, `[[`, "contents")), rel_vignettes())
@@ -22,6 +22,13 @@ test_that("pkgdown_yaml() lists every page once, secondary group members never",
   sheet = readLines(file.path(assets, "cheatsheet.html"), warn = FALSE)
   expect_true(any(grepl('href="gptr-cheatsheet.pdf"', sheet, fixed = TRUE)))
   expect_true(file.exists(file.path(assets, "gptr-cheatsheet.pdf")))
+  # the PDF is printed from this sheet: it carries each of the sheet's links, the harness guide too
+  path = file.path(assets, "gptr-cheatsheet.pdf")
+  pdf = readBin(path, "raw", file.size(path))
+  links = regmatches(sheet, gregexpr('(?<=href=")https://[^"]+', sheet, perl = TRUE))
+  links = unique(unlist(links))
+  expect_true("https://broccolito.github.io/gptr/articles/tailor-and-coach.html" %in% links)
+  for (link in links) expect_true(length(grepRaw(link, pdf, fixed = TRUE)) > 0L, info = link)
   # Learn more opens the site's guides: browseVignettes() lists none when the install built none
   expect_false(any(grepl("<dt>browseVignettes(", sheet, fixed = TRUE)))
   expect_true(any(grepl("broccolito.github.io/gptr/articles", sheet, fixed = TRUE)))

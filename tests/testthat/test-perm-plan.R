@@ -310,6 +310,24 @@ test_that("the call the go-ahead notice names runs the whole plan", {
   expect_true(file.exists(file.path(root, "f.txt")))
 })
 
+test_that("in the console the go-ahead notice names no call for R's prompt (FIX-32)", {
+  skip_on_cran()
+  local_project()
+  local_plan_store()
+  local_gptr_options(quiet = FALSE)
+  local_scripted_ui(list(2L))
+  fake = local_fake_provider(list("<proposed_plan>1. write f.txt</proposed_plan>"))
+  # console_send() binds the REPL state as `.gptr_repl` in the frame of the console's call
+  console_call = function() {
+    .gptr_repl = new.env()
+    force(.gptr_repl)
+    testthat::capture_messages(peter("Create f.txt", model = fake, mode = "plan"))
+  }
+  msgs = console_call()
+  expect_length(grep("send Go ahead. to run the plan", msgs, fixed = TRUE), 1L)
+  expect_false(any(grepl("At R's prompt", msgs, fixed = TRUE)))
+})
+
 test_that("the go-ahead the person sends runs the plan once, in the mode the menu chose", {
   skip_on_cran()
   local_project()

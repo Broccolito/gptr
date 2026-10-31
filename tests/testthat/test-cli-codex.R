@@ -1175,7 +1175,7 @@ test_that("a fake CLI joins two inline agents and two workers on one reactor (IN
   skip_without_installed_gptr()
   f = local_fake_cli("codex", "slow")
   slow = function(name) {
-    gptr_fake_provider(list(list(text = paste(name, "done"), delay = 3)), name = name)
+    gptr_fake_provider(list(list(text = paste(name, "done"), delay = 6)), name = name)
   }
   inline1 = slow("fakea")
   inline2 = slow("fakeb")
@@ -1192,7 +1192,9 @@ test_that("a fake CLI joins two inline agents and two workers on one reactor (IN
   expect_identical(team$a1$text, "fakea done")
   expect_identical(team$w2$text, "faked done")
   expect_identical(team$code$messages[[length(team$code$messages)]]$route, "plan-cli")
-  expect_lt(elapsed, 13)
+  # four 6 s agents one after another take 24 s; the workers are other processes, so the bound is
+  # on the whole call
+  expect_lt(elapsed, 0.8 * 4 * 6)
 })
 
 # These copies isolate leaf observations without changing base or package namespace bindings.
@@ -1409,4 +1411,495 @@ test_that("fixed dangling SYSTEM and MCP control links keep markers and detect r
   mcp_second = mcp_link$make(file.path(root, "gone-mcp-2.json"))
   expect_false(identical(mcp_first, mcp_second), info = "native MCP payload changed")
   expect_identical(pcli_control_changed(system_after, pcli_control_hash(root)), path_norm(mcp))
+})
+
+# ---- confined Codex sessions for gptr_coach() (P29 T5; 08 section 3.7) -------------------------
+
+# The switches every confined exec carries (08 3.7)
+codex_off = c("shell_tool", "unified_exec_tty", "view_image", "multi_agent", "apps", "plugins",
+              "tool_suggest", "image_generation", "memories", "goals", "sleep_tool",
+              "skill_search", "browser_use", "computer_use")
+codex_settings = c("web_search=\"disabled\"", "tools.experimental_request_user_input.enabled=false",
+                   "agents.enabled=false", "skills.bundled.enabled=false",
+                   "skills.include_instructions=false", "cloud.skills.enabled=false",
+                   "include_permissions_instructions=false", "include_environment_context=false",
+                   "include_apps_instructions=false", "history.persistence=\"none\"")
+
+# The warning item the bypass flag always adds, and a hook log's start and denial lines
+codex_bypass = list(type = "item.completed",
+                    item = list(id = "item_0", type = "error",
+                                message = paste("`--dangerously-bypass-hook-trust` is enabled.",
+                                                "Enabled hooks may run without review for this",
+                                                "invocation.")))
+hook_start = "{\"event\":\"start\",\"time\":\"2026-10-28T10:00:00+0000\"}"
+hook_deny = function(tool) {
+  paste0("{\"event\":\"deny\",\"tool_name\":\"", tool, "\",\"time\":\"2026-10-28T10:00:01+0000\"}")
+}
+agent_message = function(text, id = "item_9") {
+  list(type = "item.completed", item = list(id = id, type = "agent_message", text = text))
+}
+
+# A confined exec's normaliser: the role in the adapter state and a private folder whose hook
+# log holds `log`
+local_confined = function(role, log = hook_start, .env = parent.frame()) {
+  opts = stub_opts() # nolint: object_usage_linter.
+  dir = withr::local_tempdir(.local_envir = .env)
+  if (length(log)) writeLines(log, file.path(dir, "hook.log"))
+  opts$state$codex_role = role
+  opts$state$codex_relay = dir
+  model = stub_model("codex") # nolint: object_usage_linter.
+  n = local_normaliser(pcli_codex_parse, model, opts, .env = .env) # nolint: object_usage_linter.
+  list(n = n, opts = opts, dir = dir)
+}
+
+# Push events in order until one ends the exec; the last event emitted
+push_all = function(n, opts, events) {
+  for (ev in events) if (isTRUE(n$push(list(data = json_encode(ev), obj = ev)))) break
+  opts$log$events[[length(opts$log$events)]]
+}
+
+# The value of a `-c hooks.<event>=` override: the hook's shell command, TOML-unescaped
+codex_hook_command = function(args, event) {
+  value = sub(paste0("^hooks[.]", event, "="), "",
+              grep(paste0("^hooks[.]", event, "="), args, value = TRUE))
+  quoted = regmatches(value, regexec("command=\"((?:[^\"\\\\]|\\\\.)*)\"", value, perl = TRUE))
+  gsub("\\\\(.)", "\\1", quoted[[1L]][[2L]], perl = TRUE)
+}
+
+test_that("a confined exec is ephemeral, read-only, without Codex's own tools, and hooked", {
+  local_mocked_bindings(pcli_is_windows = function() FALSE)
+  withr::local_envvar(CODEX_HOME = withr::local_tempdir())
+  head = c("exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
+           "--skip-git-repo-check", "-m", "gpt-5.5", "-C", "/w")
+  coach = pcli_codex_args("gpt-5.5", "/w", "workspace-write", "/r", role = "coach",
+                          schema = "/r/schema.json")
+  expect_identical(coach[seq_along(head)], head)
+  expect_false(any(grepl("mcp_servers", coach, fixed = TRUE)))
+  expect_identical(coach[match("--sandbox", coach) + 1L], "read-only")
+  expect_identical(coach[which(coach == "--disable") + 1L], codex_off)
+  expect_identical(coach[which(coach == "-c") + 1L][seq_along(codex_settings)], codex_settings)
+  expect_true("--dangerously-bypass-hook-trust" %in% coach)
+  expect_identical(utils::tail(coach, 3L), c("--output-schema", "/r/schema.json", "-"))
+  hook = codex_hook_command(coach, "PreToolUse")
+  expect_identical(codex_hook_command(coach, "SessionStart"), hook)
+  expect_match(hook, "codex_hook.R", fixed = TRUE)
+  expect_match(hook, "'coach' '/r/hook.log'", fixed = TRUE)
+  expect_true(any(grepl("timeout=30}]}]$", coach)))
+  run = pcli_codex_args("gpt-5.5", "/w", "workspace-write", "/r", role = "run")
+  relay = codex_relay_args("/r")
+  i = match(relay[[2L]], run)
+  expect_identical(run[(i - 1L):(i + length(relay) - 2L)], relay)
+  expect_identical(run[match("--sandbox", run) + 1L], "read-only")
+  expect_match(codex_hook_command(run, "PreToolUse"), "'run' '/r/hook.log'", fixed = TRUE)
+  expect_false("--output-schema" %in% run)
+  expect_false(any(c("resume", "--resume") %in% c(coach, run)))
+})
+
+test_that("a keyring login's credentials store is passed through, and only that key", {
+  home = withr::local_tempdir()
+  withr::local_envvar(CODEX_HOME = home)
+  expect_null(pcli_codex_auth_store())
+  config = file.path(home, "config.toml")
+  writeLines(c("model = \"gpt-5.5\"", "cli_auth_credentials_store = \"keyring\"  # OS keyring",
+               "[profiles.work]", "cli_auth_credentials_store = \"file\""), config)
+  expect_identical(pcli_codex_auth_store(), c("-c", "cli_auth_credentials_store=\"keyring\""))
+  args = pcli_codex_args("gpt-5.5", "/w", "read-only", "/r", role = "coach")
+  i = match("cli_auth_credentials_store=\"keyring\"", args)
+  expect_identical(args[i - 1L], "-c")
+  writeLines(c("[profiles.work]", "cli_auth_credentials_store = \"keyring\""), config)
+  expect_null(pcli_codex_auth_store())
+  writeLines("cli_auth_credentials_store = \"keyring\\\"; x = 1\"", config)
+  expect_null(pcli_codex_auth_store())
+})
+
+test_that("under a coaching role build() never resumes and sends the whole history", {
+  skip_on_cran()
+  local_fake_cli_path("codex", "text")
+  local_mocked_bindings(
+    pcli_probe = function(path) list(resume = TRUE),
+    pcli_notice = function(cli) invisible(NULL)
+  )
+  rlang::local_bindings(coach_role = "coach", .env = the)
+  opts = stub_opts(run = "r0000000002")
+  opts$state$codex_thread = "0199a213-thread"
+  returns = list(type = "object", properties = list(notes = list(type = "string"),
+                                                    note = list(type = "string")),
+                 required = list("notes"))
+  ctx = list(system = list(t0 = "T0", t1 = ""), request_id = "q000000000004",
+             messages = list(msg_user("first"),
+                             msg_assistant(list(block_text("one")), api = "cli-codex",
+                                           provider = "fakecodex", model = "gpt-6-sol"),
+                             msg_user("Again")),
+             params = list(cli_mode = "auto", returns = returns))
+  spec = pcli_codex_build(stub_model("codex"), ctx, opts)
+  dir = opts$state$codex_relay
+  withr::defer(unlink(dir, recursive = TRUE))
+  args = spec$start$args
+  expect_false("resume" %in% args)
+  expect_identical(args[match("--sandbox", args) + 1L], "read-only")
+  expect_null(opts$state$codex_control)
+  expect_identical(opts$state$codex_role, "coach")
+  expect_false(any(grepl("mcp_servers", args, fixed = TRUE)))
+  prompt = as.character(spec$send[[1]])
+  expect_match(prompt, "^<gptr_instructions>\nT0\n</gptr_instructions>")
+  expect_match(prompt, "Assistant: one", fixed = TRUE)
+  expect_match(prompt, "Again$")
+  file = args[match("--output-schema", args) + 1L]
+  expect_identical(file, file.path(dir, "schema.json"))
+  expect_identical(json_decode(read_utf8(file)$text),
+                   json_decode(paste0("{\"type\":\"object\",\"properties\":{\"notes\":",
+                                      "{\"type\":\"string\"},\"note\":{\"type\":[\"string\",",
+                                      "\"null\"]}},\"required\":[\"notes\",\"note\"],",
+                                      "\"additionalProperties\":false}")))
+  rlang::local_bindings(coach_role = "run", .env = the)
+  spec2 = pcli_codex_build(stub_model("codex"), ctx, opts)
+  withr::defer(unlink(opts$state$codex_relay, recursive = TRUE))
+  args2 = spec2$start$args
+  expect_false("resume" %in% args2)
+  expect_true(any(startsWith(args2, "mcp_servers.gptr.command=")))
+  expect_false("--output-schema" %in% args2)
+  pcli_untrack("s0123456789")
+})
+
+test_that("strict form: every key required, optional keys nullable, no other keys anywhere", {
+  schema = list(
+    type = "object",
+    properties = list(
+      notes = list(type = "string"),
+      level = list(enum = c("low", "high")),
+      kind = list(type = "string", enum = list("a", "b")),
+      skills = list(type = "array",
+                    items = list(type = "object",
+                                 properties = list(name = list(type = "string"),
+                                                   text = list(type = list("string"))),
+                                 required = "name")),
+      extra = list(properties = list(x = list(type = "integer")))),
+    required = c("notes", "skills"))
+  want = paste0(
+    "{\"type\":\"object\",\"properties\":{",
+    "\"notes\":{\"type\":\"string\"},",
+    "\"level\":{\"anyOf\":[{\"enum\":[\"low\",\"high\"]},{\"type\":\"null\"}]},",
+    "\"kind\":{\"type\":[\"string\",\"null\"],\"enum\":[\"a\",\"b\",null]},",
+    "\"skills\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{",
+    "\"name\":{\"type\":\"string\"},\"text\":{\"type\":[\"string\",\"null\"]}},",
+    "\"required\":[\"name\",\"text\"],\"additionalProperties\":false}},",
+    "\"extra\":{\"anyOf\":[{\"properties\":{\"x\":{\"type\":[\"integer\",\"null\"]}},",
+    "\"required\":[\"x\"],\"additionalProperties\":false},{\"type\":\"null\"}]}},",
+    "\"required\":[\"notes\",\"level\",\"kind\",\"skills\",\"extra\"],",
+    "\"additionalProperties\":false}")
+  expect_identical(json_decode(json_encode(pcli_codex_strict(schema))), json_decode(want))
+  empty = json_encode(pcli_codex_strict(list(type = "object")))
+  expect_identical(empty, paste0("{\"type\":\"object\",\"properties\":{},\"required\":[],",
+                                 "\"additionalProperties\":false}"))
+})
+
+# Run gptr's Codex hook on `input` (text on stdin) as Codex does; its exit status, output, log
+# and the permission decision it printed (NULL for none)
+run_codex_hook = function(input, mode = "run", log = tempfile("hook-", fileext = ".log"),
+                          lib = dirname(system.file(package = "jsonlite"))) {
+  inp = tempfile("hook-in-")
+  writeBin(charToRaw(input), inp)
+  hook = system.file("gptr", "codex_hook.R", package = "gptr", mustWork = TRUE)
+  res = processx::run(rscript_path(), c("--vanilla", hook, mode, log, lib), stdin = inp,
+                      error_on_status = FALSE)
+  rows = if (file.exists(log)) lapply(readLines(log, warn = FALSE), json_decode) else list()
+  out = if (nzchar(trimws(res$stdout))) json_decode(res$stdout)$hookSpecificOutput
+  list(status = res$status, stdout = res$stdout, rows = rows, decision = out)
+}
+
+# A PreToolUse denial as Codex reads it from stdout, whatever the exit status of its shell
+expect_hook_denied = function(d) {
+  expect_identical(d$status, 0L)
+  expect_identical(d$decision$hookEventName, "PreToolUse")
+  expect_identical(d$decision$permissionDecision, "deny")
+  expect_match(d$decision$permissionDecisionReason, "^gptr: ")
+  expect_identical(d$rows[[1L]]$event, "deny")
+}
+pre_tool = function(tool, input = json_obj()) {
+  json_encode(list(hook_event_name = "PreToolUse", tool_name = tool, tool_input = input,
+                   session_id = "s", turn_id = "t", tool_use_id = "u", cwd = "/w"))
+}
+
+test_that("the Codex hook writes its start line and lets a run use only gptr's tools", {
+  skip_on_cran()
+  start = run_codex_hook(json_encode(list(hook_event_name = "SessionStart", source = "startup")),
+                         mode = "coach")
+  expect_identical(start$status, 0L)
+  expect_identical(start$stdout, "")
+  expect_identical(start$rows[[1L]]$event, "start")
+  expect_length(start$rows, 1L)
+  ok = run_codex_hook(pre_tool("mcp__gptr__r", list(code = "1 + 1")))
+  expect_identical(ok$status, 0L)
+  expect_identical(ok$stdout, "")
+  expect_length(ok$rows, 0L)
+  marker = file.path(withr::local_tempdir(), "evaluated")
+  denied = list(
+    run_codex_hook(pre_tool("mcp__gptr__r"), mode = "coach"),
+    run_codex_hook(pre_tool("Bash", list(command = paste0("touch ", marker, " mcp__gptr__r")))),
+    run_codex_hook(pre_tool(paste0("system('touch ", marker, "')"))),
+    run_codex_hook(pre_tool("xmcp__gptr__r")),
+    run_codex_hook(pre_tool("mcp__gptr__r"), mode = "auto"))
+  for (d in denied) {
+    expect_hook_denied(d)
+    expect_true(nzchar(d$rows[[1L]]$time))
+  }
+  expect_identical(vapply(denied, function(d) d$rows[[1L]]$tool_name, ""),
+                   c("mcp__gptr__r", "Bash", paste0("system('touch ", marker, "')"),
+                     "xmcp__gptr__r", "mcp__gptr__r"))
+  expect_false(file.exists(marker))
+  # input it cannot read is denied, with no tool name; so is everything without jsonlite
+  for (d in list(run_codex_hook("not json {"), run_codex_hook("[1, 2]"),
+                 run_codex_hook(pre_tool("mcp__gptr__r"), lib = withr::local_tempdir()))) {
+    expect_hook_denied(d)
+    expect_null(d$rows[[1L]]$tool_name)
+  }
+  nolib = run_codex_hook(json_encode(list(hook_event_name = "SessionStart")),
+                         lib = withr::local_tempdir())
+  expect_identical(nolib$rows[[1L]]$event, "deny")
+  # a log it cannot write still denies
+  lost = run_codex_hook(pre_tool("Bash"), log = file.path(tempfile(), "no", "hook.log"))
+  expect_identical(lost$status, 0L)
+  expect_identical(lost$decision$permissionDecision, "deny")
+})
+
+# Run the hook command of a confined coach in `dir` through a shell, as Codex does, on a start and
+# then on a tool call: the exit statuses and the decision printed for the tool call
+shell_codex_hook = function(dir, shell) {
+  withr::local_envvar(CODEX_HOME = withr::local_tempdir())
+  cmd = codex_hook_command(pcli_codex_args("gpt-5.5", "/w", "read-only", dir, role = "coach"),
+                           "SessionStart")
+  run = function(input) {
+    inp = withr::local_tempfile()
+    writeLines(input, inp)
+    processx::run(shell[[1L]], c(shell[-1L], cmd), stdin = inp, error_on_status = FALSE)
+  }
+  start = run(json_encode(list(hook_event_name = "SessionStart", source = "startup")))
+  tool = run(pre_tool("shell", list(command = "ls")))
+  list(cmd = cmd, status = c(start$status, tool$status),
+       decision = json_decode(tool$stdout)$hookSpecificOutput$permissionDecision,
+       log = vapply(readLines(file.path(dir, "hook.log")), function(l) json_decode(l)$event, ""))
+}
+
+test_that("the hook command in the argv runs through the shell, logs its start, denies a tool", {
+  skip_on_cran()
+  skip_on_os("windows")
+  dir = withr::local_tempdir(pattern = "a dir with 'quotes' ")
+  res = shell_codex_hook(dir, c("/bin/sh", "-c"))
+  expect_identical(res$status, c(0L, 0L))
+  expect_identical(res$decision, "deny")
+  expect_identical(unname(res$log), c("start", "deny"))
+})
+
+test_that("on Windows the hook command holds no quote: short paths, or a refusal", {
+  short = c("C:\\PROGRA~1\\R\\bin\\Rscript.exe", "C:\\R\\gptr\\CODEX_~1.R", "C:\\T\\GPTR-C~1",
+            "C:\\R\\lib")
+  local_mocked_bindings(pcli_is_windows = function() TRUE,
+                        pcli_cmd_paths = function(paths) if (length(paths) == 4L) short)
+  hook = codex_hook_command(pcli_codex_hooks("coach", "C:/Users/Jane Doe/T/gptr-codex-1"),
+                            "PreToolUse")
+  expect_identical(hook, paste(short[[1L]], "--vanilla", short[[2L]], "coach",
+                               file.path(short[[3L]], "hook.log"), short[[4L]]))
+  local_mocked_bindings(pcli_cmd_paths = function(paths) NULL)
+  expect_error(pcli_codex_hooks("run", "C:/Users/Jane Doe/T/gptr-codex-1"),
+               "no short (8.3) name", fixed = TRUE, class = "gptr_error_model_refused")
+})
+
+test_that("on Windows the hook command runs through PowerShell, logs its start, denies a tool", {
+  skip_on_cran()
+  skip_if_not(pcli_is_windows())
+  dir = withr::local_tempdir(pattern = "a dir ")
+  if (is.null(pcli_cmd_paths(dir))) skip("this volume gives no short (8.3) names")
+  # Codex's own shell on Windows, which reports a status of 2 as 1
+  res = shell_codex_hook(dir, c("powershell.exe", "-NoProfile", "-Command"))
+  expect_false(grepl("\"", res$cmd, fixed = TRUE))
+  expect_identical(res$status, c(0L, 0L))
+  expect_identical(res$decision, "deny")
+  expect_identical(unname(res$log), c("start", "deny"))
+})
+
+test_that("a confined coach keeps its reply: bypass warning, hook start, one message", {
+  skip_on_cran()
+  c1 = local_confined("coach")
+  ev = push_all(c1$n, c1$opts, list(
+    list(type = "thread.started", thread_id = "t1"), list(type = "turn.started"), codex_bypass,
+    list(type = "item.completed", item = list(id = "item_1", type = "error",
+                                              message = "Model rerouted to gpt-5.5")),
+    list(type = "error", message = "Reconnecting... 1/5"),
+    list(type = "item.completed", item = list(id = "item_2", type = "reasoning", text = "ok")),
+    agent_message("{\"notes\":\"n\"}"),
+    list(type = "turn.completed", usage = list(input_tokens = 9L, output_tokens = 2L))))
+  expect_identical(ev$type, "done")
+  expect_identical(msg_text(c1$n$message()), "{\"notes\":\"n\"}")
+  expect_false(dir.exists(c1$dir))
+})
+
+test_that("a confined coach is discarded when a check fails", {
+  skip_on_cran()
+  done = list(type = "turn.completed", usage = list(input_tokens = 9L, output_tokens = 2L))
+  cases = list(
+    list(log = hook_start, events = list(agent_message("{}"), done), why = "bypass"),
+    list(log = character(), events = list(codex_bypass, agent_message("{}"), done),
+         why = "start"),
+    list(log = c(hook_start, hook_deny("view_image")),
+         events = list(codex_bypass, agent_message("{}"), done), why = "view_image"),
+    list(log = c(hook_start, "garbled"), events = list(codex_bypass, agent_message("{}"), done),
+         why = "denied"),
+    list(log = hook_start, events = list(codex_bypass, done), why = "0 messages"),
+    list(log = hook_start,
+         events = list(codex_bypass, agent_message("a", "item_1"), agent_message("b"), done),
+         why = "2 messages"))
+  for (case in cases) {
+    c1 = local_confined("coach", log = case$log)
+    ev = push_all(c1$n, c1$opts, case$events)
+    expect_identical(ev$type, "error")
+    expect_identical(ev$error$class, "cli_check")
+    expect_match(ev$message$error_message, case$why, fixed = TRUE)
+    expect_equal(ev$message$usage$output, 2)
+  }
+})
+
+test_that("a step outside gptr's tools stops a confined exec at once", {
+  skip_on_cran()
+  stopped = new.env()
+  stopped$n = 0L
+  local_mocked_bindings(pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
+    stopped$n = stopped$n + 1L
+    invisible(TRUE)
+  })
+  item = function(type, ...) list(id = "item_5", type = type, ...)
+  outside = list(
+    coach = list(list(type = "item.started", item = item("command_execution", command = "ls")),
+                 list(type = "item.started", item = item("mcp_tool_call", server = "gptr",
+                                                         tool = "r")),
+                 list(type = "item.completed", item = item("file_change")),
+                 list(type = "item.started", item = item("web_search", query = "q")),
+                 list(type = "item.updated", item = item("todo_list")),
+                 list(type = "item.started", item = list(id = "item_6"))),
+    run = list(list(type = "item.started", item = item("mcp_tool_call", server = "docs",
+                                                       tool = "search")),
+               list(type = "item.completed", item = item("collab_tool_call"))))
+  for (role in names(outside)) {
+    for (ev in outside[[role]]) {
+      c1 = local_confined(role)
+      expect_true(push_obj(c1$n, ev))
+      last = c1$opts$log$events[[length(c1$opts$log$events)]]
+      expect_identical(last$error$class, "cli_check")
+      expect_match(last$message$error_message, "outside gptr's tools", fixed = TRUE)
+    }
+  }
+  expect_identical(stopped$n, 8L)
+  c2 = local_confined("run")
+  ev = push_all(c2$n, c2$opts, list(
+    codex_bypass,
+    list(type = "item.started", item = item("mcp_tool_call", server = "gptr", tool = "r",
+                                            status = "in_progress")),
+    list(type = "item.completed", item = item("mcp_tool_call", server = "gptr", tool = "r",
+                                              status = "completed")),
+    agent_message("Done."), list(type = "turn.completed")))
+  expect_identical(ev$type, "done")
+})
+
+test_that("a confined run reports each hook denial as a refused step and still completes", {
+  skip_on_cran()
+  c1 = local_confined("run", log = c(hook_start, hook_deny("Bash"), hook_deny("view_image")))
+  ev = push_all(c1$n, c1$opts, list(codex_bypass, agent_message("Done."),
+                                    list(type = "turn.completed")))
+  expect_identical(ev$type, "done")
+  ends = Filter(function(e) identical(e$type, "tool_execution_end"), c1$opts$log$events)
+  expect_identical(vapply(ends, function(e) e$tool_name, ""), c("Bash", "view_image"))
+  for (e in ends) {
+    expect_true(e$informational)
+    expect_true(e$is_error)
+    expect_match(e$refused, "hook", fixed = TRUE)
+  }
+  starts = Filter(function(e) identical(e$type, "tool_execution_start"), c1$opts$log$events)
+  expect_identical(vapply(starts, function(e) e$tool_call_id, ""),
+                   vapply(ends, function(e) e$tool_call_id, ""))
+  c2 = local_confined("run", log = character())
+  ev2 = push_all(c2$n, c2$opts, list(codex_bypass, agent_message("Done."),
+                                     list(type = "turn.completed")))
+  expect_identical(ev2$error$class, "cli_check")
+})
+
+test_that("a Codex plan limit ends the exec as a plan limit with its quoted reset time", {
+  expect_identical(pcli_codex_limit(paste("You’ve hit your usage limit. Upgrade to Pro,",
+                                          "or try again at 3:45 PM.")), "3:45 PM")
+  expect_identical(pcli_codex_limit(c("Reconnecting...", paste(
+    "You've hit your usage limit. Try again at Oct 29th, 2026 9:05 AM."))),
+    "Oct 29th, 2026 9:05 AM")
+  expect_identical(pcli_codex_limit("You’ve hit your usage limit. Try again later."),
+                   NA_character_)
+  expect_identical(pcli_codex_limit("Your workspace is out of credits. Add credits to continue."),
+                   NA_character_)
+  expect_identical(pcli_codex_limit(paste("You hit your spend cap set in your workspace.",
+                                          "Increase your spend cap to continue.")),
+                   NA_character_)
+  expect_null(pcli_codex_limit(c("usage limit reached", "stream disconnected")))
+  expect_null(pcli_codex_limit(NULL))
+  opts = stub_opts()
+  n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+  push_obj(n, list(type = "error",
+                   message = "You’ve hit your usage limit. Try again at 3:45 PM."))
+  expect_true(push_obj(n, list(type = "turn.failed", error = json_obj())))
+  ev = opts$log$events[[length(opts$log$events)]]
+  expect_identical(ev$error$class, "plan_limit")
+  expect_identical(ev$error$resets_at, "3:45 PM")
+  expect_match(ev$message$error_message, "hit your usage limit", fixed = TRUE)
+  opts2 = stub_opts()
+  n2 = local_normaliser(pcli_codex_parse, stub_model("codex"), opts2)
+  push_obj(n2, list(type = "error", message = "Your workspace is out of credits."))
+  ev2 = n2$finish()
+  last = opts2$log$events[[length(opts2$log$events)]]
+  expect_identical(last$error$class, "plan_limit")
+  expect_identical(last$error$resets_at, NA_character_)
+})
+
+# A fake codex for the preflight in its own folder: it prints features.txt and exits with
+# status.txt; calls.txt logs each argv
+local_preflight_codex = function(features = NULL, status = 0L, .env = parent.frame()) {
+  dir = withr::local_tempdir(.local_envir = .env)
+  script = file.path(dir, "fake-codex.R")
+  writeLines(c(
+    "args = commandArgs(trailingOnly = TRUE)",
+    "cat(paste(args[-1L], collapse = ' '), '\\n', file = file.path(args[[1L]], 'calls.txt'),",
+    "    append = TRUE)",
+    "writeLines(readLines(file.path(args[[1L]], 'features.txt')))",
+    "quit(save = 'no', status = as.integer(readLines(file.path(args[[1L]], 'status.txt'))))"),
+    script)
+  states = c(stats::setNames(rep("false", length(codex_off)), codex_off), hooks = "true",
+             unified_exec = "true")
+  states[names(features)] = features
+  states = states[!is.na(states)]
+  rows = c(sprintf("%-40s %-18s %s", names(states), "stable", states),
+           sprintf("%-40s %-18s %s", "agent_message_board", "under development", "false"))
+  writeLines(rows, file.path(dir, "features.txt"))
+  writeLines(as.character(status), file.path(dir, "status.txt"))
+  list(path = c(rscript_path(), "--vanilla", script, dir),
+       calls = function() readLines(file.path(dir, "calls.txt"), warn = FALSE))
+}
+
+test_that("the Codex preflight checks hooks.json and the switched-off features", {
+  skip_on_cran()
+  home = withr::local_tempdir()
+  withr::local_envvar(CODEX_HOME = home)
+  ok = local_preflight_codex()
+  expect_true(pcli_codex_preflight(ok$path))
+  features = grep("^features list", ok$calls(), value = TRUE)
+  expect_length(features, 1L)
+  expect_identical(strsplit(trimws(features), " ", fixed = TRUE)[[1L]],
+                   c("features", "list", as.vector(rbind("--disable", codex_off)),
+                     as.vector(rbind("-c", codex_settings))))
+  refused = function(fake, pattern) {
+    e = expect_error(pcli_codex_preflight(fake$path), class = "gptr_error_model_refused")
+    expect_identical(e$reason, "cli_preflight")
+    expect_match(conditionMessage(e), pattern, fixed = TRUE)
+  }
+  refused(local_preflight_codex(features = c(shell_tool = "true")), "shows shell_tool in")
+  refused(local_preflight_codex(features = c(hooks = "false")), "shows hooks in")
+  refused(local_preflight_codex(features = c(computer_use = NA)), "shows computer_use in")
+  refused(local_preflight_codex(status = 1L), "features list` exited")
+  file.create(file.path(home, "hooks.json"))
+  refused(ok, "hooks.json exists")
+  unlink(file.path(home, "hooks.json"))
+  expect_true(pcli_codex_preflight(ok$path))
 })

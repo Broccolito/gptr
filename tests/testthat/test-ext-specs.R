@@ -182,6 +182,8 @@ test_that("gptr_spec() builds a classed spec carrying api_version", {
   expect_s3_class(err, "gptr_error_invalid_spec")
   expect_equal(err$kind, "widget")
   expect_error(gptr_spec(1, "w"), class = "gptr_error_invalid_argument")
+  expect_error(gptr_spec("", "w"), class = "gptr_error_unknown_kind")
+  expect_error(gptr_registry(""), class = "gptr_error_unknown_kind")
 })
 
 test_that("validators name the failing field and accept unknown fields", {
@@ -344,6 +346,12 @@ test_that("kind-specific rules: skill, command, setting, redaction, alias, risk,
   local_registry()
   expect_error(gptr_spec("skill", "Bad", description = "d"), class = "gptr_error_invalid_spec")
   expect_error(gptr_spec("skill", "ok", description = strrep("x", 1025L)),
+               class = "gptr_error_invalid_spec")
+  # a skill may carry its own body instead of a SKILL.md (08 section 3.2), never both
+  expect_identical(gptr_spec("skill", "tips", description = "d", text = "Body.")$text, "Body.")
+  expect_error(gptr_spec("skill", "tips", description = "d", text = 1),
+               class = "gptr_error_invalid_spec")
+  expect_error(gptr_spec("skill", "tips", description = "d", text = "Body.", path = "SKILL.md"),
                class = "gptr_error_invalid_spec")
   expect_error(gptr_spec("command", "/rows", handler = function(args, ctx) NULL),
                class = "gptr_error_invalid_spec")

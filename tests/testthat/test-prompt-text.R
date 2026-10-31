@@ -123,8 +123,9 @@ test_that("the r_session core carries exactly one fragments marker on its own li
 
 test_that("r_session runs programs with peter$sh(), not system() or system2()", {
   lines = strsplit(prompt_text("r_session"), "\n", fixed = TRUE)[[1]]
+  # where its output is (FIX-32): models ran cat() or grep() on the result and lost a call
   want = paste0("- system() and system2() children read the user's terminal and you do not ",
-                "see their output: use peter$sh() instead.")
+                "see their output: use peter$sh(); read $stdout.")
   expect_identical(lines[length(lines) - 1L], want)
 })
 

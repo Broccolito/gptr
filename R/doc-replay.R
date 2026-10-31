@@ -29,6 +29,16 @@ doc_consent = function(path, ask = TRUE) {
   yes
 }
 
+#' Says once per document that gptr did not record into it for want of write consent, and how to
+#' give it (the gptr_doc() call names the document as it resolves from the working directory)
+#' @noRd
+doc_no_consent = function(path) {
+  gptr_inform(paste0("gptr did not record into ", doc_rel(path), ": no write consent. Call ",
+                     "gptr_doc(", doc_str_literal(path_rel(path, getwd())), ") or set ",
+                     "options(gptr.record = \"auto\") to record."), "notice",
+              .once = paste0("doc_consent:", path_key(path)))
+}
+
 #' Could consent still be given for a document (without asking now)? Consent exists, or a human
 #' can answer and nothing refuses it (decides whether the route keeps a site for recording)
 #' @noRd
@@ -93,16 +103,26 @@ s2_key = function(doc, block, part = "", prompt = "", args = "") {
                                   prompt = prompt %||% "", args = args %||% "")))
 }
 
+#' Where the S2 answers of a document are kept: `rel`, its path relative to its own project, which
+#' keys name, and `root`, that project's workspace, so a replay run from another directory finds
+#' them; a document in no workspace keeps the working directory's (doc_rel(), doc_root())
+#' @noRd
+doc_s2_home = function(path) {
+  ws = workspace_dir(dirname(path_norm(path)))
+  if (is.null(ws)) return(list(rel = doc_rel(path), root = doc_root()))
+  list(rel = path_rel(path, dirname(ws)), root = ws)
+}
+
 #' The S2 file of a key: `<root>/cache/s2/<2 hex>/<sha256>.json`
 #' @noRd
-s2_path = function(key) {
-  file.path(doc_root(), "cache", "s2", substr(key, 1L, 2L), paste0(key, ".json"))
+s2_path = function(key, root = doc_root()) {
+  file.path(root, "cache", "s2", substr(key, 1L, 2L), paste0(key, ".json"))
 }
 
 #' Read an S2 record (NULL on a miss, and for a file that is not a JSON object)
 #' @noRd
-s2_get = function(key) {
-  f = s2_path(key)
+s2_get = function(key, root = doc_root()) {
+  f = s2_path(key, root)
   if (!file.exists(f)) return(NULL)
   x = tryCatch(json_decode(read_utf8(f)$text), error = function(e) NULL)
   if (is.list(x) && !is.null(names(x))) x else NULL
@@ -112,9 +132,9 @@ s2_get = function(key) {
 #' date}` plus any provenance the caller adds (IC-74: provider, model digest, locality, image
 #' digests), kept as given; the answer is redacted with the persist profile at ingress
 #' @noRd
-s2_put = function(key, record) {
+s2_put = function(key, record, root = doc_root()) {
   record$answer = redact(as_utf8(record$answer %||% ""), "persist")
-  f = s2_path(key)
+  f = s2_path(key, root)
   dir.create(dirname(f), recursive = TRUE, showWarnings = FALSE)
   write_atomic(f, json_encode(record))
   invisible(f)
@@ -122,32 +142,41 @@ s2_put = function(key, record) {
 
 # ---- replay decisions and replaying fresh blocks (IC-45, IC-46, IC-47) -------------------------
 
-#' The replay decision for a located call (contract 7.15): "replay", "run", "regenerate" or
-#' "skip", or signals `not_recorded`/`stale_block`. The table of architecture 6.9.3 and report 14
-#' section 4.4.2 with the undone row of G7 section 3.8: a block is fresh only when its `prompt=`
-#' and `args=` both match (IC-45). Regeneration needs a driver that can skip the old block
-#' (gptr_source(), knitr, an IDE, Jupyter); under base source()/Rscript it downgrades to replay
-#' with the warning `replay_downgraded` in every mode (architecture 6.9.3: "under base
-#' source()/Rscript, live and stale regeneration downgrade to replay with a warning"), and a
-#' hand-edited block is then not offered for overwriting. An undone block is inert (`#~ `,
-#' `eval=FALSE`), so nothing of it can run twice: `record` regenerates it under every driver
-#' (G7 section 3.8: "regenerate in place (the block becomes live)").
+#' The replay decision for a located call (contract 7.15): "replay", "run", "regenerate", "skip"
+#' or, for a coaching call, "ask", or signals `not_recorded`/`stale_block`. The table of
+#' architecture 6.9.3 and report 14 section 4.4.2 with the undone row of G7 section 3.8: a block
+#' is fresh only when its `prompt=` and `args=` both match (IC-45). Regeneration needs a driver
+#' that can skip the old block (gptr_source(), knitr, an IDE, Jupyter); under base
+#' source()/Rscript it downgrades to replay with the warning `replay_downgraded` in every mode
+#' (architecture 6.9.3: "under base source()/Rscript, live and stale regeneration downgrade to
+#' replay with a warning"), and a hand-edited block is then not offered for overwriting. An
+#' undone block is inert (`#~ `, `eval=FALSE`), so nothing of it can run twice: `record`
+#' regenerates it under every driver (G7 section 3.8: "regenerate in place (the block becomes
+#' live)").
 #' A hand-edited block replays (user code wins) only while its `prompt=` and `args=` match; once
 #' either moved it is stale too (IC-45): `replay` errors, and the other modes regenerate only after
 #' a yes to overwriting it, else downgrade to replay with `replay_downgraded`.
+#' A block is also stale when the coaching of the harness its call runs changed, and a coaching
+#' call's block is stale when its starting harness's did (doc_block_status(); 08 section 3.6).
+#' Coaching costs many runs and is not deterministic, so under `auto` a stale coach block asks
+#' first ("ask": the caller asks, showing the session count) when a person can answer, and is
+#' replayed with `replay_downgraded` otherwise.
 #' `stale_block` is a child of `not_recorded` (contract 2.2).
 #' @noRd
 doc_decide = function(site, prompt_hash, args_hash, mode) {
   mode = check_choice(mode, c("auto", "replay", "live", "record"), "mode")
   b = site$block
   rel = doc_rel(site$path)
+  status = function(h) {
+    doc_block_status(h[setdiff(names(h), "sha")], character(), prompt_hash, args_hash,
+                     site$harness, site$coach)
+  }
   state = if (is.null(b)) {
     "none"
   } else if ((b$status %||% "") %in% c("undone", "user-edited")) {
     b$status
   } else {
-    doc_block_status(b$header[setdiff(names(b$header), "sha")], character(), prompt_hash,
-                     args_hash)
+    status(b$header)
   }
   can_regen = !identical(site$driver %||% "base", "base")
   regen = function() {
@@ -167,8 +196,9 @@ doc_decide = function(site, prompt_hash, args_hash, mode) {
   switch(state,
     none = {
       if (identical(mode, "replay")) {
-        gptr_abort(c(paste0("The peter() call in ", rel, " has no recorded block and replay mode ",
-                            "is on."), "Run it once with replay = \"auto\" to record it."),
+        gptr_abort(c(paste0("The ", if (isTRUE(site$coach)) "gptr_coach" else "peter",
+                            "() call in ", rel, " has no recorded block and replay mode is on."),
+                     "Run it once with replay = \"auto\" to record it."),
                    "not_recorded", document = site$path,
                    prompt = substr(site$template %||% "", 1L, 60L))
       }
@@ -176,8 +206,7 @@ doc_decide = function(site, prompt_hash, args_hash, mode) {
     },
     undone = switch(mode, auto = , replay = "skip", live = "run", record = "regenerate"),
     `user-edited` = {
-      moved = !identical(doc_block_status(b$header[setdiff(names(b$header), "sha")],
-                                          character(), prompt_hash, args_hash), "fresh")
+      moved = !identical(status(b$header), "fresh")
       if (moved && identical(mode, "replay")) stale_error()
       if (!moved && mode %in% c("auto", "replay")) return("replay")
       if (!can_regen) return(regen())
@@ -194,6 +223,14 @@ doc_decide = function(site, prompt_hash, args_hash, mode) {
     },
     stale = {
       if (identical(mode, "replay")) stale_error()
+      if (isTRUE(site$coach) && identical(mode, "auto")) {
+        if (!can_regen) return(regen())
+        if (gptr_can_prompt()) return("ask")
+        gptr_warn(paste0("Block ", b$id, " of ", rel, " is stale; it was replayed, because no ",
+                         "one can confirm coaching again. Run with replay = \"record\" to coach ",
+                         "again."), "replay_downgraded")
+        return("replay")
+      }
       regen()
     },
     if (identical(mode, "live")) regen() else "replay")
@@ -264,29 +301,44 @@ doc_replay_no_value = function(site, block, code, s) {
               .once = paste0("doc_no_value:", path_key(site$path), ":", block$id))
 }
 
+#' Block `block_id` as the site's document holds it (doc_block_get()), with `sent`, what its
+#' prompt was sent with (doc_block_sent()); NULL when unreadable
+#' @noRd
+doc_site_block = function(site, block_id = site$block$id) {
+  if (is.null(block_id)) return(NULL)
+  tryCatch({
+    text = doc_read(site$path)$lines
+    b = doc_block_get(site$format, text, block_id)
+    if (!is.null(b)) b$sent = doc_block_sent(site$format, text, b)
+    b
+  }, error = function(e) NULL)
+}
+
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
-#' list(path, format, template, code, output, text, steps, running); `code` and `output` are those
-#' of all the block's runs; `running` is TRUE when the call returns before its run ends
-#' (`background = TRUE` or `.run = FALSE`), so the script may still steer it (IC-55)
+#' list(path, format, template, code, output, text, steps, sent, running); `code` and `output`
+#' are those of all the block's runs; `sent` the context blocks its `#< ` lines record (IC-49);
+#' `running` is TRUE when the call returns before its run ends (`background = TRUE` or `.run =
+#' FALSE`), so the script may still steer it (IC-55)
 #' @noRd
 doc_replay_doc = function(site, call, block_id, text = NULL) {
-  body = tryCatch(doc_block_get(site$format, doc_read(site$path)$lines, block_id)$body,
-                  error = function(e) NULL) %||% character()
-  steps = doc_replay_steps(body)
+  b = doc_site_block(site, block_id)
+  steps = doc_replay_steps(b$body %||% character())
   runs = Filter(function(st) identical(st$type, "r"), steps)
   list(path = site$path, format = site$format,
        template = site$template %||% call$template %||% call$prompt,
        code = as.character(unlist(lapply(runs, function(st) st$code))),
        output = as.character(unlist(lapply(runs, function(st) st$output))), text = text,
-       steps = steps, running = isTRUE(call$args$background) || !isTRUE(call$args$run))
+       steps = steps, sent = b$sent,
+       running = isTRUE(call$args$background) || !isTRUE(call$args$run))
 }
 
 #' A block body as ordered steps: each run of code with its `#>` output, list(type = "r", code,
-#' output), split at the `## Steer:` and `## Follow-up:` lines, list(type = "steer" or
-#' "follow_up", text), so a reconstruction puts each message where it was delivered (IC-46)
+#' output), split at the `## Steer:` and `## Follow-up:` lines (doc_steer_lines(): never a line
+#' of model code or inside a string), list(type = "steer" or "follow_up", text), so a
+#' reconstruction puts each message where it was delivered (IC-46)
 #' @noRd
 doc_replay_steps = function(body) {
-  note = grepl(doc_re_steer, body)
+  note = doc_steer_lines(body)
   steps = list()
   for (seg in split(seq_along(body), cumsum(note))) {
     lines = body[seg]
@@ -320,8 +372,9 @@ doc_replay_header = function(header, site, mode) {
 doc_replay_call = function(call, site, mode = "replay") {
   b = site$block
   h = b$header
-  rel = doc_rel(site$path)
-  answer = doc_s2_answer(s2_get(s2_key(rel, b$id, "", h$prompt %||% "", h$args %||% "")))
+  home = doc_s2_home(site$path)
+  answer = doc_s2_answer(s2_get(s2_key(home$rel, b$id, "", h$prompt %||% "", h$args %||% ""),
+                                home$root))
   header = doc_replay_header(h, site, mode)
   doc = doc_replay_doc(site, call, b$id, answer)
   s = if (!is.null(call$session)) {
@@ -348,8 +401,9 @@ doc_run_block_nested = function(call, site, mode) {
   rel = doc_rel(site$path)
   parent = tryCatch(doc_block_get("r", doc_read(site$path)$lines, site$in_block)$header,
                     error = function(e) NULL) %||% list()
-  rec = s2_get(s2_key(rel, site$in_block, paste0("n", site$ordinal), parent$prompt %||% "",
-                      parent$args %||% ""))
+  home = doc_s2_home(site$path)
+  rec = s2_get(s2_key(home$rel, site$in_block, paste0("n", site$ordinal), parent$prompt %||% "",
+                      parent$args %||% ""), home$root)
   asked = call$prompt %||% call$template %||% site$template
   if (!is.null(rec$sent) && rlang::is_string(asked) && !identical(rec$sent, prompt_hash(asked))) {
     rec = NULL
@@ -385,11 +439,12 @@ doc_replay_team = function(call, site, mode) {
   b = site$block
   h = b$header
   rel = doc_rel(site$path)
+  home = doc_s2_home(site$path)
   pairs = strsplit(strsplit(h$children %||% "", ",", fixed = TRUE)[[1L]], ":", fixed = TRUE)
   texts = character()
   for (kv in pairs) {
     if (!length(kv) %in% 2:3 || !all(nzchar(kv))) next
-    rec = s2_get(s2_key(rel, b$id, kv[1L], h$prompt %||% "", h$args %||% ""))
+    rec = s2_get(s2_key(home$rel, b$id, kv[1L], h$prompt %||% "", h$args %||% ""), home$root)
     answer = doc_s2_answer(rec)
     child_header = list(model = rec$model %||% h$model, session = kv[2L],
                         turn = as.character(rec$turn %||% 1L), doc = rel, mode = mode)
@@ -450,7 +505,8 @@ doc_touch = function(call, site, where, keep) {
 #' block), or a console call with a transcript target (asked once per project when a human can
 #' answer and the call could be recorded); never a call made from model code. Recovers a dead
 #' process's deferred writes for that document first (doc_touch()) and keeps the site in
-#' `call$doc` for run().
+#' `call$doc` for run(); a console site gets `default_model`, TRUE when the call starts a session
+#' naming no model by name (D-265).
 #' @noRd
 doc_route_match = function(call) {
   if (!is.null(run_current())) return(FALSE)
@@ -460,7 +516,8 @@ doc_route_match = function(call) {
     site = doc_console_site(session_id = if (is.null(s)) NULL else session_data(s)$id,
                             template = call$template %||% call$prompt,
                             context_labels = doc_context_labels(call$context),
-                            ask = doc_console_may_record(call))
+                            ask = doc_console_may_record(call),
+                            harness = doc_console_harness(call), args = args_hash(call$interp))
     if (!is.null(site)) assign("top_level", TRUE, envir = call)
   }
   if (is.null(site) || is.null(site$path)) return(FALSE)
@@ -468,6 +525,9 @@ doc_route_match = function(call) {
   site = doc_touch(call, site, "route", function(s) {
     isTRUE(s$top_level) || !is.null(s$in_block)
   })
+  if (isTRUE(site$console)) {
+    site$default_model = is.null(call$session) && !rlang::is_string(call$ids$model)
+  }
   assign("doc", site, envir = call)
   TRUE
 }
@@ -485,8 +545,9 @@ doc_skip_undone = function(site) {
 
 #' Keep `site` in `call$doc` for recording when the call may record: not in replay mode and write
 #' consent can still be given (IC-45); else NULL. A call that cannot record because gptr_doc()
-#' bound another document says so once per document (without a binding it stays silent); the
-#' gptr_doc() it suggests names the document as gptr_doc() resolves it, from the working directory.
+#' bound another document says so once per document; without a binding it stays silent, except
+#' under replay = "record", which asked to record (doc_no_consent()). The gptr_doc() it suggests
+#' names the document as gptr_doc() resolves it, from the working directory.
 #' @noRd
 doc_keep = function(call, site, mode) {
   may = !is.null(site) && !isFALSE(call$args$opts$record) && !identical(mode, "replay")
@@ -498,12 +559,17 @@ doc_keep = function(call, site, mode) {
                        "that holds them; run gptr_doc(",
                        doc_str_literal(path_rel(site$path, getwd())), ") to record them there."),
                 "notice", .once = paste0("doc_other_binding:", path_key(site$path)))
+  } else if (may && !ok && identical(mode, "record")) {
+    doc_no_consent(site$path)
   }
   assign("doc", if (ok) site else NULL, envir = call)
 }
 
 #' The route's run(): replay a fresh block (no write consent needed), skip an undone one,
-#' regenerate a stale one, or pass with `call$doc` set when the call may be recorded (IC-45)
+#' regenerate a stale one, or pass with `call$doc` set when the call may be recorded (IC-45). A
+#' call that asks again for a recorded block gets in `call$sent` what that prompt was sent with
+#' (its `#< ` lines, which the console's context blocks send again, IC-49), recorded or not, and
+#' a call it passes is asked with the model of gptr_source(model =) when that sources its file.
 #' @noRd
 doc_route_run = function(call) {
   site = call$doc
@@ -518,8 +584,21 @@ doc_route_run = function(call) {
     return(invisible(call$session))
   }
   if (identical(decision, "regenerate")) site = doc_skip_old(site)
+  assign("sent", doc_site_block(site)$sent, envir = call)
   doc_keep(call, if (decision %in% c("record", "regenerate")) site, mode)
+  model = doc_source_model(site$path)
+  if (!is.null(model)) call$ids$model = model
   route_pass()
+}
+
+#' Does an expression name peter() or gptr_coach(), or call a harness bound where it runs (08
+#' section 3.6)?
+#' @noRd
+doc_names_head = function(expr, envir) {
+  nms = all.names(expr)
+  if (any(c("peter", "gptr_coach") %in% nms)) return(TRUE)
+  heads = setdiff(nms, all.vars(expr))
+  any(vapply(heads[make.names(heads) == heads], env_harness_bound, NA, envir = envir))
 }
 
 # ---- services (contract 7.0; owned by builtin:documents, IC-34) --------------------------------
@@ -760,12 +839,345 @@ doc_replay_service = function(call) {
   NULL
 }
 
+# ---- coaching calls and harness definitions (P29; 08 section 3.6) ------------------------------
+
+#' The items of a plain-data value as R code: text through doc_str_literal() (never a raw
+#' string), numbers and logicals as R reads them back, lists through doc_r_code(), each item
+#' `name = ` prefixed where named. NULL when the value holds anything else (a function, an
+#' environment, a value with attributes other than names).
+#' @noRd
+doc_r_items = function(x, depth = 0L) {
+  nms = names(x)
+  if (depth > 32L || length(setdiff(names(attributes(x)), "names")) || anyNA(nms)) return(NULL)
+  if (!length(x)) return(character())
+  items = if (is.list(x)) {
+    lapply(x, doc_r_code, depth = depth + 1L)
+  } else if (is.character(x)) {
+    as.list(doc_str_literal(x))
+  } else if (is.logical(x) || is.numeric(x)) {
+    lapply(unname(x), deparse, control = c("keepInteger", "digits17", "keepNA"))
+  }
+  if (is.null(items) || any(vapply(items, is.null, NA))) return(NULL)
+  items = unlist(items)
+  if (is.null(nms)) return(items)
+  key = ifelse(make.names(nms) == nms, nms, doc_str_literal(nms))
+  ifelse(nzchar(nms), paste0(key, " = ", items), items)
+}
+
+#' A plain-data value as one R expression (`list(...)`, `c(...)` or a literal; doc_r_items()),
+#' or NULL when it is not plain data
+#' @noRd
+doc_r_code = function(x, depth = 0L) {
+  if (is.null(x)) return("NULL")
+  items = doc_r_items(x, depth)
+  if (is.null(items)) return(NULL)
+  if (!is.list(x) && length(x) == 1L && is.null(names(x))) return(items)
+  paste0(if (is.list(x)) "list(" else "c(", paste(items, collapse = ", "), ")")
+}
+
+#' A value with every text redacted with the persist profile
+#' @noRd
+doc_redact_text = function(x) {
+  rapply(list(x), function(s) redact(s, "persist"), classes = "character", how = "replace")[[1L]]
+}
+
+#' The value of a parsed literal (08 section 3.6, replay step 2): NULL, one text, number or
+#' logical, and `list()` or `c()` of literals, named or not. Anything else signals an error;
+#' nothing is evaluated (as doc_unquote() reads strings) and text passes as_utf8().
+#' @noRd
+doc_coach_value = function(e, depth = 0L) {
+  if (is.null(e)) return(NULL)
+  if ((is.character(e) || is.numeric(e) || is.logical(e)) && length(e) == 1L) {
+    return(if (is.character(e)) as_utf8(e) else e)
+  }
+  if (depth > 32L || !is.call(e) || !is.symbol(e[[1L]]) ||
+      !as.character(e[[1L]]) %in% c("list", "c")) {
+    stop("not a literal")
+  }
+  args = as.list(e)[-1L]
+  vals = lapply(args, doc_coach_value, depth = depth + 1L)
+  names(vals) = names(args)
+  if (identical(e[[1L]], as.name("list"))) vals else do.call(c, vals)
+}
+
+#' The parts of an assignment `<name> = <value>` or `<name> <- <value>`: list(name, value), else
+#' NULL
+#' @noRd
+doc_assign_parts = function(e) {
+  ok = is.call(e) && length(e) == 3L && is.symbol(e[[1L]]) &&
+    as.character(e[[1L]]) %in% c("=", paste0("<", "-")) && is.symbol(e[[2L]])
+  if (ok) list(name = as.character(e[[2L]]), value = e[[3L]])
+}
+
+#' A coach block body read without evaluating it (08 section 3.6, replay steps 1 and 2): exactly
+#' one `<name> = gptr::gptr_tailor(<start>)` or `<name> = gptr::gptr_tailor(<start>, coaching =
+#' <literal>)`, `gptr_tailor` also unqualified (as written before FIX-37), gives list(name, start,
+#' coaching) with `start` the starting harness as written: a name or `gptr::peter`; else NULL
+#' @noRd
+doc_coach_walk = function(body) {
+  tryCatch({
+    ex = doc_parse_text(body, keep_source = FALSE)
+    a = if (length(ex) == 1L) doc_assign_parts(ex[[1L]])
+    rhs = a$value
+    nms = names(rhs) %||% rep("", length(rhs))
+    start = if (is.call(rhs) && length(rhs) %in% 2:3) rhs[[2L]]
+    ok = is.call(rhs) && deparse(rhs[[1L]]) %in% c("gptr_tailor", "gptr::gptr_tailor") &&
+      ((is.symbol(start) && nzchar(as.character(start))) || identical(start, quote(gptr::peter))) &&
+      !nzchar(nms[2L]) && (length(rhs) == 2L || identical(nms[3L], "coaching"))
+    if (!ok) NULL else list(name = a$name, start = start,
+                            coaching = if (length(rhs) == 3L) doc_coach_value(rhs[[3L]]))
+  }, error = function(e) NULL)
+}
+
+#' The coaching normalised by coaching_validate() (gptr-tailor.R, a higher layer, so found at
+#' call time); an error of class `coaching` when it is invalid
+#' @noRd
+doc_coach_valid = function(coaching) ns_fun("coaching_validate")(coaching)
+
+#' The coaching hash of coaching_hash() (gptr-tailor.R, found at call time)
+#' @noRd
+doc_coach_hash = function(coaching) ns_fun("coaching_hash")(coaching)
+
+#' The assignment that rebuilds a harness from its starting harness `start` and `coaching` (NULL:
+#' the starting harness's own), every text written by doc_str_literal() and redacted with the
+#' persist profile; NULL with a notice unless the text parses back to exactly that assignment and,
+#' with coaching, to the coaching hash `hash` (08 section 3.6, safe writing). It calls
+#' `gptr::gptr_tailor()`, and `gptr::peter` for the start `peter`, so a script that calls gptr
+#' only through `gptr::` runs it.
+#' @noRd
+doc_coaching_code = function(name, start, coaching, hash) {
+  from = if (identical(start, "peter")) quote(gptr::peter) else as.name(start)
+  head = paste0(deparse(as.name(name), backtick = TRUE), " = gptr::gptr_tailor(",
+                deparse(from, backtick = TRUE))
+  items = if (!is.null(coaching)) doc_r_items(doc_redact_text(coaching))
+  code = if (is.null(coaching)) {
+    paste0(head, ")")
+  } else if (length(items)) {
+    c(paste0(head, ", coaching = list("),
+      paste0("  ", items, c(rep(",", length(items) - 1L), "))")))
+  }
+  w = if (!is.null(code)) doc_coach_walk(code)
+  back = if (!is.null(w$coaching)) {
+    tryCatch(doc_coach_hash(doc_coach_valid(w$coaching)), error = function(e) NA_character_)
+  }
+  if (!is.null(w) && identical(w$name, name) && identical(w$start, from) &&
+      (is.null(coaching) || identical(back, hash))) {
+    return(code)
+  }
+  gptr_inform(paste0("gptr did not record the coaching of ", name, ": its text does not read ",
+                     "back as the same coaching."), "notice")
+  NULL
+}
+
+#' The starting harness a coaching call names: "peter" when `harness` is missing, the name it
+#' gives, else NULL (such a call is not recorded, 08 section 3.6)
+#' @noRd
+doc_coach_start = function(call0) {
+  args = as.list(call0)[-1L]
+  k = match("harness", names(args) %||% character())
+  if (is.na(k)) return("peter")
+  h = args[[k]]
+  if (is.symbol(h) && nzchar(as.character(h))) as.character(h)
+}
+
+#' The name a coaching call's statement assigns, when the statement is exactly `<name> =
+#' gptr_coach(...)` or `<name> <- gptr_coach(...)` for this call (08 section 3.6); else NULL
+#' @noRd
+doc_coach_target = function(site, call) {
+  text = doc_read(site$path)$lines
+  loc = doc_format_get(site$format)$locate(text, site)
+  hit = loc$hit
+  if (is.null(hit) || !isTRUE(loc$top_level)) return(NULL)
+  if (identical(site$format, "ipynb")) {
+    text = nb_cell_lines(nb_parse(text)[["cells"]][[loc$stmt[1L]]])
+  }
+  ex = tryCatch(doc_parse_text(text[hit$stmt1:hit$stmt2], keep_source = FALSE),
+                error = function(e) NULL)
+  a = if (length(ex) == 1L) doc_assign_parts(ex[[1L]])
+  if (!is.null(a) && identical(doc_call_norm(a$value), doc_call_norm(call$sys_call))) a$name
+}
+
+#' The harness a coach block defines (08 section 3.6, replay), with no model, key or process: its
+#' body read by doc_coach_walk(), the coaching validated, and the starting harness it names found
+#' as R finds it from the caller's frame. A body that is not literal coaching gives the call's
+#' starting harness with a notice; the body's own code then defines the result when it runs, as
+#' all recorded code does.
+#' @noRd
+doc_coach_replay = function(site, call) {
+  id = site$block$id
+  w = doc_coach_walk(doc_block_get(site$format, doc_read(site$path)$lines, id)$body)
+  coaching = tryCatch(if (!is.null(w$coaching)) doc_coach_valid(w$coaching),
+                      gptr_error = function(e) e)
+  doc_source_log(site$path, id, "replayed")
+  if (is.null(w) || inherits(coaching, "error")) {
+    gptr_inform(paste0("Block ", id, " of ", doc_rel(site$path), " is not literal coaching: ",
+                       "gptr_coach() returned the starting harness, and the block's code defines ",
+                       "the result."), "notice")
+    return(get(sub(":[^:]*$", "", site$harness), envir = call$envir, mode = "function"))
+  }
+  start = if (is.symbol(w$start)) {
+    get(as.character(w$start), envir = call$envir, mode = "function")
+  } else {
+    eval(w$start, baseenv())
+  }
+  tailor = ns_fun("gptr_tailor")
+  if (is.null(coaching)) tailor(start) else tailor(start, coaching = coaching)
+}
+
+#' doc.coach (contract IC-87; 08 section 3.6): the document decision for a coaching call, which
+#' gptr_coach() asks before anything else. `call` is a call record built as the gateway builds
+#' peter()'s (call_new()): `prompt`, `template` (the literal as written, NULL when computed),
+#' `interp`, `context`, `sys_call` and `nframe` (gptr_coach()'s own sys.call() and sys.nframe()),
+#' `envir` (the caller's frame, where the starting harness is found), `args` with `replay` and
+#' `opts` (`.opts`, of which `record` is read), `start_hash`, the coaching hash of the starting
+#' harness, and `offline`, TRUE when every model of the call is offline. Returns
+#' list(action, site, harness) with action:
+#' - "replay": a fresh block; `harness` is the harness it builds;
+#' - "ask": a stale block under auto while a person can answer: coach again (then record at
+#'   `site`) only after a yes, else return `harness`, the block's;
+#' - "record": coach, then pass `site` to doc.coach_block;
+#' - "none": coach without recording (a statement of another shape says why, once).
+#' Under replay, a recordable call without a fresh block signals not_recorded or stale_block, except
+#' an offline call without a block, which runs, as offline models answer peter() under replay.
+#' @noRd
+doc_coach_service = function(call) {
+  out = function(action, site = NULL, harness = NULL) {
+    list(action = action, site = site, harness = harness)
+  }
+  if (!is.null(run_current())) return(out("none"))
+  mode = replay_mode(call$args$replay)
+  start = doc_coach_start(doc_call_norm(call$sys_call))
+  call$start = paste0(start %||% "", ":", call$start_hash %||% "")
+  site = tryCatch(doc_locate(call), error = function(e) NULL)
+  if (is.null(site$path)) return(out("none"))
+  if (isTRUE(site$console)) {
+    if (!doc_console_may_record(call) || !doc_consent_possible(site$path)) return(out("none"))
+    return(out("record", site))
+  }
+  top = function(s) isTRUE(s$top_level) && !is.null(s$stmt)
+  if (!top(site)) return(out("none"))
+  site = doc_touch(call, site, "doc.coach", top)
+  site$name = doc_coach_target(site, call)
+  if (is.null(site$name) || is.null(start)) {
+    gptr_inform(paste0("gptr did not record a gptr_coach() call in ", doc_rel(site$path), ": a ",
+                       "coaching call is recorded only as `<name> = gptr_coach(...)`, with ",
+                       "`harness` missing or a name."), "notice",
+                .once = paste0("doc_coach_shape:", path_key(site$path)))
+    return(out("none"))
+  }
+  if (is.null(site$block) && identical(mode, "replay") && isTRUE(call$offline)) return(out("none"))
+  decision = doc_decide(site, site$prompt_hash, site$args_hash, mode)
+  if (decision %in% c("replay", "ask")) {
+    if (identical(decision, "ask")) site = doc_skip_old(site)
+    return(out(decision, site, doc_coach_replay(site, call)))
+  }
+  if (identical(decision, "skip")) return(out("none"))
+  if (identical(decision, "regenerate")) site = doc_skip_old(site)
+  doc_keep(call, site, mode)
+  if (is.null(call$doc)) out("none") else out("record", call$doc)
+}
+
+#' doc.coach_block (contract IC-87; 08 section 3.6): record the result `harness` of a coaching
+#' call at doc.coach's `site` and return the harness the recorded text defines (the one given,
+#' unless a process-wide `document_write` hook patched the block). `record` holds what the block
+#' shows besides the coaching: `model` and `coach` (the run and coach models), `tokens` (input and
+#' output), `cost`, `runs` (one line per run, as gptr_coach() prints them) and `decision` (one
+#' line). A document gets a block of kind `coach` (no session, so no S2 answer) whose body is the
+#' one assignment of doc_coaching_code(), then `## Run` lines and a `## Decision:` line; a console
+#' transcript gets the harness's definition (doc_harness_def()).
+#' @noRd
+doc_coach_block_service = function(site, harness, record) {
+  spec = attr(harness, "gptr_harness", exact = TRUE)
+  if (isTRUE(site$console)) {
+    def = doc_harness_def(spec)
+    if (!is.null(def)) doc_transcript_define(site$path, def)
+    return(harness)
+  }
+  hash = doc_coach_hash(spec$coaching)
+  start = sub(":[^:]*$", "", site$harness)
+  kept = !identical(hash, doc_coaching_of(site$harness))
+  code = doc_coaching_code(site$name, start, if (kept) spec$coaching, hash)
+  if (is.null(code)) return(harness)
+  runs = vapply(as.character(record$runs), doc_one_line, "", USE.NAMES = FALSE)
+  body = c(code, redact(c(paste0("## Run ", runs),
+                          paste0("## Decision: ", doc_one_line(record$decision))), "persist"))
+  header = doc_header_common(site, 1L, record$model)
+  tokens = record$tokens
+  if (is.numeric(tokens) && length(tokens) == 2L && !anyNA(tokens)) {
+    header$tokens = sprintf("%.0f/%.0f", tokens[1L], tokens[2L])
+  }
+  if (is.numeric(record$cost) && length(record$cost) == 1L && !is.na(record$cost)) {
+    header$cost = format(round(record$cost, 4L), scientific = FALSE)
+  }
+  header = c(header, list(kind = "coach", harness = paste0(site$name, ":", hash),
+                          start = site$harness, coach = record$coach,
+                          gptr = as.character(utils::packageVersion("gptr"))))
+  res = doc_upsert(site, structure(body, header = header))
+  if (is.null(res$sha) || identical(res$sha, doc_body_sha(body))) return(harness)
+  queued = doc_state()$docs[[path_key(site$path)]]$upserts
+  ids = vapply(queued, function(u) u$block_id, "")
+  written = if (res$block_id %in% ids) {
+    as.character(queued[[match(res$block_id, ids)]]$lines)
+  } else {
+    doc_block_get(site$format, doc_read(site$path)$lines, res$block_id)$body
+  }
+  w = doc_coach_walk(written)
+  if (is.null(w$coaching)) return(harness)
+  ns_fun("gptr_tailor")(harness, coaching = doc_coach_valid(w$coaching))
+}
+
+#' The definition a console transcript gives a harness the first time it is coached or called (08
+#' section 3.6): `h_<id> = gptr_tailor(peter, <fixed arguments>, rules = list(...),
+#' coaching = list(...))` through doc_r_code(), its text redacted with the persist profile; fixed
+#' arguments that are not plain data (functions) are named by a flag line instead. list(head,
+#' define), NULL when the person's rules or the coaching are not plain data.
+#' @noRd
+doc_harness_def = function(spec) {
+  head = paste0("h_", gsub("[^0-9A-Za-z]", "", spec$id %||% ""))
+  args = lapply(as.list(spec$args), doc_redact_text)
+  plain = !vapply(args, function(a) is.null(doc_r_code(a)), NA)
+  data = Filter(Negate(is.null), list(rules = spec$rules, coaching = spec$coaching))
+  code = lapply(data, function(x) doc_r_code(doc_redact_text(x)))
+  if (any(vapply(code, is.null, NA))) return(NULL)
+  flag = if (!all(plain)) {
+    paste0("# gptr: ", head, " needs fixed arguments that are not recorded: ",
+           paste(names(args)[!plain], collapse = ", "))
+  }
+  items = c("peter", doc_r_items(args[plain]),
+            if (length(code)) paste0(names(code), " = ", unlist(code)))
+  list(head = head, define = c(flag, paste0(head, " = gptr_tailor(",
+                                            paste(items, collapse = ", "), ")")))
+}
+
+#' The definition of the harness a call ran (its `gptr_harness` attribute's name, looked up where
+#' the call was made) for a console transcript, with the `harness=` its blocks carry (`key`, under
+#' the definition's name); NULL for a peter() call
+#' @noRd
+doc_console_harness = function(call) {
+  h = doc_harness_attr(call)
+  if (is.null(h) || !is.environment(call$envir)) return(NULL)
+  f = tryCatch(get0(h$fn, envir = call$envir, mode = "function"), error = function(e) NULL)
+  def = if (inherits(f, "gptr_harness")) doc_harness_def(attr(f, "gptr_harness", exact = TRUE))
+  if (!is.null(def)) def$key = paste0(def$head, ":", h$hash)
+  def
+}
+
+#' Append a harness's definition `def` (doc_harness_def()) to a console transcript, once: not
+#' when the transcript already defines its `h_<id>`
+#' @noRd
+doc_transcript_define = function(path, def, session = NULL) {
+  text = tryCatch(doc_read(path)$lines, error = function(e) character())
+  if (any(startsWith(text, paste0(def$head, " = ")))) return(invisible(FALSE))
+  doc_transcript_append(path, c("", def$define), session)
+}
+
 # ---- hooks --------------------------------------------------------------------------------------
 
 #' agent_end: write the block of a settled top-level run whose run options carry a document site
 #' (contract 7.15). A script document records only runs that ended `idle`; a console transcript,
 #' the history of what happened, records every settled run, one that did not end `idle` with a
-#' last `## Run: <status>` line and no cached answer (IC-49)
+#' last `## Run: <status>` line and no cached answer (IC-49), after the definition of the harness
+#' a harness call ran, the first time (08 section 3.6)
 #' @noRd
 doc_on_agent_end = function(event, ctx) {
   site = event$doc
@@ -777,11 +1189,11 @@ doc_on_agent_end = function(event, ctx) {
   d = session_data(s)
   if (isTRUE(site$console)) {
     site$session_id = d$id
-    # without .gptr/ the log is in tempdir()/gptr, which R deletes at exit
-    kept = !is.null(d$file) && !path_inside(d$file, file.path(tempdir(), "gptr"))
-    site$session_file = if (kept) doc_rel(d$file)
+    site$session_file = if (doc_kept(d$file)) doc_rel(d$file)
+    site = doc_console_ran(s, site)
   }
   turn = if (d$kind %in% c("team", "fanout")) 1L else as.integer(event$turns %||% d$turns)
+  if (!is.null(site$define)) doc_transcript_define(site$path, site, s)
   lines = doc_block_lines(s, turn, site, site$ordinal %||% 1L)
   if (!identical(status, "idle")) {
     lines[length(lines) + 1L] = paste0("## Run: ", status)
@@ -789,6 +1201,25 @@ doc_on_agent_end = function(event, ctx) {
   }
   doc_upsert(site, lines, block_id = site$block_id)
   NULL
+}
+
+#' The model reference (`provider/id[:thinking]`, a router without its level) and mode a console
+#' turn ended with (`ran_with`), and those its session's previous turn in the same transcript
+#' recorded on its `gptr.doc_block` entry (`ran_before`, NULL when none), which
+#' doc_console_statement() compares (D-265)
+#' @noRd
+doc_console_ran = function(s, site) {
+  d = session_data(s)
+  th = d$thinking
+  site$ran_with = c(model = if (is.null(th) || startsWith(d$model, "router:")) d$model else
+    paste0(d$model, ":", th), mode = d$mode)
+  rel = doc_rel(site$path)
+  prev = Find(function(e) {
+    identical(e$custom_type, "gptr.doc_block") && identical(e$data[["doc"]], rel) &&
+      rlang::is_string(e$data[["model"]]) && rlang::is_string(e$data[["mode"]])
+  }, doc_path_entries(s), right = TRUE)
+  site$ran_before = if (!is.null(prev)) c(model = prev$data[["model"]], mode = prev$data[["mode"]])
+  site
 }
 
 #' Ancestors (inclusive) of an entry id in a list of entries
@@ -808,10 +1239,14 @@ doc_ancestors = function(ents, id) {
 }
 
 #' session_tree: the blocks of turns a rewind abandoned become inert, the blocks of turns a redo
-#' brings back become live again, and console transcripts get a `# /rewind` line (G7 3.8, 4.4).
+#' brings back become live again, and console transcripts get a `# /rewind` line (G7 3.8, 4.4)
+#' and switch their direct R lines off or back on (doc_transcript_rescan()).
 #' Only records that wrote a live block choose blocks: the hook's own `undone` entries sit under
 #' the rewind target (P16 appends there), so a later branch from that target holds them, and
-#' entering that branch must not revive the block its turn never wrote.
+#' entering that branch must not revive the block its turn never wrote. A block that such a record
+#' on the target's path still holds stays live: the hook's own `replace` entries of a redo sit
+#' under its target too, so the next /redo, which leaves that branch for one that holds the
+#' block's own record, must not make it inert.
 #' The `gptr.doc_block` entries it appends keep the format the block was recorded with; their
 #' backend is `transcript` for a console transcript block, `deferred` or `pending` for the script
 #' this process runs under Rscript or the notebook open in its Jupyter kernel (doc_set_inert()
@@ -857,21 +1292,30 @@ doc_on_session_tree = function(event, ctx) {
       }
     }
   }
-  mark(pick(setdiff(from, to)), TRUE)
+  key = function(es) vapply(es, function(e) paste0(field(e, "doc"), "\n", field(e, "block")), "")
+  gone = pick(setdiff(from, to))
+  mark(gone[!key(gone) %in% key(pick(to))], TRUE)
   mark(pick(setdiff(to, from)), FALSE)
   rep = as.character(event$report %||% character())
-  bad = sum(grepl("not restored|conflict", rep))
-  note = paste0("# /rewind: ", length(rep) - bad, " items restored or removed, ", bad,
-                " not restored (session log ", event$to %||% "start", ")")
+  bad = sum(grepl(": (not |conflict|failed)", rep))
+  n = length(rep) - bad
+  # a console line (doc_re_entry), so it ends a direct R line's section
+  note = paste0("# /rewind: ", n, if (n == 1L) " item" else " items", " restored or removed, ",
+                bad, " not restored")
   tdocs = unique(vapply(Filter(function(e) identical(field(e, "backend"), "transcript"), recs),
                         field, "", name = "doc"))
-  for (doc in tdocs[nzchar(tdocs)]) doc_transcript_append(doc_abs(doc), note, session = s)
+  for (doc in tdocs[nzchar(tdocs)]) {
+    doc_transcript_append(doc_abs(doc), note, session = s)
+    doc_transcript_rescan(doc_abs(doc), s)
+  }
   NULL
 }
 
 #' console:direct (P14, after the line ran): a direct R line (`!expr`) of the console enters the
 #' transcript under `# direct R (no model)` with its printed output as `#>` lines (IC-49,
-#' contract 11.5 transcript row). A line whose `status` is not "ok" (an error, interrupt or
+#' contract 11.5 transcript row), the header naming what it created (`created=`) and its code as
+#' doc_direct_code() records it, its lines as the evaluator reads them, without carriage returns
+#' (doc_split_lines()). A line whose `status` is not "ok" (an error, interrupt or
 #' timeout; no status is a line that ran) is kept inert (`#~ `, no output) under
 #' `# direct R (no model; <status>)`, so the transcript still re-sources as one session (IC-49)
 #' and an interrupted computation does not run again
@@ -880,16 +1324,147 @@ doc_on_console_direct = function(event, ctx) {
   data = event$data %||% list()
   code = as_utf8(paste(as.character(data$code %||% character()), collapse = "\n"))
   if (!length(code) || !nzchar(trimws(code))) return(NULL)
-  code = strsplit(code, "\n", fixed = TRUE)[[1L]]
+  code = doc_direct_code(doc_split_lines(code))
   st = data$status
+  created = as_utf8(as.character(data$created %||% character()))
   lines = if (is.null(st) || identical(st, "ok")) {
-    c("", "# direct R (no model)", code,
+    c("", doc_direct_header(NULL, created), code,
       doc_output_lines(as.character(data$output %||% character())))
   } else {
     named = rlang::is_string(st) && grepl("^[a-z_]{1,20}\\z", st, perl = TRUE)
-    c("", paste0("# direct R (no model; ", if (named) st else "failed", ")"), paste0("#~ ", code))
+    c("", doc_direct_header(if (named) st else "failed", created), paste0("#~ ", code))
   }
   doc_console_append(lines, ctx$session)
+}
+
+# a direct R line's header (doc_direct_header()): its reason and its key=value pairs
+doc_re_direct = "^# direct R \\(no model(?:; (.*?))?\\)(?: (.*))?$"
+# the first line of what the console appends after a direct R line (another one, a command
+# `# /<name> ...`, a session header, a turn's statement or block, a harness's definition or its
+# flag line, doc_harness_def()), which ends that line's section
+doc_re_entry = paste0("^(# (direct R \\(|/[^[:space:]/]+( |$)|gptr session |machine log: |",
+                      ">>> gptr:|gptr: h_[0-9A-Za-z]+ )|h_[0-9A-Za-z]+ = gptr_tailor\\(|",
+                      substring(doc_re_console, 2L), ")")
+
+#' The lines of a direct R line's code as a transcript records them: a comment line that reads as
+#' the first line of another entry (doc_re_entry), such as `# /tmp is scratch`, so the line's
+#' section runs on past it (doc_direct_switch()), or as a block marker, so the markers stay well
+#' formed, gets one more `#` (doc_comment_escape()). R reads the same code; a line inside a string
+#' is kept as it is.
+#' @noRd
+doc_direct_code = function(code) {
+  doc_comment_escape(code, c(doc_re_entry, doc_re_open, doc_re_close))
+}
+
+#' The header of a direct R line: `# direct R (no model)`, `; <reason>` inside the parentheses (a
+#' status, `uses undone <names>` with control, bidi and zero-width characters written `<U+XXXX>`),
+#' then `created=<names>` when it created any
+#' @noRd
+doc_direct_header = function(reason = NULL, created = character()) {
+  # a name holding a comma would read back as two (doc_created()): it is left out
+  created = created[!grepl(",", created, fixed = TRUE)]
+  kv = if (length(created)) {
+    paste0(" ", doc_format_kv(list(created = paste(created, collapse = ","))))
+  }
+  paste0("# direct R (no model", if (length(reason)) paste0("; ", reason), ")", kv)
+}
+
+#' The names of a `created=` value
+#' @noRd
+doc_created = function(value) {
+  if (!rlang::is_string(value)) return(character())
+  x = strsplit(value, ",", fixed = TRUE)[[1L]]
+  x[nzchar(x)]
+}
+
+#' A console transcript's direct R lines switched off or back on (IC-49, D-264): read top to
+#' bottom, each block and direct R line makes the names of its `created=` key, on or off (an
+#' undone block; a line that failed or is switched off), and a direct R line also the names its
+#' top-level `name = value` expressions assign; a direct R line that uses a name (by all.names(),
+#' of such an expression its value only) whose last maker is off, other than one it made before
+#' in the line, is switched off, every line under its header prefixed `#~ `, and comes back on when
+#' no such name is left. Returns list(lines, changed), `changed` holding list(line, on, names) per
+#' header switched.
+#' @noRd
+doc_direct_switch = function(lines) {
+  blocks = doc_find_blocks(lines)
+  inside = logical(length(lines))
+  for (k in seq_len(nrow(blocks))) inside[blocks$start[k]:blocks$end[k]] = TRUE
+  m = regmatches(lines, regexec(doc_re_direct, lines, perl = TRUE))
+  heads = which(lengths(m) > 0L & !inside)
+  entry = inside | grepl(doc_re_entry, lines, perl = TRUE)
+  made = logical()
+  changed = list()
+  for (i in sort(c(blocks$start, heads))) {
+    k = match(i, blocks$start)
+    if (!is.na(k)) {
+      h = blocks$header[[k]]
+      made[doc_created(h$created)] = !identical(h$status, "undone")
+      next
+    }
+    created = doc_created(doc_parse_kv(m[[i]][3L])$created)
+    reason = m[[i]][2L]
+    off = startsWith(reason, "uses undone ")
+    if (nzchar(reason) && !off) {
+      made[created] = FALSE
+      next
+    }
+    end = i
+    while (end < length(lines) && !entry[end + 1L]) end = end + 1L
+    while (end > i && !nzchar(trimws(lines[end]))) end = end - 1L
+    seg = seq_len(end - i) + i
+    raw = if (off) sub("^#~ ", "", lines[seg]) else lines[seg]
+    exprs = tryCatch(doc_parse_text(raw[!startsWith(raw, "#>")], keep_source = FALSE),
+                     error = function(e) NULL)
+    # a top-level `name = value` makes `name` and reads only its value
+    mine = created
+    uses = character()
+    for (ex in as.list(exprs)) {
+      set = is.call(ex) && length(ex) == 3L && is.symbol(ex[[2L]]) &&
+        (identical(ex[[1L]], as.name("=")) || identical(ex[[1L]], as.name("<-")))
+      uses = c(uses, setdiff(as_utf8(all.names(if (set) ex[[3L]] else ex)), mine))
+      if (set) mine = c(mine, as_utf8(as.character(ex[[2L]])))
+    }
+    bad = intersect(uses, names(made)[!made])
+    on = !length(bad)
+    # a `)` in a name would end the reason early, so the rest would read as the header's keys
+    shown = gsub(")", "<U+0029>", ui_escape(bad), fixed = TRUE)
+    new = c(doc_direct_header(if (!on) paste("uses undone", paste(shown, collapse = ", ")),
+                              created),
+            if (on) raw else ifelse(nzchar(raw), paste0("#~ ", raw), raw))
+    if (!identical(new, lines[c(i, seg)])) {
+      lines[c(i, seg)] = new
+      changed[[length(changed) + 1L]] = list(line = i, on = on, names = bad)
+    }
+    made[mine] = on
+  }
+  list(lines = lines, changed = changed)
+}
+
+#' Rescan a console transcript after an undo, redo or retry and after each direct R line it gets
+#' (doc_direct_switch()), under write consent and the `document_write` event (kind "inert"), and
+#' say which lines it switched; invisibly the switches, NULL when none
+#' @noRd
+doc_transcript_rescan = function(path, session = NULL) {
+  if (!file.exists(path) || !identical(doc_format_of(path), "r") ||
+      !doc_consent(path, ask = FALSE)) {
+    return(invisible(NULL))
+  }
+  changed = doc_rewrite(path, function(doc) {
+    res = doc_direct_switch(doc$lines)
+    if (!length(res$changed)) return(list(value = NULL))
+    ev = doc_event(path, "r", "inert", NULL, res$lines, session)
+    if (isTRUE(ev$block)) return(list(value = NULL))
+    list(lines = ev$lines %||% res$lines, value = res$changed)
+  })
+  if (!is.list(changed) || !length(changed)) return(invisible(NULL))
+  said = vapply(changed, function(ch) {
+    if (ch$on) return(paste0("line ", ch$line, " back on"))
+    paste0("line ", ch$line, " off (uses undone ", paste(ui_escape(ch$names), collapse = ", "), ")")
+  }, "")
+  gptr_inform(paste0("Direct R in ", doc_rel(path), ": ", paste(said, collapse = ", "), "."),
+              "notice")
+  invisible(changed)
 }
 
 #' console:command (P14): a slash command of the console enters the transcript as a comment
@@ -902,10 +1477,10 @@ doc_on_console_command = function(event, ctx) {
 }
 
 #' Append console lines to the console transcript target (an .R transcript; the writer redacts
-#' them with the persist profile under write consent); always NULL (notify channels). While
-#' `session` runs in the background (the pause menu's `[b]`), whose block is written when the run
-#' ends, they wait in its live handle until doc_on_agent_end() has written that block, so the
-#' record keeps the order typed
+#' them with the persist profile under write consent), then rescan it (doc_transcript_rescan());
+#' always NULL (notify channels). While `session` runs in the background (the pause menu's `[b]`),
+#' whose block is written when the run ends, they wait in its live handle until
+#' doc_on_agent_end() has written that block, so the record keeps the order typed
 #' @noRd
 doc_console_append = function(lines, session = NULL) {
   live = if (inherits(session, "gptr_session")) session_live(session)
@@ -916,6 +1491,7 @@ doc_console_append = function(lines, session = NULL) {
   target = doc_transcript_target(ask = FALSE)
   if (!is.null(target) && identical(doc_format_of(target), "r")) {
     doc_transcript_append(target, lines, session = session)
+    doc_transcript_rescan(target, session)
   }
   NULL
 }
@@ -941,7 +1517,14 @@ doc_console_held = function(s) {
 #' [gptr_source()], `Rscript`, knitr or Jupyter) get their blocks below them. Calls in no
 #' document (the console, `Rscript -e`, standard input) are appended to it, except to a notebook,
 #' as `s_<id> = peter("prompt", <context names>)` (later turns of that session as
-#' `s_<id> |> peter(...)`): your variable name and the other arguments are not recorded. A call in
+#' `s_<id> |> peter(...)`). The statement ends with `model = "<provider/model>"` or
+#' `mode = "<mode>"` when its turn ran with a model or mode the statement would not get without
+#' them, as after `/model`, `/mode`, the plan menu or in a console started as `peter(mode = plan)`:
+#' for `=`, one other than the `model` and `mode` settings (the model is left out when the call
+#' started the session without naming one); for `|>`, one other than the session's previous turn
+#' in the transcript. A model is written as its full reference (`model = opus` is recorded as
+#' `"anthropic/..."`). A model given as a provider object is not recorded on a session's first
+#' statement. Your variable name and the other arguments are not recorded. A call in
 #' another document is recorded only into that document, with its own consent; a run that cannot
 #' ask for it records nothing and says so once per document.
 #' Nothing is written until a block is recorded. `gptr_doc(FALSE)` removes the binding and
@@ -952,10 +1535,39 @@ doc_console_held = function(s) {
 #' `tools::R_user_dir("gptr", "cache")`, so any R process of the same user can apply them.
 #'
 #' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
-#' or functions do not. Binding supplies recording consent even when automatic recording is
-#' off, but `.opts = list(record = FALSE)` suppresses recording for that call. Binding does
-#' not reconstruct earlier unrecorded turns. A narrative summary or model-generated script
-#' draft needs review and execution checks before it can serve as a reproducible workflow.
+#' or functions do not. Only blank lines may separate a call's statement from its blocks: after a
+#' comment or code line between them the blocks belong to no call, so the call is asked again and
+#' gets a new block while the old block's code still runs. A block records the R code the agent
+#' ran: of a call that stopped part-way,
+#' the expressions that ran, and code that changed your objects even where the model passed
+#' `record = false`, which leaves out only inspection. Binding supplies recording consent even
+#' when automatic recording is off, but `.opts = list(record = FALSE)` suppresses recording for
+#' that call. Binding does not reconstruct earlier unrecorded turns. A narrative summary or
+#' model-generated script draft needs review and execution checks before it can serve as a
+#' reproducible workflow.
+#'
+#' In a console transcript (an `.R` file) a turn's block opens with `#< ` comment lines holding what
+#' the console sent with the prompt: the head of each `@file` (at most 40 lines, redacted) and the
+#' notes of earlier `!` lines. Only that run, under the turn's `s_<hex>` statement, is sent again,
+#' and none from a transcript whose gptr markers are malformed; a line of recorded code that would
+#' continue the run gets one more `#` (`##< `). In every format a whole comment line of recorded
+#' code that reads as a `## Steer:` or `## Follow-up:` line or as a block marker gets one more `#`
+#' too, so code the model wrote is never sent as your context or your steer and never ends its
+#' block. The block's header names the objects the turn created (`created=`), as the header of
+#' each direct R line does (`# direct R (no model) created=p`), and a comment line of `!` code that
+#' reads as a console line, such as `# /tmp is scratch`, or as a block marker gets one more `#`. A
+#' block whose code holds a marker line inside a string is not written, and gptr says so. After
+#' each `/undo`, `/redo`, `/retry` and `!` line the transcript is read again from the top: a direct
+#' R line that uses an object last created above it by an undone turn or by a line that is off is
+#' turned off (`#~ ` before each line, `# direct R (no model; uses undone fit)`) and back on when
+#' that turn returns, so `source()` does not stop there; a whole `fit = <value>` makes `fit` and
+#' uses only what `<value>` names. The console names the lines it turned off. Your own objects
+#' stay in your session: an undo removes what the turn created and restores what it changed. So a
+#' later turn that uses an object of a line that is off still stops `source()`, as turn blocks are
+#' never turned off, and a direct R line that read an object the turn changed, such as
+#' `n = nrow(dat)` after the turn cut `dat`, stays on and replays with the restored value. Names
+#' are found with [all.names()]: a column or formula term with the same name can turn a line off,
+#' and a name reached through a string, as in `get("fit")`, is not seen.
 #'
 #' @param path `NULL` to return the current binding, `FALSE` to remove it, or the path of an
 #'   `.R`, `.Rmd`, `.qmd` or `.ipynb` document.
@@ -1106,7 +1718,9 @@ doc_blocks_frame = function(rows) {
 #' format's own locator gives it (contract 11.5: the block of its run whose `prompt=` matches,
 #' else the one with its `call=` ordinal), so every step of a pipeline owns its own block; a block
 #' no call owns is stale. A computed prompt cannot be checked without running the call, so its
-#' block reads stale, and the args of a header are taken as they are.
+#' block reads stale, and the args and coaching hashes of a header are taken as they are (a
+#' harness is an object of the session); a gptr_coach() call owns a coach block, any other call
+#' another block.
 #' @noRd
 doc_blocks_text = function(text, fmt) {
   blocks = doc_find_blocks(text)
@@ -1126,7 +1740,10 @@ doc_blocks_text = function(text, fmt) {
     h = b$header[[1L]]
     k = owner[i]
     ph = if (is.na(k)) "" else calls$ph[k]
-    status = doc_block_status(h, doc_block_body(text, b), ph, h[["args"]])
+    coach = !is.na(k) && identical(calls$head[k], "gptr_coach")
+    status = doc_block_status(h, doc_block_body(text, b), ph, h[["args"]],
+                              if (coach) h[["start"]] else doc_head_harness(h, calls$head[k]),
+                              coach)
     doc_block_row(b$id, paste0(b$start, "-", b$end),
                   if (is.na(k)) NA_character_ else calls$prompt[k], status, h)
   })
@@ -1134,7 +1751,9 @@ doc_blocks_text = function(text, fmt) {
 
 #' Rows of gptr_blocks() for a notebook: the top-level calls of a calling cell own the run of
 #' agent cells right after it one to one, as the ipynb format's locator assigns them
-#' (doc_owner()); an agent cell no call owns is stale
+#' (doc_owner()); an agent cell no call owns is stale. The harness calls counted are those
+#' named in the `harness` metadata of the agent cells, and statuses are read as
+#' doc_blocks_text() reads them.
 #' @noRd
 doc_blocks_ipynb = function(text) {
   nb = nb_parse(text)
@@ -1144,10 +1763,16 @@ doc_blocks_ipynb = function(text) {
   owned = rep(FALSE, length(cells))
   prompt = rep(NA_character_, length(cells))
   ph = rep("", length(cells))
+  called = rep(NA_character_, length(cells))
+  coach = rep(FALSE, length(cells))
+  declared = vapply(cells[agent], function(cell) {
+    h = nb_cell_meta(cell)[["harness"]]
+    if (rlang::is_string(h)) sub(":[^:]*$", "", h) else ""
+  }, "", USE.NAMES = FALSE)
   for (i in seq_along(cells)) {
     run = nb_agent_run(agent, i)
     if (agent[i] || !identical(cells[[i]][["cell_type"]], "code") || !length(run)) next
-    calls = doc_calls(nb_cell_lines(cells[[i]]))
+    calls = doc_calls(nb_cell_lines(cells[[i]]), heads = declared)
     top = calls[is.na(calls$block) & !calls$nested, , drop = FALSE]
     metas = lapply(cells[run], nb_cell_meta)
     for (j in seq_len(nrow(top))) {
@@ -1157,19 +1782,24 @@ doc_blocks_ipynb = function(text) {
       owned[at] = TRUE
       prompt[at] = top$prompt[j]
       ph[at] = top$ph[j]
+      called[at] = top$head[j]
+      coach[at] = identical(top$head[j], "gptr_coach")
     }
   }
   lapply(which(agent), function(i) {
     meta = nb_cell_meta(cells[[i]])
-    status = doc_block_status(meta, nb_cell_lines(cells[[i]]), ph[i], meta[["args"]])
+    status = doc_block_status(meta, nb_cell_lines(cells[[i]]), ph[i], meta[["args"]],
+                              if (coach[i]) meta[["start"]] else doc_head_harness(meta, called[i]),
+                              coach[i])
     doc_block_row(sub("^gptr-", "", ids[i]), paste0("cell ", i), prompt[i], status, meta)
   })
 }
 
 #' Inspect, prune or clear gptr's caches
 #'
-#' `info` lists the System 1 answer cache, the System 2 answer cache used for replay, temporary
-#' spill files and unapplied document sidecars (deferred or pending blocks; a second row lists
+#' `info` lists the System 1 answer cache (held in memory for the R session while there is no
+#' `.gptr/`), the System 2 answer cache used for replay, temporary spill files and unapplied
+#' document sidecars (deferred or pending blocks; a second row lists
 #' those of documents outside any `.gptr/`, kept in the user cache; they are never removed here:
 #' apply them with `gptr_doc(path, sync = TRUE)`). `prune` removes System 2 answers
 #' whose block is neither in its document nor queued for it in a sidecar, System 1 answers unused
@@ -1182,7 +1812,7 @@ doc_blocks_ipynb = function(text) {
 #' @param action `"info"`, `"prune"` or `"clear"`.
 #' @param kind `"all"`, `"s1"`, `"s2"` or `"tmp"`.
 #' @return `info`: a `gptr_cache_info` data frame with columns `kind`, `entries`, `bytes`,
-#'   `oldest`, `path`. `prune` and `clear`: the number of files removed, invisibly.
+#'   `oldest`, `path`. `prune` and `clear`: the number of entries removed, invisibly.
 #' @export
 #' @examples
 #' proj = tempfile("proj")
@@ -1243,7 +1873,8 @@ doc_cache_info = function(kinds) {
   row = function(k, f, path) {
     info = file.info(f, extra_cols = FALSE)
     mtime = info$mtime[!is.na(info$mtime)]
-    data.frame(kind = k, entries = length(f), bytes = sum(info$size, na.rm = TRUE),
+    n = length(f) + if (identical(k, "s1")) length(doc_s1_memory()) else 0L
+    data.frame(kind = k, entries = n, bytes = sum(info$size, na.rm = TRUE),
                oldest = if (length(mtime)) min(mtime) else with_calendar_preserved(as.POSIXct(NA)),
                path = path, stringsAsFactors = FALSE)
   }
@@ -1261,12 +1892,15 @@ doc_spill_days = function() {
   if (is.numeric(d) && length(d) == 1L && !is.na(d) && d >= 0) as.numeric(d) else 7
 }
 
-#' Remove the files of a cache kind; `prune = TRUE` keeps what is still in use (S1 answers used
-#' within 90 days, S2 answers of existing blocks, temporary files younger than spill_days)
+#' Remove the files of a cache kind, and on a clear the System 1 answers held in memory
+#' (doc_s1_memory()); `prune = TRUE` keeps what is still in use (S1 answers used within 90 days,
+#' S2 answers of existing blocks, temporary files younger than spill_days). The number removed.
 #' @noRd
 doc_cache_remove = function(kind, prune = TRUE) {
+  mem = if (identical(kind, "s1") && !prune) length(doc_s1_memory()) else 0L
+  if (mem) the$s1_cache = NULL
   f = doc_cache_files(kind)
-  if (!length(f)) return(0L)
+  if (!length(f)) return(mem)
   if (prune) {
     age = as.numeric(difftime(Sys.time(), file.info(f, extra_cols = FALSE)$mtime, units = "days"))
     memo = new.env(parent = emptyenv())
@@ -1277,7 +1911,15 @@ doc_cache_remove = function(kind, prune = TRUE) {
                   rep(TRUE, length(f)))
     f = f[!keep]
   }
-  as.integer(sum(suppressWarnings(file.remove(f))))
+  mem + as.integer(sum(suppressWarnings(file.remove(f))))
+}
+
+#' The keys of the System 1 answers s1-cache.R holds in memory (`the$s1_cache`) while there is no
+#' workspace
+#' @noRd
+doc_s1_memory = function() {
+  m = if (is.null(workspace_dir())) the$s1_cache
+  if (is.environment(m)) ls(m, all.names = TRUE) else character()
 }
 
 #' Does an S2 record still belong to a block of a document? A record that cannot be read, or that
@@ -1344,13 +1986,28 @@ doc_catalog_prune = function() {
 #' Source a history document, regenerating stale blocks without running the old code
 #'
 #' Evaluates `file` top-level expression by expression in `envir`, like [source()]. An expression
-#' that names `peter()` keeps its source references, which locate the call; the others run without
-#' them, so the functions and calls they make hold no part of the document, as at the console. A
+#' that names `peter()` or `gptr_coach()`, or calls a harness bound in `envir`, keeps its source
+#' references, which locate the call; the others run without them, so the functions and calls
+#' they make hold no part of the document, as at the console. A
 #' `peter()` call whose block is fresh replays without calling a model and the block's code then
 #' runs as ordinary R. A call whose block is stale (its prompt or the values interpolated into it
 #' changed), or every call under `replay = "live"` (an undone block runs without being rewritten;
 #' `replay = "record"` regenerates it), asks the model again and rewrites its block in place, and
-#' the old block is skipped, which base `source()` cannot do.
+#' the old block is skipped, which base `source()` cannot do. Only that block is regenerated: a
+#' later turn of the same session keeps its block, answered in the old turn's context, so re-ask
+#' it with `replay = "live"` on that call when it depends on the turn that changed. Only blank
+#' lines may separate a call from its blocks (see [gptr_doc()]). A console turn is asked again with
+#' what the console sent with it, from its block's `#< ` lines (the `@file` heads and `!` notes;
+#' see [gptr_doc()]): the request is the same even when the file changed or is gone. It is asked
+#' with the model and in the mode its statement names, else those its session has from the turns
+#' before, else the `model` and `mode` settings of the session that re-asks: a statement names
+#' them only where they differed from what it gets without them (see [gptr_doc()]). A named model
+#' must be available there; `model` asks a `peter()` or harness call with another one. A re-ask
+#' does not send the `## Steer:` and `## Follow-up:` lines of a turn or the text of an approval
+#' answered `n <text>`, and the new block does not keep them. Direct R lines a transcript turned
+#' off are comments and do not run. A block is written only with write consent (see
+#' [gptr_doc()]); a call that cannot be recorded still runs, and under `replay = "record"` a
+#' notice says that gptr did not record it.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function
@@ -1364,6 +2021,12 @@ doc_catalog_prune = function() {
 #'   variable, then the `replay` setting, then `"auto"`.
 #' @param envir Environment in which the expressions are evaluated.
 #' @param echo `TRUE` prints each expression before it is evaluated.
+#' @param model `NULL`, or a model name or reference string (`"sonnet"`,
+#'   `"anthropic/claude-sonnet-5-5"`, or one of a provider you registered), not a provider spec
+#'   object: every `peter()` or harness call the file asks again (each one under
+#'   `replay = "live"`) uses it instead of the model it names or its session has, so a recorded
+#'   analysis can be re-asked with your own model. A `gptr_coach()` call and a team or fan-out call
+#'   (`agents =`, `parallel =`) keep the models they name. A block that replays asks no model.
 #' @return Invisibly, the `gptr_blocks` listing of the file after the run with an extra column
 #'   `action`: `replayed`, `regenerated`, `ran`, `skipped`, or `NA` for blocks no call touched.
 #'   A stale block whose call ran but could not be rewritten (for example without write consent)
@@ -1374,12 +2037,13 @@ doc_catalog_prune = function() {
 #' writeLines(c("x = 1", "y = x + 1"), f)
 #' gptr_source(f, replay = "replay", envir = new.env())
 gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(),
-                       echo = FALSE) {
+                       echo = FALSE, model = NULL) {
   scoped = !missing(replay)
   path = doc_file_arg(file, "r", "an existing .R file (knit .Rmd and .qmd documents)")
   replay = check_choice(replay, c("auto", "replay", "live", "record"), "replay")
   check_env(envir, "envir")
   check_flag(echo, "echo")
+  check_string(model, "model", null = TRUE)
   doc_recover(path)
   # A file that cannot be read, or is not valid UTF-8, is a bad `file` argument, not a failed
   # document write (contract 6.4 lists no doc_write here)
@@ -1393,8 +2057,9 @@ gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = 
   # string literal (a prompt included) into "<U+00E9>" text (IC-62)
   exprs = parse(text = doc$lines, keep.source = TRUE, srcfile = srcfile, encoding = "UTF-8")
   srcs = attr(exprs, "srcref")
-  # srcrefs only locate peter() calls (contract 7.15): the other expressions run from `bare`, so a
-  # closure or a call captured with sys.call() holds no part of the document
+  # srcrefs only locate peter(), gptr_coach() and harness calls (contract 7.15): the other
+  # expressions run from `bare`, so a closure or a call captured with sys.call() holds no part of
+  # the document
   bare = parse(text = doc$lines, keep.source = FALSE, encoding = "UTF-8")
   blocks = doc_find_blocks(doc$lines)
   # The block of each expression, by its parsed lines (srcref fields 7 and 8, as the locator's
@@ -1405,7 +2070,7 @@ gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = 
     if (length(k)) blocks$id[k[1L]] else NA_character_
   }, "")
   st = doc_state()
-  depth = doc_source_push(path)
+  depth = doc_source_push(path, model)
   on.exit(doc_source_pop(depth), add = TRUE)
   # Only a given `replay` is scoped over the file: left missing, each call resolves its mode
   # through replay_mode() (gptr.replay > GPTR_REPLAY > settings > "auto"), so GPTR_REPLAY=replay
@@ -1417,7 +2082,7 @@ gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = 
   for (i in seq_along(exprs)) {
     if (!is.na(owner[i]) && owner[i] %in% st$sources[[depth]]$skip) next
     if (echo) msg_verbatim(paste0("> ", as.character(srcs[[i]])))
-    eval(if ("peter" %in% all.names(bare[[i]])) exprs[i] else bare[i], envir)
+    eval(if (doc_names_head(bare[[i]], envir)) exprs[i] else bare[i], envir)
   }
   acts = st$sources[[depth]]$log
   # A stale block whose call ran live but was not rewritten (no write consent, a locked or

@@ -1,7 +1,8 @@
-# R-CMD-check.yaml's Windows rows (release, oldrel-4), each split into four serial R CMD check
-# shards. The required contexts windows-latest (release) and windows-latest (oldrel-4) are gates
-# that pass only when the latest attempt of each of the four shards of their R version passed.
-# The cran job checks the whole package as CRAN does (CRAN's test list, both manuals, CRAN's
+# R-CMD-check.yaml's Windows rows. Windows release runs the whole offline suite as ten serial
+# R CMD check shards (vignettes, examples and R's code analysis are the cran job's) behind the
+# required context windows-latest (release), a gate that passes only when the latest attempt of
+# each shard passed. windows-latest (oldrel-4) checks the whole package with CRAN's test list. The
+# cran job checks the whole package as CRAN does (CRAN's test list, both manuals, CRAN's
 # thresholds; a NOTE fails) and fails over the 600 s at which CRAN's pretest flags a check (CI-93).
 on:
   push:
@@ -20,30 +21,25 @@ permissions: read-all
 jobs:
   shards:
     runs-on: windows-latest
-    name: windows-latest (${{ matrix.r }}, shard ${{ matrix.shard }}/4)
-    # The slowest shard took about 23 minutes in October 2026
-    timeout-minutes: 45
+    name: windows-latest (release, shard ${{ matrix.shard }}/10)
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        r: ['release', 'oldrel-4']
-        shard: [1, 2, 3, 4]
-        include:
-          # Windows R < 4.5.0: file.info() lacks the owner columns this check variable needs
-          - {r: 'oldrel-4', things-in-other-dirs: 'false'}
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
-      _R_CHECK_THINGS_IN_OTHER_DIRS_: ${{ matrix.things-in-other-dirs || 'true' }}
+      _R_CHECK_THINGS_IN_OTHER_DIRS_: true
       _R_CHECK_CRAN_INCOMING_: false
+      _R_CHECK_USE_CODETOOLS_: false
       TESTTHAT_PARALLEL: false
-      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/4
+      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/10
     steps:
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
       - uses: r-lib/actions/setup-r@v2
         with:
-          r-version: ${{ matrix.r }}
           use-public-rspm: true
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         id: windows_python
@@ -129,12 +125,13 @@ jobs:
           extra-packages: any::rcmdcheck
           needs: check
       - uses: r-lib/actions/check-r-package@v2
+        timeout-minutes: 16
         with:
           upload-snapshots: true
-          artifact-name: windows-results-${{ matrix.r }}-${{ matrix.shard }}
-          snapshot-artifact-name: windows-snapshots-${{ matrix.r }}-${{ matrix.shard }}
-          build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
-          args: 'c("--no-manual", "--as-cran")'
+          artifact-name: windows-results-${{ matrix.shard }}
+          snapshot-artifact-name: windows-snapshots-${{ matrix.shard }}
+          build_args: 'c("--no-manual", "--no-build-vignettes")'
+          args: 'c("--no-manual", "--as-cran", "--ignore-vignettes", "--no-examples")'
           error-on: '"warning"'
       - name: Fail unless R CMD check wrote its status
         shell: bash
@@ -143,7 +140,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: windows-check-${{ matrix.r }}-${{ matrix.shard }}
+          name: windows-check-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/gptr-check-python-evidence/python-admission.json
             check/gptr.Rcheck/00check.log
@@ -151,50 +148,57 @@ jobs:
             check/gptr.Rcheck/tests/testthat.Rout*
           if-no-files-found: error
           retention-days: 5
-      # The gate reads the newest status per shard, so a failed re-run replaces an earlier pass
-      - name: Record this shard's status for its gate
-        if: always()
-        shell: bash
-        run: echo '${{ job.status }}' > windows-status-${{ matrix.r }}-${{ matrix.shard }}
-      - name: Upload this shard's status
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: windows-status-${{ matrix.r }}-${{ matrix.shard }}
-          path: windows-status-${{ matrix.r }}-${{ matrix.shard }}
-          retention-days: 5
 
-  gates:
+  gate:
     runs-on: ubuntu-latest
-    name: windows-latest (${{ matrix.r }})
+    name: windows-latest (release)
     needs: shards
-    # A skipped required check counts as passing, so each gate always runs and fails closed
+    # A skipped required check counts as passing, so the gate always runs and fails closed. A
+    # matrix job's result is success only when the latest attempt of each of its shards passed.
     if: always()
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        r: ['release', 'oldrel-4']
+    timeout-minutes: 5
     steps:
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - name: Fail unless every shard passed
+        run: test '${{ needs.shards.result }}' = success
+
+  oldrel-4:
+    runs-on: windows-latest
+    name: windows-latest (oldrel-4)
+    timeout-minutes: 20
+    # CRAN's own test list (tests/testthat.R), examples and vignettes
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      NOT_CRAN: false
+      R_KEEP_PKG_SOURCE: yes
+      # Windows R < 4.5.0: file.info() lacks the owner columns this check variable needs
+      _R_CHECK_THINGS_IN_OTHER_DIRS_: false
+      _R_CHECK_CRAN_INCOMING_: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
         with:
-          pattern: windows-status-${{ matrix.r }}-*
-          merge-multiple: true
-      - name: Fail unless the latest attempt of each shard of this R version passed
-        run: |
-          missing=""
-          for n in 1 2 3 4; do
-            grep -qsx success "windows-status-${{ matrix.r }}-$n" || missing="$missing $n/4"
-          done
-          if [ -n "$missing" ]; then
-            echo "::error::These windows-latest (${{ matrix.r }}) shards did not pass:$missing"
-            exit 1
-          fi
+          r-version: oldrel-4
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+      - uses: r-lib/actions/check-r-package@v2
+        timeout-minutes: 16
+        with:
+          artifact-name: windows-results-oldrel-4
+          build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
+          args: 'c("--no-manual", "--as-cran")'
+          error-on: '"warning"'
+      - name: Fail unless R CMD check wrote its status
+        shell: bash
+        run: grep '^Status:' check/gptr.Rcheck/00check.log
 
   cran:
     runs-on: windows-latest
     name: windows-latest (release, NOT_CRAN=false)
-    timeout-minutes: 45
+    timeout-minutes: 20
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       NOT_CRAN: false
@@ -224,6 +228,7 @@ jobs:
         shell: bash
         run: echo "GPTR_CHECK_START=$(date +%s)" >> "$GITHUB_ENV"
       - uses: r-lib/actions/check-r-package@v2
+        timeout-minutes: 16
         with:
           artifact-name: windows-results-cran
           build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'

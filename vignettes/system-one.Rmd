@@ -1,8 +1,8 @@
 ---
-title: "System 1 decisions"
+title: "Typed decisions"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{System 1 decisions}
+  %\VignetteIndexEntry{Typed decisions}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -53,7 +53,7 @@ is_rct = peter("Is this a randomized trial?", abstracts, model = judge)
 is_rct
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-20
+#> judge-s1-1.0 . calibration unknown . 2026-10-30
 gptr_prob(is_rct)
 #>  trial cohort  pilot
 #>   0.94   0.07   0.55
@@ -86,7 +86,7 @@ studies = data.frame(
 peter("Was allocation randomized?", studies, model = judge)
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-20
+#> judge-s1-1.0 . calibration unknown . 2026-10-30
 
 record = list(abstract = abstracts[["trial"]], sample_size = 200L,
               allocation = "randomized")
@@ -119,7 +119,7 @@ screened = peter("Is this a randomized trial?", abstracts, model = judge,
 screened
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)    NA (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-20
+#> judge-s1-1.0 . calibration unknown . 2026-10-30
 names(abstracts)[!is.na(screened) & screened]
 #> [1] "trial"
 names(abstracts)[is.na(screened)]
@@ -154,7 +154,7 @@ list(included = included, review = review)
 
 The same function can live in an ordinary R file. A call inside a function or loop does not
 own a recorded document block. A matching System 1 cache entry can avoid another request;
-that is distinct from document replay. See [Script as history](script-as-history.html).
+that is distinct from document replay. See [Record, replay and export](script-as-history.html).
 
 `uncertain = "stop"` signals `gptr_error_s1_uncertain`. `TRUE` or `FALSE` supply a yes/no
 fallback; a function `function(state, answer)` can return one replacement of the answer's
@@ -174,7 +174,7 @@ tissue = peter("Which tissue is this?", samples, model = judge,
 tissue
 #>             s1             s2             s3
 #>  lung (p=0.91) liver (p=0.88) brain (p=0.80)
-#> judge-s1-1.0 . calibration unknown . 2026-10-20
+#> judge-s1-1.0 . calibration unknown . 2026-10-30
 gptr_prob(tissue)
 #>   s1   s2   s3
 #> 0.91 0.88 0.80
@@ -191,7 +191,7 @@ severity = peter("Rate this event's severity.",
 severity
 #>                a                b
 #> 0.20 (conf 0.85) 1.88 (conf 0.90)
-#> judge-s1-1.0 . calibration unknown . 2026-10-20
+#> judge-s1-1.0 . calibration unknown . 2026-10-30
 gptr_prob(severity, "probabilities")
 #>   mild moderate severe
 #> a 0.85     0.10   0.05
@@ -238,7 +238,7 @@ do not become calibrated merely by returning probabilities. Emulated answers hav
 `calibrated = FALSE`. Slicing a typed result keeps its probabilities aligned.
 
 Matching answers are cached per input and question. With a `.gptr/` workspace the System 1
-cache is durable; without one it lives under the session's temporary workspace. Cache
+cache is durable; without one it is held in memory for the R session. Cache
 identity also depends on the model and answer options. Changed model identity, live mode or
 a missing entry can require a request. A mutable local model without verified immutable
 identity cannot promise durable reuse. Use `gptr_cache()` to inspect the cache.
@@ -260,7 +260,7 @@ session = peter("Summarize mtcars in one sentence.", model = summary_model)
 
 session |> peter("Did the analysis succeed?", model = judge)
 #> [1] TRUE (p=0.94)
-#> judge-s1-1.0 . calibration unknown . 2026-10-20
+#> judge-s1-1.0 . calibration unknown . 2026-10-30
 session$turns
 #> [1] 1
 ```

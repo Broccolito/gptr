@@ -2,8 +2,6 @@
 name: high-performance-r
 description: "Fast data work in R: data.table, arrow, duckdb, collapse or qs2 when installed; large CSV/Parquet, grouping, sorting, parallel work, single-cell objects."
 license: Apache-2.0
-metadata:
-  source: "gptr research report 19, section 3.4 (verified recipes)"
 ---
 
 # High-performance R

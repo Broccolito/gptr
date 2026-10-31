@@ -96,11 +96,13 @@ readline_limit = function() {
 #'
 #' Returns an environment with `read(prompt = "", stream = "stdout", secret = FALSE)` -> chr(1), NA
 #' at the end of piped input; `waiting()` -> the lines a paste left on a macOS terminal (none
-#' elsewhere, IC-75); `close()`; `flag` (TRUE when a line reached the readline limit); `held`,
+#' elsewhere, IC-75), in a T console erasing the row where its look made the tty echo the rest;
+#' `close()`; `flag` (TRUE when a line reached the readline limit); `held`,
 #' the lines a paste left after a block's closer, which the terminal reader returns first,
 #' unechoed (the terminal showed them); `typed`, the /command and !code lines and the follow-ups
 #' typed during an answer, which it returns next, in order, echoed after the prompt (IC-76,
-#' D-242); `compose`, the state of a T console's composer (console_compose(): its draft), whose
+#' D-242); `compose`, the state of a T console's composer (console_compose(): its draft; emptied
+#' when readline() reads at the prompt, so a bracketed paste left open ends there, D-263), whose
 #' draft a run left it then edits at the prompt (console_idle()), the line sent echoed alike, on
 #' the input band (console_band()) as are readline()'s prompts in a T console (IC-82),
 #' `sent`, the kind of message queued last (policy_enqueue()), and `complete`, TRUE where the REPL
@@ -118,9 +120,15 @@ console_reader = function(stdin = FALSE, echo = stdin) {
   rd$fd = NULL
   rd$held = character()
   rd$typed = character()
-  # only a macOS terminal (BSD tty driver) hands a waiting paste over as complete lines
+  # only a macOS terminal (BSD tty driver) hands a waiting paste over as complete lines; the look
+  # makes it echo a paste's pending last line again, whose row a T console erases
   paste_tty = !isTRUE(stdin) && is_macos() && console_readline_tty()
-  rd$waiting = function() if (paste_tty) console_typed_lines(rd) else character()
+  rd$waiting = function() {
+    if (!paste_tty) return(character())
+    lines = console_typed_lines(rd)
+    if (console_class() == "T") console_cat("\r\033[K")
+    lines
+  }
   echo = isTRUE(echo)
   if (isTRUE(stdin)) {
     rd$con = console_stdin_open()
@@ -167,6 +175,8 @@ console_reader = function(stdin = FALSE, echo = stdin) {
         console_write(console_band(strsplit(paste0(prompt, console_escape(x)), "\n")[[1L]]))
         return(x)
       }
+      # the composer holds no draft here; what else it holds (a paste left open) ends with the run
+      rd$compose = NULL
       # the idle editor's modes, echo off, are restored as the last step before readline(), whose
       # prompt erases its row for a key the terminal echoed in that moment
       tty = rd$handed
@@ -405,8 +415,9 @@ repl_read_logical = function(rd, prompt) {
 # guard), shown as it runs; `!code` also leaves a note that the `user_ran` block adds to the next
 # prompt within 300 tokens (IC-73). `@file` mentions add the file's head to the `user_files`
 # block; `@object` mentions attach the object by name (P09's `attached` block describes it).
-# Both blocks answer only the gateway call that console_send() built: the call record's
-# `sys_call` is that call.
+# Both blocks answer the gateway call that console_send() built (the call record's `sys_call` is
+# that call), and a call that asks again for a recorded console turn, which sends what that turn
+# was sent with (`call$sent`, its block's `#< ` lines, IC-49).
 # ---------------------------------------------------------------------------------------------
 
 #' Escape an attribute value of a context tag
@@ -419,10 +430,11 @@ attr_escape = function(x) {
 #' @noRd
 console_files_budget = 2000L
 
-#' The <file> block of an @file mention: the first 40 lines of a text file (redacted with the
-#' `context` profile) that fit `room` tokens, marked truncated when cut, or a one-line note for a
-#' binary file (report 18 section 4.3) or one without room; attr "said" names what it holds
-#' (`2 lines`, `first 40 lines`, `binary, 3 bytes`, `not attached, over the size limit`)
+#' The <file> block of an @file mention: the first 40 lines of a text file (a line that is not
+#' UTF-8 read as CP1252, a byte it lacks as `<xx>`; redacted with the `context` profile) that fit
+#' `room` tokens, marked truncated when cut, or a one-line note for a binary file (report 18
+#' section 4.3) or one without room; attr "said" names what it holds (`2 lines`, `first 40 lines`,
+#' `binary, 3 bytes`, `not attached, over the size limit`)
 #' @noRd
 repl_file_block = function(path, shown, max_lines = 40L, room = Inf) {
   file = paste0("<file path=\"", attr_escape(shown), "\"")
@@ -433,6 +445,12 @@ repl_file_block = function(path, shown, max_lines = 40L, room = Inf) {
                      said = paste0("binary, ", bytes, " bytes")))
   }
   x = readLines(path, n = max_lines + 1L, warn = FALSE, encoding = "UTF-8")
+  bad = !validUTF8(x)
+  # the five bytes CP1252 lacks become `<xx>` first, as Windows' iconv() reads them as C1 controls
+  for (g in as.raw(c(0x81, 0x8d, 0x8f, 0x90, 0x9d))) {
+    x[bad] = gsub(rawToChar(g), paste0("<", g, ">"), x[bad], fixed = TRUE, useBytes = TRUE)
+  }
+  x[bad] = iconv(x[bad], "CP1252", "UTF-8")
   more = length(x) > max_lines
   x = redact(clean_terminal(utils::head(x, max_lines)), profile = "context")
   tag = function(cut) paste0(file, if (cut) " truncated=\"true\"", ">")
@@ -462,36 +480,50 @@ console_objects = function(env, all = TRUE) {
 }
 
 #' Resolve @mentions, words starting with @ (readline's word breaks before it, as for completion,
-#' so an e-mail address stays text): files (relative to the working directory or the project root,
-#' or absolute/home paths) become <file> blocks, in order within the `user_files` budget;
-#' syntactic names bound in `env` become context objects passed by name. `said` names what each
-#' mention resolved to, in order (D-244): `@ notes.md (2 lines)`, `@ fit (lm)` or `@ tbl
-#' (data.frame, 32 x 11)` (its class and dimensions), or `@ fit2 not found, sent as text` (`is a
-#' folder` for a directory), each `@ ` and the name
+#' so an e-mail address stays text) followed by a quoted name or by letters, marks and digits of
+#' any script and `_ . / ~ -`, not ending in a dot (`text` is marked UTF-8, as_utf8(), so they are
+#' read as characters; a name Tab completes in any script reads whole). An unquoted name no file
+#' or object has is read as its leading run of ASCII letters, digits and `_ . / ~ -` when one has
+#' that, as text in a script written without spaces runs on after a name. Files (relative to the
+#' working directory or the project root, or absolute/home paths) become <file> blocks, in order
+#' within the `user_files` budget; syntactic names bound in `env` become context objects passed by
+#' name. `said` names what each mention resolved to, in order (D-244): `@ notes.md (2 lines)`,
+#' `@ fit (lm)` or `@ tbl (data.frame, 32 x 11)` (its class and dimensions), or `@ fit2 not found,
+#' sent as text` (`is a folder` for a directory), each `@ ` and the name
 #' @noRd
 repl_mentions = function(text, env) {
-  pattern = "(?<![^\\s\"'\\\\`><=%;,|&{()}!])@(\"[^\"]+\"|[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-])"
+  pattern = paste0("(?<![^\\s\"'\\\\`><=%;,|&{()}!])@(\"[^\"]+\"|",
+                   "[\\p{L}\\p{M}\\p{N}_./~-]*[\\p{L}\\p{M}\\p{N}_/~-])")
   toks = regmatches(text, gregexpr(pattern, text, perl = TRUE))[[1L]]
   files = character()
   objects = character()
   said = character()
   for (t in unique(toks)) {
     nm = gsub("^@\"?|\"$", "", t)
-    cand = unique(c(path.expand(nm), file.path(project_root(), nm)))
-    dir = path_info(cand)$isdir
-    hit = cand[dir %in% FALSE]
+    run = regmatches(t, regexpr("^@[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-]", t, perl = TRUE))
+    for (n in unique(c(nm, substring(run, 2L)))) {
+      # the file system gets unmarked bytes in a C locale, which cannot translate a marked name; a
+      # name too long for a path names no file (R's warning would print it raw)
+      home = tryCatch(path.expand(fs_path(n)), warning = function(w) NULL)
+      cand = fs_path(unique(c(home, file.path(project_root(), n))))
+      dir = path_info(cand)$isdir
+      if (identical(n, nm)) folder = any(dir %in% TRUE)
+      hit = cand[dir %in% FALSE]
+      obj = identical(make.names(n), n) && n %in% console_objects(env)
+      if (length(hit) || obj) break
+    }
     if (length(hit)) {
-      shown = path_rel(hit[[1L]])
+      shown = as_utf8(path_rel(hit[[1L]]))
       # the line feed that joins the blocks counts too
       block = repl_file_block(hit[[1L]], shown,
                               room = console_files_budget - est_tokens(c(files, ""), "code"))
       files = c(files, block)
       said = c(said, paste0("@ ", shown, " (", attr(block, "said"), ")"))
-    } else if (identical(make.names(nm), nm) && nm %in% console_objects(env)) {
-      objects = c(objects, nm)
-      said = c(said, paste0("@ ", nm, " (", mention_kind(nm, env), ")"))
+    } else if (obj) {
+      objects = c(objects, n)
+      said = c(said, paste0("@ ", n, " (", mention_kind(n, env), ")"))
     } else {
-      said = c(said, paste0("@ ", nm, if (any(dir %in% TRUE)) " is a folder" else " not found",
+      said = c(said, paste0("@ ", nm, if (folder) " is a folder" else " not found",
                             ", sent as text"))
     }
   }
@@ -508,12 +540,13 @@ mention_kind = function(nm, env) {
 }
 
 #' The note an `!expr` leaves for the next prompt: the code and its output as #> lines
-#' (redacted with the `context` profile)
+#' (redacted with the `context` profile). Lines end as R reads them, a lone carriage return ending
+#' one too, as a transcript records the note (`#<` lines, D-264), so every piece has its prefix
 #' @noRd
 repl_note = function(code, res) {
-  out = strsplit(format_eval_result(res, 300L)$text, "\n", fixed = TRUE)[[1L]]
-  note = paste(c(paste0("> ", strsplit(code, "\n", fixed = TRUE)[[1L]]),
-                 if (length(out)) paste0("#> ", out)), collapse = "\n")
+  lines = function(x) strsplit(gsub("\r\n?", "\n", x), "\n", fixed = TRUE)[[1L]]
+  out = lines(format_eval_result(res, 300L)$text)
+  note = paste(c(paste0("> ", lines(code)), if (length(out)) paste0("#> ", out)), collapse = "\n")
   redact(note, profile = "context")
 }
 
@@ -555,22 +588,26 @@ repl_sending = function(ctx) {
   rs
 }
 
-#' provide() of the `user_ran` context block: the pending `!expr` notes (taken once)
+#' provide() of the `user_ran` context block: the pending `!expr` notes (taken once), or for a
+#' call that asks again for a recorded turn the notes that turn was sent with
 #' @noRd
 console_notes_provide = function(ctx, budget) {
   rs = repl_sending(ctx)
-  if (is.null(rs) || !length(rs$notes)) return(NULL)
+  if (is.null(rs)) return(ctx$input$call$sent[["user_ran"]])
+  if (!length(rs$notes)) return(NULL)
   text = console_notes_text(rs$notes, budget)
   rs$notes = character()
   text
 }
 
 #' provide() of the `user_files` context block: the <file> blocks of the prompt's @files, which
-#' repl_mentions() fit to the block's budget (taken once)
+#' repl_mentions() fit to the block's budget (taken once), or for a call that asks again for a
+#' recorded turn the blocks that turn was sent with
 #' @noRd
 console_files_provide = function(ctx, budget) {
   rs = repl_sending(ctx)
-  if (is.null(rs) || !length(rs$files)) return(NULL)
+  if (is.null(rs)) return(ctx$input$call$sent[["user_files"]])
+  if (!length(rs$files)) return(NULL)
   text = paste(rs$files, collapse = "\n")
   rs$files = character()
   text
@@ -589,11 +626,12 @@ console_blocks = function() {
 
 #' `!code` / `!!code`: the user's own R code in the REPL's environment
 #'
-#' The `input` event (source "passthrough") may handle or transform the code first. Errors are
-#' shown on stderr, red, in the console margin at column 4 with what the code printed (eval_echo());
-#' there a block that showed anything ends with a blank row, as a command's output does. `!code`
-#' leaves a note for the next prompt. The `console:direct` channel tells transcript writers (P15)
-#' what ran. A gptr_wait() in the code waits through console_wait() (`.gptr_console_wait`).
+#' The `input` event (source "passthrough") may handle or transform the code first. The code's own
+#' output, messages and warnings print as R prints them; only an error, on stderr, red, at column 4,
+#' and the blank row that ends a block that showed anything, as a command's output does, use the
+#' console margin. `!code` leaves a note for the next prompt. The `console:direct` channel tells
+#' transcript writers (P15) what ran and the objects it created (the evaluator's diff, also of a
+#' line that failed). A gptr_wait() in the code waits through console_wait() (`.gptr_console_wait`).
 #' @noRd
 repl_passthrough = function(rs, text) {
   noted = !startsWith(text, "!!")
@@ -630,7 +668,7 @@ repl_passthrough = function(rs, text) {
   }
   if (noted) rs$notes = utils::tail(c(rs$notes, repl_note(code, res)), 20L)
   data = list(code = code, output = as.character(unlist(res$outputs)), status = res$status,
-              noted = noted)
+              noted = noted, created = as.character(res$changes$objects$added))
   ev_dispatch("console:direct", list(data = data), session = rs$session)
   invisible(res$status)
 }
@@ -859,6 +897,7 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
   on.exit(console_call_release(rs), add = TRUE)
   cl = console_call(rs, text, men)
   rs$sending = cl
+  notes = rs$notes
   before = gptr::gptr_last()
   res = console_reading(rs, function() {
     tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
@@ -882,7 +921,11 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
     last = gptr::gptr_last()
     if (inherits(last, "gptr_session") && !identical(last, before)) s = last
   }
-  if (!is.null(s)) rs$session = s
+  if (!is.null(s)) {
+    rs$session = s
+    # the notes this turn took, which /retry sends again (cmd_retry())
+    rs$sent = list(id = s$id, turns = s$turns, notes = if (!length(rs$notes)) notes)
+  }
   if (identical(res$status, "interrupt") && !is.null(rs$session)) console_abort_stray(rs$session)
   res
 }
@@ -1303,11 +1346,13 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'
 #' In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 #' and `... ` waits for Enter (text typed there is added); a pasted fence or `"""` block is read
-#' up to its closer at once, and a block pasted at an approval or a choice is kept in the console
-#' history and the question asked again. A last pasted line without a newline waits for Enter at
-#' the next prompt, so a two-line paste without a final newline answers with its first line.
-#' Elsewhere (Homebrew or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted
-#' lines arrive one at a time; wrap a multi-line paste in `"""`. Lines typed, pasted or run from a
+#' up to its closer at once, a block pasted at an approval or a choice is kept in the console
+#' history and the question asked again, and one pasted at the pause menu's `? Steer` or
+#' `? Follow-up` is the whole text. A last pasted line without a newline waits for Enter at the
+#' next prompt, so a two-line paste without a final newline answers a question with its first
+#' line. Elsewhere (Homebrew or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted
+#' lines arrive one at a time, as typed lines do (at a question the first one answers it); wrap a
+#' multi-line paste in `"""`. Lines typed, pasted or run from a
 #' script before a question (an approval, a choice) appeared never answer it: while an answer
 #' runs they are queued for the agent as `type_ahead` says (below; a /command or !code line waits
 #' for the next prompt), otherwise they go to the console history. Answer after the prompt.
@@ -1328,9 +1373,10 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'
 #' In terminal R and an IDE's Terminal tab what you type while peter works is a draft on the
 #' bottom row, under the transcript, so it never mixes into the answer; a block pasted there is
-#' one message. Enter sends it as a steer: the agent reads it at its next step boundary, when the
-#' response in flight ends after the results of all its tool calls (an answer about to end gets
-#' one more request), and it then shows as your own line. Tab sends it as a follow-up: the next
+#' one message where the terminal supports bracketed paste. Enter sends it as a steer: the agent
+#' reads it at its next step boundary, when the response in flight ends after the results of all
+#' its tool calls (an answer about to end gets one more request), and it then shows as your own
+#' line. Tab sends it as a follow-up: the next
 #' prompt, sent as its own run once the answer ends. `type_ahead = "follow_up"` ([gptr_config()])
 #' swaps the two keys. A draft that starts with `/` or `!` is always a follow-up, so `/command`
 #' and `!code` lines run at the next prompt, in the order typed. The bottom row counts what is
@@ -1338,9 +1384,12 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' again, and Ctrl-U clears the draft. A question (an approval, a choice) waits until typing
 #' pauses for a second, or three while the draft has text, and the draft stays: through
 #' questions, Ctrl-C and the pause menu, and to the next prompt, where Enter sends it. Keys typed
-#' while R code runs in this process (the `r` tool) show when it returns. A steer the answer did
-#' not take (it ended first) is the next prompt; after an abort or an error nothing queued is
-#' sent: the queued text and the draft go to the console history, and Up recalls them. Under
+#' while R code runs in this process (the `r` tool) show when it returns. Such code that reads
+#' the terminal through `readline()` or `menu()` inside another function shows only that read's
+#' prompt (the text printed before it shows when the code returns, the typed answer never), and
+#' Ctrl-C at that read aborts the answer instead of pausing it. A steer the answer did not take
+#' (it ended first) is the next prompt; after an abort or an error nothing queued is sent: the
+#' queued text and the draft go to the console history, and Up recalls them. Under
 #' TERM=dumb or in ESS a line typed with Enter is queued as `type_ahead` says. On the CLI routes
 #' (`claude-cli`, `codex`) the agent reads a steer after the CLI's answer, which is often the
 #' whole run.
@@ -1380,7 +1429,8 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' `/exit`, two consecutive interrupts at the prompt or the end of piped input return the session
 #' invisibly, so `session = peter()` keeps the conversation. In a terminal the chat reads keys with
 #' the terminal's echo off and restores it on return, on an error, at an interrupt and at `q()`;
-#' if R is killed or crashes while peter works, type `stty sane` and press Enter to get it back.
+#' if R is killed or crashes while peter works, type `reset` and press Enter to get the terminal
+#' back.
 #'
 #' Options: `gptr.verbose` (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 #' knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`

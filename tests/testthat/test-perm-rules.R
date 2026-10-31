@@ -81,6 +81,18 @@ test_that("r(secret:NAME) is the only allow rule that covers a registered secret
   expect_identical(rule_match(list(allow = "r(secret:OPENAI_API_KEY)"), call)$allow,
                    "r(secret:OPENAI_API_KEY)")
   expect_identical(rule_match(list(allow = "r(secret:OTHER)"), call)$allow, character())
+  # only when every other flagged call reads a named secret by name (review round 6)
+  local_vault()
+  secret_register("sk-test-0000-r6r6", "R6_FAKE_KEY")
+  allow = list(allow = "r(secret:R6_FAKE_KEY)")
+  for (code in c("x = Sys.getenv('R6_FAKE_KEY')", "x = system('echo $R6_FAKE_KEY', intern = TRUE)",
+                 "x = c(Sys.getenv('R6_FAKE_KEY'), system('echo ${R6_FAKE_KEY}', intern = 1))")) {
+    expect_identical(rule_match(allow, r_call(code))$allow, allow$allow, label = code)
+  }
+  for (code in c("x = Sys.getenv('R6_FAKE_KEY'); writeLines('hi', 'out.txt')",
+                 "x = Sys.getenv('R6_FAKE_KEY'); y = readLines('.env')")) {
+    expect_identical(rule_match(allow, r_call(code))$allow, character(), label = code)
+  }
 })
 
 test_that("rule_suggest() covers exactly the flagged calls, never level 4 or control (7.11)", {
@@ -151,6 +163,17 @@ test_that("sh: and category: rules see a program given by its path", {
   }
 })
 
+test_that("sh: globs match in any case where file names do (D-294)", {
+  root = local_project()
+  call = r_call("system('RM -rf build')")
+  local_mocked_bindings(is_windows = function() FALSE, is_macos = function() TRUE)
+  expect_identical(rule_match(list(deny = "r(sh:rm *)"), call)$deny, "r(sh:rm *)")
+  local_mocked_bindings(is_macos = function() FALSE)
+  expect_identical(rule_match(list(deny = "r(sh:rm *)"), call)$deny, character())
+  expect_identical(rule_match(list(deny = "r(sh:git push*)"),
+                              r_call("system('git push origin main')"))$deny, "r(sh:git push*)")
+})
+
 test_that("sh: rules read the command of a background job", {
   root = local_project()
   for (code in c("peter$bg('rm -rf build')", "peter$bg(c('rm', '-rf', 'build'))")) {
@@ -163,6 +186,66 @@ test_that("sh: rules read the command of a background job", {
   expect_identical(rule_suggest(r_call("peter$bg('rm -rf build')")), "r(sh:rm -rf*)")
   m = rule_match(list(allow = "r(sh:rm -rf*)"), r_call("peter$bg('curl https://x.org')"))
   expect_identical(m$allow, character())
+})
+
+test_that("deny and ask sh: rules match a read-only command; allow needs level 1 (FIX-32)", {
+  root = local_project()
+  for (code in c("peter$sh(c('cat', 'report.txt'))", "peter$sh('cat report.txt')",
+                 "system('cat report.txt', intern = TRUE)", "peter$sh('cat a.txt > b.txt')")) {
+    m = rule_match(list(deny = "r(sh:cat *)", ask = "r(sh:cat *)"), r_call(code))
+    expect_identical(c(m$deny, m$ask), rep("r(sh:cat *)", 2L), label = code)
+  }
+  m = rule_match(list(deny = c("r(sh:git *)", "r(sh:echo *)"), ask = "r(sh:wc *)"),
+                 r_call("peter$sh('git status'); system('echo x >> f.txt'); system('wc -l f.txt')"))
+  expect_identical(c(m$deny, m$ask), c("r(sh:git *)", "r(sh:echo *)", "r(sh:wc *)"))
+  # level-0 rows run in every mode, so an allow rule still needs a row of level 1 or more
+  m = rule_match(list(allow = "r(sh:git status*)"), r_call("peter$sh('git status')"))
+  expect_identical(m$allow, character())
+})
+
+test_that("an sh: glob ending ` *` also matches the command alone (review round 3)", {
+  root = local_project()
+  m = rule_match(list(deny = c("r(sh:sh *)", "r(sh:git log *)"), ask = "r(sh:cat *)"),
+                 r_call("peter$sh('sh', input = 'touch x'); peter$sh('cat'); peter$sh('git log')"))
+  expect_identical(c(m$deny, m$ask), c("r(sh:sh *)", "r(sh:git log *)", "r(sh:cat *)"))
+  m = rule_match(list(deny = c("r(sh:sh *)", "r(sh:git log *)")),
+                 r_call("peter$sh('shasum f'); peter$sh('git logs')"))
+  expect_identical(m$deny, character())
+})
+
+test_that("deny and ask sh: rules match a command inside a function the code calls (FIX-32)", {
+  root = local_project()
+  local_permission_rules()
+  # the person's own functions, as made at the console
+  e = new.env(parent = globalenv())
+  eval(parse(text = c("build = function() system('touch out.txt')",
+                      "fmt = function(x) UseMethod('fmt')",
+                      "fmt.foo = function(x) system('git push origin main')",
+                      "clean = function(d) system(paste('rm -rf', d))")), e)
+  m = rule_match(list(deny = "r(sh:touch *)", ask = "r(sh:git push*)"),
+                 r_call("build(); fmt(structure(1, class = 'foo'))", e))
+  expect_identical(c(m$deny, m$ask), c("r(sh:touch *)", "r(sh:git push*)"))
+  expect_identical(rule_suggest(r_call("build()", e)), "r(sh:touch out.txt*)")
+  # a command the function computes is still refused in auto and yolo (D-262)
+  expect_identical(perm_computed_cmd(r_call("clean('build')", e)), "system")
+})
+
+test_that("a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)", {
+  skip_on_cran()
+  root = local_project(files = list("report.txt" = "secret plans"))
+  local_permission_rules()
+  gptr_permissions(deny = "r(sh:cat *)")
+  # manual mode runs the literal call (level 0) and auto mode the computed one (level 3)
+  codes = c(manual = "peter$sh(c('cat', 'report.txt'))",
+            auto = "f = 'report.txt'; peter$sh(c('cat', f))")
+  for (mode in names(codes)) {
+    fake = local_fake_provider(list(fake_tool("r", code = codes[[mode]]), "Done."),
+                               name = paste0("cat-", mode))
+    peter("Show it.", model = fake, mode = mode, envir = new.env())
+    txt = msg_text(fake_requests(fake)[[2]]$last_results[[1]])
+    expect_match(txt, "denied by the rule r(sh:cat *)", fixed = TRUE, label = mode)
+    expect_false(grepl("secret plans", txt, fixed = TRUE), label = mode)
+  }
 })
 
 test_that("gptr_permissions() adds, lists and removes session rules (6.2)", {

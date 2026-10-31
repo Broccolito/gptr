@@ -207,13 +207,28 @@ test_that("skill:<name>/<path> resolves inside the skill directory only (IC-68)"
   td = withr::local_tempdir()
   put_file(td, "sk/references/a.md", "reference text")
   put_file(td, "sk/SKILL.md", "---\nname: demo\n---\nbody")
-  local_bootstrap_service("skill.body", function(name) {
+  local_bootstrap_service("skill.body", function(name, session = NULL) {
     if (identical(name, "demo")) list(text = "", dir = file.path(td, "sk"))
   })
   expect_identical(read_file("skill:demo/references/a.md")$text, "reference text")
   expect_match(read_file("skill:demo/SKILL.md")$text, "^---\nname: demo")
   expect_error(read_file("skill:demo/../../etc/passwd"), "must stay inside the skill directory")
   expect_error(read_file("skill:nope/SKILL.md"), "Unknown skill: nope")
+})
+
+test_that("a skill that carries its own text reads as its SKILL.md in its session (08 3.2)", {
+  local_bootstrap_service("skill.body", function(name, session = NULL) {
+    if (identical(session, "s1")) list(text = "one\ntwo\nthree\n", dir = NULL, name = "tips")
+  })
+  expect_error(read_file("skill:tips/SKILL.md"), "Unknown skill: tips")
+  local_mocked_bindings(run_current = function() fake_run(session = "s1"))
+  rf = read_file("skill:tips/SKILL.md")
+  expect_identical(rf$text, "one\ntwo\nthree")
+  expect_identical(rf$details$path, "skill:tips/SKILL.md")
+  expect_identical(read_file("skill:tips/SKILL.md", offset = 2, limit = 1)$text,
+                   "two\n\n[1 more lines in file. Use offset=3 to continue.]")
+  expect_identical(as.character(member_read("skill:tips/SKILL.md")), c("one", "two", "three"))
+  expect_error(read_file("skill:tips/notes.md"), "has no files besides SKILL.md")
 })
 
 test_that("macOS screenshot names are found through Pi's fallbacks", {

@@ -52,7 +52,8 @@ child_env_profiles_builtin = function() {
                   billing = no_billing),
     `cli-claude` = list(
       base = "inherit",
-      keep = c("CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_GIT_BASH_PATH"),
+      keep = c("CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR",
+               "CLAUDE_CODE_GIT_BASH_PATH"),
       drop = "^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDE_PID$)", set = none,
       billing = list(vars = claude_billing)
     ),
@@ -69,6 +70,21 @@ child_env_profiles_builtin = function() {
     artifact = list(base = "inherit", keep = character(), drop = character(), set = none,
                     billing = no_billing)
   )
+}
+
+#' The login variables of a plan route that a coaching child passes on to its CLI (08 section
+#' 3.7): the set ones of that route's built-in profile `keep` list; none for "api" and "fake".
+#' child_env("worker", pass = names(.)) carries them into the child.
+#' @param kind a kind of coach_model_kind().
+#' @return named chr.
+#' @noRd
+coach_cli_env = function(kind) {
+  kind = check_choice(kind, c("api", "fake", "claude", "codex"), "kind")
+  if (!kind %in% c("claude", "codex")) return(structure(character(), names = character()))
+  keep = child_env_profiles_builtin()[[paste0("cli-", kind)]][["keep"]]
+  env = Sys.getenv(keep, unset = NA, names = TRUE)
+  env = env[!is.na(env) & nzchar(env)]
+  stats::setNames(as_utf8(unname(env)), names(env))
 }
 
 #' A profile: the registered child_env spec, else the built-in table
@@ -209,8 +225,8 @@ child_env = function(profile, pass = character(), set = character(), provider = 
   gone = sort(nm[billing & nzchar(env)])
   if (length(gone)) {
     gptr_inform(paste0("Removed ", paste(gone, collapse = ", "), " from the environment of the ",
-                     profile, " child: these variables switch the CLI to API billing or to ",
-                     "another account."),
+                     sub("^cli-", "", profile), " CLI: these variables switch it to API billing ",
+                     "or to another account."),
               "billing_env", variables = gone,
               .once = paste0("billing_env:", profile, ":", paste(gone, collapse = ",")))
   }

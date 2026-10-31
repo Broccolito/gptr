@@ -227,6 +227,17 @@ test_that("path_ext() and path_sans_ext() follow R 4.6's rule without basename()
   expect_identical(Encoding(path_sans_ext("caf\u00e9.R")), "UTF-8")
 })
 
+test_that("path helpers take a UTF-8 name in a C locale (F-97)", {
+  root = path_norm(withr::local_tempdir())
+  here = file.path(root, "caf\u00e9 data.txt")
+  gone = file.path(root, "gone \u00e9", "x.txt")
+  writeLines("x", fs_path(here))
+  local_name_locale()
+  expect_true(all(path_inside(c(here, gone), root)))
+  expect_identical(path_rel(c(here, gone), root), c("caf\u00e9 data.txt", "gone \u00e9/x.txt"))
+  expect_identical(path_class(c(here, gone), root), rep("workspace", 2L))
+})
+
 test_that("path_key() lower-cases on Windows and macOS only (IC-51)", {
   local_mocked_bindings(is_windows = function() FALSE, is_macos = function() TRUE)
   expect_identical(path_key("/TMP/Foo"), tolower(path_norm("/TMP/Foo")))
@@ -304,6 +315,46 @@ test_that("path_class() assigns the classes of report 18 and IC-54", {
   # Linux keeps the case of path keys: ~/.R/Makevars is still a control file there
   local_mocked_bindings(is_windows = function() FALSE, is_macos = function() FALSE)
   expect_identical(path_class(file.path(home, ".R", "Makevars"), root), "control")
+})
+
+test_that("a project in a protected folder classes a path by its part below the root (D-292)", {
+  base = path_norm(withr::local_tempdir())
+  root = file.path(base, ".claude", "worktrees", "proj")
+  dir.create(file.path(root, "sub"), recursive = TRUE)
+  root = path_norm(root)
+  cls = function(p) path_class(p, root)
+  expect_identical(cls(c("a.csv", "sub/out.txt", file.path(root, "x.R"))), rep("workspace", 3L))
+  expect_identical(cls(c(".git/config", ".env", "AGENTS.md", ".git/HEAD")),
+                   c("control", "protected", "instructions", "protected"))
+  expect_identical(cls(root), "critical")
+  expect_identical(cls(file.path(base, ".claude", "settings.json")), "protected")
+})
+
+test_that("path_class() classes a vector as it classes each path alone, in bounded time (F-80)", {
+  base = path_norm(withr::local_tempdir())
+  root = file.path(base, ".claude", "worktrees", "proj")
+  dir.create(root, recursive = TRUE)
+  root = path_norm(root)
+  p = c(NA, "", "https://x.org/a", "R/*.R", "C:x", "a.R", "sub/../b.csv", "sub\\c.R",
+        ".gptr/settings.json", ".git/hooks/x", ".git/HEAD", "keys/a.env", "AGENTS.md",
+        ".gptr/skills/s/SKILL.md", root, "/", file.path(tempdir(), "t.csv"),
+        file.path(base, ".claude", "x.json"), "/opt/elsewhere/x")
+  cls = path_class(p, root)
+  expect_identical(cls, c("unknown", "unknown", "url", "wildcard", "outside", rep("workspace", 3L),
+    "control", "control", "protected", "protected", "instructions", "instructions", "critical",
+    "critical", "temp", "protected", "outside"))
+  expect_identical(cls, vapply(p, path_class, "", root = root, USE.NAMES = FALSE))
+  many = file.path(root, sprintf("d%02d/f%04d.R", seq_len(5000L) %% 50L, seq_len(5000L)))
+  t0 = proc.time()[["elapsed"]]
+  expect_identical(unique(path_class(many, root)), "workspace")
+  # 0.3 s on an idle laptop (1.7 s with a grepl() call per path); coarse, so load cannot fail it
+  expect_lt(proc.time()[["elapsed"]] - t0, 30)
+  # a vector may mix marked and unmarked UTF-8 names, which a C locale cannot match together
+  p = c(file.path(root, "caf\u00e9.R"), "d\u00e9j\u00e0.env")
+  bytes = p
+  Encoding(bytes) = "unknown"
+  local_name_locale()
+  expect_identical(path_class(c(p, bytes), root), rep(c("workspace", "protected"), 2L))
 })
 
 test_that("path_class protects local credential directories and env files", {

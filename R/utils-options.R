@@ -56,16 +56,19 @@ setting_get = function(key, session = NULL, default = NULL) {
 #' @noRd
 context_mode = function(opts) opts$context %||% setting_get("context", default = "summary")
 
-#' Say once per R process what yolo still asks for (IC-78)
+#' Say once per R process what yolo still asks for and refuses (IC-78, D-262)
 #' @noRd
 mode_notice = function(mode) {
   if (!identical(mode, "yolo")) return(invisible(NULL))
   gptr_inform(paste0("Mode yolo: actions run without approval, including package installs, ",
                      "writes anywhere and gptr's own configuration functions. A person is still ",
                      "asked before deleting files outside the project or protected files (.git, ",
-                     ".env, keys), the project or home directory, rm(list = ls()), quitting R, ",
-                     "options(gptr.*) and sending a secret over the network. The classifier ",
-                     "reads code; it is not a sandbox."), "notice", .once = "mode_yolo")
+                     ".env, keys), the project or home directory, moving the working directory ",
+                     "out of the project, rm(list = ls()), options(gptr.*) and sending a secret ",
+                     "over the network. system(), system2(), shell() and shell.exec() calls with ",
+                     "a command the code computes are refused; the model is pointed to ",
+                     "peter$sh(). The classifier reads code; it is not a sandbox."), "notice",
+              .once = "mode_yolo")
 }
 
 #' Mockable wrapper of interactive()
@@ -95,21 +98,35 @@ console_class = function() {
 }
 
 #' Mockable: the modes of the terminal R reads (`stty -g`), or set `modes` (such as "-echo"); NULL
-#' when stty fails (IC-76)
+#' when stty fails (IC-76). `paste` and `-paste` among `modes` are gptr's own, not stty's (alone
+#' they run no stty): they turn bracketed paste on (`ESC [ ? 2004 h`, written after stty) or off
+#' (`ESC [ ? 2004 l`, written before it), through the console writer (gptr_message_write()), never
+#' into a tool's output (D-263)
 #' @noRd
 tty_modes = function(modes = "-g") {
-  out = tryCatch(suppressWarnings(system2("stty", modes, stdout = TRUE, stderr = FALSE)),
-                 error = function(e) NULL)
+  bp = modes %in% c("paste", "-paste")
+  if ("-paste" %in% modes) gptr_message_write("\033[?2004l", gptr_message_stream("stdout"))
+  out = if (!all(bp)) {
+    tryCatch(suppressWarnings(system2("stty", modes[!bp], stdout = TRUE, stderr = FALSE)),
+             error = function(e) NULL)
+  }
+  if ("paste" %in% modes) gptr_message_write("\033[?2004h", gptr_message_stream("stdout"))
   if (is.null(attr(out, "status"))) out
 }
 
 #' Set the terminal modes of a console call (IC-76, D-243), the saved ones (`stty -g`) kept: a T
 #' console's composer reads keys as typed, `-icanon -echo -iexten -isig min 1 time 0` (Ctrl-C is a
 #' key it reads, as a signal could be lost under load; opost stays on, and `min 1` keeps a tool
-#' that reads stdin waiting, never at an end of input); a D console turns the echo off and keeps
-#' what is typed at SIGINT (`-echo noflsh`; `keys` FALSE), so the pause menu's drain keeps a line
-#' being typed (policy_menu()). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which
-#' also runs at q() (a finalizer, onexit); nothing is set when stty fails
+#' that reads stdin waiting, never at an end of input); a D console turns the echo off
+#' (`-echo`; `keys` FALSE). Both keep what is typed at SIGINT (`noflsh`; for a T console while R
+#' code runs with isig on), so the pause menu's drain keeps a line being typed (policy_menu()).
+#' `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which also runs at q() (a
+#' finalizer, onexit); nothing is set when stty fails. A T console's set also
+#' turns bracketed paste on (`paste`, D-263), and every return to the saved modes (tty_restore(),
+#' tty_question(), gptr_readline()) turns it off first, so readline never reads with it on: GNU
+#' readline 8.1+ toggles it around its own reads, older readline (CRAN macOS R's 5.2) and libedit
+#' would read the markers as text. In-process R code may read through readline, so the end of its
+#' evaluation turns it on again (eval_restore())
 #' @noRd
 tty_call = function(keys) {
   saved = tty_modes()
@@ -118,7 +135,7 @@ tty_call = function(keys) {
   tty$saved = saved
   tty$keys = keys
   tty$set = if (keys) {
-    c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0")
+    c("-icanon", "-echo", "-iexten", "-isig", "noflsh", "min", "1", "time", "0", "paste")
   } else {
     c("-echo", "noflsh")
   }
@@ -135,7 +152,7 @@ tty_restore = function(tty = the$tty) {
   saved = tty$saved
   if (is.null(saved)) return(invisible(NULL))
   tty$saved = NULL
-  tty_modes(saved)
+  tty_modes(c(saved, if ("paste" %in% tty$set) "-paste"))
   invisible(NULL)
 }
 
@@ -167,18 +184,20 @@ console_readline_tty = function() {
     isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty()
 }
 
-#' A console question of a terminal call reads in the saved modes from before its rows are written
-#' (`on` TRUE) until it returns (FALSE), so readline starts as soon as the person sees the question,
-#' never after a slow stty (D-243); gptr_readline() then switches nothing. Where readline reads the
-#' tty the echo stays off (`tty$quiet`) until gptr_readline() starts it, so a key typed while the
-#' rows are written is not echoed before the chevron and again by readline
+#' A console question of a terminal call reads in the saved modes (bracketed paste off first,
+#' D-263) from before its rows are written (`on` TRUE) until it returns (FALSE), so readline starts
+#' as soon as the person sees the question, never after a slow stty (D-243); gptr_readline() then
+#' switches nothing. Where readline reads the tty the echo stays off (`tty$quiet`) until
+#' gptr_readline() starts it, so a key typed while the rows are written is not echoed before the
+#' chevron and again by readline
 #' @noRd
 tty_question = function(on) {
   tty = the$tty
   if (is.null(tty$saved) || identical(isTRUE(tty$asking), on)) return(invisible(NULL))
   tty$asking = on
   tty$quiet = on && console_readline_tty()
-  tty_modes(if (on) c(tty$saved, if (tty$quiet) "-echo") else tty$set)
+  saved = c(tty$saved, if (tty$quiet) "-echo", if ("paste" %in% tty$set) "-paste")
+  tty_modes(if (on) saved else tty$set)
   invisible(NULL)
 }
 
@@ -260,11 +279,12 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
     gptr_message_write(paste0(text, "\n"), "stdout", margin = TRUE)
     prompt = paste0(pad, "> ")
   }
-  # readline() edits and echoes in the modes a console call saved (tty_call()); the call's after,
-  # unless a console question already reads in them (tty_question())
+  # readline() edits and echoes in the modes a console call saved (tty_call()), bracketed paste
+  # off first (D-263); the call's after, unless a console question (tty_question()) already reads
+  # in them
   tty = the$tty
   if (!is.null(tty$saved) && !isTRUE(tty$asking)) {
-    tty_modes(tty$saved)
+    tty_modes(c(tty$saved, if ("paste" %in% tty$set) "-paste"))
     on.exit(tty_modes(tty$set), add = TRUE)
   } else if (isTRUE(tty$quiet)) {
     # readline shows what it reads only where the echo is on as it starts; its prompt erases a key
@@ -536,7 +556,8 @@ s3_register = function(generic, class, method = NULL) {
 #'
 #' @section Transport and processes:
 #' - `gptr.connect_timeout` (seconds, `20`), `gptr.first_byte_timeout` (seconds, `120`) and
-#'   `gptr.idle_timeout` (seconds, `90`): network timeouts.
+#'   `gptr.idle_timeout` (seconds, `90`): network timeouts. High-effort reasoning on OpenAI or
+#'   Google may need `options(gptr.idle_timeout = 300)`.
 #' - `gptr.max_retry_delay` (seconds, `60`): a longer `retry-after` from a provider fails at
 #'   once.
 #' - `gptr.max_attempts` (integer, `4`): transport attempts per request.
@@ -550,7 +571,9 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.cli_turn_timeout` (seconds, `3600`): wall-clock time per command-line turn.
 #'
 #' @section Evaluation and tools:
-#' - `gptr.r_timeout` (seconds, `3600`): time limit of the `r` tool when nobody is present.
+#' - `gptr.r_timeout` (seconds, `3600`): time limit of the `r` tool when nobody is present. It
+#'   stops R code that is computing; in a non-interactive R it does not end `Sys.sleep()` or
+#'   `system()`, which `peter$sh(timeout = )` does for a command.
 #' - `gptr.r_output_tokens` (integer, `4000`): estimated tokens of one `r` result.
 #' - `gptr.r_max_images` (integer, `3`): plot images attached to one `r` result.
 #' - `gptr.helper_output_tokens` (integer, `1500`): printed size of `peter$` helper results.
@@ -565,7 +588,7 @@ s3_register = function(generic, class, method = NULL) {
 #'   to answer); `"deny"` returns a denial to the model.
 #' - `gptr.critical_guard` (logical, `TRUE`): level-4 actions ask even in `auto` mode.
 #' - `gptr.secret_guard` (logical, `TRUE`): reads of registered secrets ask even in `auto`
-#'   mode.
+#'   mode; [gptr_security] lists the reads.
 #' - `gptr.protect_size` (bytes, `1e8`): overwriting a larger object is a level-3 action.
 #' - `gptr.plan_handoff` (logical, `TRUE`): hand the plan a `plan` run proposes, once, to the next
 #'   top-level `peter()` call from the same environment, within an hour and in another mode;
@@ -635,6 +658,21 @@ s3_register = function(generic, class, method = NULL) {
 #' - `GPTR_PROJECT_ROOT`: overrides the project root, like `gptr.project_root`.
 #' - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `TYPESAFE_API_KEY` and the other
 #'   provider keys: read at the first use of a provider; see [gptr_env()] for `.env` files.
+#' - `R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME` and `HOME` (on Windows also `APPDATA` and
+#'   `USERPROFILE`): they place `tools::R_user_dir("gptr", "config")`, which holds gptr's
+#'   settings, permission rules, trust decisions and credentials, and your home directory.
+#'   Setting or unsetting one of them from model code changes gptr's own configuration, as does
+#'   a variable a registered provider reads (its key or base-URL variable, such as `AWS_REGION`
+#'   for Bedrock, or a variable gptr keeps for the `claude` or `codex` command-line tool: its
+#'   login, its folder or the path of Git Bash, such as `CODEX_HOME`), a `GPTR_*` or `*_BASE_URL`
+#'   variable, `R_ENVIRON_USER`, `R_PROFILE_USER`,
+#'   `R_ENVIRON` or `R_PROFILE`, whatever the letter case. Every mode but `yolo` asks you first,
+#'   `auto` included, before `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` or
+#'   `withr::with_envvar()` of such a name or of a name the classifier cannot read, before
+#'   `readRenviron()` and `dotenv::load_dot_env()`, and before an `os.environ` write in
+#'   `peter$py()` or `peter$knit("python", code)` code that names one in a string or an upper-case
+#'   word or whose name is not a plain string literal; [gptr_security] lists what it does not
+#'   read.
 #' - `GPTR_WORKER`, `GPTR_SUBAGENT_DEPTH`, `GPTR_ARTIFACT_PORTS`, `GPTR_SHELL_CMD` and the tree
 #'   markers `GPTR_PROC_<id>`: set by gptr in its own child processes only.
 #' - `GPTR_MCP_TOKEN`: the variable through which the Codex snippet of [gptr_mcp_serve()] passes

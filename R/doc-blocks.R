@@ -14,18 +14,128 @@ doc_block_token = "@@GPTR_BLOCK@@"
 # what a recorded gptr_return(<expression>) assigns, and value= names (doc_rewrite_return())
 doc_value_name = paste0(".gptr_value_", doc_block_token)
 doc_header_keys = c("model", "date", "prompt", "sha", "call", "tokens", "cost", "session", "turn",
-                    "value", "fork", "plan", "status", "args", "kind", "children")
+                    "value", "created", "fork", "plan", "status", "args", "kind", "children",
+                    "harness", "start", "coach", "gptr")
 doc_quoted_keys = "children"
+# the context blocks the console sends with a typed prompt (its !code notes and @file heads),
+# which a block records as `#< ` lines (IC-49)
+doc_sent_kinds = c("user_ran", "user_files")
+# a console turn's statement in a transcript, live or undone, of peter or a harness (IC-49)
+doc_re_console = "^(#~ )?s_[0-9a-f]{6} (=|[|]>) (peter|h_[0-9A-Za-z]+)\\("
+# a control character, as ui_escape() counts them: C0, DEL and C1, which holds the 8-bit CSI and
+# OSC that a terminal may honour as ESC [ and ESC ]
+doc_re_ctl = "[\u0001-\u001f\u007f-\u009f]"
 
 #' A `## Steer:` or `## Follow-up:` line; a blank text leaves no trailing space for an editor to
 #' trim
 #' @noRd
 doc_steer_line = function(kind, text) sub(" $", "", paste0("## ", kind, ": ", doc_one_line(text)))
 
-#' A string literal that both R and JSON read back as `x` (Python's json.dumps(ensure_ascii =
-#' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale
+#' Which `lines` are whole comment lines by R's parse data (a COMMENT token with only blanks before
+#' it on its line); none when the lines do not parse. A line inside a string is not one.
 #' @noRd
-doc_str_literal = function(x) {
+doc_comment_lines = function(lines) {
+  pd = tryCatch(utils::getParseData(doc_parse_text(lines)), error = function(e) NULL)
+  if (is.null(pd)) return(logical(length(lines)))
+  pd = pd[pd$token == "COMMENT", , drop = FALSE]
+  whole = as_utf8(pd$text) == sub("^[ \t]+", "", lines[pd$line1])
+  seq_along(lines) %in% pd$line1[whole]
+}
+
+#' The `## Steer:` and `## Follow-up:` lines of a block body (doc_steer_line()): whole comment
+#' lines matching doc_re_steer, as recorded code gets one more `#` on such a line
+#' (doc_comment_escape()), so model code cannot write one
+#' @noRd
+doc_steer_lines = function(body) {
+  hit = grepl(doc_re_steer, body)
+  if (any(hit)) hit = hit & doc_comment_lines(body)
+  hit
+}
+
+#' The lines of `text`, which `\r\n` or a lone `\r` ends as `\n` does, as R's evaluator reads
+#' them (eval_parse())
+#' @noRd
+doc_split_lines = function(text) {
+  strsplit(gsub("\r\n?", "\n", as_utf8(text)), "\n", fixed = TRUE)[[1L]]
+}
+
+#' `lines` of code with one more `#` where each whole comment line matching a pattern of `re`
+#' starts (doc_comment_lines()), so R reads the same code and the line no longer reads as one that
+#' gptr writes
+#' @noRd
+doc_comment_escape = function(lines, re) {
+  hit = Reduce(`|`, lapply(re, function(p) grepl(p, lines, perl = TRUE)), logical(length(lines)))
+  if (any(hit)) hit = hit & doc_comment_lines(lines)
+  lines[hit] = sub("#", "##", lines[hit], fixed = TRUE)
+  lines
+}
+
+#' The `#< ` lines of the context blocks a prompt was sent with (IC-49): each line of each block's
+#' text, as R reads them (doc_split_lines()), an empty one as `#<`
+#' @noRd
+doc_sent_lines = function(texts) {
+  x = unlist(lapply(as.character(texts), doc_split_lines))
+  out = paste0("#< ", x, recycle0 = TRUE)
+  out[!nzchar(x)] = "#<"
+  out
+}
+
+#' The number of lines starting `#<` that open `body`: the same lines as written and as read back,
+#' which drops a line's trailing carriage return
+#' @noRd
+doc_sent_n = function(body) {
+  match(FALSE, startsWith(body, "#<"), nomatch = length(body) + 1L) - 1L
+}
+
+#' The line of the console statement that owns the block starting at line `start`: the nearest
+#' non-blank line above it, when that is one (doc_re_console); else NA
+#' @noRd
+doc_console_stmt = function(lines, start) {
+  p = start - 1L
+  while (p >= 1L && !nzchar(trimws(lines[p]))) p = p - 1L
+  if (p >= 1L && grepl(doc_re_console, lines[p])) p else NA_integer_
+}
+
+#' What block `b` (doc_block_get()) of a document's `text` records its prompt was sent with
+#' (IC-49), as list(<kind> = <text inside its tags>): only in an .R document whose markers are well
+#' formed (gptr markers in recorded code leave them malformed), only for a block a console
+#' statement owns (doc_console_stmt()), and only from the run of lines that opens its body
+#' (doc_sent_n()), under `#~ ` when it is undone. doc_block_lines() writes that run and gives
+#' recorded code that would read as part of it one more `#`, so model code cannot extend or forge
+#' it, also in a block a format error moved into the console transcript (doc_upsert_fallback()).
+#' The run is the doc_sent_kinds blocks in that order, each optional, each from its opening tag to
+#' the first line holding its closing tag that ends the run or comes before a later kind's opening
+#' tag (a file's lines may hold any tag; each line of a `!` note starts `> ` or `#> `); any other
+#' run, as an edit can leave, gives list().
+#' @noRd
+doc_block_sent = function(format, text, b) {
+  if (!isTRUE(format %in% c("r", "transcript")) || is.null(b) ||
+      is.na(doc_console_stmt(text, b$start)) ||
+      isTRUE(attr(doc_find_blocks(text), "malformed"))) {
+    return(list())
+  }
+  x = as_utf8(as.character(b$body))
+  if (identical(b$header[["status"]], "undone")) x = sub("^#~ ", "", x)
+  x = sub("^#< ?", "", x[seq_len(doc_sent_n(x))])
+  out = list()
+  for (k in seq_along(doc_sent_kinds)) {
+    kind = doc_sent_kinds[k]
+    if (!identical(x[1L], paste0("<", kind, ">"))) next
+    nxt = c(x[-1L], NA)
+    end = which(x == paste0("</", kind, ">") &
+                  (is.na(nxt) | nxt %in% paste0("<", doc_sent_kinds[-seq_len(k)], ">")))[1L]
+    if (is.na(end)) return(list())
+    out[[kind]] = paste(x[seq_len(end - 2L) + 1L], collapse = "\n")
+    x = x[-seq_len(end)]
+  }
+  if (length(x)) list() else out
+}
+
+#' A string literal that both R and JSON read back as `x` (Python's json.dumps(ensure_ascii =
+#' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale. A character
+#' matching `ctl` (by default a C0 control, as json.dumps() escapes) is written as a Unicode escape.
+#' @noRd
+doc_str_literal = function(x, ctl = "[\001-\037]") {
   x = as_utf8(as.character(x))
   x = gsub("\\", "\\\\", x, fixed = TRUE)
   x = gsub("\"", "\\\"", x, fixed = TRUE)
@@ -34,8 +144,8 @@ doc_str_literal = function(x) {
   x = gsub("\t", "\\t", x, fixed = TRUE)
   x = gsub("\b", "\\b", x, fixed = TRUE)
   x = gsub("\f", "\\f", x, fixed = TRUE)
-  ctl = gregexpr("[\001-\037]", x, perl = TRUE)
-  regmatches(x, ctl) = lapply(regmatches(x, ctl), function(ch) {
+  hit = gregexpr(ctl, x, perl = TRUE)
+  regmatches(x, hit) = lapply(regmatches(x, hit), function(ch) {
     vapply(ch, function(c) sprintf("\\u%04x", utf8ToInt(c)), "", USE.NAMES = FALSE)
   })
   paste0("\"", x, "\"")
@@ -82,7 +192,9 @@ doc_parse_kv = function(s) {
 }
 
 #' Format header fields in the key order of contract 11.5 (unknown keys last); values that hold
-#' a blank, a line break, a quote, `=` or a backslash are quoted so the header stays one line
+#' a blank, a control character (doc_re_ctl: C0, a line break among them, DEL or C1), a quote, `=`
+#' or a backslash are quoted, which escapes each control character (doc_str_literal()), so the
+#' header is one line without them and starts no terminal sequence
 #' @noRd
 doc_format_kv = function(x) {
   x = x[!vapply(x, function(v) is.null(v) || !length(v), NA)]
@@ -90,10 +202,11 @@ doc_format_kv = function(x) {
   known = intersect(doc_header_keys, names(x))
   x = x[c(known, setdiff(names(x), known))]
   vals = vapply(names(x), function(k) {
-    v = as.character(x[[k]])[1L]
+    v = as_utf8(as.character(x[[k]])[1L])
     if (is.na(v)) v = "NA"
-    quote = k %in% doc_quoted_keys || !nzchar(v) || grepl("[ \t\r\n\"=\\\\]", v)
-    if (quote) doc_str_literal(v) else v
+    quote = k %in% doc_quoted_keys || !nzchar(v) || grepl("[ \"=\\\\]", v) ||
+      grepl(doc_re_ctl, v, perl = TRUE)
+    if (quote) doc_str_literal(v, doc_re_ctl) else v
   }, "")
   paste0(names(x), "=", vals, collapse = " ")
 }
@@ -158,11 +271,15 @@ doc_dedent = function(lines, indent) {
   lines
 }
 
-#' First 8 hex of sha256 of the body as written, without steering lines (IC-49)
+#' First 8 hex of sha256 of the body as written, without steering lines (IC-49, doc_steer_lines())
+#' and without the trailing blanks of a line, which an editor may trim, or its carriage return,
+#' which a read drops. `legacy = TRUE` gives the hash written before FIX-33 (D-268): without each
+#' line matching doc_re_steer, nothing trimmed
 #' @noRd
-doc_body_sha = function(body) {
+doc_body_sha = function(body, legacy = FALSE) {
   body = as_utf8(as.character(body))
-  body = body[!grepl(doc_re_steer, body)]
+  body = if (legacy) body[!grepl(doc_re_steer, body)] else
+    sub("[ \t\r]+$", "", body[!doc_steer_lines(body)])
   substr(hash_sha256(paste(body, collapse = "\n")), 1L, 8L)
 }
 
@@ -170,8 +287,7 @@ doc_body_sha = function(body) {
 #' whitespace around newlines removed
 #' @noRd
 prompt_hash = function(template) {
-  p = as_utf8(paste(as.character(template), collapse = "\n"))
-  p = gsub("[ \t]*\r?\n[ \t]*", "\n", trimws(p))
+  p = text_norm(paste(as.character(template), collapse = "\n"))
   substr(hash_sha256(p), 1L, 12L)
 }
 
@@ -188,18 +304,44 @@ args_hash = function(interp) {
   substr(hash_sha256(paste(x, collapse = "\n")), 1L, 8L)
 }
 
-#' Status of a block: undone > user-edited (sha) > stale (prompt or args) > fresh. With
-#' `ph = NULL` only undone and user-edited are detected. Header keys are matched exactly.
+#' Status of a block: undone > user-edited (sha, also as written before FIX-33) > stale (prompt,
+#' args, kind or coaching) > fresh. With `ph = NULL` only undone and user-edited are detected.
+#' Header keys are matched exactly. `hh` is the `<name>:<hash>` of the harness the call runs
+#' (NULL: peter) and `coach` tells a coaching call: its block must be of kind `coach` and its
+#' `start=` must have that coaching hash, any other block's `harness=` (08 section 3.6).
 #' @noRd
-doc_block_status = function(header, body, ph = NULL, ah = NULL) {
+doc_block_status = function(header, body, ph = NULL, ah = NULL, hh = NULL, coach = FALSE) {
   if (identical(header[["status"]], "undone")) return("undone")
   sha = header[["sha"]]
-  if (!is.null(sha) && !identical(sha, doc_body_sha(body))) return("user-edited")
+  if (!is.null(sha) && !identical(sha, doc_body_sha(body)) &&
+      !identical(sha, doc_body_sha(body, legacy = TRUE))) {
+    return("user-edited")
+  }
   if (!is.null(ph)) {
     if (!identical(header[["prompt"]], ph)) return("stale")
     if (!identical(header[["args"]] %||% "", ah %||% "")) return("stale")
+    if (!identical(identical(header[["kind"]], "coach"), isTRUE(coach))) return("stale")
+    key = if (isTRUE(coach)) "start" else "harness"
+    if (!identical(doc_coaching_of(header[[key]]), doc_coaching_of(hh))) return("stale")
   }
   "fresh"
+}
+
+#' The coaching hash of a `<name>:<hash>` header value; none (peter, whose coaching is empty)
+#' reads as the hash of empty coaching, so `peter(` and an uncoached harness read alike
+#' @noRd
+doc_coaching_of = function(v) {
+  if (rlang::is_string(v) && grepl(":", v, fixed = TRUE)) return(sub("^.*:", "", v))
+  doc_coach_hash(NULL)
+}
+
+#' The harness a reader that runs nothing takes a call of `head` to run (doc_block_status()'s
+#' `hh`): the block header's `harness=` when it names that head, else none (peter), so a block a
+#' coached harness recorded reads stale under `peter(`
+#' @noRd
+doc_head_harness = function(header, head) {
+  hh = header[["harness"]]
+  if (rlang::is_string(hh) && identical(sub(":[^:]*$", "", hh), head)) hh
 }
 
 #' Render a marker block (contract 11.5): header, indented non-empty body lines, footer
@@ -225,6 +367,27 @@ doc_splice = function(lines, from, to, new) {
 }
 
 # ---- the peter() call scanner, anchors and block ownership (report 14 sections 3.1 and 4.2) ----
+
+#' The call heads a reader of a text counts (08 section 3.6): `peter`, `gptr_coach`, every name
+#' a `harness=` header of the text declares, and `extra` (the head of the call being located)
+#' @noRd
+doc_heads = function(lines, extra = NULL) {
+  hit = lines[grepl("harness=", lines, fixed = TRUE)]
+  m = regmatches(hit, regexec(doc_re_open, hit, perl = TRUE))
+  vals = vapply(m[lengths(m) > 0L], function(x) doc_parse_kv(x[4L])[["harness"]] %||% "", "")
+  names = sub(":[^:]*$", "", vals)
+  unique(c("peter", "gptr_coach", names[make.names(names) == names], extra))
+}
+
+#' The heads a format's locate() counts for a site: its own (doc_site_base()) and the head of
+#' its anchored call, which an upsert recovered from a sidecar keeps (`head`, or a notebook
+#' anchor's call identity, doc_sidecar_call())
+#' @noRd
+doc_site_heads = function(site) {
+  call0 = site[["anchor"]][["call0"]]
+  c(site[["heads"]], site[["anchor"]][["head"]],
+    if (is.call(call0) && is.symbol(call0[[1L]])) as.character(call0[[1L]]))
+}
 
 #' P15's process state `the$doc_pending` (contract 7.0): deferred and pending upserts by
 #' document key (`docs`), document locks held until exit (`held`), whether the exit finalizer is
@@ -261,27 +424,30 @@ doc_setting = function(key, default) {
 doc_calls_empty = function() {
   data.frame(line1 = integer(), col1 = integer(), line2 = integer(), col2 = integer(),
              stmt1 = integer(), stmt2 = integer(), nested = logical(), prompt = character(),
-             n_in_stmt = integer(), text = character(), ident = character(),
+             n_in_stmt = integer(), text = character(), ident = character(), head = character(),
              stringsAsFactors = FALSE)
 }
 
-#' The peter() calls of an R text: positions, statement range, nesting, prompt literal, ordinal
-#' within the statement (report 14 doc_scan_calls, with `prompt =` and named-argument handling),
-#' the call's text and its identity text (`ident`: the text that parses to the call R evaluates,
-#' the whole pipe for the right-hand side of `|>`, the call with `.` inserted as magrittr calls
-#' it for the right-hand side of a magrittr pipe, else the call's text). A text that does not
-#' parse gives no calls and the attribute `parse_error`. Texts of 20 lines or more are remembered
-#' (the 16 most recently used), so every peter() call of a long script locates through one parse.
+#' The calls of an R text whose head is one of `heads` (peter() and harness calls): positions,
+#' statement range, nesting, prompt literal, ordinal within the statement (report 14
+#' doc_scan_calls, with `prompt =` and named-argument handling), the call's text, its identity
+#' text (`ident`: the text that parses to the call R evaluates, the whole pipe for the right-hand
+#' side of `|>`, the call with `.` inserted as magrittr calls it for the right-hand side of a
+#' magrittr pipe, else the call's text) and its head. A text that does not parse gives no calls
+#' and the attribute `parse_error`. Texts of 20 lines or more are remembered (the 16 most
+#' recently used, keyed by the heads too), so every call of a long script locates through one
+#' parse.
 #' @noRd
-doc_scan_calls = function(lines, line_offset = 0L) {
+doc_scan_calls = function(lines, line_offset = 0L, heads = doc_heads(lines)) {
   lines = as_utf8(as.character(lines))
   if (!length(lines)) return(doc_calls_empty())
-  if (length(lines) < 20L) return(doc_scan_parse(lines, line_offset))
+  if (length(lines) < 20L) return(doc_scan_parse(lines, line_offset, heads))
   st = doc_state()
-  key = hash_sha256(paste(c(line_offset, lines), collapse = "\n"))
+  key = hash_sha256(paste(c(line_offset, paste(sort(heads), collapse = " "), lines),
+                          collapse = "\n"))
   res = get0(key, envir = st$scan, inherits = FALSE)
   if (is.null(res)) {
-    res = doc_scan_parse(lines, line_offset)
+    res = doc_scan_parse(lines, line_offset, heads)
     assign(key, res, envir = st$scan)
   }
   st$scan_keys = c(setdiff(st$scan_keys, key), key)
@@ -301,7 +467,7 @@ doc_scan_calls = function(lines, line_offset = 0L) {
 #' into peter() with it: contract 6.1, research 12 D3) runs `lhs %>% peter(q)` as `peter(., q)`
 #' with `.` bound to the left-hand side (doc_dot_ident()).
 #' @noRd
-doc_scan_parse = function(lines, line_offset) {
+doc_scan_parse = function(lines, line_offset, heads = doc_heads(lines)) {
   empty = doc_calls_empty()
   exprs = tryCatch(doc_parse_text(lines), error = function(e) e)
   if (inherits(exprs, "error")) {
@@ -310,7 +476,7 @@ doc_scan_parse = function(lines, line_offset) {
   }
   pd = utils::getParseData(exprs)
   if (is.null(pd) || !nrow(pd)) return(empty)
-  sym = which(pd$token == "SYMBOL_FUNCTION_CALL" & pd$text == "peter")
+  sym = which(pd$token == "SYMBOL_FUNCTION_CALL" & pd$text %in% heads)
   if (!length(sym)) return(empty)
   parent = integer(max(pd$id))
   parent[pd$id] = pd$parent
@@ -348,7 +514,8 @@ doc_scan_parse = function(lines, line_offset) {
     rows[[i]] = data.frame(line1 = pd$line1[cl], col1 = pd$col1[cl], line2 = pd$line2[cl],
                            col2 = pd$col2[cl], stmt1 = pd$line1[top], stmt2 = pd$line2[top],
                            nested = nested, prompt = prompt, n_in_stmt = NA_integer_,
-                           text = text, ident = ident, stringsAsFactors = FALSE)
+                           text = text, ident = ident, head = pd$text[sym[i]],
+                           stringsAsFactors = FALSE)
   }
   res = do.call(rbind, rows)
   res = res[order(res$line1, res$col1, method = "radix"), , drop = FALSE]
@@ -482,12 +649,12 @@ doc_call_prompt = function(pd, call_id, lhs_id = NA_integer_, magrittr = FALSE) 
   as_utf8(positional %||% NA_character_)
 }
 
-#' All peter() calls of an R text with their block, ordinal inside the block, prompt hash (`ph`)
-#' and identity hash (`th`, of the identity text `ident`: the identity of calls with a computed
-#' prompt)
+#' All peter() and harness calls of an R text (doc_heads() with `heads`) with their block,
+#' ordinal inside the block, prompt hash (`ph`) and identity hash (`th`, of the identity text
+#' `ident`: the identity of calls with a computed prompt)
 #' @noRd
-doc_calls = function(lines, blocks = doc_find_blocks(lines)) {
-  calls = doc_scan_calls(lines)
+doc_calls = function(lines, blocks = doc_find_blocks(lines), heads = NULL) {
+  calls = doc_scan_calls(lines, heads = doc_heads(lines, heads))
   n = nrow(calls)
   calls$block = rep(NA_character_, n)
   calls$n_in_block = rep(NA_integer_, n)
@@ -547,10 +714,13 @@ doc_call_norm = function(x) {
   if (pl) as.pairlist(x) else x
 }
 
-#' Calls that share an anchor's identity (prompt hash, else call-text hash)
+#' Calls that share an anchor's identity: its head, when known, and prompt hash, else call-text
+#' hash. The head keeps the ordinal of a deferred anchor from counting calls of a harness whose
+#' `harness=` header was written after the anchor was taken.
 #' @noRd
-doc_same_calls = function(calls, ph, th = NA_character_) {
+doc_same_calls = function(calls, ph, th = NA_character_, head = NULL) {
   keep = if (!is.na(ph)) calls$ph %in% ph else calls$th %in% th
+  if (!is.null(head)) keep = keep & calls$head %in% head
   calls[keep, , drop = FALSE]
 }
 
@@ -571,9 +741,10 @@ doc_anchor_scope = function(calls, block, label) {
 #' @noRd
 doc_anchor_of = function(calls, t) {
   label = t[["label"]] %||% NA_character_
-  same = doc_same_calls(doc_anchor_scope(calls, t$block, label), t$ph, t$th)
+  same = doc_same_calls(doc_anchor_scope(calls, t$block, label), t$ph, t$th, t$head)
   j = which(same$line1 == t$line1 & same$col1 == t$col1)
-  list(ph = t$ph, th = t$th, j = if (length(j)) j[1L] else 1L, block = t$block, label = label)
+  list(ph = t$ph, th = t$th, j = if (length(j)) j[1L] else 1L, block = t$block, label = label,
+       head = t$head)
 }
 
 #' Re-locate an anchored call in a (possibly edited) text; NULL when it is gone
@@ -581,7 +752,7 @@ doc_anchor_of = function(calls, t) {
 doc_match_anchor = function(calls, anchor) {
   if (is.null(anchor) || !nrow(calls)) return(NULL)
   cls = doc_anchor_scope(calls, anchor[["block"]], anchor[["label"]] %||% NA_character_)
-  same = doc_same_calls(cls, anchor[["ph"]], anchor[["th"]])
+  same = doc_same_calls(cls, anchor[["ph"]], anchor[["th"]], anchor[["head"]])
   if (nrow(same) < anchor[["j"]]) return(NULL)
   same[anchor[["j"]], , drop = FALSE]
 }
@@ -683,7 +854,8 @@ doc_located = function(hit, stmt, top) {
 #' @noRd
 doc_owned = function(b, body, stale, site) {
   h = b$header[[1L]]
-  status = doc_block_status(h, body, site[["prompt_hash"]], site[["args_hash"]])
+  status = doc_block_status(h, body, site[["prompt_hash"]], site[["args_hash"]], site[["harness"]],
+                            site[["coach"]])
   if (stale && identical(status, "fresh")) status = "stale"
   list(id = b$id, header = h, status = status, start = b$start, end = b$end)
 }
@@ -691,7 +863,7 @@ doc_owned = function(b, body, stale, site) {
 #' The `r` and `transcript` formats' locate(): the run of blocks after the call's statement, and a
 #' new block after the run or after the blocks of earlier calls of a pipeline
 #' @noRd
-doc_text_locate = function(text, site, calls = doc_calls(text)) {
+doc_text_locate = function(text, site, calls = doc_calls(text, heads = doc_site_heads(site))) {
   hit = doc_match_anchor(calls, site[["anchor"]])
   doc_located(hit, c(hit$stmt1, hit$stmt2), function(out) {
     run = doc_blocks_after(text, hit$stmt2, attr(calls, "blocks") %||% doc_find_blocks(text))
@@ -957,10 +1129,11 @@ doc_rewrite_return = function(lines) {
 #' doc_parse_text() parses it (IC-62; parse data kept under sys.source()); a cut whose result does
 #' not parse to the kept expressions leaves the code as written. Attributes `kept`: one logical
 #' per top-level expression (NULL when the code does not parse; such code is kept as written);
-#' `returned`: the hidden name holds the code's designated value (doc_rewrite_return()).
+#' `returned`: the hidden name holds the code's designated value (doc_rewrite_return()). Lines
+#' end where the evaluator's do (doc_split_lines()), without carriage returns.
 #' @noRd
 doc_code_clean = function(code) {
-  lines = strsplit(as_utf8(paste(code, collapse = "\n")), "\n", fixed = TRUE)[[1L]]
+  lines = doc_split_lines(paste(code, collapse = "\n"))
   if (!length(lines)) return(character())
   exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
   kept = NULL
@@ -1044,6 +1217,9 @@ doc_history_code = function(lines) {
 #' Printed output as `#> ` lines of at most 76 characters, then `#> ... (N more lines)` counting
 #' every line not shown. `outputs` is a character vector or a list of output per top-level
 #' expression, each its lines or r_doc_outputs()'s list(lines, n); no line follows a cut one.
+#' Lines end where R reads a line end (doc_split_lines()), whichever evaluator printed them, and
+#' control, bidi and zero-width characters are written `<U+XXXX>` (ui_escape()), as doc_one_line()
+#' writes them; a byte that is not valid UTF-8 is written `<xx>` (console_utf8()).
 #' @noRd
 doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
   out = character()
@@ -1051,15 +1227,15 @@ doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
   for (o in if (is.list(outputs)) outputs else list(outputs)) {
     held = is.list(o) && !is.null(o$n)
     n = if (held) as.integer(o$n) else 0L
-    o = as_utf8(as.character(unlist(if (held) o$lines else o, use.names = FALSE)))
-    o = unlist(strsplit(o, "\n", fixed = TRUE), use.names = FALSE)
+    o = as.character(unlist(if (held) o$lines else o, use.names = FALSE))
+    o = unlist(lapply(console_utf8(o), doc_split_lines), use.names = FALSE)
     if (length(out) == total) out = c(out, o)
     total = total + max(n, length(o))
   }
   if (!total) return(character())
   out = utils::head(out, max_lines %||% doc_max_output_lines())
   extra = total - length(out)
-  out = if (length(out)) paste0("#> ", substr(out, 1L, width)) else character()
+  out = if (length(out)) paste0("#> ", substr(ui_escape(out), 1L, width)) else character()
   if (extra > 0L) out = c(out, paste0("#> ... (", extra, " more lines)"))
   out
 }
@@ -1079,13 +1255,15 @@ doc_string_tails = function(lines) {
 
 #' Wrap body lines for an overlay fork or a team child (IC-46, IC-47); the block id is filled in
 #' when the block is written (doc_block_token). Lines inside a multi-line string keep their text.
+#' The home is `gptr::gptr_resume()`, so a script that calls gptr only through `gptr::` replays.
 #' @noRd
 doc_wrap_local = function(body, child = NULL) {
   if (!length(body)) return(character())
   target = if (is.null(child)) {
-    paste0("gptr_resume(block = \"", doc_block_token, "\")")
+    paste0("gptr::gptr_resume(block = \"", doc_block_token, "\")")
   } else {
-    paste0("gptr_resume(block = \"", doc_block_token, "\", child = ", doc_str_literal(child), ")")
+    paste0("gptr::gptr_resume(block = \"", doc_block_token, "\", child = ",
+           doc_str_literal(child), ")")
   }
   pad = nzchar(body) & !doc_string_tails(body)
   body[pad] = paste0("  ", body[pad])
@@ -1168,16 +1346,17 @@ doc_turn_children = function(session, ents) {
   kids[keep[order(created[keep], method = "radix")]]
 }
 
-#' S2 parts of the children a turn created (IC-47): the k-th direct peter() call of the block body
-#' (not inside a loop, function or braces) owns part "n<k>" and the first unused child whose first
-#' prompt has that call's prompt hash; a computed or interpolated prompt takes the next unused
-#' child that no literal call claims. Children of deeper calls get no part (those calls run live
-#' on re-source). `sent` (the child's prompt hash) lets replay check the call it answers.
+#' S2 parts of the children a turn created (IC-47): the k-th direct peter() or harness call
+#' (`heads`, those of the document) of the block body (not inside a loop, function or braces)
+#' owns part "n<k>" and the first unused child whose first prompt has that call's prompt hash; a
+#' computed or interpolated prompt takes the next unused child that no literal call claims.
+#' Children of deeper calls get no part (those calls run live on re-source). `sent` (the child's
+#' prompt hash) lets replay check the call it answers.
 #' @noRd
-doc_nested_parts = function(body, kids) {
+doc_nested_parts = function(body, kids, heads = NULL) {
   out = list()
   if (!length(kids) || !length(body)) return(out)
-  calls = doc_calls(as.character(body))
+  calls = doc_calls(as.character(body), heads = heads)
   direct = calls[!calls$nested, , drop = FALSE]
   if (!nrow(direct)) return(out)
   sent = vapply(kids, function(k) {
@@ -1206,7 +1385,8 @@ doc_nested_parts = function(body, kids) {
 
 #' Body lines, recorded code, value, plan facts, last assistant message, tokens and cost of one
 #' turn (tokens and cost are known only when every assistant message of the turn reports them,
-#' IC-74: missing usage stays unknown)
+#' IC-74: missing usage stays unknown), the texts of the console's context blocks its prompt was
+#' sent with (`sent`) and the objects its r calls created (`created`, what a rewind removes)
 #' @noRd
 doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
   results = list()
@@ -1216,7 +1396,8 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
   }
   out = list(body = character(), code = character(), secrets = FALSE, value = NULL,
              plan_path = NULL, plan_from = NULL, last = NULL, tokens = c(0, 0),
-             tokens_known = TRUE, cost = 0, cost_known = TRUE)
+             tokens_known = TRUE, cost = 0, cost_known = TRUE, sent = character(),
+             created = character())
   for (i in seq_along(ents)) {
     e = ents[[i]]
     m = e$message
@@ -1224,9 +1405,9 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
       out$body = c(out$body, doc_steer_line("Steer", m$origin_text %||% ""))
     } else if (identical(e$type, "message") && identical(m$role, "user")) {
       for (blk in m$content) {
-        if (identical(blk$type, "context") && identical(blk$kind, "plan")) {
-          out$plan_from = blk$attrs$from %||% out$plan_from
-        }
+        if (!identical(blk$type, "context")) next
+        if (identical(blk$kind, "plan")) out$plan_from = blk$attrs$from %||% out$plan_from
+        if (i == 1L && isTRUE(blk$kind %in% doc_sent_kinds)) out$sent = c(out$sent, blk$text)
       }
       if (i == 1L) next
       src = m$source %||% "prompt"
@@ -1244,8 +1425,18 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
         out$value = e$data$name
       }
       if (identical(ct, "gptr.plan")) out$plan_path = e$data$path %||% out$plan_path
+      if (identical(ct, "gptr.checkpoint")) {
+        rows = e$data$fragments$objects$objects
+        made = vapply(rows, function(r) {
+          if (identical(r$status, "created") && rlang::is_string(r$name)) r$name else ""
+        }, "")
+        # a name holding a comma would read back as two (doc_created()): it is left out
+        out$created = union(out$created, made[nzchar(made) & !grepl(",", made, fixed = TRUE)])
+      }
       if (identical(ct, "gptr.mcp_r")) {
-        out = doc_turn_r(out, e$data, list(), with_out, plan_mode)
+        det = e$data
+        if (!identical(det$status %||% "ok", "ok")) det = doc_ran_part(det)
+        if (!is.null(det)) out = doc_turn_r(out, det, list(), with_out, plan_mode)
       }
     }
   }
@@ -1277,9 +1468,10 @@ doc_turn_usage = function(out, u) {
   out
 }
 
-#' Add one assistant message (its successful recorded r calls) to a turn body. When every
-#' expression of a call was dropped, all its printed output belongs to dropped expressions and is
-#' dropped too, even from P10's flat output vector (IC-48)
+#' Add one assistant message (its recorded r calls; of a call that stopped part-way the
+#' expressions that ran, doc_ran_part()) to a turn body. When every expression of a call was
+#' dropped, all its printed output belongs to dropped expressions and is dropped too, even from
+#' P10's flat output vector (IC-48)
 #' @noRd
 doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
   out$last = m
@@ -1287,22 +1479,43 @@ doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
   for (b in m$content) {
     if (!identical(b$type, "tool_call") || !identical(b$name, "r")) next
     res = results[[b$id]]
-    if (is.null(res) || isTRUE(res$is_error)) next
+    if (is.null(res)) next
     det = res$details %||% list()
-    out = doc_turn_r(out, det, b$arguments, with_out, plan_mode)
+    if (isTRUE(res$is_error)) det = doc_ran_part(det)
+    if (!is.null(det)) out = doc_turn_r(out, det, b$arguments, with_out, plan_mode)
   }
   out
 }
 
+#' The details of an r call that stopped part-way (an error, interrupt or timeout) as those of a
+#' call that ran its first `n_done` top-level expressions, whose bindings stay: the code without
+#' the expressions after them (doc_drop_ranges()); NULL when none ran
+#' @noRd
+doc_ran_part = function(det) {
+  n = as.integer(det$n_done %||% 0L)
+  lines = doc_split_lines(paste(det$code %||% "", collapse = "\n"))
+  exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
+  if (length(n) != 1L || is.na(n) || n < 1L || n > length(exprs)) return(NULL)
+  srcs = attr(exprs, "srcref")
+  ran = seq_along(exprs) <= n
+  if (!all(ran)) lines = doc_drop_ranges(lines, srcs[!ran], srcs[ran])
+  if (is.null(lines)) return(NULL)
+  det$code = paste(lines, collapse = "\n")
+  det$status = "ok"
+  det
+}
+
 #' Serialize successful canonical or locally served R with the same code, secret and output
-#' rules. A local MCP trace does not create or alter the provider's assistant/tool messages.
+#' rules; a comment line shaped like a steer or a block marker gets one more `#`
+#' (doc_comment_escape()), and a bridge digest is escaped as output is (ui_escape()). A local MCP
+#' trace does not create or alter the provider's assistant/tool messages.
 #' @noRd
 doc_turn_r = function(out, det, args, with_out, plan_mode) {
   if (!identical(det$status %||% "ok", "ok")) return(out)
   # value= is one name (11.5): an expression's label is not; its recorded assignment names one
   named = rlang::is_string(det$value) && identical(make.names(det$value), det$value)
   if (!is.null(det$value)) out$value = if (named) det$value
-  if (plan_mode || isFALSE(det$record) || isFALSE(args$record)) return(out)
+  if (plan_mode || isFALSE(det$record %||% args$record)) return(out)
   chunk = doc_code_clean(det$code %||% args$code %||% "")
   if (!is.null(det$value) && !named && isTRUE(attr(chunk, "returned"))) {
     out$value = doc_value_name
@@ -1310,7 +1523,7 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
   kept = attr(chunk, "kept")
   chunk = as.character(chunk)
   safe = doc_history_code(chunk)
-  hist = safe$lines
+  hist = doc_comment_escape(safe$lines, c(doc_re_steer, doc_re_open, doc_re_close))
   if (safe$secrets) out$secrets = TRUE
   outs = det$outputs
   if (!length(chunk)) {
@@ -1321,7 +1534,7 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
   lines = hist
   if (with_out) lines = c(lines, doc_output_lines(outs))
   if (length(det$bridge)) {
-    dig = as_utf8(as.character(det$bridge))
+    dig = ui_escape(det$bridge)
     lines = c(lines, ifelse(startsWith(dig, "#>"), dig, paste0("#> ", dig)))
   }
   if (length(det$artifacts)) {
@@ -1340,36 +1553,72 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
 
 #' Recorded code of every turn of a (child) session, without outputs or comment lines (team
 #' blocks); attribute `secrets` when a marker stays in it, `value` the name the latest turn that
-#' designated one gave (as a block's `value=`), else none
+#' designated one gave (as a block's `value=`), else none, and `usage` its turns' tokens and cost
+#' (doc_usage_add())
 #' @noRd
 doc_session_code = function(session) {
   d = session_data(session)
   code = character()
   secrets = FALSE
   value = NULL
+  usage = doc_usage_none
   for (k in seq_len(d$turns %||% 0L)) {
     tb = doc_turn_body(doc_turn_entries(session, k), with_out = FALSE,
                        plan_mode = identical(d$mode, "plan"))
     code = c(code, tb$code)
     secrets = secrets || tb$secrets
     value = tb$value %||% value
+    usage = doc_usage_add(usage, tb)
   }
-  structure(code, secrets = secrets, value = value)
+  structure(code, secrets = secrets, value = value, usage = usage)
 }
 
-#' Header facts common to every block
+# no usage yet (doc_usage_add())
+doc_usage_none = list(tokens = c(0, 0), tokens_known = TRUE, cost = 0, cost_known = TRUE)
+
+#' The tokens and cost of two usages (doc_turn_body()'s fields: `tokens`, `tokens_known`, `cost`,
+#' `cost_known`); a total is known only when both are
+#' @noRd
+doc_usage_add = function(a, b) {
+  list(tokens = a$tokens + b$tokens, tokens_known = a$tokens_known && b$tokens_known,
+       cost = a$cost + b$cost, cost_known = a$cost_known && b$cost_known)
+}
+
+#' A block header with the `tokens=` and `cost=` of a usage (doc_usage_add()): tokens when known
+#' and not zero, cost when known
+#' @noRd
+doc_usage_header = function(header, usage) {
+  if (usage$tokens_known && any(usage$tokens > 0)) {
+    header$tokens = sprintf("%.0f/%.0f", usage$tokens[1L], usage$tokens[2L])
+  }
+  if (usage$cost_known) header$cost = format(round(usage$cost, 4L), scientific = FALSE)
+  header
+}
+
+#' Header facts common to every block; a harness call's block names the harness it ran
+#' (`harness=<name>:<coaching hash>`, 08 section 3.6)
 #' @noRd
 doc_header_common = function(site, call_ordinal, model) {
   list(model = model, date = with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d")),
        prompt = site$prompt_hash %||% prompt_hash(site$template %||% ""),
        call = if (isTRUE(call_ordinal > 1L)) as.integer(call_ordinal) else NULL,
-       args = site$args_hash)
+       args = site$args_hash, harness = if (!isTRUE(site$coach)) site$harness)
+}
+
+#' Does `path`, a session log or plan, outlast this R process? Without .gptr/ they are in
+#' tempdir()/gptr, which R deletes at exit, so a document must not name them
+#' @noRd
+doc_kept = function(path) {
+  !is.null(path) && !path_inside(doc_abs(path), file.path(tempdir(), "gptr"))
 }
 
 #' The lines of the block of a session turn (contract 7.15): chr with attributes `header` (named
 #' list of 11.5 keys), `session`, `answer` (final text) and `children` (S2 parts to cache). The
 #' header's `model` is the provider and model of the turn's last answer as recorded, so a local
-#' model keeps its tag (IC-74).
+#' model keeps its tag (IC-74). In an .R document the body opens with the `#< ` lines of the
+#' console's context blocks the prompt was sent with; in every format recorded code that would read
+#' as part of that run gets one more `#` (doc_block_sent()). `created=` names the objects the turn
+#' created (IC-49).
 #' @noRd
 doc_block_lines = function(session, turn, site, call_ordinal) {
   d = session_data(session)
@@ -1381,27 +1630,31 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   plan_mode = identical(d$mode, "plan")
   tb = doc_turn_body(ents, with_out = with_out, plan_mode = plan_mode)
   body = tb$body
-  if (plan_mode) body = paste0("## Plan: ", tb$plan_path %||% "none")
+  if (plan_mode) {
+    plan = if (is.null(tb$plan_path) || doc_kept(tb$plan_path)) tb$plan_path else
+      "none kept (gptr_init() keeps plans in .gptr/)"
+    body = paste0("## Plan: ", plan %||% "none")
+  }
   if (tb$secrets) body = c(doc_secret_flag, body)
   fork = NULL
   if (!is.null(d$fork_of)) {
     fork = paste0(d$fork_of$id, ":", d$fork_of$turn %||% 0L)
     if (startsWith(d$home_label %||% "", "overlay of")) body = doc_wrap_local(body)
   }
+  lead = seq_len(doc_sent_n(body))
+  body[lead] = paste0("#", body[lead])
+  if (fmt %in% c("r", "transcript")) body = c(doc_sent_lines(tb$sent), body)
   body = redact(body, "persist")
   last = tb$last
   model = if (!is.null(last)) paste0(last$provider, "/", last$model) else d$model
-  header = doc_header_common(site, call_ordinal, model)
-  if (tb$tokens_known && any(tb$tokens > 0)) {
-    header$tokens = sprintf("%.0f/%.0f", tb$tokens[1L], tb$tokens[2L])
-  }
-  if (tb$cost_known) header$cost = format(round(tb$cost, 4L), scientific = FALSE)
+  header = doc_usage_header(doc_header_common(site, call_ordinal, model), tb)
   header$session = d$id
   header$turn = as.integer(turn)
   header$value = tb$value
+  header$created = if (length(tb$created)) paste(tb$created, collapse = ",")
   header$fork = fork
   header$plan = tb$plan_from
-  children = doc_nested_parts(body, doc_turn_children(session, ents))
+  children = doc_nested_parts(body, doc_turn_children(session, ents), site$heads)
   answer = if (!is.null(last)) msg_text(last) else NA_character_
   structure(as.character(body), header = header, session = session, answer = answer,
             children = children)
@@ -1409,7 +1662,8 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
 
 #' The lines of a team or fan-out block (IC-47): one `## Agent` line per child in name order;
 #' children with exports or a designated value get their code in a child overlay, plus one
-#' assignment per export; `children=` holds `<name>:<session id>[:<value name>]` per child
+#' assignment per export; `children=` holds `<name>:<session id>[:<value name>]` per child, and
+#' `tokens=` and `cost=` the children's sums
 #' @noRd
 doc_team_block_lines = function(team, site, call_ordinal) {
   d = session_data(team)
@@ -1419,6 +1673,7 @@ doc_team_block_lines = function(team, site, call_ordinal) {
   children = list()
   ids = character()
   secrets = FALSE
+  usage = doc_usage_none
   for (nm in nms) {
     cd = session_data(kids[[nm]])
     txt = cd$last_text
@@ -1432,13 +1687,14 @@ doc_team_block_lines = function(team, site, call_ordinal) {
                                              doc_one_line(first))))
     exports = as.character(cd$exports %||% character())
     code = doc_session_code(kids[[nm]])
+    usage = doc_usage_add(usage, attr(code, "usage"))
     value = attr(code, "value")
     if (length(exports) || !is.null(value)) {
       secrets = secrets || isTRUE(attr(code, "secrets"))
       body = c(body, doc_wrap_local(as.character(code), child = nm))
     }
     if (length(exports)) {
-      body = c(body, paste0(exports, " = gptr_resume(block = \"", doc_block_token,
+      body = c(body, paste0(exports, " = gptr::gptr_resume(block = \"", doc_block_token,
                             "\", child = ", doc_str_literal(nm), ")$envir$", exports))
     }
     children[[nm]] = list(text = txt, session = cd$id, model = cd$model,
@@ -1447,7 +1703,7 @@ doc_team_block_lines = function(team, site, call_ordinal) {
   }
   if (secrets) body = c(doc_secret_flag, body)
   model = if (length(nms)) session_data(kids[[nms[1L]]])$model else d$model
-  header = doc_header_common(site, call_ordinal, model)
+  header = doc_usage_header(doc_header_common(site, call_ordinal, model), usage)
   header$session = d$id
   header$turn = 1L
   header$kind = d$kind
@@ -1612,7 +1868,8 @@ doc_prepare = function(fmt, site, up, text, taken = character()) {
 
 #' Insert or replace a call's block through the site's backend (contract 7.15): checks write
 #' consent first (IC-45; otherwise nothing is written), passes `document_write` (fail closed,
-#' patchable), md5 conflict checks with re-locate and retry. `file` and `transcript` sites are
+#' patchable), md5 conflict checks with re-locate and retry; a block that could not be written
+#' anywhere is named once per document. `file` and `transcript` sites are
 #' written on disk here, `deferred` (Rscript) and `pending` (Jupyter) sites are queued by
 #' doc_pending_add() (IC-50, IC-51), the IDE backends go through the editor buffer
 #' (doc_ide_upsert()). Returns list(action, block_id, lines, backend) invisibly.
@@ -1623,10 +1880,7 @@ doc_upsert = function(site, block_lines, block_id = NULL) {
   fmt = doc_format_get(site$format %||% doc_format_of(site$path))
   if (is.null(fmt)) return(invisible(none))
   if (!doc_consent(site$path)) {
-    rel = doc_rel(site$path)
-    gptr_inform(paste0("gptr did not record into ", rel, ": no write consent. Call gptr_doc(\"",
-                       rel, "\") or set options(gptr.record = \"auto\") to record."), "notice",
-                .once = paste0("doc_consent:", path_key(site$path)))
+    doc_no_consent(site$path)
     return(invisible(none))
   }
   up = list(block_id = block_id %||% site$block_id, lines = as.character(block_lines),
@@ -1640,7 +1894,13 @@ doc_upsert = function(site, block_lines, block_id = NULL) {
   ), error = function(e) {
     registry_diagnostic("builtin:documents", "document_write", class(e)[1L],
                         conditionMessage(e))
-    doc_upsert_fallback(site, up, backend)
+    res = doc_upsert_fallback(site, up, backend)
+    if (identical(res$action, "failed")) {
+      gptr_inform(paste0("gptr did not record this block into ", doc_rel(site$path), ": ",
+                         conditionMessage(e)), "notice",
+                  .once = paste0("doc_failed:", path_key(site$path)))
+    }
+    res
   })
   written = res$site %||% site
   res$site = NULL
@@ -1665,7 +1925,7 @@ doc_upsert_fallback = function(site, up, backend) {
   }
   s = up$session
   tsite = doc_console_site(session_id = if (is.null(s)) NULL else session_data(s)$id,
-                           template = site$template)
+                           template = site$template, args = site$args_hash)
   if (is.null(tsite)) return(failed)
   up$block_id = NULL
   res = tryCatch(doc_file_upsert(doc_format_get("transcript"), tsite, up),
@@ -1674,7 +1934,8 @@ doc_upsert_fallback = function(site, up, backend) {
   res
 }
 
-#' Disk upsert through doc_rewrite() (the document lock, md5 conflict checks, three attempts; IC-51)
+#' Disk upsert through doc_rewrite() (the document lock, md5 conflict checks, three attempts;
+#' IC-51); a block whose text would leave the markers malformed is a doc_write error
 #' @noRd
 doc_file_upsert = function(fmt, site, up) {
   path = site$path
@@ -1689,6 +1950,11 @@ doc_file_upsert = function(fmt, site, up) {
     if (!is.null(prep$skip)) return(list(value = res(prep$skip, prep$id)))
     new = fmt$upsert(doc$lines, site, prep$rendered, prep$id)
     if (identical(new, doc$lines)) return(list(value = res("unchanged", prep$id)))
+    # a marker line inside a string of the code would leave the markers malformed
+    if (isTRUE(attr(doc_find_blocks(new), "malformed"))) {
+      gptr_abort("The block would leave the document's gptr markers malformed.", "doc_write",
+                 path = path, reason = "malformed")
+    }
     b = doc_block_get(site$format, new, prep$id)
     list(lines = new, value = list(action = prep$action, block_id = prep$id, backend = backend,
                                    lines = c(b$start, b$end), sha = prep$sha,
@@ -1719,29 +1985,33 @@ doc_after_write = function(site, res, block_lines) {
     data = list(doc = rel, format = site$format, block = res$block_id, action = res$action,
                 prompt = header$prompt, sha = res$sha,
                 lines = if (length(res$lines)) I(as.integer(res$lines)) else NULL,
-                backend = res$backend)
+                backend = res$backend, model = site[["ran_with"]][["model"]],
+                mode = site[["ran_with"]][["mode"]])
     tryCatch(session_append(s, list(type = "custom", custom_type = "gptr.doc_block",
                                     data = data[!vapply(data, is.null, NA)])),
              error = function(e) NULL)
   }
   ph = header$prompt %||% ""
   ah = header$args %||% ""
+  home = doc_s2_home(site$path)
   answer = attr(block_lines, "answer")
   if (length(answer) && !is.na(answer[1L])) {
-    s2_put(s2_key(rel, res$block_id, "", ph, ah),
-           list(block = res$block_id, doc = rel, part = "", prompt = ph, model = header$model,
-                answer = answer[1L], usage = header$tokens, cost = header$cost,
-                session = header$session, turn = header$turn, date = header$date))
+    s2_put(s2_key(home$rel, res$block_id, "", ph, ah),
+           list(block = res$block_id, doc = home$rel, part = "", prompt = ph,
+                model = header$model, answer = answer[1L], usage = header$tokens,
+                cost = header$cost, session = header$session, turn = header$turn,
+                date = header$date), home$root)
   }
   kids = attr(block_lines, "children") %||% list()
   for (nm in names(kids)) {
     k = kids[[nm]]
     text = k[["text"]]
     if (!length(text) || is.na(text[1L])) next
-    rec = list(block = res$block_id, doc = rel, part = nm, prompt = ph, model = k$model,
+    rec = list(block = res$block_id, doc = home$rel, part = nm, prompt = ph, model = k$model,
                answer = text[1L], session = k$session, turn = k$turn %||% 1L,
                date = header$date, sent = k$sent)
-    s2_put(s2_key(rel, res$block_id, nm, ph, ah), rec[!vapply(rec, is.null, NA)])
+    s2_put(s2_key(home$rel, res$block_id, nm, ph, ah), rec[!vapply(rec, is.null, NA)],
+           home$root)
   }
   doc_source_log(site$path, res$block_id, if (isTRUE(site$regenerate)) "regenerated" else "ran")
   invisible(NULL)

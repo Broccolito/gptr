@@ -82,7 +82,7 @@ prompt_text_table = list(
     "- To hand a result to the user's peter() call (a fitted model, a table), assign it and ",
     "call gptr_return(obj).\n",
     "- system() and system2() children read the user's terminal and you do not see their ",
-    "output: use peter$sh() instead.\n",
+    "output: use peter$sh(); read $stdout.\n",
     "- Never call q(), quit(), readline() or menu(), and do not install, update or remove ",
     "packages unless the user asked."
   ),
@@ -157,9 +157,8 @@ prompt_text_table = list(
     "changes objects, and anything outside the project, still needs approval."
   ),
   mode_auto = paste0(
-    "Auto mode is on: actions run without approval, except critical ones such as quitting R ",
-    "or deleting the project. Keep going until the task is done; ask only if the request is ",
-    "ambiguous."
+    "Auto mode is on: actions run without approval, except critical ones such as deleting the ",
+    "project. Keep going until the task is done; ask only if the request is ambiguous."
   ),
   noninteractive_stop = paste0(
     "No one can answer questions or approvals in this run, so actions that need approval ",

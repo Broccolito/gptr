@@ -150,10 +150,10 @@ mcp_serve_envir = function(target, run, mode) {
 }
 
 #' Gate a served call when no pump runs (an idle console): the policies alone decide; whatever
-#' needs approval is denied with how to allow it and a console notice, never prompted from a
-#' callback (IC-57)
+#' needs approval is denied with how to allow it and, with `notice`, a console notice, never
+#' prompted from a callback (IC-57)
 #' @noRd
-mcp_gate_idle = function(call, ctx, sid = NULL) {
+mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   if (isTRUE(gptr_opt("unsafe_no_permissions"))) {
     return(list(decision = "allow", reason = "gptr.unsafe_no_permissions is set"))
   }
@@ -165,9 +165,11 @@ mcp_gate_idle = function(call, ctx, sid = NULL) {
     if (!is.null(d) && !identical(d$decision, "allow")) ask = ask %||% d
   }
   if (is.null(ask)) return(list(decision = "allow", reason = ""))
-  gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your approval; it ",
-                     "was refused. Allow it with gptr_permissions(allow = ...) or run it ",
-                     "yourself."), "notice")
+  if (notice) {
+    gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your approval; it ",
+                       "was refused. Allow it with gptr_permissions(allow = ...) or run it ",
+                       "yourself."), "notice")
+  }
   list(decision = "deny",
        reason = paste0(if (nzchar(ask$reason)) ask$reason else "this needs approval",
                        "; nobody can approve it while gptr serves requests in the background"))
@@ -178,9 +180,13 @@ mcp_gate_idle = function(call, ctx, sid = NULL) {
 #' (no run, or a run left in progress by gptr_step()) mcp_gate_idle()
 #' @noRd
 mcp_serve_gate = function(call, run, ctx, sid = NULL) {
-  if (!is.null(run) && reactor_depth() > 0L) return(perm_check(call, run))
+  if (mcp_pumped(run)) return(perm_check(call, run))
   mcp_gate_idle(call, ctx, sid)
 }
+
+#' Does a pump serve this request of `run` (mcp_serve_gate())?
+#' @noRd
+mcp_pumped = function(run) !is.null(run) && reactor_depth() > 0L
 
 #' Run one served tool call (mcp_serve_exec()). In a live run without a tool of its own on the
 #' stack (the CLI routes, also a nested CLI run inside its parent's tool; an MCP client during a
@@ -225,6 +231,14 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
                             is_error = TRUE))
   }
   run = live$run
+  # a run blocked on an approval nobody can give acts no further (08 section 3.7): a CLI's turn
+  # would otherwise go on calling tools until it ends
+  if (!is.null(run$blocked)) {
+    if (!is.null(st)) st$refused = "the run is blocked on an approval nobody can give"
+    return(gptr_tool_result(paste0("Not run: this run stopped because `", run$blocked$tool,
+                                   "` needs approval and nobody can give it in this run; no ",
+                                   "further tool call runs."), is_error = TRUE))
+  }
   ctx = live$ctx
   sid = session_data(s)$id
   spec = registry_get("tool", name, session = sid)
@@ -259,7 +273,8 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     if (!is.null(st)) st$refused = perm_refused(d) %||% "not allowed"
     d$how = paste0("To allow it, run it yourself at the R prompt or add a rule with ",
                    "gptr_permissions(allow = ...).")
-    return(gptr_tool_result(perm_denial_text(d), is_error = TRUE))
+    return(gptr_tool_result(paste(perm_denial_text(d), "Nothing in this call ran."),
+                            is_error = TRUE))
   }
   if (is.list(d$input)) call$input = d$input
   tokens = NULL
@@ -268,7 +283,8 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     st$t0 = reactor_now()
   }
   res = if (identical(name, "r")) {
-    mcp_serve_r(call$input, env, run, s)
+    call$approved_level = as.integer((d$risk %||% call$risk)$level %||% 2L)
+    mcp_serve_r(call, env, run, s, ctx)
   } else if (is.null(st)) {
     tool_run(spec, call$input, ctx, name)
   } else {
@@ -277,15 +293,31 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   checkpoint_after(run, call, ctx, tokens, res)
 }
 
-#' Evaluate served R code in `env` through the eval.r service (the evaluator kind, IC-69).
-#' Mark the running tool on this call stack, as tool_execute_frame() does, so gptr_return()
-#' and nested calls belong to the session whose MCP token authorized this evaluation. During a
-#' run its plots are drawn and its printed output shown as the loop's `r` tool does ("auto", tee
-#' for a depth-0 run with a human; P28 Task 31), else offscreen and silent (#42).
+#' Evaluate the served r call `call` in `env` through the eval.r service (the evaluator kind,
+#' IC-69). Mark the running tool on this call stack, as tool_execute_frame() does, so gptr_return()
+#' and nested calls belong to the session whose MCP token authorized this evaluation, and bind the
+#' r tool's marker (`gptr_r_call`, ctx `ctx`) with `call` as the run's tool call, so nested
+#' `peter$` calls pass dispatch_nested() as the loop's `r` calls do; with no pump the idle gate
+#' decides each first (the marker's `gate`, mcp_nested_gate()). During a run its plots are drawn
+#' and its printed output shown as the loop's `r` tool does ("auto", tee for a depth-0 run with a
+#' human; P28 Task 31), else offscreen and silent (#42).
 #' @noRd
-mcp_serve_r = function(input, env, run, session = NULL) {
+mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
+  input = call$input
   .gptr_tool_run = run
   force(.gptr_tool_run)
+  gptr_r_call = r_call_new(ctx)
+  if (!mcp_pumped(run)) {
+    sid = if (!is.null(session)) session_data(session)$id
+    gptr_r_call$gate = function(name, input) mcp_nested_gate(name, input, ctx, sid, call$risk)
+  }
+  if (!is.null(run)) {
+    outer = run$tool_call
+    run$tool_call = call
+    on.exit({
+      run$tool_call = outer
+    }, add = TRUE)
+  }
   record = mcp_r_recording(run, session)
   budget = as.integer(gptr_opt("r_output_tokens"))
   timeout = input$timeout %||% (if (gptr_has_human()) NULL else gptr_opt("r_timeout"))
@@ -295,9 +327,14 @@ mcp_serve_r = function(input, env, run, session = NULL) {
   res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = plots, tee = tee,
                                   budget_tokens = budget, rng = run$opts$rng_state,
                                   record = record)
-  if (record && identical(res$status, "ok") && mcp_r_recording(run, session)) {
+  # images attached by peter$plot() and peter$read(), as in the r tool (IC-67)
+  res$images = c(res$images, gptr_r_call$images)
+  ok = identical(res$status, "ok")
+  if (record && (ok || isTRUE(res$n_done > 0L)) && mcp_r_recording(run, session)) {
     data = list(code = input$code, record = TRUE, status = res$status,
                 outputs = r_doc_outputs(res))
+    # a call that stopped part-way records what ran (doc_ran_part())
+    if (!ok) data$n_done = as.integer(res$n_done)
     # what gptr_return() designated, as the r tool's details$value (doc_turn_r())
     data$value = r_new_value_name(session, n_values)
     session_append(session, list(type = "custom", custom_type = "gptr.mcp_r", data = data))
@@ -307,6 +344,40 @@ mcp_serve_r = function(input, env, run, session = NULL) {
   gptr_tool_result(out$text, images = out$images, is_error = !identical(res$status, "ok"),
                    details = list(objects = res$changes$objects, plots = length(out$images),
                                   error = if (length(err)) err[[1L]]$message))
+}
+
+#' The idle gate (mcp_gate_idle(), which asks nobody) of a nested `peter$` call in served R that no
+#' pump serves (IC-57): a sh, bg or script call as its literal call (nested_literal(): a command
+#' run in its `wd`, as the member's own risk reads it, or a script's path), as the static gate
+#' reads one, with the registered secrets its `env` hands the child for the rules, and then, when
+#' that hand-over meets the secret guard, the member itself (its own risk), which no rule for `r`
+#' code covers; any other with its tool's risk of its input. A secret the served call's analysis
+#' (`outer`) guards was that call's question, as in dispatch_nested(). Signals the denial.
+#' @noRd
+mcp_nested_gate = function(name, input, ctx, sid = NULL, outer = NULL) {
+  spec = registry_get("tool", name, session = sid)
+  call = list(name = name, input = input, tool = spec, nested = TRUE,
+              risk = if (is.function(spec$risk)) spec$risk(input, ctx))
+  if (isTRUE(call$risk$secret_guard) && isTRUE(outer$secret_guard) &&
+      all(call$risk$secrets %in% outer$secrets)) {
+    call$risk$secret_guard = FALSE
+  }
+  calls = list(call)
+  if (name %in% c("sh", "bg", "script")) {
+    code = nested_literal(name, input)
+    risk = ext_service_get("risk.classify")(code, envir = NULL, root = project_root(), kind = "r")
+    risk$secrets = unique(c(risk$secrets, call$risk$secrets))
+    calls = c(list(list(name = "r", input = list(code = code), risk = risk)),
+              if (isTRUE(call$risk$secret_guard)) calls)
+  }
+  for (x in calls) {
+    # no console notice: the served result captures it, and the denial tells the model
+    d = mcp_gate_idle(x, ctx, sid, notice = FALSE)
+    if (!identical(d$decision, "allow")) {
+      gptr_abort(perm_denial_text(d), "tool", tool = name, status = "denied")
+    }
+  }
+  invisible(NULL)
 }
 
 #' Only the exact active token-owned run's document receives native R history. Standalone MCP

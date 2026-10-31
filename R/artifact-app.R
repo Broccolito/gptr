@@ -728,8 +728,14 @@ artifact_browser_launch = function(args) {
                      operation = "close", path = stderr)
         }
       }
-      # Exiting helpers still write in the profile, so wait for them before removing it.
-      proc_wait_exit(held$family, seconds)
+      # Exiting helpers still write in the profile, so wait for them before removing it. Under
+      # load the scheduler can starve an orphaned helper past the deadline, so those still
+      # running after a 2 s grace are killed, then waited for in the rest (D-271).
+      started = proc.time()[["elapsed"]]
+      if (!isTRUE(proc_wait_exit(held$family, min(seconds, 2)))) {
+        proc_kill_signalled(held$family)
+        proc_wait_exit(held$family, seconds - (proc.time()[["elapsed"]] - started))
+      }
       tree = proc_tree(marker)
       if (length(tree) || isTRUE(attr(tree, "unavailable")) ||
           !all(vapply(held$family, proc_handle_alive, NA) %in% FALSE)) {
@@ -780,7 +786,7 @@ artifact_browser_launch = function(args) {
         gptr_abort("The private headless browser directory did not finish cleanup: path remains.",
                    "io", operation = "close", path = root, cleanup_stage = "remaining")
       }
-      # Raw logs remain available to callers after the exact marked family settles.
+      unlink(c(stdout, stderr))
       invisible(NULL)
     })
   lease = list(browser = NULL, owner = owner)
@@ -863,8 +869,15 @@ artifact_browser_ready = function(owner) {
 #' @noRd
 artifact_browser = function() {
   if (!is.null(artifact_state$browser_pending)) {
-    gptr_abort("The pending headless browser must finish cleanup before opening another.", "io",
-               operation = "open", path = NULL)
+    # Retry the cleanup that failed: its helpers may have exited since (D-271).
+    settled = tryCatch({
+      artifact_browser_close()
+      TRUE
+    }, error = function(e) FALSE, interrupt = function(e) FALSE)
+    if (!settled) {
+      gptr_abort("The pending headless browser must finish cleanup before opening another.", "io",
+                 operation = "open", path = NULL)
+    }
   }
   b = artifact_state$browser
   owner = artifact_state$browser_owner
@@ -1688,8 +1701,10 @@ artifact_ckpt_move = function(fragment, ctx, side) {
     artifact_set_current(r$id, n)
     line = paste0(head, "current version ", n)
     if (!isTRUE(r[[paste0("running_", side)]])) return(line)
-    failed = inherits(try(artifact_relaunch(r$id, n, ctx), silent = TRUE), "try-error")
-    paste0(line, if (failed) " (relaunch failed)" else " (relaunched)")
+    if (inherits(try(artifact_relaunch(r$id, n, ctx), silent = TRUE), "try-error")) {
+      return(paste0(head, "not relaunched (current version ", n, ")"))
+    }
+    paste0(line, " (relaunched)")
   }, character(1))
 }
 

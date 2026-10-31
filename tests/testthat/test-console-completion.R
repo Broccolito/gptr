@@ -311,6 +311,74 @@ test_that("completion comes only after @, !, !!, / and peter$, in full words (IC
   expect_identical(console_complete("use @mtc"), character())
 })
 
+test_that("no completion holds a line end or another control character (review round 4)", {
+  .gptr_repl = local_completing_repl()
+  # readline would send what follows a line end as a line of its own, a ! line as R code
+  bad = c("bang\n!cat(1)", "cr\r!cat(1)", "esc\033[2J", "c1\u0085!cat(1)")
+  testthat::local_mocked_bindings(registry_names = function(kind, session = NULL) {
+    switch(kind, command = c("mode", bad), skill = c("tidy-data", bad), character())
+  })
+  local_service("ns.names", function(prefix) c("read", bad))
+  assign("cfg", stats::setNames(list(1, 2, 3, 4, 5), c("ok", bad)), envir = .gptr_repl$envir)
+  expect_identical(console_complete("@cfg$"), "@cfg$ok")
+  expect_identical(console_complete("/"), c("/mode", "/skill:"))
+  # the package's own skills are listed too
+  skills = console_complete("/skill:")
+  expect_true("/skill:tidy-data" %in% skills)
+  expect_false(any(paste0("/skill:", bad) %in% skills))
+  expect_identical(console_complete("ask peter$"), "peter$read")
+  # names in the working directory, at @ and in a ! line's string (not on Windows, whose file
+  # names hold no control character)
+  skip_on_os("windows")
+  file.create(bad[1:3])
+  expect_identical(console_complete("look at @"),
+                   c("@cfg", "@mtcars_copy", "@my_long_object_name", "@analysis_notes.R",
+                     "@data/"))
+  expect_identical(console_complete("look at @ban"), character())
+  expect_identical(console_complete("!x = readLines('ban"), character())
+  expect_identical(console_complete("!x = readLines('ana"), "analysis_notes.R")
+  # a C1 control (U+0080 to U+009F), which a name in a C locale cannot hold
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "a C1 control's file name needs a UTF-8 locale")
+  file.create(bad[[4L]])
+  expect_identical(console_complete("look at @c1"), character())
+})
+
+test_that("@ completes a folder whose first name is not ASCII (round 4 merge)", {
+  .gptr_repl = local_completing_repl()
+  # unmarked UTF-8 bytes, as list.files() gives them, which a radix sort refused as the first name
+  cafe = rawToChar(as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9)))
+  dir.create("acc")
+  file.create(file.path("acc", cafe))
+  expect_identical(console_complete("look at @acc/"), paste0("@acc/", cafe))
+  dir.create(file.path("acc", "b"))
+  expect_identical(console_complete("look at @acc/"), c("@acc/b/", paste0("@acc/", cafe)))
+})
+
+test_that("the @ name Tab completes is read whole, so its file is attached (review round 5)", {
+  .gptr_repl = local_completing_repl()
+  withr::local_options(gptr.project_root = getwd())
+  cafe = os_bytes("café.csv")
+  dir.create("acc")
+  writeLines("a,b", file.path("acc", cafe))
+  line = paste("Summarise", console_complete("Summarise @acc/caf"))
+  expect_identical(repl_mentions(as_utf8(line), new.env())$said,
+                   as_utf8(paste0("@ acc/", cafe, " (1 line)")))
+})
+
+test_that("a ! line's string never goes to readline's file completion (round 4 verification)", {
+  .gptr_repl = local_completing_repl()
+  settings = utils::rc.settings()
+  withr::defer(do.call(utils::rc.settings, as.list(settings)))
+  # with quotes = FALSE R leaves a string's file name to readline (`<file>`), whose completion
+  # gptr cannot filter: a name holding a line end would go in whole; the composer's Tab gives none
+  utils::rc.settings(quotes = FALSE)
+  expect_identical(host_complete("!x = readLines('ana", "ana"), character())
+  expect_identical(host_complete("!x = readLines('ana"), character())
+  expect_identical(console_complete("!x = readLines('ana"), character())
+  # R's own completion of the code still comes
+  expect_true("summary" %in% host_complete("!summ", "summ"))
+})
+
 test_that("/skill: completes the project's skills before the first prompt (Task 30)", {
   local_project(trust = TRUE, files = list(".gptr/skills/tidy-up/SKILL.md" = c(
     "---", "name: tidy-up", "description: Tidy the data.", "---", "Tidy it.")))

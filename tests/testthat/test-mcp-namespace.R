@@ -147,6 +147,41 @@ test_that("servers of other harnesses are reachable by name but not advertised (
   expect_match(mcp_catalog(NULL, 1500), "cur: 5 tools", fixed = TRUE)
 })
 
+test_that("a session plugin's MCP server is reached by a call that connects (F-81)", {
+  local_mcp_home()
+  local_project()
+  fx = local_mcp_fixture("modern", "stdio")
+  d = withr::local_tempdir()
+  write_json_file(file.path(d, "plugin.json"), list(name = "pyplug"))
+  write_json_file(file.path(d, "mcp.json"), list(mcpServers = list(pyplug = list(
+    command = fx$spec$command, args = I(fx$spec$args), env = as.list(fx$spec$env)))))
+  withr::defer(plugin_forget(d))
+  # a cached tool list (a first use earlier today): the member is built without connecting
+  conn = mcp_connect(fx$spec)
+  mcp_tools(conn)
+  mcp_close(conn)
+  fake = local_fake_provider(list(fake_tool("r", code = "res = peter$mcp$pyplug$echo(text = 'x')"),
+                                  "done"))
+  e = new.env()
+  peter("Echo x", plugins = d, model = fake, envir = e, mode = auto)
+  expect_identical(e$res, list(text = "x"))
+})
+
+test_that("a member follows its tool's schema after a refresh (F-112)", {
+  local_mcp_home()
+  local_project()
+  gptr_mcp_add("srv", command = "never-started")
+  tool = list(name = "say", description = "Say it.",
+              input_schema = list(type = "object", properties = list(text = list(type = "string"))))
+  box = new.env()
+  box$tools = list(tool)
+  local_mocked_bindings(mcp_tools_known = function(s) box$tools)
+  expect_identical(names(formals(peter$mcp$srv$say)), "text")
+  tool$input_schema$properties$loud = list(type = "boolean")
+  box$tools = list(tool)
+  expect_identical(names(formals(peter$mcp$srv$say)), c("text", "loud"))
+})
+
 test_that("tool arguments named like the member closure's own variables reach the server", {
   props = list(tool = list(type = "string"), server = list(type = "string"),
                fm = list(type = "string"), label = list(type = "string"))

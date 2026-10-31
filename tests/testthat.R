@@ -1,33 +1,38 @@
-# Windows native files get fresh supervisors under R CMD check, and CRAN runs a fixed list of
-# files (D-240). Other checks keep one suite.
+# A CI shard (GPTR_CI_TEST_SHARD, testthat/ci-shard.R) runs its share of the test files, Windows
+# native files get fresh supervisors under R CMD check, and CRAN runs a fixed list of files
+# (D-240). Other checks keep one suite.
 library(testthat)
 library(gptr)
 
-if (.Platform$OS.type == "windows" && identical(Sys.getenv("NOT_CRAN"), "true")) {
+if (identical(Sys.getenv("NOT_CRAN"), "true") &&
+    (nzchar(Sys.getenv("GPTR_CI_TEST_SHARD")) || .Platform$OS.type == "windows")) {
   local({
-    native = c(
-      "test-bridge-python-native.R",
-      "test-proc-marker-family.R",
-      "test-proc-rscript-native.R",
-      "test-proc-windows-backpressure.R",
-      "test-proc-writer-idle-boundary.R",
-      "test-proc-writer-idle-slots.R",
-      "test-proc-writer-prototype.R",
-      "test-proc-writer-retirement.R",
-      "test-proc-writer-runtime.R",
-      "test-subagent-worker.R"
-    )
     files = sort(list.files("testthat", pattern = "^test.*[.][rR]$"))
-    stopifnot(length(files) > length(native), !anyDuplicated(files), all(native %in% files))
-    stopifnot(all(grepl("^test-[A-Za-z0-9_-]+[.][rR]$", files)))
-    ordinary = setdiff(files, native)
+    stopifnot(!anyDuplicated(files), all(grepl("^test-[A-Za-z0-9_-]+[.][rR]$", files)))
+    if (.Platform$OS.type == "windows") {
+      native = c(
+        "test-bridge-python-native.R",
+        "test-proc-marker-family.R",
+        "test-proc-rscript-native.R",
+        "test-proc-windows-backpressure.R",
+        "test-proc-writer-idle-boundary.R",
+        "test-proc-writer-idle-slots.R",
+        "test-proc-writer-prototype.R",
+        "test-proc-writer-retirement.R",
+        "test-proc-writer-runtime.R",
+        "test-subagent-worker.R"
+      )
+      stopifnot(length(files) > length(native), all(native %in% files))
+      files = setdiff(files, native)
+    }
     source("testthat/ci-shard.R", local = TRUE)
-    selected = ci_shard_files(ordinary)
-    names = sub("[.][rR]$", "", sub("^test[-_]", "", selected))
-    stopifnot(all(grepl("^[A-Za-z0-9_-]+$", names)), !anyDuplicated(names))
-    result = test_check("gptr", filter = paste0("^(", paste(names, collapse = "|"), ")$"))
-    # A CI shard fails unless each of its files recorded a test result
-    if (nzchar(Sys.getenv("GPTR_CI_TEST_SHARD"))) {
+    selected = ci_shard_files(files)
+    if (!nzchar(Sys.getenv("GPTR_CI_TEST_SHARD"))) {
+      test_check("gptr", filter = ci_shard_filter(selected))
+    } else {
+      # A CI shard's log names each file with its time, and the shard fails unless each of its
+      # files recorded a test result
+      result = test_check("gptr", filter = ci_shard_filter(selected), reporter = "progress")
       missing = setdiff(selected, as.data.frame(result)$file)
       if (length(missing)) {
         stop("CI shard files that recorded no test result (a file-level skip() records none): ",

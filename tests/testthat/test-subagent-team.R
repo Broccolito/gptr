@@ -102,11 +102,16 @@ test_that("gptr_parallel() returns a team of the members (contract 6.5 example)"
 
 test_that("gptr_parallel() members run concurrently, max_active at a time", {
   skip_on_cran()
-  local_team_fake(list(fake_text("slow", delay = 2)))
-  t0 = Sys.time()
+  starts = numeric()
+  local_team_fake(function(request) {
+    starts <<- c(starts, reactor_now())
+    fake_text("slow", delay = 2)
+  })
   team = gptr_parallel(a = peter("one", envir = new.env()), b = peter("two", envir = new.env()),
                        c = peter("three", envir = new.env()))
-  expect_lt(as.numeric(difftime(Sys.time(), t0, units = "secs")), 5)
+  # concurrent members send their requests together; one after another they are 2 s apart
+  expect_length(starts, 3L)
+  expect_lt(diff(range(starts)), 2)
   expect_identical(unname(vapply(team$children, function(s) s$status, "")), rep("idle", 3L))
   t1 = Sys.time()
   gptr_parallel(a = peter("one", envir = new.env()), b = peter("two", envir = new.env()),
@@ -152,6 +157,29 @@ test_that("gptr_parallel() members keep the user's random seed (IC-61)", {
   expect_true(is.numeric(e1$z) && is.numeric(e2$z))
   expect_false(identical(e1$z, e2$z))
   expect_identical(get(".Random.seed", envir = globalenv()), seed)
+})
+
+# Added (FIX-37, F-85): a member without envir = evaluates in the caller's environment, which it
+# shares with the other members (as ?gptr_parallel says); each assigns fit, then returns it once
+# both have assigned, so both return the last value. With envir = new.env() each keeps its own.
+test_that("gptr_parallel() members share the caller's environment unless given envir =", {
+  skip_on_cran()
+  turns = new.env()
+  local_team_fake(function(request) {
+    k = request$last_user
+    i = turns[[k]] = (turns[[k]] %||% 0L) + 1L
+    switch(min(i, 3L), fake_tool("r", code = paste0("fit = '", k, "'")),
+           c(fake_tool("r", code = "gptr::gptr_return(fit)"), delay = 0.5), "done")
+  })
+  shared = gptr_parallel(a = peter("A"), b = peter("B"))
+  expect_true(fit %in% c("A", "B"))
+  expect_identical(shared$value, list(a = fit, b = fit))
+  rm(list = ls(turns), envir = turns)
+  e1 = new.env()
+  e2 = new.env()
+  own = gptr_parallel(a = peter("A", envir = e1), b = peter("B", envir = e2))
+  expect_identical(own$value, list(a = "A", b = "B"))
+  expect_identical(c(e1$fit, e2$fit), c("A", "B"))
 })
 
 test_that("model-issued teams are limited to gptr.subagents.max_tasks (IC-39)", {

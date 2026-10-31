@@ -261,6 +261,9 @@ completions_normaliser = function(model, opts) {
     has_id = is.character(tid) && length(tid) == 1L && !is.na(tid) && nzchar(tid)
     idx = if (!is.null(tc[["index"]])) adp_chr(tc[["index"]]) else ""
     i = if (nzchar(idx)) cur$by_index[[idx]] else NULL
+    # a server that numbers every call 0 tells its calls apart by id only
+    known = if (is.null(i)) "" else adp_chr(st$blocks[[i]]$id)
+    if (has_id && nzchar(known) && !identical(known, tid)) i = NULL
     if (is.null(i) && has_id) i = cur$by_id[[tid]]
     if (is.null(i)) {
       i = adp_open(st, "tool_call", id = if (has_id) tid else "", name = fn[["name"]] %||% "",

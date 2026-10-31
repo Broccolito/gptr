@@ -132,6 +132,18 @@ test_that("an error stops the evaluation and is reported; plan mode never record
                class = "gptr_error_internal")
 })
 
+test_that("record = false never leaves out code that changed objects (FIX-33 ALL-3)", {
+  e = new.env()
+  e$x = 1
+  ctx = list(envir = e, session = NULL)
+  record = function(code, ctx) r_tool_execute(list(code = code, record = FALSE), ctx)$details$record
+  expect_true(record("out = 41 + 1", ctx))
+  expect_true(record("x = 2", ctx))
+  expect_true(record("rm(out)", ctx))
+  expect_false(record("head(mtcars, 2)", ctx))
+  expect_false(record("z = 1", list(envir = e, session = NULL, mode = function() "plan")))
+})
+
 test_that("only depth-0 runs tee r output; a sub-agent's output stays in its result (D-188)", {
   local_gptr_options(interactive = TRUE)
   run = structure(new.env(), class = "gptr_run")

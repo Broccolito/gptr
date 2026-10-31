@@ -481,13 +481,17 @@ bridge_knit = function(engine, code) {
 # ---- builtin:lang --------------------------------------------------------------------------------
 
 #' Risk of peter$knit(): the command classifier for the shell engines, else 3 like peter$script()
-#' (contract 9.4, IC-67)
+#' (contract 9.4, IC-67), or for python, which runs through peter$py(), the Python classifier's
+#' reading when it is 3 or more
 #' @noRd
 bridge_risk_knit = function(input, ctx) {
   if (isTRUE(tolower(input$engine) %in% bridge_knit_shells)) {
     return(bridge_risk(paste(bridge_chr(input$code), collapse = "\n"), "command"))
   }
-  list(level = 3L, categories = "process", paths = character())
+  r = if (isTRUE(tolower(input$engine) == "python")) {
+    bridge_risk(paste(bridge_chr(input$code), collapse = "\n"), "python")
+  }
+  if (isTRUE(r$level >= 3L)) r else list(level = 3L, categories = "process", paths = character())
 }
 
 #' builtin:lang (contract 7.22): the members py, sql, knit (contract 9.4) with their S-4

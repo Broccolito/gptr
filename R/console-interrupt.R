@@ -168,8 +168,10 @@ console_ahead = function(rd, accept) {
 #' be kept above the chevron (ui_draft_kept()). A key or its word
 #' answers, also one typed before the chevron showed or with the Ctrl-C (console_ahead()), an empty
 #' answer continues, anything else is kept in the history, never sent, under a dim row that says
-#' so and names the keys (ui_reask()). `[s]` and `[f]` read their text at the chevron of their own
-#' question, `? Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their
+#' so and names the keys (ui_reask()); so is a pasted block, whatever its first line (the lines a
+#' macOS terminal leaves waiting after it). `[s]` and `[f]` read their text at the chevron of their
+#' own question, `? Steer` or `? Follow-up` (a pasted block's later lines, which a macOS terminal
+#' leaves waiting, are part of it), and queue it as Enter and Tab do (policy_enqueue()), their
 #' queue line, without the text it shows under, right under it, as under any question. `[b]` closes
 #' the answer's cut row, then says in dim terms (console_terms()) that the run went to the
 #' background, the service's notice one of them, then lists what the REPL held for after the run as
@@ -224,9 +226,18 @@ policy_menu = function(cnd, pol) {
     console_asked()
     invokeRestart("resume")
   }
+  # the lines a macOS terminal left of a block pasted at a question (ui_console_read())
+  rd = console_repl_find()$reader
   repeat {
-    typed = if (rlang::is_string(ahead)) ahead else console_ask(answers)
+    asked = !rlang::is_string(ahead)
+    typed = if (asked) console_ask(answers) else ahead
     ahead = NULL
+    more = if (asked && !is.na(typed) && !is.null(rd)) rd$waiting()
+    if (length(more)) {
+      kept = gptr_is_interactive() && console_history_add(paste(c(typed, more), collapse = "\n"))
+      console_write(ui_reask("a pasted block is not an answer", k, kept))
+      next
+    }
     ans = tolower(trimws(typed))
     key = if (is.na(ans)) "a" else c("c", k, k)[match(ans, c("", k, keys))]
     if (identical(key, "c")) go()
@@ -238,6 +249,8 @@ policy_menu = function(cnd, pol) {
       ui_draft_kept()
       text = console_ask(function(x) TRUE)
       if (is.na(text)) return(invisible(NULL))
+      # a block pasted here is one message, as at the prompt
+      text = paste(c(text, if (!is.null(rd)) rd$waiting()), collapse = "\n")
       enqueue = function() {
         the$echoed = ""
         on.exit({

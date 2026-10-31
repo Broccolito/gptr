@@ -448,7 +448,8 @@ kind_check_mcp_server = function(spec) {
   spec
 }
 
-#' Skills (contract 11.13): the name is the directory name
+#' Skills (contract 11.13): the name is the directory name; a skill with `text` carries its own
+#' body and has no files (08 section 3.2)
 #' @noRd
 kind_check_skill = function(spec) {
   if (!grepl("^[a-z0-9][a-z0-9-]*\\z", spec[["name"]], perl = TRUE)) {
@@ -456,6 +457,9 @@ kind_check_skill = function(spec) {
   }
   if (nchar(spec[["description"]], type = "chars") > 1024L) {
     spec_abort(spec, "description", "must be at most 1,024 characters")
+  }
+  if (!is.null(spec[["text"]]) && (!is.null(spec[["path"]]) || !is.null(spec[["dir"]]))) {
+    spec_abort(spec, "text", "cannot be combined with `path` or `dir`")
   }
   spec
 }
@@ -674,7 +678,7 @@ kinds_install = function(k) {
     source = f("chr1"), also_in = f("chr")
   ), kind_check_mcp_server)
   def("skill", list(
-    description = f("chr1", null = FALSE), path = f("chr1"), dir = f("chr1"),
+    description = f("chr1", null = FALSE), path = f("chr1"), dir = f("chr1"), text = f("chr1"),
     source = f("chr1"), disable_model_invocation = f("lgl1", default = FALSE),
     allowed_tools = f("chr"), tokens = f("num1")
   ), kind_check_skill)
@@ -816,7 +820,7 @@ kind_define = function(name, validate, resolve = c("first", "all"), fields = cha
 #' The definition of a kind, or gptr_error_unknown_kind (a gptr_error_invalid_spec)
 #' @noRd
 kind_get = function(name) {
-  ok = rlang::is_string(name)
+  ok = rlang::is_string(name) && nzchar(name)
   k = if (ok) get0(name, envir = kinds_env(), inherits = FALSE)
   if (is.null(k)) {
     label = if (ok) name else "?"

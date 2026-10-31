@@ -187,13 +187,15 @@ overflow_patterns = c(
 non_overflow_patterns = c("^(Throttling error|Service unavailable):", "rate limit",
                           "too many requests")
 bodyless_overflow_pattern = "^4(?:00|13)\\s*(?:status code)?\\s*\\(no body\\)"
+# a plan's session, weekly or model-family limit ("You've hit your Opus limit"), not a throttle
+plan_limit_pattern = "hit (?:the session|your(?! rate)[^\\n]{0,40}?) limit\\b"
 non_retryable_pattern = paste(c(
   "GoUsageLimitError", "FreeUsageLimitError", "Monthly usage limit reached", "available balance",
   "insufficient_quota", "out of budget", "quota exceeded", "billing",
-  "subscription_sharing_usage_limit_exceeded", "hit (?:your|the) session limit"), collapse = "|")
+  "subscription_sharing_usage_limit_exceeded", plan_limit_pattern), collapse = "|")
 retryable_pattern = paste(c(
-  "overloaded", "currently experiencing high demand", "rate.?limit", "too many requests", "429",
-  "500", "502", "503", "504", "520", "524", "service.?unavailable", "server.?error",
+  "overloaded", "currently experiencing high demand", "rate.?limit", "too many requests",
+  "(?<![0-9])(?:429|500|502|503|504|520|524)(?![0-9])", "service.?unavailable", "server.?error",
   "internal.?error", "provider.?returned.?error",
   "exceeded request buffer limit while retrying upstream", "network.?error",
   "connection.?error", "connection.?refused", "connection.?lost", "other side closed",
@@ -301,7 +303,9 @@ provider_classes = function(err) {
   if (is.na(k)) return("provider")
   if (startsWith(k, "timeout")) return(c(k, "timeout"))
   if (k %in% c("auth", "rate_limit", "spend_cap", "retry_after", "overloaded", "context_overflow",
-               "network", "redirect", "billing")) return(c(k, "provider"))
+               "network", "redirect", "billing", "plan_limit", "cli_check", "model_refused")) {
+    return(c(k, "provider"))
+  }
   "provider"
 }
 
@@ -315,7 +319,8 @@ run_retryable = function(msg, err) {
   k = err_class(err)
   if (!is.na(k) && k %in% c("spend_cap", "auth", "retry_after", "redirect", "billing",
                             "context_overflow", "no_key", "not_available", "untrusted",
-                            "invalid_argument", "invalid_spec", "missing_package", "process")) {
+                            "invalid_argument", "invalid_spec", "missing_package", "process",
+                            "plan_limit", "cli_check", "model_refused")) {
     return(FALSE)
   }
   quota = grepl(non_retryable_pattern, text, perl = TRUE, ignore.case = TRUE)
@@ -1086,11 +1091,15 @@ run_take = function(run, which) {
   lapply(items, queue_item_message, which, relay = isTRUE(run$requested))
 }
 
-#' The loop's finish_turn hook: a blocked gate or an abort ends the run
+#' The loop's finish_turn hook: a blocked gate or an abort ends the run; a turn that ended at the
+#' model's output limit is a notice
 #' @noRd
 run_finish_turn = function(run, turn) {
   if (!is.null(run$blocked)) return(list(action = "end", reason = "blocked"))
   if (isTRUE(run$signal$aborted)) return(list(action = "end", reason = "aborted"))
+  if (identical(turn$message$stop_reason, "length")) {
+    gptr_inform("The reply stopped at the model's output limit, so it may be incomplete.", "notice")
+  }
   NULL
 }
 
@@ -1249,7 +1258,8 @@ run_response = function(run, msg) {
   }
   row = usage_row(msg, session = d$id, agent = run$opts$agent %||% "main",
                   parent_id = d$parent_id %||% NA_character_, started = run$request_started,
-                  seconds = as.numeric(difftime(Sys.time(), run$request_started, units = "secs")),
+                  seconds = max(0, as.numeric(difftime(Sys.time(), run$request_started,
+                                                       units = "secs"))),
                   multiplier = d$estimator$m %||% 1)
   row = usage_conform(row)
   row$request_id = run$request_id
@@ -1372,10 +1382,12 @@ run_condition = function(run, msg, cls, message = NULL, ...) {
   d = session_data(run$shell)
   rid = err[["request_id"]]
   if (!rlang::is_string(rid)) rid = run$request_id %||% NA_character_
+  # a plan limit's `reason` and `resets_at` (08 section 3.7) travel in the error record
   gptr_condition(message %||% msg$error_message %||% "the model request failed", cls, "error",
-                 list(provider = run$model$provider %||% NA_character_,
-                      model = run$model$ref %||% d$model, status = err_status(err),
-                      request_id = rid, error_type = err_class(err), session = d$id, ...))
+                 c(list(provider = run$model$provider %||% NA_character_,
+                        model = run$model$ref %||% d$model, status = err_status(err),
+                        request_id = rid, error_type = err_class(err), session = d$id, ...),
+                   err[intersect(c("reason", "resets_at"), names(err))]))
 }
 
 # ---------------------------------------------------------------------------- compaction, budgets
@@ -1737,7 +1749,8 @@ run_abort_usage = function(run, msg) {
   msg$usage = usage_as(u)
   row = usage_row(msg, session = d$id, agent = run$opts$agent %||% "main",
                   parent_id = d$parent_id %||% NA_character_, started = run$request_started,
-                  seconds = as.numeric(difftime(Sys.time(), run$request_started, units = "secs")),
+                  seconds = max(0, as.numeric(difftime(Sys.time(), run$request_started,
+                                                       units = "secs"))),
                   multiplier = d$estimator$m %||% 1)
   row$cost = cost
   row = usage_conform(row)

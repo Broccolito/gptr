@@ -50,7 +50,7 @@
     scope$proc.time = function() c(elapsed = scope$clock)
     scope$Sys.sleep = function(delay) {
       stopifnot(is.numeric(delay), length(delay) == 1L, is.finite(delay),
-        delay > 0, delay <= 0.05)
+        delay > 0, delay <= 0.5)
       scope$waits = c(scope$waits, delay)
       if (!is.null(sleep_failure)) stop(sleep_failure)
       scope$clock = scope$clock + delay
@@ -63,13 +63,13 @@
       interrupt = function(error) error)
     stopifnot(identical(Sys.getenv(), ambient), identical(serialize(scope$tracked, NULL), cached),
       all(vapply(scope$seen, function(held) identical(held, handle), logical(1))),
-      scope$calls <= 6L)
+      scope$calls <= 10L)
     list(result = result, original = original, calls = scope$calls,
       elapsed = scope$clock, waits = scope$waits)
   }
   exact_failure = function(x) identical(x$result, x$original)
   immediate = run(list(FALSE))
-  late = run(list(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE))
+  late = run(c(rep(list(TRUE), 9L), list(FALSE)))
   first_wait = run(list(TRUE, FALSE))
   mixed = run(list(NA, TRUE, NA, FALSE))
   live = run(list(TRUE))
@@ -85,7 +85,7 @@
   sleep_interrupt = run(list(TRUE), original = original,
     sleep_failure = structure(list(message = "Synthetic sleep interrupt", call = NULL),
       class = c("interrupt", "condition")))
-  overdue = run(list(TRUE), original = original, query_cost = 0.06)
+  overdue = run(list(TRUE), original = original, query_cost = 1.1)
   invalid = run(list(TRUE, NULL), original = original)
   interruption = structure(list(message = "Synthetic original interrupt", call = NULL),
     class = c("interrupt", "condition"))
@@ -93,13 +93,13 @@
   checks = c(immediate_dead_zero = identical(immediate$result, 0),
     immediate_dead_no_wait = length(immediate$waits) == 0L && immediate$calls == 1L,
     dead_at_first_wait_zero = identical(first_wait$result, 0) && first_wait$calls == 2L,
-    dead_at_last_wait_zero = identical(late$result, 0) && late$calls == 6L,
-    scheduled_wait_bounded = late$elapsed <= 0.05 && sum(late$waits) <= 0.05,
+    dead_at_last_wait_zero = identical(late$result, 0) && late$calls == 10L,
+    scheduled_wait_bounded = late$elapsed <= 1 && sum(late$waits) <= 1,
     earlier_unknown_is_not_death = identical(mixed$result, 0) && mixed$calls == 4L,
     live_original_condition = exact_failure(live),
     unknown_original_condition = exact_failure(unknown),
-    live_checks_all_targets = live$calls == 6L,
-    unknown_checks_all_targets = unknown$calls == 6L,
+    live_checks_all_targets = live$calls == 10L,
+    unknown_checks_all_targets = unknown$calls == 10L,
     typed_condition_identity = exact_failure(typed),
     liveness_error_keeps_original = exact_failure(query_error),
     liveness_interrupt_keeps_original = exact_failure(query_interrupt),

@@ -1,5 +1,6 @@
 # CI-only resource check. R's _R_CHECK_CONNECTIONS_LEFT_OPEN_ covers examples;
-# this explicit comparison also checks the complete test suite.
+# this explicit comparison also checks the test suite, in CI one shard of its files per job
+# (GPTR_CI_TEST_SHARD, tests/testthat/ci-shard.R).
 #
 # The suite runs to its end (stop_on_failure = FALSE), so the connection table is compared even
 # when tests fail; the gate then fails on failed tests, on a suite error and on any change of the
@@ -36,13 +37,16 @@ suite_failures = function(results) {
   as.integer(sum(df$failed) + sum(df$error))
 }
 
-# Run the whole suite through `test`, then fail on its failures and on leaked connections
-run_gate = function(test = devtools::test, failures = suite_failures) {
-  check_connections(test(stop_on_failure = FALSE), failures = failures)
+# Run the suite's files that `filter` selects (NULL: all) through `test`, then fail on their
+# failures and on leaked connections
+run_gate = function(test = devtools::test, failures = suite_failures, filter = NULL) {
+  check_connections(test(filter = filter, stop_on_failure = FALSE), failures = failures)
 }
 
 if (sys.nframe() == 0L) {
   invisible(loadNamespace("devtools"))
   testthat::set_max_fails(Inf)
-  run_gate()
+  source("tests/testthat/ci-shard.R", local = TRUE)
+  files = list.files("tests/testthat", pattern = "^test.*[.][rR]$")
+  run_gate(filter = ci_shard_filter(ci_shard_files(files)))
 }

@@ -81,7 +81,8 @@ code.
 
 \itemize{
 \item \code{gptr.connect_timeout} (seconds, \code{20}), \code{gptr.first_byte_timeout} (seconds, \code{120}) and
-\code{gptr.idle_timeout} (seconds, \code{90}): network timeouts.
+\code{gptr.idle_timeout} (seconds, \code{90}): network timeouts. High-effort reasoning on OpenAI or
+Google may need \code{options(gptr.idle_timeout = 300)}.
 \item \code{gptr.max_retry_delay} (seconds, \code{60}): a longer \code{retry-after} from a provider fails at
 once.
 \item \code{gptr.max_attempts} (integer, \code{4}): transport attempts per request.
@@ -99,7 +100,9 @@ command-line tools.
 \section{Evaluation and tools}{
 
 \itemize{
-\item \code{gptr.r_timeout} (seconds, \code{3600}): time limit of the \code{r} tool when nobody is present.
+\item \code{gptr.r_timeout} (seconds, \code{3600}): time limit of the \code{r} tool when nobody is present. It
+stops R code that is computing; in a non-interactive R it does not end \code{Sys.sleep()} or
+\code{system()}, which \code{peter$sh(timeout = )} does for a command.
 \item \code{gptr.r_output_tokens} (integer, \code{4000}): estimated tokens of one \code{r} result.
 \item \code{gptr.r_max_images} (integer, \code{3}): plot images attached to one \code{r} result.
 \item \code{gptr.helper_output_tokens} (integer, \code{1500}): printed size of \verb{peter$} helper results.
@@ -118,7 +121,7 @@ nobody can answer: \code{"stop"} ends the run with status \code{blocked} and a
 to answer); \code{"deny"} returns a denial to the model.
 \item \code{gptr.critical_guard} (logical, \code{TRUE}): level-4 actions ask even in \code{auto} mode.
 \item \code{gptr.secret_guard} (logical, \code{TRUE}): reads of registered secrets ask even in \code{auto}
-mode.
+mode; \link{gptr_security} lists the reads.
 \item \code{gptr.protect_size} (bytes, \code{1e8}): overwriting a larger object is a level-3 action.
 \item \code{gptr.plan_handoff} (logical, \code{TRUE}): hand the plan a \code{plan} run proposes, once, to the next
 top-level \code{peter()} call from the same environment, within an hour and in another mode;
@@ -212,6 +215,21 @@ that a script makes no model calls.
 \item \code{GPTR_PROJECT_ROOT}: overrides the project root, like \code{gptr.project_root}.
 \item \code{ANTHROPIC_API_KEY}, \code{OPENAI_API_KEY}, \code{GEMINI_API_KEY}, \code{TYPESAFE_API_KEY} and the other
 provider keys: read at the first use of a provider; see \code{\link[=gptr_env]{gptr_env()}} for \code{.env} files.
+\item \code{R_USER_CONFIG_DIR}, \code{XDG_CONFIG_HOME} and \code{HOME} (on Windows also \code{APPDATA} and
+\code{USERPROFILE}): they place \code{tools::R_user_dir("gptr", "config")}, which holds gptr's
+settings, permission rules, trust decisions and credentials, and your home directory.
+Setting or unsetting one of them from model code changes gptr's own configuration, as does
+a variable a registered provider reads (its key or base-URL variable, such as \code{AWS_REGION}
+for Bedrock, or a variable gptr keeps for the \code{claude} or \code{codex} command-line tool: its
+login, its folder or the path of Git Bash, such as \code{CODEX_HOME}), a \verb{GPTR_*} or \verb{*_BASE_URL}
+variable, \code{R_ENVIRON_USER}, \code{R_PROFILE_USER},
+\code{R_ENVIRON} or \code{R_PROFILE}, whatever the letter case. Every mode but \code{yolo} asks you first,
+\code{auto} included, before \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} or
+\code{withr::with_envvar()} of such a name or of a name the classifier cannot read, before
+\code{readRenviron()} and \code{dotenv::load_dot_env()}, and before an \code{os.environ} write in
+\code{peter$py()} or \code{peter$knit("python", code)} code that names one in a string or an upper-case
+word or whose name is not a plain string literal; \link{gptr_security} lists what it does not
+read.
 \item \code{GPTR_WORKER}, \code{GPTR_SUBAGENT_DEPTH}, \code{GPTR_ARTIFACT_PORTS}, \code{GPTR_SHELL_CMD} and the tree
 markers \verb{GPTR_PROC_<id>}: set by gptr in its own child processes only.
 \item \code{GPTR_MCP_TOKEN}: the variable through which the Codex snippet of \code{\link[=gptr_mcp_serve]{gptr_mcp_serve()}} passes

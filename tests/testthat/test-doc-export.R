@@ -125,6 +125,29 @@ test_that("a console transcript exports like a script, its later turns piping th
   expect_length(fake_requests(x$fake), 4L)
 })
 
+test_that("console statements naming model and mode export in both formats (D-265)", {
+  local_project()
+  calls = c("s_ab12cd = peter(\"one\", mode = \"plan\")",
+            "s_ab12cd |> peter(\"two\", model = \"fake2/fake2-1\")")
+  block = function(id, prompt, body, turn) {
+    doc_render_block(id, list(model = "fake/fake-1", prompt = prompt_hash(prompt),
+                              sha = doc_body_sha(body), session = "sab12cd3456", turn = turn),
+                     body)
+  }
+  f = file.path(getwd(), "history.R")
+  writeLines(c(calls[1L], block("abc123", "one", "x = 1", 1L),
+               calls[2L], block("def456", "two", "y = x + 1", 2L)), f, useBytes = TRUE)
+  raw = file.path(getwd(), "raw.R")
+  gptr_export(f, raw)
+  expect_true(all(c(paste0("# ", calls), "x = 1", "y = x + 1") %in% readLines(raw)))
+  r = new.env(parent = baseenv())
+  source(raw, local = r)
+  expect_identical(c(r$x, r$y), c(1, 2))
+  peter = file.path(getwd(), "peter.R")
+  gptr_export(f, peter, format = "peter")
+  expect_true(all(c(calls, "# x = 1", "# y = x + 1") %in% readLines(peter)))
+})
+
 test_that("Peter export keeps calls active and recorded code inert exactly once", {
   local_project()
   body = c("hits = hits + 1L", "value = c(", "  2, 4", ")", "## Decision: Keep the data.",
@@ -151,6 +174,86 @@ test_that("Peter export keeps calls active and recorded code inert exactly once"
   expect_identical(e$s, "new-session")
   expect_false(exists("value", e, inherits = FALSE))
   expect_identical(export_read(f), bytes)
+})
+
+test_that("an export leaves out what a prompt was sent with, in both formats (FIX-33 DOC-7)", {
+  local_project()
+  sent = c("#< <user_files>", "#< <file path=\"notes.md\">", "#< hi", "#<", "#< </file>",
+           "#< </user_files>")
+  # only the run that opens a console turn's block: a later `#<` comment is recorded code
+  f = export_fixture(call = "s_ab12cd = peter(\"one\")", body = c(sent, "x = 1", "#< x is one"))
+  raw = file.path(getwd(), "raw.R")
+  gptr_export(f, raw)
+  expect_identical(grep("^#<", readLines(raw), value = TRUE), "#< x is one")
+  expect_true(all(c("# Recorded prompt: \"one\"", "x = 1") %in% readLines(raw)))
+  # nothing sends them from an exported call, which is asked without them
+  peter = file.path(getwd(), "peter.R")
+  gptr_export(f, peter, format = "peter")
+  expect_identical(grep("^#<", readLines(peter), value = TRUE), "#< x is one")
+  expect_true(all(c("s_ab12cd = peter(\"one\")", "# x = 1") %in% readLines(peter)))
+})
+
+test_that("a fresh block of a coached harness call exports like a peter() block", {
+  local_project()
+  f = export_fixture(call = "s = h(\"one\")", header = list(harness = "h:1234abcd"))
+  target = file.path(getwd(), "plain.R")
+  expect_identical(gptr_export(f, target), path_norm(target))
+  expect_true(all(c("# s = h(\"one\")", "x = 1") %in% readLines(target)))
+})
+
+test_that("a harness definition exports as ordinary code, in a script and in a transcript", {
+  local_project()
+  def = "h = gptr_tailor(peter, mode = \"auto\")"
+  f = export_fixture(call = "s = h(\"one\")", header = list(harness = "h:1234abcd"),
+                     before = c("library(gptr)", def))
+  raw = file.path(getwd(), "raw.R")
+  gptr_export(f, raw)
+  expect_true(all(c(def, "# s = h(\"one\")", "x = 1") %in% readLines(raw)))
+  clean = file.path(getwd(), "clean.R")
+  gptr_export(f, clean, format = "peter")
+  expect_true(all(c(def, "s = h(\"one\")", "# x = 1") %in% readLines(clean)))
+  def = "h_1a2b3c4d = gptr_tailor(peter, coaching = list(note = \"Be terse.\"))"
+  f = export_fixture(call = "s_ab12cd = h_1a2b3c4d(\"one\")",
+                     header = list(harness = "h_1a2b3c4d:1234abcd"),
+                     before = c("# gptr: h_1a2b3c4d needs fixed arguments that are not recorded: x",
+                                def))
+  transcript = file.path(getwd(), "transcript.R")
+  gptr_export(f, transcript)
+  expect_true(all(c(def, "# s_ab12cd = h_1a2b3c4d(\"one\")", "x = 1") %in% readLines(transcript)))
+  # any other statement naming a harness is still refused
+  f = export_fixture(call = "s = h(\"one\")", header = list(harness = "h:1234abcd"),
+                     before = c(def, "g = h"))
+  expect_error(gptr_export(f, file.path(getwd(), "other.R")), "unresolved Peter references",
+               class = "gptr_error_doc_export")
+})
+
+test_that("a coached harness's block called by peter() is stale for gptr_export()", {
+  local_project()
+  f = export_fixture(header = list(harness = "h:1234abcd"))
+  target = file.path(getwd(), "plain.R")
+  err = expect_error(gptr_export(f, target), class = "gptr_error_doc_export")
+  expect_match(err$reason, "stale")
+  f = export_fixture(header = list(harness = paste0("h:", doc_coach_hash(NULL))))
+  expect_identical(gptr_export(f, target), path_norm(target))
+})
+
+test_that("gptr_export() takes `format` exactly and names a non-literal argument it refuses", {
+  local_project()
+  f = export_fixture()
+  for (format in list("xml", NA, 1, "p", c("r", "peter", "x"))) {
+    expect_error(gptr_export(f, file.path(getwd(), "out.R"), format = format),
+                 class = "gptr_error_invalid_argument")
+  }
+  for (arg in c("agents = list(a = gptr_agent(\"x\"))", "budget = list()", "envir = new.env()",
+                ".opts = list()", "agents = ags")) {
+    f = export_fixture(call = paste0("crew = peter(\"one\", mtcars, ", arg, ")"))
+    err = expect_error(gptr_export(f, file.path(getwd(), "out.R")),
+                       class = "gptr_error_doc_export")
+    expect_match(err$reason, paste0("argument `", sub(" = .*", "", arg), "`"), fixed = TRUE)
+  }
+  f = export_fixture(call = "s = peter(\"zero\", budget = list(usd = 1)) |> peter(\"one\")")
+  err = expect_error(gptr_export(f, file.path(getwd(), "out.R")), class = "gptr_error_doc_export")
+  expect_match(err$reason, "argument `budget`", fixed = TRUE)
 })
 
 test_that("history export keeps quoted notes and UTF-8 output inert and bounded", {
@@ -233,6 +336,11 @@ test_that("raw export refuses ambiguous calls and unresolved session semantics",
   local_project()
   expect_identical(doc_export_chain(str2lang("peter(\"one\", )")), 0L)
   expect_identical(doc_export_chain(str2lang("peter(, \"one\")")), 0L)
+  # a console turn's @objects are unnamed names after the prompt (FIX-33); nothing else is
+  expect_identical(doc_export_chain(str2lang("peter(\"one\", fit, dat)")), 1L)
+  expect_identical(doc_export_chain(str2lang("peter(fit, \"one\")")), 0L)
+  expect_identical(doc_export_chain(str2lang("peter(\"one\", mode = auto)")),
+                   structure(0L, arg = "mode"))
   calls = c("before = 1; s = peter(\"one\"); after = 2",
             "s = peter(\"one\")$value", "s = peter(\"one\") |> identity()",
             "s = peter(paste0(\"o\", \"ne\"))", "s = list(peter(\"one\"))",
@@ -334,6 +442,25 @@ test_that("history export rejects missing stale edited undone and secret-marked 
   writeLines(c(text, doc_render_block("def456", list(prompt = prompt_hash("one")), "z = 2")), f)
   expect_error(gptr_export(f, target), class = "gptr_error_doc_export")
   expect_false(file.exists(target))
+})
+
+test_that("recorded peter$ member calls export; a nested Peter call is refused (review round 2)", {
+  local_project()
+  for (format in c("r", "peter")) {
+    f = export_fixture(body = "x = peter$sh(c(\"echo\", \"hi\"))$stdout")
+    target = file.path(getwd(), paste0("member-", format, ".R"))
+    gptr_export(f, target, format = format)
+    expect_true(any(grepl("x = peter$sh(c(\"echo\", \"hi\"))$stdout", readLines(target),
+                          fixed = TRUE)))
+  }
+  target = file.path(getwd(), "refused.R")
+  for (body in c("y = peter(\"again\")", "f = peter", "x |> peter(\"more\")",
+                 "peter$sh(gptr_return(1))")) {
+    f = export_fixture(body = body)
+    expect_error(gptr_export(f, target), "unresolved control calls",
+                 class = "gptr_error_doc_export")
+    expect_false(file.exists(target))
+  }
 })
 
 test_that("export never evaluates input or recovers pending writes", {

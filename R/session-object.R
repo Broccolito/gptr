@@ -395,13 +395,18 @@ session_text = function(s) {
   d$last_text
 }
 
-#' Each child's report under `### <name> (<model>)`; a child that did not end idle says
+#' Each child's report under `### <name> (<model>)`, the model its `gptr.subagent` entry names (a
+#' worker's proxy session has model `worker/worker`); a child that did not end idle says
 #' `(ended with status <status>)` first, as in the agent_reports block
 #' @noRd
 session_child_reports = function(d) {
+  models = list()
+  for (e in d$entries) {
+    if (identical(e$custom_type, "gptr.subagent")) models[[e$data$child]] = e$data$model
+  }
   parts = vapply(names(d$children), function(nm) {
     cd = session_data(d$children[[nm]])
-    paste0("### ", nm, " (", cd$model, ")\n",
+    paste0("### ", nm, " (", models[[cd$id]] %||% cd$model, ")\n",
            if (!identical(cd$status, "idle")) paste0("(ended with status ", cd$status, ")\n"),
            if (is.na(cd$last_text)) "" else cd$last_text)
   }, "")
@@ -1387,7 +1392,7 @@ replay_model_parts = function(model) c(sub("/.*$", "", model), sub("^[^/]*/", ""
 
 #' Check the document fields of a replay before a session is built from them: `path`, `format`,
 #' `template` and `text` are one string or NULL, `code` and `output` character vectors or NULL,
-#' `steps` a list or NULL
+#' `steps` a list or NULL, `sent` a named list of strings or NULL
 #' @noRd
 replay_doc_check = function(doc) {
   check_list(doc, "doc", null = TRUE)
@@ -1396,6 +1401,8 @@ replay_doc_check = function(doc) {
   }
   for (f in c("code", "output")) check_strings(doc[[f]], paste0("doc$", f), null = TRUE)
   check_list(doc[["steps"]], "doc$steps", null = TRUE)
+  check_list(doc[["sent"]], "doc$sent", named = TRUE, null = TRUE)
+  for (k in names(doc[["sent"]])) check_string(doc$sent[[k]], paste0("doc$sent$", k), empty = TRUE)
   invisible(doc)
 }
 
@@ -1417,7 +1424,7 @@ replay_mark = function(s, block, header, text, advance) {
   if (block %in% d$seen) return(invisible(s))
   turn = if (advance && !replay_holds_block(d, block)) d$turns + 1L else d$turns
   session_append(s, entry_custom("gptr.replay", compact(list(
-    doc = header$doc %||% d$doc$path, block = block, mode = header$mode %||% "replay",
+    doc = header$doc %||% d$doc$path, block = block, mode = header[["mode"]] %||% "replay",
     turn = turn, value = header$value))))
   d$seen = c(d$seen, block)
   d$turns = turn
@@ -1539,9 +1546,10 @@ replay_reconstruct = function(s, header, doc) {
   replay_turn_append(s, header, doc, if (is.na(turn) || turn < 1L) 1L else turn)
 }
 
-#' Append turn `turn` reconstructed from a document block: the template, then in body order each
-#' run of code as an `r` call with its `#>` lines as the result, each steer as the relay a live
-#' steer arrives as (which records back as the same `## Steer:` line), each follow-up as the user
+#' Append turn `turn` reconstructed from a document block: the template after the context blocks
+#' it was sent with (`doc$sent`, the block's `#< ` lines, IC-49), then in body order each run of
+#' code as an `r` call with its `#>` lines as the result, each steer as the relay a live steer
+#' arrives as (which records back as the same `## Steer:` line), each follow-up as the user
 #' message it was, after the earlier answer it followed; then the cached answer. `doc$steps` is
 #' doc_replay_steps(); without it, `doc$code` and `doc$output` are one run.
 #' @noRd
@@ -1553,8 +1561,9 @@ replay_turn_append = function(s, header, doc, turn) {
     session_append(s, entry_message(msg_assistant(content, api = "replay", provider = parts[[1L]],
                                                   model = parts[[2L]], ...)))
   }
-  session_append(s, entry_message(msg_user(doc$template %||% "(the prompt was not recorded)",
-                                           source = "replay")))
+  sent = lapply(names(doc$sent), function(k) block_context(k, doc$sent[[k]]))
+  prompt = block_text(doc$template %||% "(the prompt was not recorded)")
+  session_append(s, entry_message(msg_user(c(sent, list(prompt)), source = "replay")))
   steps = doc$steps %||% list(list(type = "r", code = doc$code, output = doc$output))
   k = 0L
   for (st in steps) {

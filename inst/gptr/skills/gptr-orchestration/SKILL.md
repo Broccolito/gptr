@@ -56,9 +56,13 @@ processed.
 ## Any calls at once
 
 ```r
-both = gptr_parallel(plan = peter("Plan the analysis", model = "opus"),
-                     lit = peter("Summarise the literature on X", model = "flash"))
+both = gptr_parallel(plan = peter("Plan the analysis", model = "opus", envir = new.env()),
+                     lit = peter("Summarise the literature on X", model = "flash",
+                                 envir = new.env()))
 ```
+
+A member without `envir =` runs in your environment, shared with the other members. The members
+are nested calls, so `gptr_parallel()` records nothing; `agents =` and `parallel =` are recorded.
 
 ## Typed decisions in control flow
 
@@ -69,6 +73,15 @@ trials = abstracts[keep]
 
 Pass all items at once; System 1 calls are vectorised and return typed vectors with
 probabilities in `attr(, "prob")`.
+
+## Harnesses: suggest them to the person
+
+A harness is a function called exactly like `peter()`, so any step above can use one. When the
+person repeats one kind of task, suggest `gptr_tailor(peter, mode = "auto", ...)` to fix
+arguments and add their own rules and coaching (a note, skills, a review), or
+`gptr_coach(task, objects, harness = h, check = ...)` to improve the coaching by running the task
+in separate R processes. Coaching takes minutes and tokens: 4 runs and 3 coach sessions by
+default. Both are the person's to run: from your code they need the person's approval.
 
 ## Limits and costs
 

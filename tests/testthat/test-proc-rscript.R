@@ -36,6 +36,27 @@ test_that("Rscript workers use a fixed bootstrap and explicit installed library"
   expect_false(grepl("pkgload|Sys.setenv|Sys.unsetenv|source[(]", script))
 })
 
+test_that("the coaching child entry loads the installed namespace as a worker does (P29)", {
+  dir = withr::local_tempdir()
+  got = NULL
+  lib = normalizePath(tempdir(), winslash = "/")
+  local_mocked_bindings(proc_rscript_library = function() lib,
+    proc_spawn = function(command, args, env, ...) {
+      got <<- list(args = args)
+      new.env(parent = emptyenv())
+    })
+  input = list(file.path(dir, "spec.rds"), file.path(dir, "result.json"))
+  proc_rscript("child", input, dir = dir, env = character())
+  payload = readRDS(got$args[[3L]])
+  expect_named(payload, c("entry", "args", "libpaths", "library"))
+  expect_identical(payload$entry, "child")
+  expect_identical(payload$args, input)
+  expect_identical(payload$library, lib)
+  script = paste(readLines(got$args[[2L]], warn = FALSE), collapse = "\n")
+  expect_match(script, "c('worker', 'child')", fixed = TRUE)
+  expect_true(is.function(get(paste0(payload$entry, "_main"), envir = asNamespace("gptr"))))
+})
+
 test_that("artifact bootstrap is detached from the caller and gptr namespace", {
   dir = withr::local_tempdir()
   got = NULL

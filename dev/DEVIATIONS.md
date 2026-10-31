@@ -4257,7 +4257,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `  sub-agent <agent> > r  <code>`, detail `sub-agent <agent> wants to use`,
   `     asks in every mode: <reason>` for `ask_human`, `sub-agent <agent> asks: ` (ask tool) and
   `sub-agent <agent>: ` (budget select). `perm_ask()` drops `agent` from the `permission_request`
-  payload (the event keeps its own label).
+  payload (the event keeps its own label). Status 2026-10-28 (verification round 6, R6-SS-8): the
+  `ask_human` row reads `asks even in auto mode: <reason>`, since yolo runs the secret guard's
+  reads without asking (D-267).
 - Invalid answers: `a`/`p` not offered is explained; others
   `Not an answer: '<text>'. Type y, a, n ...`; after five (`?` is none)
   `No valid answer after 5 tries; refused.` with feedback
@@ -4610,6 +4612,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: perm-classify (a name assigned outside a function body; a straight-line reassignment; a
   value that uses the name; computed, branch-default, loop, `<<-` and named `assign()` forms stay
   3), perm-gate (auto asks a person). Evidence: progress/P26.md Task 14.
+- Amended by D-293 (F-9): a `for` variable takes the folded values of its sequence, and
+  `list.files()` and `dir()` with full names and `fs::dir_ls()` of a literal folder name a file in
+  it, so neither is a name the code computes.
 
 ## D-212 - P26 a fan-out child gets its element alone as `.x`; context "none" is refused (2026-10-18)
 - Rule: for every backend a fan-out child's element is bound alone in its overlay as
@@ -4961,6 +4966,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   no readable marker (Linux `setproctitle()` zeroes their environment block, macOS ps reads none),
   so the profile was removed while they still wrote in it (hosted ubuntu, CI-64). Without a deadline
   (the startup unwind, the retained cleanup job) `release()` keeps its single check.
+- Amended by D-271 (FIX-35): `release()` waits at most 2 s for them, kills those still running and
+  waits for them in the rest of the deadline, as a helper starved under load outlasted the 10 s.
 - Limitation (macOS): the background children of a shell that exits by itself, and system binaries
   left by a dead parent (`proc_sweep()`), stay unreachable: no parent link and no readable marker.
 - Contract-visible: 04 section 7.4 `kill_all()` row and 03 section 6.7 amended (the recorded
@@ -5069,6 +5076,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   pass only when the latest attempt of each of their version's four shards recorded `success` in its
   `windows-status-<r>-<n>` artifact. Every attempt records its job status, so a failed re-run
   replaces an earlier pass, and "Re-run failed jobs" keeps the passed shards' records.
+- Amended by CI-107 (2026-10-30): Windows release runs as ten serial shards
+  `windows-latest (release, shard <n>/10)` without vignettes, examples or R's code analysis (the
+  cran and oldrel-4 jobs check the whole package), and `windows-latest (oldrel-4)` is one check
+  with CRAN's test list. The gate `windows-latest (release)` passes only when `needs.shards.result`
+  is `success`, which counts the latest attempt of each shard, in place of the status artifacts.
+  `GPTR_CI_TEST_SHARD` shards the full-suite lanes of every OS (Ubuntu `LC_ALL=C` 4, macOS 5, the
+  connection gate 9), the native list stays Windows-only, and a shard's log names each file with
+  its time. Tests: test-zzz.R "each check main requires is the name of exactly one hosted job
+  (CI-107)" and "each sharded lane's required context gates the latest attempt of its shards
+  (CI-107)".
 - Contract-visible: none. Amends architecture section 3.5, spec 05 P01, 00-index section 5.1, P25
   Task 15 and P27 A1-A2: both workflows must pass.
 - Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "Windows
@@ -6117,6 +6134,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   never an IDE's box (S9)".
 - Amended by D-253 (R19): the [b] row's `gptr_wait()` call has `!!` only while a console REPL is on
   the stack.
+- Amended by D-263 (FIX-28): a T console's call turns bracketed paste on, which the steering
+  review's paste item rejected; the markers decide a paste and the timing rule only batches without
+  them.
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members,
@@ -6145,7 +6165,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   after @, / and ! and never natural language (IC-81)"; test-console-typing.R "Tab completes a
   trigger word; several show on the live row until a key (IC-81)"; test-console-input.R "a draft at
   the prompt completes a trigger word; several are listed above (IC-81)", "the draft keeps its
-  column as the status changes; the status only widens (review)".
+  column as the status changes; the status only widens (review)". Status 2026-10-27 (FIX-34
+  review round 4): `console_complete()` returns no word holding a control character, whatever its
+  source, so a file named `bang\n!file.create('M')` is not offered; formerly Tab and Enter on
+  `@ban` sent `!file.create('M')` as a `!` line, which ran. 04 section 15.10 IC-81 says so; test:
+  test-console-completion.R "no completion holds a line end or another control character (review
+  round 4)". Status 2026-10-27 (round 4 verification): `console_completer()` sets `fileName`
+  FALSE again after `console_complete()`, so a string on a `!` line never goes to readline's own
+  file-name completion, which no filter reaches; under `rc.settings(quotes = FALSE)` it completes
+  nothing at the prompt, as the composer's Tab gave, where readline formerly offered every name.
+  Test: test-console-completion.R "a ! line's string never goes to readline's file completion
+  (round 4 verification)".
 - Task 23: RStudio's console and Windows' Rgui and Rterm complete only after the trigger characters
   too. `console_completes()` decides where: R's own Unix readline on a tty, RStudio's console,
   Windows' Rgui and Rterm (utils' `.win32consoleCompletion()` calls the custom completer); not
@@ -6237,6 +6267,29 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   function` went to RStudio's engine, whose popup took Enter. Contract-visible: 03 section 6.17, 04
   section 15.10 IC-81. Tests: test-console-completion.R "RStudio's console completes only the
   triggers; its editor gets RStudio's own (IC-81)".
+- Status 2026-10-28 (FIX-34 review round 5): an unquoted @mention's name is letters, marks and
+  digits of any script with `_ . / ~ -`, not ending in a dot (it was ASCII letters and digits),
+  so a non-ASCII name Tab completes since round 4 reads whole, as it does typed; formerly
+  `@acc/café.csv` read `@acc/caf`, not found. In a non-UTF-8 Unix locale the name reaches the file
+  system as unmarked UTF-8, so under C such a name is found, quoted or not (it never was). Tab
+  still writes no quotes. Contract-visible: the console vignette (03 section 6.17 and 04 section
+  15.10 name no character set). Tests: test-console-repl.R "an @name holds letters, marks and
+  digits of any script, in C too (review round 5)"; test-console-completion.R "the @ name Tab
+  completes is read whole, so its file is attached (review round 5)".
+- Status 2026-10-28 (review round 5, the merge): an unquoted @mention's name that no file or
+  object has is read as its leading run of ASCII letters, digits and `_ . / ~ -`, not ending in a
+  dot (the name read before round 5), when a file or object has that, as text in a script written
+  without spaces runs on after a name: `@df` and then Chinese with no space attaches `df` again,
+  and `@x²` the object `x`. Otherwise the whole name is reported, a folder or not found; a quoted
+  name is read whole. Contract-visible: the console vignette. Tests: test-console-repl.R "an @name
+  nothing has is read as its leading ASCII run (round 5 merge)". Evidence: progress/fixes.md
+  FIX-34's merge.
+- Status 2026-10-28 (review round 5, the final merge): `fs_path()`, which hands the mention's
+  candidate paths to the file system as unmarked UTF-8 in a non-UTF-8 Unix locale, is in
+  `utils-encoding.R` (L0), beside `os_bytes()`, not P10's `tool-walk.R`, an L4 service the console
+  (L5) may not call: from round 5 `repl_mentions()` called it there, which the layering test
+  refused. Contract-visible: 03 section 3.2 (the file's row). Tests: test-arch-layers.R. Evidence:
+  progress/fixes.md FIX-34's final merge.
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input
@@ -6816,6 +6869,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   that said nothing. Contract-visible: 04 section 15.10 (the pause menu's [b]). Tests:
   test-console-commands.R "/exit, /quit and /q end the REPL"; test-agent-background.R "gptr_cancel()
   aborts a background session and releases its job".
+- Amended by D-296 (F-93): the person's own `!code` output, messages and warnings print as R prints
+  them, live and at R's width; only the error row and the closing blank row use the margin.
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets
@@ -7413,10 +7468,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   and then as tool `sh`, which no `r(sh:)` rule matches, so `cmd = "rm -rf build"; peter$sh(cmd)`
   ran in auto and yolo under `r(sh:rm *)`.
 - Open (nested-1): a computed command run through base `system()` or `system2()`
-  (`cmd = paste("rm", "-rf",
-  "build"); system(cmd)`) is one `dynamic` level-3 row that no `sh:` rule matches, so it still runs
-  in auto and yolo under a deny `r(sh:rm *)`; only nested `peter$sh` and `peter$bg` calls are
-  re-checked. The gate is advisory; `?gptr_security` names the limit. No code change.
+  (`cmd = paste("rm", "-rf", "build"); system(cmd)`) is one `dynamic` level-3 row that no `sh:` rule
+  matches, so it still runs in auto and yolo under a deny `r(sh:rm *)`; only nested `peter$sh` and
+  `peter$bg` calls are re-checked. The gate is advisory; `?gptr_security` names the limit. No code
+  change. Status 2026-10-26: closed by D-262 (FIX-27): auto and yolo refuse such a call.
 - Rule (sessions-22): the `gptr.frozen` entry records `mode`, the session's mode at the freeze
   (P07's and the fallback's), and a rebuild (`gptr_resume()`, console `/resume`, a replay cut) takes
   the last mode its active path records, a `gptr.frozen` `mode` or a `gptr.mode_change` `to` that is
@@ -7780,6 +7835,909 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   chose".
   Evidence: progress/fixes.md FIX-21.
 
+## D-262 - FIX-27 Auto and yolo refuse a system() command the code computes (2026-10-26)
+- Rule: in auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or
+  `shell.exec()` call whose command (`system2()`'s `args` too, `shell.exec()`'s file) the classifier
+  cannot fold to literals: a `dynamic` row of these functions whose call text is no `<fn>(): `
+  reading of a command (`perm_computed_cmd()`). The code is not evaluated; the model reads "system()
+  with a computed command is refused in auto mode: the permission rules cannot read it. Run the
+  command with peter$sh(), which checks it against them when it runs" (the function and the mode
+  named), and `peter$sh()` meets the deny and ask rules with its command when it runs (D-251
+  nested-1). `system2()` with computed `args` counts as computed (`system2("git", c("log", n))`). A
+  literal command is read and gated as before, table readings included: `system("ls | xargs rm")`,
+  `system('eval $X')` and `system(paste("rm", "-rf", "build"))` (an inline fold, so `r(sh:rm *)`
+  denies it) keep their rows and decisions. Plan, manual and edits are unchanged (deny, ask, ask).
+  Status 2026-10-27: the reason is shortened by D-267 ("<fn>() with a computed command is refused
+  in <mode> mode; use peter$sh()"). Status 2026-10-27 (review round 3): `peter$sh()`'s own level
+  reads its command as run in its `wd`, a `cd` before it (`bridge_risk_sh()`; an argv is quoted
+  into one line), so `peter$sh(c("rm", "-rf", "build"), wd = <outside>)` is level 4 and asks in
+  auto and yolo. Formerly it was level 3, the command read in the project, and ran without a
+  question (also on `13a917ff`). `peter$bg()` takes no `wd`. Status 2026-10-27 (review round 4): the
+  directories a line moves to (each `cd` target, the `wd`) also place the code a shell or Python
+  runs there (`sh -c`, `python3 -c`) and the literal scan, so
+  `peter$sh(c("sh", "-c", "rm -f f"), wd = <outside>)` is level 4 (formerly 3, the code read in the
+  project, and run in auto and yolo); a `cd` target is read as `git -C`'s directory is, so
+  `peter$sh("ls", wd = <outside>)` is level 1 and manual asks (formerly 0); a drive-relative path
+  (`D:x`) is `outside` on every OS (`is_drive_rel()`; formerly joined to the project, level 3), and
+  sh's reading of a line with a backslash places a word that starts with a drive letter as relative,
+  as sh does; and `setwd()`, `withr::local_dir()` and `withr::with_dir()` to a directory outside the
+  project and `tempdir()`, or to one the code computes, are a level-4 `session` row (formerly level
+  2, after which a relative delete outside the project ran in auto and yolo, and with an unpinned
+  root the outside folder became the project; also on `13a917ff`). Not followed, and named in
+  `?gptr_security`: the working directory changed in other ways (`usethis::local_project()`), the
+  code another interpreter runs (`Rscript -e`, `perl -e`) and a path the shell computes (`rm "$f"`,
+  `xargs rm`), all level 3. A literal `wd` of `processx::run()` is read the same way
+  (`cmd_in_wd()`). Status 2026-10-27 (the fixes' verifier): so is a `wd` held by a name the code
+  assigns, in each directory the name may hold; a `wd` the code computes is read as the project, as
+  `?gptr_security` now says. Status 2026-10-27 (the merge of review round 4, the fixes' verifier's
+  finding 1): a literal code word handed to `sh -c` or `bash -c` with its spaces escaped by a
+  backslash or written `$IFS` (`sh -c rm\ -f\ <file>`) is not read, so auto and yolo delete a file
+  outside the project with no question, as on `0aa55320` and `13a917ff`: the tokenizer splits the
+  word at the escaped space and sh's second reading drops the escapes, so the code is `rm` alone, a
+  level-3 row (`eval rm\ -f\ <file>` is 4). A fix needs a tokenizer of its own that reads escapes as
+  sh does inside and outside quotes without breaking Windows `C:\x` paths, which the two readings
+  exist for; `?gptr_security` and 03 section 6.8.1 now name it among what is not followed.
+- Rule (allow): only an `r(fn:NAME,...)` (or `*(fn:...)`) allow rule lifts the refusal, matched
+  against the refused rows alone and covering all of them, as only `r(secret:NAME)` lifts the secret
+  guard: `r(fn:system)` lets `system(cmd); write.csv(x, "out.csv")` run in auto, while `r`,
+  `r(level<=3)`, `r(category:dynamic)` and `r(sh:*)` do not lift it, so a rule kept for manual mode
+  does not switch the refusal off. `rule_suggest()` offers no `[a]lways` rule for dynamic code and
+  an untrusted project contributes no allow rules (IC-52), so only a rule a person writes allows
+  such a call; it then runs unchecked by `sh:` rules. Deny and ask rules are unchanged.
+- Rule (shell.exec): `shell.exec()` of a file the code computes is one `dynamic` level-3 row,
+  `shell.exec(f) (a file the code computes)`, also through `lapply(fs, shell.exec)`; a literal file
+  keeps the table's level-3 `process` row. Formerly every `shell.exec()` was that `process` row.
+  risk-functions.csv's `shell.exec` note said that literal commands are classified with the command
+  table, which never held (`shell.exec` is no code argument); it now says that a file the code
+  computes is dynamic.
+- Formerly `cmd = paste("rm", "-rf", "build"); system(cmd)` ran in auto and yolo despite a deny
+  `r(sh:rm *)` (D-251 Open nested-1, FIX-18, issue #87).
+- Chosen over option 1 (maintainer, 2026-10-26), which binds run-time wrappers of `system()` and
+  `system2()` in the evaluation environment to check the command string when it runs. Option 2 is
+  simpler: one predicate in the gate, no wrappers and no run-time reparse of a command string. It
+  changes no evaluation: `R/eval-core.R` is untouched and nothing masks base functions in the user's
+  environment, often the global environment, so no copy-safety or `.GlobalEnv` question arises. It
+  is the same on every OS: one table-driven rule, with no Windows-only wrappers for `shell()` and
+  `shell.exec()` and no mirroring of how each OS's `system()` hands a string to a shell. It is
+  wider: it also covers `base::system(cmd)` and `do.call(system, list(cmd))`, which wrappers bound
+  by name miss. And it keeps one checked route, `peter$sh()` (nested-1).
+- Not covered (Open): a function reached by a computed name (`get("system")(cmd)` is only a
+  `<computed>` row); `eval(parse(text = ))`, `source()`, package code that calls `system()`,
+  `peter$knit` R chunks and `peter$script`; `pipe(cmd)`, `processx::run(cmd)` and
+  `data.table::fread(cmd = x)`, which give the same `dynamic` row (widening is one word in the
+  function vector, the maintainer's call); `system2()`'s `env`, pasted unquoted into the Unix
+  command line and never read (`system2("ls", env = "A=1; rm -rf build;")` is level 0), a separate
+  issue; in manual mode an allow `r(level<=3)` still lets a computed `system()` run without asking,
+  past a deny `sh:` rule (as before). Status 2026-10-27: `env` is read since D-267 (FIX-32).
+  Status 2026-10-27 (review round 2): `?gptr_security` and 03 section 6.8.1 also name what a shell
+  reads when it runs, which neither the rules nor the refusal read: its standard input
+  (`system("sh", input = cmd)`, `peter$sh("sh", input = cmd)`, `printf '...' | sh`), variables it
+  expands (`sh -c "$X"`, `eval $X`) and a script file; and a function passed as a value
+  (`g(system)`, `for (f in list(system)) f(cmd)`, `baseenv()$system(cmd)`). A reading of `input`
+  alone would leave the other ways open. Status 2026-10-27 (review round 3): the page names a
+  function reached through a list or an environment or handed to a function of your own, as
+  `lapply(cmd, system)`, `Map(system, cmd)` and `do.call(system, list(cmd))` are refused.
+- Accepted false refusals, each costing one round trip to `peter$sh()` or an `r(fn:)` rule:
+  `cmd = "ls"; system(cmd)` (names are not followed for code arguments),
+  `system2("git", c("log", n))`, `system2("ls", character())`, `do.call(system, list("ls"))`, a
+  function defined but not called (`f = function(x) system(x)`), and a literal unmodelled command
+  inside the user's own helper (the row `via g(): system(): xargs rm`), which is no `<fn>(): `
+  reading. Status 2026-10-27: since D-267's review round such a row is read as the same command
+  written in the call is (the rules drop the `via g(): ` labels), so it is no longer refused.
+- Contract-visible: 03 sections 6.8.1, 6.8.2 and 6.8.4; 04 sections 7.11 (`builtin_permissions`),
+  9.4 (the `sh` member's risk, review round 3) and 15.9 IC-78; `?gptr_security`,
+  `?gptr_permissions`, `?gptr_risk`; vignette("execution-model"); NEWS; risk-functions.csv's
+  `shell.exec` note. Review round 4: 03 section 6.8.1 (its levels 1 and 4 and the placing of paths),
+  04 sections 7.1 (`path_class()`), 9.4 (the `sh` row) and 15.9 IC-78; `?gptr_security`;
+  risk-functions.csv's `setwd` row and the two `withr` rows.
+- Tests: test-perm-gate.R "auto and yolo refuse system() with a computed command; peter$sh() meets
+  the rules", "only auto and yolo refuse a computed command; a literal one is gated as before";
+  test-perm-classify.R "shell.exec() of a file the code computes is a dynamic row (D-262)"; review
+  round 3: test-perm-gate.R "a peter$sh() command is read as run in its wd (review round 3)"; review
+  round 4: test-perm-gate.R "code a shell or Python runs is read in the directory the line moved to
+  (round 4)", "setwd() out of the project asks in auto and yolo (review round 4)";
+  test-perm-classify.R "a drive-relative path is outside the project on every OS (review round 4)",
+  "a command run in a directory outside the project reads it (review round 4)", "moving R's working
+  directory out of the project is level 4 (review round 4)", "a Windows wd is placed as Windows
+  places it, on every OS (review round 4)", "processx::run()'s wd is read as peter$sh()'s (review
+  round 4)". Evidence: progress/fixes.md FIX-27.
+- Status 2026-10-28 (review round 5): the code that `cmd /c`, `/k` or `/r` and `pwsh` or
+  `powershell` `-c` or `-Command` run is every word after the option, in any letter case, and is
+  read whole (formerly its first word, so `cmd /c del <outside file>` was level 3, run in auto and
+  yolo); `env -C DIR` and `env --chdir=DIR` are read as a `cd`, as `git -C` is (formerly level 3);
+  `callr::run()`, which is `processx::run()`, and `sys::exec_wait()`, `sys::exec_internal()` and
+  `sys::exec_background()` read a literal command as `processx::run()` does (formerly level 1
+  `unlisted`); `eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as
+  `evalq()` does (formerly quoted, so `eval(quote(setwd(<outside>)))` was 3); `xfun::in_dir()`
+  joins the `with_dir` rows; and a link `file.symlink()`, `file.link()` or `Sys.junction()` makes
+  to a path outside the project is a level-4 `file_delete` row, as `ln`'s source is (formerly 2,
+  so a relative delete through it in the same call ran in auto). R's working directory is held as
+  a name's paths are (D-211): from `getwd()` when the code is read, moved by `setwd()` and
+  `withr::local_dir()`, one the code computes in or after `withr::with_dir()` and `xfun::in_dir()`
+  and after a move in a branch or a function body; `getwd()` reads it and `setwd()` returns the
+  one before. So `owd = setwd("data"); ...; setwd(owd)` and `setwd(file.path(getwd(), "data"))`
+  are level 2 again (round 4 made them 4, a directory the code computes, which asked in auto and
+  yolo and stopped Rscript and knitr runs), and `setwd(<unknown object>)` stays 4. Not followed,
+  named in `?gptr_security` and 03 section 6.8.1, each level 3 or lower: the command of
+  `processx::process$new()`, `get("setwd")` and the `wd` of `callr::r()`. Both now state the class
+  every form they name as not read belongs to: code that builds a call, a name, a path or a
+  command at run time, or reaches a function by another name, is read only as far as the
+  classifier sees. The yolo notice and NEWS name moving the working directory out of the project.
+  Tests: test-risk-forms.R (review round 5). Evidence: progress/fixes.md FIX-27.
+- Status 2026-10-28 (review round 5 verification): `env -C` and `git -C` read `~` and `$HOME` as
+  the home directory, as a `cd` does, through helpers the `cd` reading shares (formerly placed in
+  the project, so `env -C ~/other rm -f x` was level 3 where `cd ~/other && rm -f x` is 4); a
+  directory the shell computes is one the code computes for both. PowerShell's `-Command` and
+  `-EncodedCommand` are read in any abbreviation, after `-` or `/` (formerly `pwsh -Comm` was level
+  3 `process`); `eval(base::quote(x))` reads `x`; and `fs::link_create()` writes `new_path` and
+  its source is read as `file.symlink()`'s, so a link to a path outside the project is level 4.
+  Still not read, each level 3 or lower: `env` with `-C` in a cluster of short options or an
+  abbreviated `--chdir`. Tests: test-risk-forms.R (review round 5). Evidence: progress/fixes.md
+  FIX-27.
+- Status 2026-10-28 (review round 5, the merge): `getwd()` and `setwd()` are read as D-272's
+  helpers are, so a call of either that the code assigns, or that the environment the code would
+  run in holds as other than base R's, is one the code computes: `getwd = function() "~"` and then
+  `setwd(getwd())` is level 4 (2 on the merged branches, which read it as R's working directory).
+  Contract-visible: 03 section 6.8.1. Tests: test-risk-forms.R "a getwd() or setwd() the code or
+  the session binds is one the code computes (merge)". Evidence: progress/fixes.md FIX-34's merge.
+- Status 2026-10-28 (review round 6): `Sys.junction()`'s row names `to` again, R's formal, so on
+  Windows, where the function exists, a junction written to a control path is level 4 `control`
+  (round 5's `link` named no formal, which left it 2 there); `sys::exec_wait()`'s and
+  `sys::exec_background()`'s `std_out` and `std_err` are files they write, read as
+  `processx::run()`'s `stdout` is (formerly 0 for an output file outside the project). Not read,
+  each level 3, and now named in `?gptr_security` and 03 section 6.8.1: `env` with `-C` among
+  other short options or as an abbreviated `--chdir`, `pwsh -CommandWithArgs` and `-cwa`, and
+  `os.environ.update()` of a mapping whose names are not plain string literals. Both pages also
+  say that a form they name as not read is code built or reached at run time, code in a file or
+  a package, code another interpreter runs, or a call or argument the classifier has no rule for
+  (round 5 named only the first kind). Contract-visible: 03 section 6.8.1; `?gptr_security`.
+  Tests: test-risk-forms.R "Sys.junction() writes its `to`, with R's formals or as written, on
+  any host (round 6)", "sys::exec_*()'s std_out and std_err are files it writes, as processx's
+  (round 6)". Evidence: progress/fixes.md FIX-27.
+- Status 2026-10-28 (review round 6 verification): a function written as sys's `std_out` or
+  `std_err` is a callback, not a file it writes (round 6 read it as a level 2 file write, which
+  manual and edits asked); its code is read as any function's, and a name there stays a file the
+  code computes, level 2. Tests: test-risk-forms.R "sys::exec_*()'s std_out and std_err are files
+  it writes, as processx's (round 6)". Evidence: progress/fixes.md FIX-27.
+- Status 2026-10-28 (review round 6, the gate writer): after the code has moved R, a relative
+  directory given to `setwd()`, `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()` is
+  read in each directory R may be in, one the code computes when that is (before any move in the
+  project, as every relative path is), so `setwd("data"); ...; setwd("..")` is level 2 (round 4 read
+  it as leaving the project, 4, which auto and yolo asked); a function body and the code of
+  `local()` (given no environment) bind their own names, followed from their start as the top
+  level's are (a function's other names are ones the code computes and R starts where the code
+  started or has moved it to; `local()`'s start as the names around it; a name assigned with `<<-`
+  there adds its values outside), so the save-and-restore idiom stays in the project in a function
+  and in `local()` (4 since round 4); `withr::local_tempdir()` and `withr::local_tempfile()` are
+  folded as `tempfile()` is; a `cd`, `env -C` or `git -C` directory and the `wd` of `peter$sh()` and
+  `processx::run()` are ones the shell computes only when the tokenizer saw an expansion or a glob
+  in the word (a quoted `out[1]` outside the project was level 3, run in auto and yolo; now 4);
+  `chdir()` in Python code (`os.chdir()`, `os.fchdir()`, `contextlib.chdir()`), which moves R's
+  working directory too, is a `session` row as `setwd()` is (formerly level 1); the evaluator's
+  guard reads `eval(quote(x))` as `x`, as the classifier does, so `eval(quote(q()))` is refused in
+  every mode (D-269; since round 5 auto asked a person to approve it at 4); `fs::file_copy()`,
+  `fs::file_move()` and `fs::dir_copy()` write `new_path` (risk-functions.csv named the source, so
+  with fs loaded a copy outside the project was 2); and `do.call(system, list("ls"))` is read as
+  `system("ls")` (D-272's review round 6), so it is no longer an accepted false refusal. Documented,
+  each level 4: the idiom with the directory saved in a branch, a loop or another call's argument,
+  and `setwd(here::here())`, a directory the code computes (here's root, not gptr's).
+  Contract-visible: 03 section 6.8.1, 04 sections 15.4 IC-53 item 3 and IC-78, the `eval_guard()`
+  bullet; `?gptr_security`; risk-functions.csv's three fs rows. Tests: test-risk-forms.R (review
+  round 6). Evidence: progress/fixes.md FIX-27.
+- Amended by D-293 (F-20): `pipe()`, `processx::run()` and `data.table::fread(cmd =)` with a command
+  the code computes are refused in auto and yolo too.
+
+## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
+- Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`
+  takes the pseudo-modes `paste` and `-paste`, which write `ESC [ ? 2004 h` after stty and
+  `ESC [ ? 2004 l` before it, through the console writer, so never into a tool's output. Every
+  switch back to the saved modes (`tty_restore()`, also at `q()`; `tty_question(TRUE)`;
+  `gptr_readline()`) turns it off first, so readline never reads with it on (GNU readline 8.1+
+  toggles it around its own reads; CRAN macOS R's readline 5.2 and libedit would insert the
+  markers). The isig switches leave it on, so a paste made during in-process R code arrives marked;
+  as GNU readline 8.1+ turns it off when a read ends, the end of an evaluation that turned isig on
+  turns it on again once its capture is lifted (`eval_restore()`), and `tty_modes()` runs no stty
+  for the pseudo-modes alone. D consoles, L consoles (Windows, RStudio, Positron, radian, R.app),
+  Jupyter and pipes never get it.
+- Rule (composer): `console_compose()` drops the markers and keeps the newlines between them in
+  the draft, leading blank lines dropped. `state$bracket` keeps a paste open across reads; a
+  sequence cut inside it is held however late, as is a marker's start (`ESC [`, `ESC [ 2`,
+  `ESC [ 2 0`, `ESC [ 2 0 0`, `ESC [ 2 0 1`) while the reads after it may still complete it; once
+  none can follow, its Esc is the Esc key, dropped, and the rest is typed. Readline's read at the
+  prompt empties the composer, so a paste left open ends with its run. A Tab or Up inside a paste
+  never acts. In a batch with markers the text before them is typed, and a newline after a
+  paste's end in that batch stays in the draft too (review round 1 of FIX-28), so pasted text that
+  holds an end marker, which a terminal that does not filter pastes passes on, sends nothing: only
+  Enter in a later batch sends, and an Enter read with a paste is a newline of the draft. Formerly
+  the text after such a marker was typed, so its newline sent it, a `!` line as direct R at the
+  next prompt. A Ctrl-C byte inside a paste is pasted text (`console_keys()`), not the key that
+  pauses the run and leaves the bytes after it to answer the menu. The timing rule (IC-76, CI-94)
+  stays for batches without markers. Status 2026-10-27 (review round 3): a batch whose first
+  marker is an end marker, read while no paste is open, is pasted up to it, as it ends a paste
+  whose text ended it early in an earlier batch or whose start another reader took; and a batch
+  holding a marker, or read while a paste is open, holds no Ctrl-C key (`console_keys()` drops
+  every Ctrl-C byte in it). Formerly the Ctrl-C after an early end marker in one paste paused the
+  run and the bytes after it answered the menu (`f`, then a `!` line run with no Enter; seen live
+  in tmux), and the rest of a paste read after a read that ended at such a marker sent at its
+  newline.
+- Rule (live row): a terminal mode's control alone (`ESC [ ? <n> h` or `l`) leaves the live row as
+  it is.
+- Windows: unchanged. No composer reads keys there (IC-76 scope: processx cannot poll a console
+  handle, and `console_class()` is "L"), gptr never writes the mode, Rterm and Rgui never enable
+  it, and Windows Terminal brackets only for an application that did, so no marker reaches R and
+  neither the markers nor the timing apply. The composer's rules are pure R; their tests run on
+  every OS, the pty tests skip on Windows.
+- Formerly: a read more than about 145 ms late (a CPU-starved session, or keys piled up during an
+  in-process tool) split a paste, its head sent at once as a steer and its last line left as the
+  draft; a paste ending in a newline was sent at once; short pastes on a late beat were at the
+  limit of what timing can tell from typing. Esc then Tab, or a cut sequence then Up, in one read
+  made `console_compose()` feed the held sequence to itself until the stack overflowed, and the
+  reactor dropped the typing task for the rest of the call; the key now acts. Before FIX-28's
+  refinements an opening marker cut at two or more reads' ends leaked into the draft when a read
+  that left it cut came more than 50 ms after its first cut, and once in-process code read through
+  GNU readline 8.1+ the mode was off for the rest of the call.
+- Limits: other control bytes inside a paste act as typed (DEL, Ctrl-U and Ctrl-W edit the draft;
+  xterm, kitty, VTE and Windows Terminal filter them). A paste split across reads right after an
+  end marker its text holds, and again before its own end marker, sends at a newline of the read
+  between (since review round 3 only then; a split needs 50 ms without input), and a message sent
+  there that starts with `!` or `/` is a follow-up, so it runs as R or as a command at the next
+  prompt with no Enter (review round 6). A Ctrl-C typed in the same batch as a paste is dropped. A
+  paste whose end marker another reader takes (a question asked mid-paste) stays open, so Enter
+  only adds lines for the rest of its run and at the prompt's editor, until an abort (since review
+  round 6 a Ctrl-C read more than 2 s after the paste's last read pauses the run, and the pause
+  menu aborts it) or a hand-over to readline (Ctrl-C there) empties
+  the composer. After a lone Esc a typed `[`, `[2`, `[20`, `[200` or `[201` waits for the next key,
+  as it may start a marker, and is lost where readline reads before one (the run ended with no
+  draft, or Ctrl-C or a cursor key handed the prompt's draft over). A paste bracketed just before a
+  hand-over's `ESC [ ? 2004 l` reaches readline with its markers. R code or a process that a tool
+  runs and that reads the terminal gets the markers. A read through GNU readline 8.1+ turns the mode
+  off as it ends: one by code an r call evaluates until the outermost r call returns (a sub-agent
+  run from r code waits for it), one by other code during the call (a `gptr_tool()` function, a
+  hook) until the call next sets its modes (an r call's end, a question's answer); a paste made
+  meanwhile is decided by timing. A kill or a crash leaves the mode on (zsh, fish and bash 5.1+
+  reset it at their prompts, as does `reset`). The key loop is quadratic in a paste's size, as
+  before. Status 2026-10-27 (review round 4): a batch read right after one that holds a marker or
+  is read while a paste is open, with no empty read between (`rd$compose$pasted`), holds no Ctrl-C
+  key either, so a Ctrl-C byte in that read between is pasted text; formerly it paused the run and
+  the bytes after it answered the pause menu (`f`, then a `!` line run with no Enter). Where the
+  reader read nothing between the marker's read and the next (a pause of more than about 0.1 s)
+  that byte is still the key, and the bytes after it answer the menu. An empty read ends the
+  chain, so a Ctrl-C typed after a pause is the key; one typed within about 0.1 s of a paste's end
+  is dropped, as one typed in the same batch already was. 04 sections 7.1 (`tty_call()`), 15.9
+  (IC-76's Limits) and 15.10 (IC-76, typing while the agent works) say so. Status 2026-10-27
+  (round 4 verification): only a batch on the polling beat (at most 0.2 s after the read before
+  it) carries the drop, so a Ctrl-C read later, as after a reactor an in-process tool held, is the
+  key; formerly the chain held until an empty read, however late. Status 2026-10-28 (review round
+  6): an open paste holds no Ctrl-C key only until 2 s after its last read (`console_paste_open()`),
+  so in a paste whose end marker a question took a Ctrl-C read later is the key again, and the
+  bytes after it in its read answer the pause menu; formerly every Ctrl-C byte was dropped while
+  the paste was open, however late, so the rest of the run could be neither paused nor stopped
+  (SC-1, a regression of FIX-28). A Ctrl-C byte in the rest of a paste that reaches the reader more
+  than 2 s after the paste's last read (a terminal that stalls mid-paste, or a reactor held that
+  long) is the key too, as it is after a paste's end since round 4's verification. At the prompt's
+  editor a Ctrl-C byte or a cursor key (Ctrl-A, Ctrl-E, Left, Right, Home, End) inside a paste, in
+  the same window, is text the composer drops (`console_unpasted()` blanks the pasted keys, so the
+  editor's search sees only the others); formerly it handed the draft over and the rest of the
+  paste was lost (SC-3). 04 sections 7.1 (`tty_call()`), 15.9 (IC-76's Limits) and 15.10 (IC-76,
+  typing while the agent works, the idle editor) say so.
+- Amends IC-76 (04 section 15.10, the composer and typing) and D-243, whose steering review rejected
+  bracketed paste for the terminal state it adds to every mode switch and question; that state stays
+  in `tty_modes()`'s pseudo-modes.
+- Contract-visible: 04 sections 7.1 (`tty_modes()`, `tty_call()`), 15.10 (IC-76 and its Limits,
+  the composer, typing while the agent works, the live row's writes); 03 "Typing during an
+  answer".
+- Tests: test-console-input.R "a bracketed paste is text: its newlines stay and its keys do not
+  act (D-263)", "a bracketed paste spans reads; its end marker is held however late (D-263)", "a
+  marker cut at a read's end joins its rest however late (D-263)", "Esc then Tab, or a cut sequence
+  then Up, in one read is the key (FIX-28)", "a bracketed paste at the prompt's editor stays in the
+  draft until Enter (D-263)", "readline's read at the prompt starts the composer afresh (FIX-28)";
+  test-console-typing.R "tty_modes() turns bracketed paste on after stty and off before it (D-263)",
+  "a bracketed paste stays one draft however late its reads (FIX-28, D-263)", "a terminal: a paste
+  during an r call is one draft; no marker shows (FIX-28)". Amended for the mode's place in the stty
+  logs, the new state field and the live row's writes: test-console-input.R "an escape sequence cut
+  short is held for 50 ms, then dropped", "a console write clears the live row and redraws it after
+  its whole lines (D-243)" and the three idle editor blocks; test-console-typing.R "a T console's
+  call reads keys in character mode; its modes return after it (D-243)", "a terminal call's modes
+  return after an interrupt, also one while stty sets them", "a question during a terminal call
+  reads with the saved modes, then the call's", "a terminal call's question reads in the saved modes
+  from before its rows (review)" and "in-process R code runs with isig on, so Ctrl-C interrupts it
+  (review)"; `local_pty_r()` gains `raw` and `paste()`, a terminal that brackets pastes while the
+  child's last toggle turned the mode on. FIX-28's refinements: test-console-typing.R "after
+  in-process R code the toggle reaches the console, never the result (FIX-28)" and "a terminal:
+  after r code reads through readline a paste is one draft (FIX-28)"; amended: test-console-input.R
+  "a marker cut at a read's end joins its rest however late (D-263)" (a cut at every byte, the
+  probe, typed keys after a late start) and "an escape sequence cut short is held for 50 ms, then
+  dropped" (a late rest typed), test-console-typing.R "in-process R code runs with isig on, so
+  Ctrl-C interrupts it (review)" (`paste` after `-isig`) and "tty_modes() turns bracketed paste on
+  after stty and off before it (D-263)" (no stty for the pseudo-modes alone). Review round 1:
+  test-console-input.R "pasted text holding an end marker cannot send what follows it (review round
+  1)"; test-console-typing.R "a Ctrl-C byte inside a bracketed paste is pasted text, not the key
+  (review round 1)"; amended: test-console-input.R "a bracketed paste is text: its newlines stay and
+  its keys do not act (D-263)" (an Enter read with a paste stays in the draft). Review round 3:
+  test-console-input.R "a lone end marker ends a paste: the text before it is pasted (review round
+  3)"; test-console-typing.R "a batch holding a paste marker holds no Ctrl-C key (review round 3)".
+  Review round 4: test-console-typing.R "a read right after a paste's marker holds no Ctrl-C key
+  (review round 4)", "a read off the beat after a paste's marker holds a Ctrl-C key (round 4
+  verification)". Review round 6: test-console-typing.R "an open paste holds no Ctrl-C key for 2 s
+  after its last read (review round 6)"; test-console-input.R "a Ctrl-C or cursor key inside a
+  paste at the prompt's editor is text (review round 6)". Evidence: progress/fixes.md FIX-28.
+
+## D-264 - FIX-29 Transcripts record what a prompt was sent with and what steps created (2026-10-26)
+- Rule (`#<` lines, issue #85 R27): a console turn's block in an `.R` document opens with the
+  `user_ran` and `user_files` context blocks its prompt was sent with, tags included, one `#< `
+  comment line per line (an empty one `#<`): the `!code` notes and each `@file` as attached (at most
+  40 lines, redacted with the `context` profile, or the one line of a binary, truncated or omitted
+  file). `prompt=` still hashes only the typed text, and `source()` reads the lines as comments
+  (status 2026-10-27, review round 3: the lines are split as R reads them, a lone carriage return
+  ending one too, so an `@file` name holding one writes no bare line that `source()` runs). A
+  call that asks again for a recorded block (`replay = "live"`, a stale or undone block) gets those
+  blocks in `call$sent` from the `document` route, and the console's providers send them again as
+  the same context blocks without reading the file. Formerly `gptr_source(replay = "live")` sent
+  only the literal `@notes.md` text, so the re-ask was another request. A history reconstructed from
+  the document puts them before the turn's prompt; a raw `gptr_export()` leaves them out and the
+  Peter format keeps them (status 2026-10-27: both formats leave them out since D-268). The format
+  changes in place: no version key and no reader for earlier
+  transcripts (gptr 1.0 is unreleased). D-266 reads back only the run of these lines that opens a
+  console turn's block.
+- Rule (`created=` and switched-off lines, R29): a block header names the objects its r calls
+  created (`created=`, the `created` rows of its objects fragments: what an undo removes), and a
+  direct R header those the evaluator's diff reports added, also for a line that failed. After
+  each rewind (`/undo`, `/redo`, `/retry`) and each line the console appends, the transcript is
+  read top to bottom: each block and direct R line makes its `created=` names, on or off (an
+  undone block; a line that failed or is off). A direct R line that uses (by `all.names()`) a
+  name whose last maker above it is off, other than a name it created itself, gets `#~ ` before
+  each line under `# direct R (no model; uses undone <names>)`, and goes back on when no such
+  name is left; a notice names the lines switched. The last maker decides, not "made only by an
+  undone step": a name an earlier live step made and a later off step made again was removed in
+  between, so `source()` would not have it. Formerly such a line ran under `source()` and stopped
+  it, as the undone turn's objects never existed there. A rewind still removes only what the turn
+  created, so the person's own objects stay (status 2026-10-27: it also restores what the turn
+  changed since D-268).
+- Checks of the design: (a) the provider cannot rely on `call$doc` during a re-ask, which the
+  route leaves `NULL` when the answer may not be recorded (no consent, an undone block under
+  `"live"`); the route therefore keeps the parsed `#<` lines in a new call record binding,
+  `sent`, whatever the recording decision. (b) `doc_replay_steps()` still skips `#` lines; the
+  reconstruction takes the `#<` lines through `doc$sent` instead. (c) raw export drops `#<` lines,
+  Peter export keeps them (both drop them since D-268). (d) the evaluator reports `added` names for
+  a line that stopped at an error (a parse error ran nothing and adds none).
+- Known limits: turn blocks are never switched, so a later turn that uses an object made by a line
+  that is off still stops `source()` (the rewind kept the object, so the turn ran in the session);
+  `all.names()` can match a column or formula term of the same name, which turns a line off that did
+  not need it; a name reached through a string, as in `get("fit")`, is not seen; a direct R line's
+  section runs to the next line the console writes for another entry (a direct R header, a
+  `# /<name>` command line, a session header, a turn's statement or block), so lines written by hand
+  right after it switch with it (a comment of its code shaped like such a line gets one more `#`,
+  D-266); a name holding a comma is left out of `created=`, which would split it (review round 1 of
+  FIX-29: formerly `` `tmp,df` `` read back as `tmp` and `df` and switched off the person's own line
+  that used `df`), so a line using it is not switched; a non-ASCII name is matched only in a UTF-8
+  locale. The `#<` lines are what was sent, so neither `gptr.doc_output_lines` nor the `doc` setting
+  limits them.
+- Status 2026-10-28 (review round 6): a `created=` value holding a control character is quoted,
+  which writes each one as a Unicode escape, so a name the model chose cannot put a terminal
+  sequence into the transcript; printed output and bridge digests write control, bidi and zero-width
+  characters as `<U+XXXX>`, as steer lines do (T6-4). Test: test-doc-blocks.R "control characters in
+  output, names and digests are escaped (review round 6)".
+- Status 2026-10-28 (review round 6 recheck): "control character" in a header value means C0, DEL
+  and C1 (U+0080 to U+009F, which holds the 8-bit CSI and OSC), as `ui_escape()` counts them, and
+  the names of `uses undone <names>`, in the header and in the notice, are written as output is
+  (`<U+XXXX>`). Tests: test-doc-blocks.R "a header value escapes C1 controls and DEL too (review
+  round 6)"; test-doc-replay.R "the undone names a direct R line uses are written escaped (review
+  round 6)".
+- Status 2026-10-30 (FIX-48, ledger V6T-2): control characters inside the model's own code, in a
+  string or a comment, are kept, since the code must run as written, so a raw ESC or BEL there
+  reaches the transcript.
+- Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
+  lines, the transcript row) and section 7.8 (call record binding `sent`); `?gptr_doc`,
+  `?gptr_source`, `?gptr_export`, `?gptr_security`; vignette("script-as-history").
+- Tests: test-doc-blocks.R "a block records what its prompt was sent with as #< lines and what it
+  created"; test-console-repl.R "a live re-ask sends the @file head and !code note the console
+  sent (IC-49)"; test-doc-replay.R "a reconstruction sends what the prompt was sent with, from its
+  #< lines (IC-49)", "a direct R line records what it created, also when it failed (IC-49)", "a
+  direct R line using a name an undone step or an off line made is switched off", "a rewind
+  switches dependent direct R lines off, says which, and a redo back on", "console /undo, /redo
+  and /retry keep the transcript sourceable (IC-49, D-264)", "a re-asked block sends its #< lines
+  again, also when it cannot be recorded"; test-doc-export.R "an export leaves out what a prompt
+  was sent with, in both formats (FIX-33 DOC-7)" (formerly "a raw export leaves out what a prompt
+  was sent with; the Peter format keeps it"); test-doc-blocks.R "a lone carriage return in sent
+  text ends a #< line, as R reads it (review round 3)"; test-console-repl.R "a !code note's lines
+  are those its transcript records, a lone CR too (review round 6)". Evidence: progress/fixes.md
+  FIX-29.
+
+## D-265 - FIX-30 A console statement names the model and mode its re-ask needs (2026-10-26)
+- Rule: a console transcript statement `s_<hex> = peter(...)` or `s_<hex> |> peter(...)` ends,
+  after the prompt and the context names, with `model = "<model reference>"` and/or
+  `mode = "<mode>"`, string literals, when its turn ran with a model or mode the statement would
+  not get without them. A turn's values are its session's at the end of the turn: the model
+  reference `provider/id[:thinking]` (a router as `router:<name>`, with no level) and the mode.
+  An assignment (`=`), which a re-ask runs as a new session, is compared with the `model` and
+  `mode` settings as written; its model is left out when the call started the session without
+  naming a model by name (on the default, or on a provider or router object). A pipe (`|>`) is
+  compared with the values its session's previous turn in the same transcript recorded on its
+  `gptr.doc_block` entry (new keys `model` and `mode`), else with the settings. So `/model`,
+  `/mode`, the plan menu's choice and a console started as `peter(mode = plan)` appear on the
+  statement where they took effect, a switch followed by a switch back names nothing, plain turns
+  are written byte for byte as before, and the `# /model x` comment lines stay. Formerly every
+  re-ask used the configured model and mode for a session's first turn and the session's own
+  afterwards, so a `/model` switch or a console started as `peter(mode = plan)` was lost. The
+  format changes in place: no version key and no reader for earlier transcripts (gptr 1.0 is
+  unreleased). This closes FIX-21's open item "a console transcript does not record the console's
+  starting mode".
+- Why not the alternatives: (a) honouring the block header's `model=` and a header `mode=`:
+  `model=` is provenance, not the route (IC-74), a mode honoured from a header comment is hidden
+  permission state, and `gptr_export(format = "peter")` drops headers. (b) a fold over the
+  session path: chat sessions write no initial `model_change` (only `session_set_model()`,
+  `run_route()` and `session_record_initial_model()`, which only team sessions call, write one),
+  router choices append `model_change` entries with reason "router", and the model of
+  `gptr.frozen` has no thinking level; the fold would re-implement `rebuild_model()` and
+  `rebuild_mode()` outside the session layer. (c) comparing with the resolved default model:
+  `gateway_model_ref()` is L6, which arch-layers forbids in L4 document code. (d) sticky naming
+  (a statement names its values until they change): it parses earlier statements and writes more
+  arguments.
+- Known limits: values are taken at the end of a turn, so a switch during a run applies to the
+  whole re-ask. A model given as a provider object is not named on a session's first statement,
+  so it is re-asked on the default, as before; it is named by its reference on a re-assignment
+  after `/undo` or `/retry` of turn 1, or on a piped or forked session, and a re-ask must then
+  resolve it (`gptr_error_unknown_model` otherwise). Under an alias or unset `model` setting, the
+  first statement after `/clear` names the model (`/clear` carries the canonical route). Other
+  arguments are still not recorded: `.opts$thinking` on a first call, the budget, tools, skills
+  and `.opts`. A statement deleted or edited by hand is not accounted for. A replay reconstructed
+  from the document (no session log) does not apply the literals of fresh statements, so a stale
+  statement after them continues the reconstructed session's model (block 1's header `model=`)
+  in the setting mode, as before. Named models must resolve when re-asked; plain statements
+  follow the re-asking machine's settings. A turn recorded in `auto` or `yolo` is re-asked in
+  that mode: the transcript is R code the person chooses to run, like any script that calls
+  `peter(mode = "yolo")` (D-250 is about project settings files, and blocks already run code
+  under plain `source()`). `/retry` still resends the typed prompt (FIX-29 Open; status
+  2026-10-27: closed by D-268, which sends the undone turn's `!` notes again).
+- Contract-visible: 04 section 4.6 (`gptr.doc_block` keys `model` and `mode`), section 11.5 (the
+  transcript row) and section 15.3 IC-49; 03 section 6.9.3; `?gptr_doc`, `?gptr_source`;
+  vignette("script-as-history").
+- Tests: test-doc-formats.R "a console statement names the model and mode its turn ran with if
+  they differ (D-265)"; test-doc-replay.R "doc_console_ran() takes the turn's values and its
+  session's previous ones (D-265)", "after /model the transcript names the model and a live
+  re-ask asks it (D-265)", "a plan-mode console records mode = "plan" and re-asks in plan mode
+  (D-265)", "the plan menu's choice reaches the go-ahead statement (D-265)", "a turn after /undo
+  names the model the session kept (D-265)", "/retry of a plan console's first turn keeps
+  mode = "plan" (D-265)", "plain console turns stay plain, also after /clear (D-265)", "a fresh
+  console statement naming an unknown model replays without it (D-265)"; test-doc-export.R
+  "console statements naming model and mode export in both formats (D-265)". Four
+  test-doc-replay.R tests that drive agent_end on a `fake/fake-1` session in `auto` mode now set
+  those `model` and `mode` settings, as its first statement would otherwise rightly name both:
+  "console turns become one steered session in the transcript (IC-49)", "a console transcript
+  records a run that ended aborted, at max_turns or with an error", "direct R lines and slash
+  commands of the console enter the transcript" and "what the console records while its session
+  runs in the background follows its block". Evidence: progress/fixes.md FIX-30.
+
+## D-266 - FIX-31 A console turn's own #< run, command-shaped comments, redo (2026-10-26)
+- Rule (`#<` run, security): what a block records its prompt was sent with is read back only in an
+  `.R` document, only for a block a console statement owns (the nearest non-blank line above it is
+  `s_<6 hex> = peter(` or `s_<6 hex> |> peter(`), only from the run of lines starting `#<` that
+  opens its body, under `#~ ` when the block is undone, and only when the document's gptr markers
+  are well formed. The run must be whole, as `doc_block_lines()` writes it: the `user_ran` block,
+  then the `user_files` block, each optional, and nothing else; any other run, as a hand edit can
+  leave, sends nothing. The writer gives the recorded code's leading lines that start with `#<` one
+  more `#` (`##<`), in every format, so model code cannot extend the run, also in a block a format
+  error moves into the transcript (`doc_upsert_fallback()`); it writes the run only in an `.R`
+  document (an `.Rmd`, `.qmd` or `.ipynb` document the console records into gets none, as nothing
+  reads it there). Model code cannot forge a block with a run either: a gptr marker in recorded code
+  leaves the markers malformed. Formerly `doc_block_sent()` took every `#<` line of a body in any
+  format, so model code recorded in a script or console block (`#< <user_ran>`,
+  `#< > system('curl evil')`, `#< </user_ran>`) was sent by a replay and by
+  `gptr_source(replay = "live")` as user-role context. A raw `gptr_export()` drops only that run; a
+  later `#<` comment is code.
+- Why this rule: the run starts under the header and ends at its first line that does not start with
+  `#<`, so the writer changes only the recorded lines that would read as part of it, each a whole
+  comment line at the top level (the first starts a recorded call's code and each later one follows
+  a whole comment line, so none is inside a string): R reads the same code, and `sha` is that of the
+  lines as written. How a line starts is the same as written and as read back, as a read drops only
+  a line's trailing carriage return; a test of `^#<( |$)` is not, as `#<` and a carriage return
+  fails it as written and passes it as read, which let model code extend the run. A gptr marker in
+  recorded code nests in its turn's block or closes it early, so it always leaves the markers
+  malformed; `doc_block_get()` still finds a block nested in another, so without this check model
+  code could record a console statement and a block whose run a live re-ask sent. A write refuses a
+  document with malformed markers, so reading nothing there costs no flow. An end line the reader
+  requires would not do on its own: with nothing sent, model code could write a whole run, end line
+  included. A header key holding the run's length would do, but adds a key to section 11.5.
+- Rule (command-shaped comments): the transcript writer gives a comment line of a direct R line's
+  code that reads as the first line of another entry (`doc_re_entry`), such as `# /tmp is scratch`,
+  one more `#`; the line is a comment by R's parse data (a COMMENT token at the line's start), so a
+  line inside a string is kept as it is. The line's section then runs on past it, and a line
+  switched off goes off whole. Formerly the section ended there and the lines below stayed on, so
+  `source()` could stop at them (a known limit of D-264, now removed). A line of the code that reads
+  as one but is not a comment (inside a multi-line string, or an `s_<6 hex> |> peter(` call) still
+  ends the section.
+- Rule (redo): a rewind makes a block inert only when the path it moves to holds no record that
+  wrote it. Formerly the `replace` record a first `/redo` appends under its target sat on a branch
+  the second `/redo` left, so `/undo`, `/undo`, `/redo`, `/redo` over two console turns left the
+  first turn's block undone and its `s_x = peter()` statement `#~ ` while the second turn's
+  `s_x |> peter()` was live, and `source()` stopped with "object 's_xxxxxx' not found" (also on
+  origin/main 13a917ff, an open defect FIX-29 recorded).
+- Status 2026-10-28 (review round 6): a read also ends a line at a lone carriage return (D-268),
+  which no line gptr writes holds, so how a line starts is still the same as written and as read
+  back.
+- Contract-visible: 04 section 15.3 IC-49 and section 11.5 (the body and the transcript row);
+  `?gptr_doc`; vignette("script-as-history"); D-264's first rule and known limits.
+- Tests: test-doc-blocks.R "only the #< run opening a console turn's block in an .R file is read
+  back (FIX-31)"; test-doc-replay.R "recorded code is never sent as context, in a script or a
+  console block (FIX-31)", "a comment in a direct R line shaped like another entry stays in its
+  section (FIX-31)", "console /undo, /undo, /redo, /redo bring back both turns' blocks (FIX-31)";
+  test-console-repl.R "a live re-ask never sends the turn's recorded code as context (FIX-31)";
+  test-doc-export.R "an export leaves out what a prompt was sent with, in both formats (FIX-33
+  DOC-7)". Evidence: progress/fixes.md FIX-31.
+
+## D-267 - FIX-32 Permission findings from the live sessions (2026-10-27)
+- Rule (rules, PERM-1): a deny or ask rule with an `fn:`, `category:`, `sh:` or `sql:` spec matches
+  when it covers any flagged row of the call, level 0 included: `r(sh:cat *)` denies
+  `peter$sh("cat report.txt")`, its argv form, `system("cat report.txt")` and the same command
+  that a `peter$sh()` call computes, `r(sh:echo *)` denies `echo x >> f` (whose only row of level 1
+  or more is `redirect to f`), and an ask `r(sh:wc *)` asks for `wc -l f`. An allow rule still
+  matches only when it covers every row of level 1 or more: level 0 runs in every mode, so a call
+  of level-0 rows alone needs no allow rule. A known read-only R function such as `readLines()`
+  gets no flagged row, so `fn:` rules never match it (`?gptr_permissions` says so). Formerly every
+  list read only rows of level 1 or more, as 04's `rule_match` row wrote ("every flagged call
+  (level >= 1)"); no user page said so, `?gptr_security` and FIX-27's refusal said that
+  `peter$sh()` checks a command against the rules, and the page's example `r(sh:git status*)`
+  matched nothing as a deny or ask rule. The example is now `r(sh:git push*)`. A row read inside
+  a function the code calls keeps its `via f(): ` labels (`via build(): system(): touch out.txt`,
+  `via S3 method fmt.foo(): ...`); the rules read its command without them (`rule_code_text()`,
+  review round 1), so `r(sh:touch *)` denies `build()` as it denies the literal call. Formerly
+  only a leading `system(): ` was dropped, and such a call ran in auto and yolo past the rule.
+  Status 2026-10-27 (review round 3): an `sh:` glob ending in ` *` also matches the command alone
+  (`r(sh:sh *)` denies `peter$sh("sh", input = cmd)`, `r(sh:cat *)` covers `cat`), as the page's
+  form `r(sh:cat *)` reads; formerly it needed a space after the command. And a question an ask
+  rule asks offers no `[a]lways` rule: `perm_decision()` suggests none for it, and
+  `perm_policies()` keeps a question's rule only when every policy that asks it has one. Formerly
+  `a` and `p` added an allow rule (`r(level<=1)` for a level-0 command) that never wins over the
+  ask rule, so the same call asked again (level 1 and above already so on `13a917ff`). Status
+  2026-10-27 (review round 4): an `a` or `p` typed there says why, "a and p are not offered: the
+  rule r(sh:touch *) asks; an always rule would not stop it": `perm_decision()` gives the question
+  an ask rule asks its reason as `no_rule`, `perm_policies()` keeps it when that question drops
+  another policy's rule, and the request record carries it (04 section 7.11). Formerly it read "no
+  rule covers these calls", also at a nested call's ask, while the `?` view named the ask rule (in
+  auto) or the mode (in manual); "no rule covers these calls" stays where no rule can cover the
+  calls. Status 2026-10-27 (round 4 verification): `ui_no_rule()` escapes the rule's text, as the
+  `?` view escapes the same reason (04 section 15.4 IC-53 item 8); formerly a rule holding an ESC,
+  which `rule_parse()` accepts, wrote its sequence raw into the hint and its wrapped row.
+- Rule (served R, review round 1): R served to the claude-cli and codex routes or to an MCP client
+  (`mcp_serve_r()`) binds the r tool's marker (`gptr_r_call`) with the served call as the run's
+  tool call, so a nested `peter$sh()`, `peter$bg()` or other member call passes
+  `dispatch_nested()` as in the loop's `r`: the deny and ask rules on its command, the critical
+  guard, its own level. With no pump serving the request (IC-57) the idle gate (`mcp_gate_idle()`,
+  which asks nobody) decides each nested call first, a `sh` or `bg` call as the literal call of
+  its command (`mcp_nested_gate()`, the marker's `gate`). Formerly these calls ran as the person's
+  own: on those routes `peter$sh(c("cat", f))` printed a file past a deny `r(sh:cat *)`, and a
+  computed `rm -rf` outside the project ran in auto without the critical guard's question, which
+  FIX-27's refusal steers every model to (live with claude-cli and codex; already so on
+  origin/main 13a917ff). Images that `peter$plot()` or `peter$read()` attach in served R go with
+  its result, as in the r tool. Status 2026-10-27 (review round 2): the idle gate writes no console
+  notice for a nested call, as the served result captured it for the model (naming the `r` tool);
+  the denial tells the model. Status 2026-10-27 (review round 4): the idle gate reads a nested
+  `peter$sh()` as run in its `wd` (the literal call of `cmd_in_wd()`'s line, the helper
+  `bridge_risk_sh()` uses), so idle served `peter$sh(c("rm", "-rf", "build"), wd = <outside>)` is
+  refused at level 4 in auto and yolo; formerly it read the command alone, level 3, and ran (also on
+  `13a917ff`). Status 2026-10-28 (review round 5, R5-SEC-3): the secret guard also meets a nested
+  `peter$sh()` or `peter$script()` whose `env` hands its child a registered secret, by its name (in
+  any case, as `child_env()` matches names) or in a value the redactor finds it in.
+  `bridge_risk_env()` makes that a guarded read of the secret, as `Sys.getenv()` of its name is;
+  `dispatch_nested()` passes the gate for a secret the outer call's analysis did not show; the idle
+  gate adds the member's secrets to the literal call it reads. It asks in every mode but yolo, which
+  runs it as it runs secret reads, unless the same code reads that secret by name: the question for
+  that read, or an `r(secret:NAME)` rule allowing that code, covers the hand-over too. No rule
+  allows the member itself: an allow `secret:` rule covers `r` code only, and the question offers no
+  `[a]lways` rule. Formerly an unnamed `env` element was level 3 `secret` without the guard and a
+  value was not read, so auto and yolo ran the child with the key and no question, idle or not (also
+  on `13a917ff`). An ordinary `env` is unchanged. In manual mode such a call asks twice, for the
+  code and then for the secret, as a nested call above the approved level does. Status 2026-10-28
+  (review round 5 verification): the question shows a nested call's command and its other inputs
+  redacted (`perm_summary()`, `ui_request_change()`), so a secret handed over in `env` shows as its
+  marker; formerly they showed raw, the key in clear. Status 2026-10-28 (review round 6, V5-1): the
+  idle gate reads a nested `sh` or `bg` call as the literal call of its command with the member's
+  secrets (for the rules), and then, when the hand-over meets the secret guard and the served
+  call's own analysis did not guard the same secrets, the member call itself, as
+  `dispatch_nested()` does. Formerly it merged the member's guard into the literal `r` call, which
+  an `r(secret:NAME)` allow rule covered when the command was level 0, so idle served
+  `peter$sh("whoami", env = "NAME")` handed the child the key in auto with no question, where the
+  loop asks once. Tests: test-mcp-server.R "an r(secret:) rule covers an idle served hand-over if
+  the code reads it (round 6)". Status 2026-10-28 (verification round 6, R6-SS-1 to R6-SS-8 and
+  SC-5): the secret guard reads more forms and its rules and texts hold everywhere. Reading a
+  registered secret now also asks in auto through a read of a `.env` or `.Renviron` file or of one
+  `gptr_env()` loaded, a `$NAME`, `${NAME}`, `os.environ` or `getenv()` read of a registered name
+  in a command line or Python (`risk_secret_guard()`, in every kind the classifier reads, so a
+  member's own command too), `Sys.getenv()` of a variable the code only ever sets to strings, and
+  a registered name in any letter case; formerly all four ran in auto (also on `13a917ff`). A name
+  the code computes when it runs stays level 3 without the guard, as `?gptr_security` now says.
+  An allow `r(secret:NAME)` rule applies to `r` code every flagged call of which reads a named
+  secret by name, a shell's `$NAME` included. Sending a secret over the network asks in yolo for
+  `peter$sh()`, `peter$bg()` and `peter$script()` as for `system2()`: their strings name the
+  network program, or their `env` passes a registered name; formerly they ran. A deny or ask
+  `r(secret:NAME)` rule meets a member's hand-over in the loop, in served R during a run and idle,
+  for `sh`, `bg` and `script` (`nested_literal()`, `nested_rules()` with the member's secrets);
+  formerly only idle served `sh` and `bg`, so yolo handed the key over past a deny rule. No
+  permission question shows a registered secret (`ui_wrap()` gives every UI the request redacted)
+  and the record's `risk` and `summary` are redacted when it is built, so the `blocked` condition
+  carries them redacted; formerly a nested call's flagged rows and path showed the key. The console
+  shows the output of model code it indents, and its warnings, redacted; output it does not indent
+  R prints itself, which `?gptr_security` says. The question's dim row reads
+  `asks even in auto mode: <reason>`, true of the secret guard's question too, which yolo does not
+  ask (formerly `asks in every mode`; D-188's status line). Status 2026-10-28 (verification of
+  round 6 on `eee30f55`): `Sys.getenv()` of a variable none of whose strings names a secret is a
+  name computed at run time again (level 3), so a function's argument or a data mask named like a
+  variable bound to a string elsewhere is no longer read as that string (round 6 read
+  `f = function(n) Sys.getenv(n); f('KEY')` after `n = 'HOME'` as level 1, and yolo sent the value
+  over the network with no question, a regression); a key the environment finds again keeps its
+  `dotenv:` source, so a read of a file `gptr_env()` loaded asks in a run too; a .env file is
+  `.env`, `.env.<suffix>`, `<name>.env` or `.Renviron`, and in R code only a function that reads
+  a file's text makes its read guarded, so `file.exists('.env')` and `read.csv('doubs.env.csv')`
+  run in auto again, while a command line or Python that mentions `.env` still asks (a cost);
+  code that starts a process and holds a string naming a network program anywhere counts as a
+  network sink, so a command vector held in a variable sends a secret in yolo only after a
+  question; and an ask rule on a nested hand-over is asked in `perm_check()`'s one question with
+  the call's other reasons (`extra`), not before it. Status 2026-10-30 (FIX-48, ledger L-6): wider
+  than this entry said, a `Sys.getenv()` whose name the code computes counts as a secret read for
+  the network question even for an ordinary variable, so `v = 'PATH'; Sys.getenv(v)` beside
+  `system('echo hi')` and the string `'install curl first'` is level 4 and asks in auto too (3 on
+  `3cd3b146`).
+- Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
+  Unix `system2()` pastes it, unquoted, before the command:
+  `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
+  `env` that the classifier cannot fold to literals makes the call's `dynamic` row, which auto and
+  yolo refuse (D-262). On Windows `env` words follow the command as arguments; the Unix reading is
+  the higher one, so one rule holds on every OS. A literal `env = "LC_ALL=C"` stays level 0;
+  `env = "A=1"` is level 3, as `system("A=1 ls")` is (a variable the command table does not
+  model). This closes D-262's Not covered item on `env`.
+- Rule (texts, PERM-6 and PERM-8): the computed-command refusal reads "<fn>() with a computed
+  command is refused in <mode> mode; use peter$sh()", at most 77 characters, so the console's one
+  dim not-run row shows it whole at 100 columns; formerly it went on ": the permission rules cannot
+  read it. Run the command with peter$sh(), which checks it against them when it runs" (D-262),
+  and the row cut it before `peter$sh()` below about 190 columns. A denied top-level call and a
+  denied call served to a CLI route, refused before evaluation, end with "Nothing in this call
+  ran." after `Permission denied: <reason>. <how>` or the denial that carries the person's text; a
+  nested `peter$sh()` or `peter$bg()` denial inside running code, whose earlier lines ran, does
+  not.
+- Rule (prompt, PERM-7 and ALL-5): the `<r_session>` line reads "- system() and system2() children
+  read the user's terminal and you do not see their output: use peter$sh(); read $stdout." (29
+  o200k tokens, 2 more than D-253's line). The static prefixes are 1262/2380/2858/3001, within
+  architecture 12.7's prefix gate (standard_core 2335 + 2% leaves 1 token), so IC-68's totals stay;
+  the verdicts' longer lines (about 41 tokens) fail that gate.
+- Rule (console, PERM-9 and MM-7): a permission question's summary of a `cmd` input (a nested
+  `peter$sh()` or `peter$bg()`) is its words joined by spaces, not JSON, followed by its other
+  inputs as JSON (review round 2: `sh {"input":"rm -rf x"}`; the words alone hid a shell's
+  standard input, `env` and `wd`, which the JSON showed before). The plan menu's hand-off
+  notice adds `At R's prompt: gptr_last() |> peter("Go ahead.")` only when no console REPL state
+  (`.gptr_repl`) is on the call stack.
+- Not changed: (a) PERM-4's code alternative, `-c features.shell_tool=false` for Codex in the
+  read-only modes: IC-65 keeps Codex's own shell, and that key is not among the flags gptr's
+  capability probe checks; `?gptr_security` and vignette("language-models") now say that Codex's
+  shell runs in every mode outside gptr's gate, rules and secret guard, and since review round 2
+  03 section 8.3 and 04 section 15.6 IC-65 do. (b) PERM-9's second half:
+  an approved `system()` child writes to the terminal on the frozen `r` row, after IC-82's
+  `keys show when r returns` cue; ending or clearing the row before evaluation would drop the cue
+  or erase the child's last line. (c) PERM-8's transcript half (a refused turn records an empty
+  block) is the transcript writer's.
+- Contract-visible: 04 sections 6.2 (`gptr_permissions()`'s example), 7.11 (`rule_match`), 9.2
+  (result texts) and 15.9 IC-77 (an ask rule's question has no `suggested_rule`, review round 3,
+  and says why, review round 4: the request record's `no_rule`, 7.11);
+  03 sections 6.8.1, 6.8.2 and 7.3; `?gptr_permissions`, `?gptr_security`,
+  `?gptr_risk`; vignette("language-models"); the cheat sheet's auto and yolo rows and the yolo
+  notice (IC-78). Review round 4: 03 section 6.8.4 and 04 section 15.5 IC-57 (the idle gate's `wd`).
+  Review round 5: 03 sections 6.5, 6.8.2 and 6.8.4, 04 sections 7.6, 15.4 IC-53 item 7, 15.5 IC-57
+  and 15.9 IC-79, `?gptr_security`, `?gptr_permissions` and NEWS (the secret guard on `env`); its
+  verification: 04 section 7.11 (the request record's `summary`) and IC-53 items 7 and 8.
+  Verification round 6: 03 sections 6.8.3 and 6.8.4; 04 sections 7.6, 15.4 IC-53 items 7 and 8,
+  15.5 IC-57, 15.9 IC-77 and 15.10 IC-82; `?gptr_security`, `?gptr_permissions`, `?gptr_options`
+  (`gptr.secret_guard`) and `?gptr_egress`. Its verification: 03 section 6.8.4; 04 sections 7.6
+  (`dispatch_nested()`, `perm_check()`) and 15.4 IC-53 item 7; `?gptr_security`.
+- Tests: test-perm-rules.R "deny and ask sh: rules match a read-only command; allow needs level 1
+  (FIX-32)", "a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)";
+  test-perm-classify.R "system2()'s env is read as the start of its command line (FIX-32)";
+  test-perm-gate.R "only auto and yolo refuse a computed command; a literal one is gated as
+  before"; test-agent-dispatch.R "a refused call says none of it ran; a nested denial mid-run does
+  not (FIX-32)", "input fields are matched exactly, never by a prefix"; test-mcp-server.R "a served
+  r call evaluates in the session's environment with its mode (idle gate)", "a nested sh or bg
+  call in served R meets the rules and the critical guard (FIX-32)"; test-perm-rules.R "deny and
+  ask sh: rules match a command inside a function the code calls (FIX-32)"; test-prompt-text.R
+  "r_session runs programs with peter$sh(), not system() or system2()"; test-perm-plan.R "in the
+  console the go-ahead notice names no call for R's prompt (FIX-32)"; test-session-object.R "yolo
+  is the loosest mode; entering it says once what still asks (IC-78)"; review round 3:
+  test-perm-rules.R "an sh: glob ending ` *` also matches the command alone (review round 3)",
+  test-perm-gate.R "a question an ask rule raises offers no [a]lways rule (review round 3)";
+  review round 4: test-perm-gate.R "an ask rule's question says why it offers no [a]lways rule
+  (review round 4)", test-console-ui.R "a and p's reason shows an ask rule's text escaped (review
+  round 4 verification)", test-mcp-server.R "idle served R reads a nested sh call as run in its
+  wd (review round 4)"; review round 5: test-bridge-sh.R "an env that hands a child a registered
+  secret meets the secret guard (review round 5)", "a secret handed to a child through env asks as
+  a secret read does (review round 5)", test-perm-gate.R "a member handing a child a registered
+  secret meets the guard; no rule allows it", test-mcp-server.R "served R meets the secret guard
+  when env hands a child a secret (review round 5)"; its verification: test-bridge-sh.R "the
+  question for a secret in env shows its marker, never its value (review round 5)"; verification
+  round 6: test-auth-secrets.R "a registered name read in another letter case is a guarded read
+  (review round 6)", "a name bound from a string and a .env file are guarded reads (review round
+  6)", "peter's sh, bg and script members are read by the network check (review round 6)" and the
+  G6 table's `.env` rows; test-perm-gate.R "auto asks before code reads a secret by .env, a shell's
+  $NAME or a name (round 6)", "yolo asks before peter$sh() or peter$bg() sends a secret over the
+  network (round 6)"; test-agent-dispatch.R "an r(secret:) deny or ask rule stops a member handing
+  a child the secret (round 6)", "a request and a blocked run's condition carry its flagged rows
+  redacted (round 6)"; test-mcp-server.R "a deny r(secret:) rule stops a served hand-over in a run
+  and in a script (round 6)"; test-console-ui.R "a permission question never shows a registered
+  secret (review round 6)"; test-eval-core.R "the console shows the output it indents with
+  registered secrets redacted (round 6)"; test-perm-rules.R "r(secret:NAME) is the only allow rule
+  that covers a registered secret read"; its verification: test-auth-dotenv.R "finding a loaded key
+  in the environment again keeps its file (round 6 verification)", and new cases in the round 6
+  tests of test-auth-secrets.R, test-perm-gate.R and test-agent-dispatch.R above. Evidence:
+  progress/fixes.md FIX-32.
+
+## D-268 - FIX-33 What a document records and reads back after the live sessions (2026-10-27)
+- Rule (steering lines, security): a block body line is a `## Steer:` or `## Follow-up:` line only
+  as a whole comment line by R's parse data (a COMMENT token with only blanks before it on its
+  line), so a line inside a string is code and a body that does not parse holds none; the reader
+  (`doc_replay_steps()`) and the body `sha` use the same test (`doc_steer_lines()`). The writer
+  gives each whole comment line of recorded code that reads as one one more `#` where its comment
+  starts (`doc_comment_escape()`), in every format, so model code cannot write a line that a
+  history rebuilt from the document sends as the person's steer or follow-up. Formerly any line
+  matching `^[ \t]*## (Steer|Follow-up):` was one, so a shared or copied document, or one replayed
+  without its session log, sent model-written lines as an operator relay or a user message
+  (verifier 2's open item of FIX-31, found live with GPT-5.6).
+- Why this rule: neither half is enough alone. A genuine steer line is a whole comment at the
+  block's own indentation (`doc_wrap_local()` indents a fork's), so the reader cannot tell it from
+  a model comment by its text; the writer cannot escape a line inside a string without changing
+  what R runs, so the reader must not take one. R reads the same code either way.
+- Rule (markers): the same writer escape applies to whole comment lines of recorded code, and of
+  direct R code (`doc_direct_code()`), shaped like a block marker (`BLOCK_OPEN`, `BLOCK_CLOSE`),
+  indented or not, open or close; a block write whose new text would still leave the markers
+  malformed (a marker line inside a string) is refused as a `doc_write` error, so only that block
+  is lost, and a block that cannot be written anywhere is named once per document. This amends
+  D-266's "a gptr marker in recorded code leaves the markers malformed": formerly one such line
+  stopped every later block write without a word, and the transcript could not be listed,
+  exported or replayed.
+- Rule (sha and line ends): `sha` ignores each line's trailing blanks and carriage return, and
+  recorded code and direct R code lose a trailing carriage return as a read gives them back, so an
+  editor's trim or CRLF model code leaves a block fresh and a CRLF comment such as `# /undo` is
+  escaped (FIX-31's open CR item). They are split into lines where the evaluator splits them
+  (`doc_split_lines()`, as `eval_parse()`: `\r\n` or a lone `\r` ends a line, review round 1), so
+  the escapes read the code R ran; formerly a lone `\r` stayed inside one line, the code did not
+  parse, no comment was escaped (a forged `## Steer:` line was written as is, a marker line left
+  the turn unrecorded) and `gptr_source()` of the document failed.
+- Rule (rescan): a direct R line's top-level `name = value` (or `<-`) makes `name` and reads only
+  what `value` names, after the names the line made before; any other expression, an in-place
+  change such as `fit$x = 1` included, uses every name it holds. A corrected line after a failed
+  one, or a reassignment of what an undone turn made, then stays on with its users. A direct R line
+  that read an object a turn changed stays on after the undo and replays with the restored value
+  (known limit, stated in `?gptr_doc`).
+- Rule (recorded code, amends IC-48): an `r` call that stopped part-way records its first `n_done`
+  top-level expressions, whose bindings stay, also when served to a CLI route (the `gptr.mcp_r`
+  trace carries `n_done`); the model's `record = false` holds only for code
+  that added, changed or removed none of the person's objects (`r_tool_execute()`), so a later
+  call that uses them replays. Formerly both were left out while their objects stayed, and
+  `source()` stopped at the next read.
+- Rule (export, amends D-258 and D-264's check (c)): `gptr_export()` admits unnamed symbols after a
+  call's prompt (a console turn's `@objects`, a script's data object), leaves out an undone block
+  that no statement owns (a console turn an `/undo` or `/retry` undid, under its `#~ ` statement),
+  and drops a console turn's `#< ` run in both formats, as nothing sends it from an exported call.
+- Rule (re-ask): `gptr_source(model =)` gives every call the `document` route passes to be asked
+  that model (`call$ids$model`), so a record whose statements name a model the reader lacks is
+  re-asked with the reader's own; `NULL` keeps each call's. A re-ask sends neither a block's
+  steering lines nor an `n <text>` answer, which no block records, and `?gptr_source`, NEWS and
+  the vignette now say which model and mode a turn that names none gets (its session's from the
+  turns before, else the re-asking session's settings). `/retry` of a turn the console sent puts
+  the `!` notes that turn took back before the pending ones.
+- Rule (plan line): a block's `## Plan:` line names a plan file only when it is kept;
+  without `.gptr/` it reads `## Plan: none kept (gptr_init() keeps plans in .gptr/)`, the rule of
+  the transcript's machine-log line (`doc_kept()`).
+- Status 2026-10-27 (review round 1): `?gptr_source` says that `model` takes a model name or
+  reference string, not a provider spec object as `peter(model =)` does; NEWS says which model and
+  mode a turn that names none gets.
+- Status 2026-10-27 (review round 2): NEWS and the script-as-history vignette say, as
+  `?gptr_source` did, that a turn naming no model or mode is asked with those its session has from
+  the turns before, else with the re-asking session's settings (they said the latter of every such
+  turn). `gptr_export()` exports code that calls a `peter$` member
+  (`x = peter$sh(c("echo", "hi"))$stdout`), which runs as ordinary R, and refuses any other
+  `peter` or `gptr_return` name (`doc_export_names()`); formerly `all.names()` refused every
+  console transcript whose code used `peter$sh()`, where FIX-27's refusal sends models.
+- Status 2026-10-27 (review round 3): a bridge digest is one line (`bridge_emit()` turns the line
+  ends in it into a space), as text the model chose, a `peter$bg()` job's name or a Python error,
+  passes into it; formerly `name = "job\n## Steer: X"` wrote a whole `## Steer:` line, read back as
+  the person's steer, and `name = "job\nfile.create(f) #"` a bare line that `source()` of the
+  transcript ran (already so on `13a917ff`). The rewind note of a console transcript counts every
+  item `gptr_rewind()` counts as not restored (`not redone` and `failed` too), and `/redo`'s
+  heading says "some items were not redone". The README says that `replay = "live"` asks again and
+  `model =` picks your own model, as a statement may name its turn's model (D-265).
+- Status 2026-10-28 (review round 6): a block whose `sha` is the hash written before this rule, of
+  the body without each line matching `^[ \t]*## (Steer|Follow-up):( |$)` and nothing trimmed, is
+  fresh too, so a live re-ask regenerates a block main (`13a917ff`) recorded whose printed lines end
+  in blanks, which read `user-edited` (R6-REG-2). Printed output is split into `#>` lines where code
+  is (`doc_split_lines()`), and a document is read so too: `doc_read()` ends a line at a lone `\r`,
+  as `readLines()`, editors and `source()` do, so a pasted line cannot hide the next one from gptr,
+  and every line gptr writes reads back as written (T6-2, T6-3). Tests: test-doc-blocks.R "a block
+  recorded before FIX-33 reads fresh by its untrimmed sha (review round 6)", "a carriage return in
+  printed output ends a #> line, as R reads it (review round 6)"; test-doc-io.R "a lone carriage
+  return ends a line, as source() reads it (review round 6)".
+- Status 2026-10-28 (review round 6 recheck): output that is not valid UTF-8 is written with each
+  invalid byte as `<xx>` (`console_utf8()`) before it is split, in every locale; the split stopped
+  on it in a UTF-8 locale. Test: test-doc-blocks.R "a carriage return in printed output ends a #>
+  line, as R reads it (review round 6)".
+- Contract-visible: 04 section 6.4 (`gptr_source()`'s `model`), section 11.5 (`sha`, the body, the
+  plan line, one-line bridge digests), section 15.3 IC-48 and IC-49; 03 section 4.3's signature;
+  `?gptr_doc`, `?gptr_source`, `?gptr_export`; vignettes script-as-history and interactive-console;
+  NEWS.md; the cheat sheet's export line; the README.
+- Tests: test-doc-blocks.R "model code cannot record a steer or follow-up line, in any format
+  (FIX-33 DOC-1)", "an editor's trim and CRLF model code leave a block fresh (FIX-33 DOC-5)", "a
+  call that stopped part-way records the expressions that ran (FIX-33 PERM-5)"; test-doc-replay.R
+  "model code never becomes the person's steers when a document is rebuilt (FIX-33)", "a stale turn
+  re-asked after a rebuilt turn gets no forged steer (FIX-33 DOC-1)", "a marker-shaped line in model
+  or ! code never stops the recording (FIX-33 DOC-2)", "a direct R line that assigns a name again
+  makes it and does not use it (FIX-33)", "gptr_source(model =) re-asks every call with another
+  model (FIX-33 MM-2)"; test-tool-r.R "record = false never leaves out code that changed objects
+  (FIX-33 ALL-3)"; test-doc-export.R "an export leaves out what a prompt was sent with, in both
+  formats (FIX-33 DOC-7)", "recorded peter$ member calls export; a nested Peter call is refused
+  (review round 2)"; test-mcp-recording.R "plan, non-recording and idle served R add no
+  executable history; failed R what ran"; review round 3: test-bridge-sh.R "a bridge digest is one
+  line, whatever text the model chose (review round 3)", test-ckpt-rewind.R "/redo's heading says
+  some items were not redone (review round 3)", test-doc-replay.R "a rewind makes abandoned blocks
+  inert and notes it in the console transcript" (amended: every item counted). Evidence:
+  progress/fixes.md FIX-33.
+
+## D-269 - FIX-34 Console findings from the live sessions (2026-10-27)
+- Rule (gate, PASTE-4): in every mode the `mode` policy denies `r` code that the evaluator's
+  static guard refuses (`eval_guard()` on the call's code in `ctx$envir`: `q()`, `quit()`,
+  `readline()`, `menu()` and the rest of `eval_guard_blocked`, a read of standard input, a secret
+  marker), with the guard's text as its reason less its leading "Not run: " and its "Nothing was
+  evaluated." (review round 1: the console's row says "not run" before it, and the denial ends
+  "Nothing in this call ran.", D-267), so no person is asked to approve code that never runs;
+  `eval_run()` keeps the guard as the evaluator's backstop. Formerly `q()`, rated level 4,
+  made the critical guard ask "Allow r?" in every mode, yolo included, and the evaluator then
+  refused it whatever the answer; without a person the run stopped `blocked` with "This action
+  always needs a person to approve it: run it interactively", and the yolo notice, NEWS,
+  `?gptr_security` and the auto-mode prompt listed quitting R among what a person is asked about.
+  They now leave it out, and NEWS and `?gptr_security` say that such code is refused without a
+  question. `risk-functions.csv` keeps `q` and `quit` at level 4, so `gptr_risk()` still reports
+  them as critical. A `q` the evaluation environment binds to data passes, as in the evaluator
+  (D-252).
+- Rule (composer, STATIC-3): the Tab or Up that ends a key batch acts as the key when the batch
+  holds no newline outside its bracketed pastes, a paste open since an earlier read included
+  (`console_unpasted()`); the idle editor's Tab rule uses the same test. Formerly a newline inside
+  the markers counted, so a multi-line paste and Tab read together after an in-process r call left
+  the Tab in the draft as text.
+- Rule (paste echo, PASTE-2): on a macOS terminal `rd$waiting()`'s look at fd 0 makes the BSD tty
+  echo the pending rest of a paste again, its last line left on the cursor's row; in a T console it
+  then erases that row (`\r\033[K`), so the paste hint at `peter>` and the re-ask at an approval are
+  not written after it and readline shows that line once. The pause menu's `? Steer` and
+  `? Follow-up` questions take the lines a paste left waiting as the text's later lines (review
+  round 1), so a block pasted there is one message; formerly they became the next `peter>` input,
+  a `!` line run as R without Enter. Not changed: the menu's key question reads no waiting lines,
+  and there the echo comes at no fixed point (before the `not a key` row in the
+  lens's runs, before the next chevron in the writer's), so it would take an erase before that row
+  and another in the next prompt for a paste at a menu. Status 2026-10-27 (review round 2): the key
+  question reads them (`rd$waiting()` after an answer it asked for): a block pasted there is asked
+  again as at an approval ("a pasted block is not an answer", the whole block kept in the
+  history), so nothing of it is a key, a steer or a follow-up; formerly its first line answered
+  (`s`), its second became the steer, and a `!` line later in it ran as R at the next prompt.
+  Status 2026-10-27 (review round 3, no code change): that look also erases the echo row at the key
+  question, as `rd$waiting()` does wherever it looks, so the pause menu no longer shows a paste's
+  echoed last line twice either (pastes of `alpha\nbeta` and `alpha\nbeta\ngamma` without a final
+  newline at `? Paused` showed each line once, the last at the next chevron, on `7fe6cff5`, the
+  docs verifier's tmux run); 04 sections 15.9 IC-75 and 15.10 IC-76 now state both menu rules.
+- Rule (crash advice, PASTE-3): `?peter` and vignette("interactive-console") advise `reset` after
+  R is killed or crashes while peter works, which restores the echo and turns bracketed paste off,
+  as D-263 and 04 section 15.10 already said; `stty sane` leaves the mode on.
+- Not changed (PASTE-1): on macOS a two-line paste without a final newline still answers a
+  question with its first line, as IC-75, D-220, `?peter` and the vignette state; only NEWS, which
+  left that out and named no platform, is corrected. Its triager's alternative reads the waiting
+  input in `tty_drain_mode()` so a partial last line also marks a paste, but that 50 ms read would
+  also take a key typed just after Enter as a pasted line and re-ask a typed answer, and Linux,
+  where GNU readline hands the lines over one at a time, keeps the limit either way.
+- Contract-visible: 03 sections 6.8.1, 6.8.2 and 7.4 (the auto-mode block); 04 sections 7.11
+  (`builtin_permissions`), 15.7 IC-67 (`eval_guard()`), 15.9 IC-75 and IC-78 and 15.10 IC-76;
+  `?peter`, `?gptr_security`, vignette("interactive-console"); NEWS; the yolo notice and the
+  auto-mode prompt.
+- Tests: test-perm-gate.R "code the evaluator never runs is refused in every mode, no person asked
+  (FIX-34)" (the reason without "Not run: ", review round 1); test-console-interrupt.R "a block
+  pasted at the pause menu's steer question is one steer (review round 1)", "a block pasted at the
+  pause menu's key question is no answer (review round 2)";
+  test-console-input.R "a Tab after a bracketed paste in one read is the key: its
+  newlines are text (FIX-34)" and "a bracketed paste at the prompt's editor stays in the draft until
+  Enter (D-263)"; test-console-repl.R "a macOS terminal's look at fd 0 erases the row its tty echoed
+  a paste on (FIX-34)". Evidence: progress/fixes.md FIX-34.
+
 ## D-270 - CI-105 The Title and Description from contributor PR #92 (2026-10-28)
 - Rule: DESCRIPTION's Title is "Language Model Agents in Live 'R' Sessions" and its Description
   the paragraph that opens "Runs language model agents in an existing 'R' session, where
@@ -7791,14 +8749,818 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   Constraints; Task 1's DESCRIPTION, its test and the Red step), P25 (Global Constraints, Task 5)
   and 05's P01 scope now state the new Title (#94). P01's Task 1 still writes its own first
   Description, which the shipped one had replaced before #92 (CI-104); this entry wins over it,
-  as over the Description 05 asks of P01 (per research report 13, section 3).
-- Why: the maintainer merged the PR as is and asked that its wording be the gold standard for the
-  rest of the repository (CI-105). The Title has 42 characters, is left unchanged by
-  `tools::toTitleCase()` and has no period; the Description opens with neither the Title nor the
-  package name.
+  as over the Description 05 asks of P01 (per research report 13, section 3). The maintainer merged
+  the PR as is and asked that its wording be the gold standard for the rest of the repository
+  (CI-105). The Title has 42 characters, is left unchanged by `tools::toTitleCase()` and has no
+  period; the Description opens with neither the Title nor the package name.
 - Contract-visible: DESCRIPTION's Title and Description, as CRAN, `citation("gptr")` and the
   package site show them; no section of 03 or 04 names either (IC-72 lists the fields P01 writes
   without them).
 - Tests: test-zzz.R "DESCRIPTION carries the fields CRAN and the contract require (IC-72)";
   `dev/release/tests/test-description.R` "description_problems() checks the two fields P25 owns and
   guards the others". Evidence: progress/fixes.md CI-105.
+
+## D-271 - FIX-35 The owned browser's close kills helpers that outlast a 2 s grace (2026-10-27)
+- Rule: the owned headless Chrome's `release(seconds)` waits at most 2 s (`seconds`, if less) for
+  the helpers `close()` recorded by parent link to exit by themselves; if one still runs, it kills
+  the recorded helpers with `proc_kill_signalled()` (`ps::ps_kill()`: on Unix SIGTERM, then
+  SIGKILL after 200 ms; on Windows `TerminateProcess()`; ps handles carry the creation time, so a
+  reused pid is never signalled, and a helper already gone reads `"dead"`) and waits for them in
+  the rest of `seconds`. What follows is unchanged (CI-64): a member still running or unknown
+  raises "The owned headless browser family did not finish cleanup." and keeps the profile for a
+  retry, and the profile is removed only once the family is gone. Without a deadline (`seconds` 0:
+  the startup unwind and the retained cleanup job, which record no helpers) nothing changes. This
+  amends D-233 ("no bound, grace or deadline changes") and CI-64's measurement that the helpers
+  settle in 0.06-0.08 s, which holds on an idle machine only. The reason: under load the macOS
+  scheduler starves an orphaned Chrome renderer (parent 1, state RN, priority 4, the background band
+  Chrome sets for an idle renderer) after the browser stops, past the shared 10 s close deadline.
+  The round 4 flake investigation's logs (test-artifact-app.R, an open-and-close driver and a probe)
+  hold 13 such failures from 12 closes, one line being a close's retry 120 s later. In each the
+  marker tree was empty and readable and a recorded renderer, runnable at priority 4, lived on under
+  parent 1, in one beside an exiting helper. The families settled 20.6 to 169.5 s after the SIGTERM,
+  so a 30 s deadline would still have missed 8 of the 12 closes. The failures came at a load average
+  of 163 to 371: 11 of the 49 closes under 16 or 32 busy loops (16 cores, 22%) and 1 of the other
+  212, under another agent's check at 206; none of the 116 closes logged below 100 failed. Killing
+  the recorded helpers still running after the 2 s grace gave 0 failures in 28 closes under 32 busy
+  loops at a load average of 315 to 385 (Fisher p = 0.004 against the 11 of 49), each lingering
+  helper gone within 0.1 s of the kill. FIX-35's own measurement under 32 and 16 busy loops, the fix
+  and the base in alternate blocks: none of the fix's 40 closes (load average 103 to 362) ran out
+  `release()`'s deadline or ended "did not finish cleanup", 9 of them killing one helper, gone
+  within 0.085 s, though 3 ended "close timed out" before `release()` waited (F2); 4 of the base's
+  11 closes ran out that deadline, 3 with "did not finish cleanup" and one behind its check's
+  page-load timeout (Fisher p = 0.0013).
+- Rule: `artifact_browser()` first retries a pending lease (a startup whose cleanup close failed)
+  with `artifact_browser_close()`, and raises "The pending headless browser must finish cleanup
+  before opening another." only when that retry fails, the lease kept. Formerly it raised at once,
+  so after such a failure every later session check of the R session was HTTP-only and only the
+  unload retried the cleanup. A call made while another frame of `artifact_browser()` constructs
+  its browser would now close that owner, and the outer frame raises "The cached headless browser
+  changed during construction."; gptr makes no such call (the readiness pump runs no tool). The
+  cost: while the retry keeps failing, each call runs that close before it raises, up to the
+  close's 10 s deadline and longer when F2's walks are slow (the closes that timed out in FIX-35's
+  runs took 14.2 to 43.4 s), where formerly it raised at once.
+- Not changed: at a load average of 260 and more the process-table walks of the close
+  (`proc_children()`, `proc_tree()`) can take 12-28 s (at 280 and more in that investigation) and
+  use up the deadline by themselves; in FIX-35's runs 4 of 33 closes under 32 busy loops ended
+  "close timed out" so, one after 14.0 s in `proc_children()` (FIX-35 F2; closed by D-300).
+- Contract-visible: none of 03 and 04 states the owned browser's close or its helpers (D-233's rows
+  are `kill_all()`'s); a session check reports "HTTP-only check: the headless browser failed" less
+  often, after a close or a failed startup under load.
+- Tests: test-artifact-browser-launch.R "artifact browser close waits for its unmarked helpers
+  before removing the profile" (a helper that exits, one killed after the grace and one that
+  survives the kill) and "a recorded helper that cannot run is killed after the grace, in the
+  deadline (FIX-35)" (a stopped R child); test-artifact-browser-owner.R "opening retries a pending
+  owner's cleanup and opens once it settles (FIX-35)". Evidence: progress/fixes.md FIX-35.
+
+## D-272 - FIX-36 Variables that move gptr's own folders are control (2026-10-27)
+- Rule: `Sys.setenv()` or `Sys.unsetenv()` in R code, and an `os.environ` write in `peter$py()`
+  code, of `R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME` or `USERPROFILE` is level 4
+  `control`, as one of a provider key, `GPTR_*`, `*_BASE_URL`, `R_ENVIRON_USER`, `R_PROFILE_USER`,
+  `R_ENVIRON` or `R_PROFILE` already was: every mode but yolo asks a person, auto included, and
+  yolo runs it, as it runs gptr's configuration functions (IC-78). The five decide where
+  `tools::R_user_dir("gptr", "config")` (settings, rules, trust decisions, credentials) and
+  `user_home()` (which places `~/.Rprofile`, `~/.Renviron` and `~/.R/Makevars`) resolve, so
+  moving them moved the control path class (IC-54) with them. The names match on every OS, one
+  rule with no OS branch. This amends the control list of D-132 and 03 section 6.8.1 as the code
+  names it (`risk_control_env`), which 04 IC-53 item 3 gave as `GPTR_*` and provider keys only.
+- Rule (not control): the variables of the cache (`R_USER_CACHE_DIR`, `XDG_CACHE_HOME`,
+  `LOCALAPPDATA`) and data (`R_USER_DATA_DIR`, `XDG_DATA_HOME`) folders stay level 2: a write into
+  those folders is the `outside` path class, level 3, so moving them gives model code nothing it
+  cannot do where they are. `R_USER` stays level 2: R reads it for `~` on Windows once, at
+  startup, and gptr never.
+- Formerly each of the five was level 2 `session`, which auto runs, so one call could point gptr
+  at a folder of the model's choice for the next run.
+- Not covered (Open): `withr::local_envvar()` and `withr::with_envvar()` (withr has no row: level
+  1 `unlisted`) and a name the code computes (a level-3 `dynamic` row), for every control
+  variable.
+- Contract-visible: 03 section 6.8.1; 04 section 15.4 IC-53 item 3; `?gptr_options`,
+  `?gptr_security`; NEWS.
+- Tests: test-perm-classify.R "a variable that moves gptr's config folder or the home is control
+  (FIX-36)"; test-perm-gate.R "auto asks before model code moves gptr's config folder or the home
+  (FIX-36)". Evidence: progress/fixes.md FIX-36.
+- Status 2026-10-27 (review round 1): one rule for an R name the classifier cannot read: a
+  `Sys.setenv()` or `Sys.unsetenv()` whose names it cannot fold, such as a computed name or
+  `Sys.setenv` handed to `do.call()`, is level 4 `control`, not 3 `dynamic`, and a name held in a
+  name the code assigns is folded. Names match in any letter case (`risk_control_name()`), as
+  Windows and Python there read them, on every OS. `readRenviron()` and `dotenv::load_dot_env()`,
+  which set variables from a file, are level 4 `control`. So "a name the code computes" above is
+  closed for R. Still not covered (Open), each level 3 or lower, which auto runs: withr's two
+  functions, a Python name the code computes (level 3 `session`, not `dynamic`), an alias of
+  `os.environ`, Python run through 'reticulate', and `Sys.setenv` reached by a computed name or
+  through an environment (`get("Sys.setenv")`, `baseenv()$Sys.setenv`).
+- Tests (review round 1): test-perm-classify.R "a control name in any case, unread, or set from a
+  file is control (review round 1)"; test-perm-gate.R's FIX-36 test also runs `do.call()` and
+  `readRenviron()`.
+- Status 2026-10-27 (review round 2): `peter$knit("python", code)`, which runs its code through
+  `peter$py()`, is read as `peter$py()` is, at least level 3 (04 section 9.4's `knit` row;
+  formerly a flat level 3 `process` in R code and in the member's risk), and
+  `withr::local_envvar()` and `withr::with_envvar()` are read as `Sys.setenv()` is (two `withr`
+  rows at level 2 `session`; the names of `...` and of a `c()` or `list()` passed as `.new` or
+  `new`). Formerly withr's two were level 1 `unlisted`, and given a `.local_envir` that is not a
+  running call's frame the change lasted for the session. Still not covered (Open), each level 3
+  or lower, which auto runs: code in a file R runs (`source()`, `sys.source()`,
+  `eval(parse(file = ))`); `Sys.setenv()` reached by a computed name, through a list or an
+  environment, or handed to another function (`get("Sys.setenv")`, `baseenv()$Sys.setenv`,
+  `with(list(f = Sys.setenv), ...)`, `assign("f", Sys.setenv)`, `identity(Sys.setenv)`); a Python
+  write whose name the code computes, that reaches `os.environ` by another name
+  (`e = os.environ`, `getattr(os, "environ")`) or through `ctypes`, or that passes
+  `os.environ.update()` lower-case keyword names; Python run through 'reticulate'.
+- Contract-visible (review round 2): 03 section 6.8.1; 04 sections 9.4 (`knit`) and 15.4 IC-53
+  item 3; `?gptr_options`, `?gptr_security`; NEWS; risk-functions.csv's two `withr` rows.
+- Tests (review round 2): test-perm-classify.R "peter$knit()'s python engine is read as
+  peter$py() is (FIX-36 review round 2)", "withr's variable setters are read as Sys.setenv() is
+  (FIX-36 review round 2)"; test-perm-gate.R "auto asks before peter$knit()'s python moves gptr's
+  config folder (FIX-36 round 2)", "auto asks before withr moves gptr's config folder for the
+  session (FIX-36 round 2)".
+- Status 2026-10-28 (review round 3): the arguments of `Sys.setenv()`, `Sys.unsetenv()`,
+  `withr::local_envvar()` and `withr::with_envvar()` are read as R matches them (exactly, then in
+  part before `...`, then by position; withr's formals as the classifier writes them when withr
+  is not loaded), and `Sys.unsetenv()`'s `x` as values, so a part name of `.new` or `new`
+  (`.n =`, `. =`, `n =`) or `Sys.unsetenv(x = )` that names a control variable is level 4
+  `control`, and a call R cannot match counts as one whose names the code computes. Formerly
+  these were level 2 `session`, which auto runs. The rules above and the Open list are unchanged.
+- Tests (review round 3): test-perm-classify.R "a variable setter's arguments are matched as R
+  matches them (FIX-36 review round 3)"; test-perm-gate.R "auto asks before a named or
+  part-named argument moves the folder (FIX-36 round 3)".
+- Status 2026-10-28 (review round 4): a call of a helper the classifier folds (`c()`,
+  `paste0()`, `file.path()` and the others of `risk_base_helpers`, and a `list()` holding withr's
+  variables) is one the code computes when the code assigns the helper's name or the helper found
+  from the environment the code would run in is not base R's: a variable name built with it is
+  one the classifier cannot read, so level 4 `control`, as is a `c()` or `list()` of the code's own
+  passed as withr's `.new` or `new`. Formerly such a call was folded as base R's, so
+  `paste0 = function(...) "R_USER_CONFIG_DIR"` and then `Sys.unsetenv(x = paste0("T", "Z"))`, in
+  one call or in two turns, was level 2 `session`, which auto runs. The same rule makes a command
+  built with such a helper a level-3 `dynamic` row and a `setwd()` directory one the code computes
+  (level 4). Round 2's Open list holds for `Sys.unsetenv()`, `withr::local_envvar()` and
+  `withr::with_envvar()` as it does for `Sys.setenv()`: each reached by a computed name, through a
+  list or an environment, or handed to another function (`get("Sys.unsetenv")`,
+  `asNamespace("withr")$local_envvar`, `with(list(f = withr::with_envvar), ...)`,
+  `assign("f", Sys.unsetenv)`, `identity(withr::local_envvar)`) is level 3 or lower, which auto
+  runs, as `?gptr_security` now says.
+- Contract-visible (review round 4): 03 section 6.8.1; `?gptr_risk`, `?gptr_security`.
+- Tests (review round 4): test-perm-classify.R "a helper the code or the session binds is one the
+  code computes (FIX-36 round 4)" and the round 3 test's rows of an exact `.new` beside a part
+  name; test-perm-gate.R "auto asks before a helper the code or the run binds names the folder
+  (FIX-36 round 4)".
+- Status 2026-10-28 (review round 5): the provider names of the control list come from the
+  registry (`risk_control_env()`): every registered provider's `auth` names (an optional key's
+  too) and `compat$base_url_env`, with the key pair a `bedrock-converse` provider signs with
+  (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`), R's startup variables and the
+  five folder variables. So `AWS_REGION` and `AWS_DEFAULT_REGION` (which place Bedrock's endpoint),
+  `AI_GATEWAY_API_KEY` (vercel-jev's key) and the key pair, formerly level 2 `session`, are
+  `control`, as is a variable that a provider the person registers reads. A Python environment
+  write whose name (a subscript, or the first argument of `putenv()`, `unsetenv()`, `setdefault()`,
+  `pop()` or the item methods) is not a plain string literal (an escape, adjacent literals, a name
+  the code computes) is `control`, as an R name the classifier cannot read is; formerly level 3.
+  Still not read, each level 3 or lower: a Python write through an alias of `os.environ` or
+  `ctypes`, or one that passes `os.environ.update()` a mapping the code computes or keyword names
+  not all in upper case. Contract-visible: 03 section 6.8.1; 04 section 15.4 IC-53 item 3;
+  `?gptr_options`, `?gptr_security`. Tests: test-risk-forms.R "a variable a registered provider
+  reads is control (review round 5)", "a Python variable name it cannot read in an environment
+  write is control (round 5)". Evidence: progress/fixes.md FIX-36.
+- Status 2026-10-28 (review round 5 verification): a Python environment subscript is read to its
+  matching bracket, over lines, with strings and nested brackets read whole, so a write whose
+  subscript holds brackets (`os.environ[keys[0]] = d`), formerly not seen as a write (level 2), is
+  `control`; every augmented operator (`%=`, `**=`) assigns; and a name that only ends in
+  `environ` (`my_environ`) is not read as `os.environ` (since round 5 its write through a computed
+  key was level 4). Tests: test-risk-forms.R "a Python variable name it cannot read in an
+  environment write is control (round 5)". Evidence: progress/fixes.md FIX-36.
+- Status 2026-10-28 (review round 6): the names the `cli-claude` and `cli-codex` child
+  environments keep for the `claude` and `codex` command-line tools (`CLAUDE_CODE_OAUTH_TOKEN`,
+  `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, `CODEX_HOME`) join the control list, formerly
+  level 2 `session` although `?gptr_options` called a variable a provider reads control.
+  `paste()`, `paste0()`, `file.path()` and `c()` are folded with every argument as R passes it:
+  `paste0()`'s `sep` is a part, `collapse` and `fsep` join the parts, and a `collapse` is also
+  read as each value, which may be one of a name's several values (formerly `paste0()` dropped
+  `sep`, and `collapse` and `fsep` were parts, so `file.path("R_USER", "CONFIG_DIR", fsep = "_")`
+  and `Sys.unsetenv(x = paste0("R_USER_", sep = "CONFIG_DIR"))` were level 2 `session`). The rule
+  of round 4 sees a helper the code binds with `=`, `<-` or `<<-`, as a formal or as a `for`
+  variable only: one bound with `assign()`, `delayedAssign()`, `makeActiveBinding()`,
+  `list2env()` or `attach()`, or in a list given to `with()` or `within()`, is read as base R's
+  (level 2 for such a variable name, which auto runs), as `?gptr_security`, `?gptr_risk` and 03
+  section 6.8.1 now say. Contract-visible: 03 section 6.8.1; 04 section 15.4 IC-53 item 3;
+  `?gptr_options`, `?gptr_security`, `?gptr_risk`. Tests: test-risk-forms.R "a variable the
+  claude and codex CLIs keep is control, as a provider's key (round 6)", "paste(), paste0() and
+  file.path() are folded with their arguments as R passes them". Evidence: progress/fixes.md
+  FIX-36.
+- Status 2026-10-28 (review round 6 verification): a `collapse` in `paste()` or `paste0()` is
+  also read as each value only when a part holds a name or R's working directory (round 6 did so
+  for literals too, which made `system(paste(c("python3", "--version"), collapse = " "))` level 3
+  instead of 0). The rule of round 4 counts a helper's bare name; a helper assigned into an
+  environment (`e$paste0 = f`, `.GlobalEnv[["paste0"]] = f`) is read as base R's, level 2 for such
+  a variable name, as `?gptr_security`, `?gptr_risk` and 03 section 6.8.1 now say.
+  `?gptr_options` and `?gptr_security` call round 6's CLI names the variables gptr keeps for the
+  `claude` or `codex` tool (its login, its folder or the path of Git Bash). Contract-visible: 03
+  section 6.8.1; `?gptr_options`, `?gptr_security`, `?gptr_risk`. Tests: test-risk-forms.R
+  "paste(), paste0() and file.path() are folded with their arguments as R passes them".
+  Evidence: progress/fixes.md FIX-36.
+- Status 2026-10-28 (review round 6, the gate writer): `do.call()` of a function written out that
+  the code does not bind, with a `list()` or `c()` of base R written out, and `rlang::exec()` of
+  such a function, are read as the call they make, so `do.call(Sys.setenv, list(TZ = "UTC"))` is
+  level 2 `session` (round 1 made it 4 `control`, which auto asked, while `?gptr_security` said
+  level 3 or lower) and `do.call(Sys.setenv, list(R_USER_CONFIG_DIR = d))` stays 4. A setter handed
+  to `lapply()`, `Map()` or a `do.call()` whose list the classifier cannot read still passes names
+  it cannot read, level 4 `control`; one handed to a function the classifier does not know calls it
+  (`identity()`, `assign()`, a function of your own) stays level 3 or lower, as `?gptr_security` now
+  says. Python code is read as Python joins it: a backslash at a line's end joins the next line and
+  a parenthesised `os.environ` or `environb` name is the name, so `os.environ\<newline>['HOME'] = d`
+  and `(os.environ)['HOME'] = d` are `control` (formerly level 1 or 2). Contract-visible: 03 section
+  6.8.1; 04 section 15.4 IC-53 item 3; `?gptr_security`. Tests: test-risk-forms.R "do.call() of a
+  list written out and rlang::exec() are read as the call (round 6)", "Python code is read as Python
+  joins its lines and names (review round 6)"; test-perm-classify.R's round 1 row. Evidence:
+  progress/fixes.md FIX-36.
+- Status 2026-10-28 (review round 6, the gate verifier): Python code is read as Python joins it
+  outside a comment only: a backslash at the end of a comment joins nothing, as Python never
+  continues one, so `# note \<newline>os.environ[k] = d` is `control` again (the round 6 line above
+  joined every backslash, making it level 3 `session`, which auto ran). The names passed to a
+  setter handed to `lapply()`, `Map()`, `do.call()` or another function the classifier knows calls
+  it, such as `sapply()` or `purrr::map()`, are ones it cannot read, level 4 `control`; the round 6
+  line above and `?gptr_security` named only the first three. Contract-visible: 03 section 6.8.1;
+  `?gptr_security`. Tests: test-risk-forms.R "Python code is read as Python joins its lines and
+  names (review round 6)". Evidence: progress/fixes.md FIX-36.
+
+## D-273 - P29 Names: gptr_tailor() and gptr_coach(); a harness is class gptr_harness (2026-10-28)
+- Rule: the two new exports are `gptr_tailor()`, which builds a harness by hand, and `gptr_coach()`, which
+  improves a harness's coaching by running the task; both keep the `gptr_` prefix (D-28 unchanged), and `peter()`
+  stays the single gateway (S-1). The object both return is a harness: a function of class
+  `c("gptr_harness", "function")`, called exactly like `peter()`. The starting harness of `gptr_coach()` is
+  `harness =`, and no argument of `gptr_coach()` shares a name with one of `peter()`'s.
+- Contract-visible: 04 sections 14.1 and 15.11 IC-83, IC-84; 03 sections 3.2, 4.4 and 6.19.
+- Tests: test-gptr-tailor.R "gptr_tailor() returns a harness built on peter (08 3.1)"; test-gptr-coach.R
+  "Harness2's demo: the coach writes the fix, which is kept (4 runs, 3 coaches)". Evidence: progress/P29.md
+  Tasks 6 and 9.
+
+## D-274 - P29 Codex coaching with a reduced tool set is a supported route; the live test decides (2026-10-28)
+- Rule: runs, coaches and the judge may use Codex on a ChatGPT plan with Codex's own tools switched off
+  (`pcli_codex_off`, `pcli_codex_confine`), a run acting only through gptr's tools over the relay and a coach with
+  none (IC-88). Whether the ChatGPT-plan backend accepts the reduced tool set and the strict `--output-schema` is
+  decided by the live test. A refused request ends the session with Codex's own error by name ("Codex reported an
+  error: <its text>", class `provider`, or `plan_limit` for a usage limit); gptr never falls back to Codex's own
+  shell.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-codex.R "a confined exec is ephemeral, read-only, without Codex's own tools, and hooked", "a step
+  outside gptr's tools stops a confined exec at once"; live (2026-10-28, Codex 0.157.1 on a ChatGPT plan):
+  test-live-cli.R "a codex coach has no tools and answers through the strict reply schema" passes, so the
+  backend accepts the reduced tool set and the strict schema, and test-live-coach.R "gptr_coach() on a Codex
+  plan ..." completes a coaching call. Evidence: progress/P29.md Task 5 and Live tests.
+
+## D-275 - P29 Coached Codex runs act without Codex's own shell (2026-10-28)
+- Rule: accepted. A run on Codex acts only through gptr's tools: `r` runs R code and `peter$sh()` reaches the shell
+  through `r`, both risk-checked, fenced and tallied. Any other Codex step fails the session
+  (`gptr_error_cli_check`), and each denial in the hook's log counts as a refused step. The live calibration (08
+  P29h) measures how well runs do this way; the checks are not traded for quality.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-codex.R "a confined run reports each hook denial as a refused step and still completes";
+  live (2026-10-28): test-live-cli.R "Codex in a non-git temporary directory calls the gptr r tool" and "a codex
+  run in the coaching role acts only through gptr's tools" pass. Evidence: progress/P29.md Task 5 and Live tests.
+
+## D-276 - P29 Codex coaching sessions keep no logs: --ephemeral and history.persistence none (2026-10-28)
+- Rule: every confined exec passes `--ephemeral` and `-c history.persistence="none"` (in `pcli_codex_confine`, so
+  the preflight's `codex features list` runs with it too) and is never resumed: a follow-up (a coach's retry, a
+  review reminder) is a fresh exec that carries gptr's instructions and the whole history. A live test is to look
+  for a canary from the prompt among the files changed under `CODEX_HOME`, by name and match count only; if Codex
+  still writes the prompt, 08 honest limit 7 says so.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-codex.R "under a coaching role build() never resumes and sends the whole history"; live
+  (2026-10-28): test-live-coach.R "gptr_coach() on a Codex plan leaves no prompt in CODEX_HOME (D-276)" passes:
+  21 to 30 files under `CODEX_HOME` changed across runs and none held the canary, so 08 honest limit 7 needs no
+  amendment. Evidence: progress/P29.md Task 5 and Live tests.
+
+## D-277 - P29 Plan CLIs are checked against a minimum version, never an exact list (2026-10-28)
+- Rule: `pcli_coach_min` is claude 2.1.296 and codex-cli 0.157.1, the oldest versions coaching was tested with.
+  `pcli_coach_preflight()` refuses an older CLI (`gptr_error_model_refused`, reason `cli_version`), runs a newer
+  one with a one-time notice, and caches a passing preflight per CLI path and version. Claude Code updates itself
+  and gptr ships through CRAN, so an exact list would refuse coaching after every update; the per-session checks,
+  which fail closed, protect a newer CLI.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-common.R "a plan CLI's preflight runs once per path and version; a newer one gets a notice".
+  Evidence: progress/P29.md Task 5.
+
+## D-278 - P29 A coaching run's result is plain JSON, never readRDS() (2026-10-28)
+- Rule: a coaching child writes its result as JSON (`plain_encode()`); the parent reads it with `json_decode()`,
+  caps its size (64 MiB), depth (20), lengths (1e6) and values (1e5), rejects unknown keys and types, and rebuilds
+  only logical, integer, double, character, factor, Date, POSIXct, data frame and list values (`plain_decode()`),
+  anything else arriving as its printed summary. It never calls `readRDS()` or `jsonlite::unserializeJSON()` on a
+  child's output. Reason: an `.rds` file can hold a promise, and before R 4.4 one crafted so that `readRDS()`
+  returns it runs any code when touched (CVE-2024-27322); R 4.4 refuses such a promise only at the top level of the
+  file, and on every version `readRDS()` can load packages the file names and return functions and active
+  bindings that run code. So coaching works on every supported R version (4.2 and later). The job still goes from
+  parent to child as an `.rds` spec in a private 0700 folder (the trusted direction).
+- Contract-visible: 04 section 15.11 IC-86.
+- Tests: test-gptr-child.R "plain data round-trips exactly (08 section 3.3)", "closures, environments, S4 and other
+  classes travel as printed summaries", "the parent refuses unknown keys, types, classes and sizes". Evidence:
+  progress/P29.md Task 7.
+
+## D-279 - P29 The coaching child reuses the worker's helpers through contract edges (2026-10-28)
+- Rule: `R/gptr-child.R` (area `gptr`, L6) starts each job through a new `child` entry of
+  `proc_rscript()` beside `worker_main()` and reuses P19's helpers instead of copying them:
+  `subagent_schedule()`, `subagent_limit()`, `worker_registry()`, `worker_registry_apply()`,
+  `worker_spec_revive()` and `worker_key_provider()`, with P11's `perm_rules_effective()`;
+  `R/gptr-tailor.R` uses P11's `rule_hit()`, `rule_glob_re()` and `risk_table()` and P10's
+  `walk_tree()`. These 11 calls, with P17's `skill_discover()` (D-288) 12, are contract edges of the
+  layering test (`arch_contract_edges()`). The worker's reader of its child's stdout is not reused:
+  the child entry has its own line reader (`child_line()`), because model code can print to that
+  stream.
+- Contract-visible: 04 sections 12.2 and 15.11 IC-86; 03 section 3.2 (128 files).
+- Tests: test-arch-layers.R "the layer table lists the files of architecture section 3.2"; test-proc-rscript.R
+  "the coaching child entry loads the installed namespace as a worker does (P29)". Evidence: progress/P29.md
+  Tasks 7 and 9.
+
+## D-280 - P29 Policies of ancestor sessions bind every sub-agent (2026-10-28)
+- Rule: a session's policies include the rank-0 policies of every ancestor session (`registry_all_recs()` through
+  `registry_session_ancestors()`, which follows `parent_id` with the lookup `session-live.R` installs), and
+  `worker_registry()` ships those of the sessions' ancestors to a worker. So a person's `extensions =` policy and a
+  harness's `coaching` and `harness_rules` policies bind a nested `peter()` from model code, team members, fan-out
+  children, inline sub-agents and workers. Other kinds stay in their session.
+- Rule (every `peter()` call): `nested_rules()` asks every policy named `rules`, `coaching` or `harness_rules`
+  (`perm_strictest()`, the strictest answer wins, allow answers are never applied) about a nested `sh`, `bg`,
+  `write` or `edit` call. Formerly it asked only the first `rules` record, and only for `sh` and `bg`, so the
+  deny and ask rules never saw the actual path of a nested write or edit that the outer approval covered.
+- Contract-visible: 04 sections 7.6 (`dispatch_nested()`) and 15.11 IC-89; 03 section 6.8.4.
+- Tests: test-ext-registry.R "a session meets the rank-0 policies of its ancestors, and no other kind (08 3.2)";
+  test-agent-dispatch.R "a person's extensions = policy binds every session started under theirs", "nested sh,
+  bg, script, write and edit calls meet every rules-like policy"; test-subagent-worker.R "the worker
+  registry ships the rank-0 policies of the sessions' ancestors (08 3.2)". Evidence: progress/P29.md Task 3.
+
+## D-281 - P29 Nested computed commands meet the coaching fence (2026-10-28)
+- Rule: `nested_rules()` also asks a coaching child's `fence` policy, so a nested `sh`, `bg`,
+  `script`, `write` or `edit` call whose command or path the outer code computes at run time
+  (`cmd = paste('R CMD', toupper('install'), 'x');
+  peter$sh(cmd)`) meets the fence as the literal call would. The fence (`child_fence_why()`) denies
+  writes and edits outside the child's temporary folder, code gptr cannot read, installs, R child
+  processes, every `peter$script()` row and `script` call, a change of working folder to anywhere
+  but the run's own folder (D-284, D-297), file targets outside it, and reads of the CLI login files
+  and `find-generic-password`. It still fences only what the classifier sees (08 honest limit 1).
+- Contract-visible: 04 sections 7.6 and 15.11 IC-86, IC-89; 03 section 6.8.4.
+- Tests: test-agent-dispatch.R "nested sh, bg, script, write and edit calls meet every rules-like policy" (the
+  fence case); test-gptr-child.R "the fence denies writes outside, moving away from the folder, installs, R
+  processes", "the fence denies reading the CLI login files and the keychain (08 3.7)". Evidence: progress/P29.md
+  Task 9.
+
+## D-282 - P29 Plan limits are never retried; paid usage credits stop coaching (2026-10-28)
+- Rule (every `peter()` call): `run_retryable()` never retries `plan_limit`, `cli_check` or `model_refused`, nor a
+  plan's weekly or model-family limit named in text ("You've hit your Opus limit"); before, only the session limit
+  was excluded. On Claude Code a rejected `rate_limit_event` or such a result text ends the turn as
+  `gptr_error_plan_limit` (`reason = "limit"`, `resets_at`); on Codex an error naming a usage limit, empty credits
+  or a spend cap does, with the time Codex quotes.
+- Rule (coaching): in a coaching child a Claude session that starts drawing on paid usage credits
+  (`isUsingOverage`, or `errorCode` `credits_required`) is stopped at once (`reason = "overage"`). `gptr_coach()`
+  then starts nothing new (that plan's queued jobs end `skipped`), returns the starting harness with decision
+  `stopped` and the reason `stopped at <stage>: plan limit, resets at <time>`, records no block, and never waits for
+  a reset or resumes.
+- Contract-visible: 04 sections 2.2 and 15.11 IC-84, IC-86, IC-88.
+- Tests: test-agent-run.R "weekly and model-family plan limits and gptr's refusals are never retried";
+  test-cli-claude.R "a plan limit ends the turn with plan_limit and when the limit resets", "a plan limit through
+  peter() is not retried and signals gptr_error_plan_limit"; test-cli-codex.R "a Codex plan limit ends the exec as a
+  plan limit with its quoted reset time"; test-gptr-coach.R "a plan limit stops the call with the starting harness
+  and a record". Evidence: progress/P29.md Tasks 5 and 9.
+
+## D-283 - P29 Claude Code honours .opts$returns through the returns instruction (2026-10-28)
+- Rule (every `peter()` call): on the claude-cli route a request with `.opts$returns` ends its user line with
+  gptr's returns instruction (`adp_returns_instruction()`, P12; `pcli_claude_build()`), in every call, not only in
+  coaching. Formerly the route ignored the schema. The CLI has no native structured output, so gptr still reads and
+  validates the reply itself; a coach reply that fails gets one retry (IC-84).
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-claude.R "the claude route asks for `returns` at the end of the user line";
+  test-live-cli.R "a claude coach has no tools, answers in one turn and saves nothing" (live;
+  passes, 2026-10-28). Evidence: progress/P29.md Task 5.
+
+## D-284 - P29 A coaching run keeps its working folder and runs no `peter$script()` (2026-10-28)
+- Rule (working folder): the fence (`child_fence_why()`) denies a change of working folder to anywhere but the
+  run's own folder written as an absolute path (`child_home()`): the folder of `setwd()`, `withr::with_dir()`,
+  `withr::local_dir()` and `xfun::in_dir()` (a computed folder, or a changer passed on or named as text, counts as
+  elsewhere), every `wd =` argument, a tool call's input `wd`, and the target of each `cd`, `pushd`, `chdir` or
+  `Set-Location` in any string of the code, inside `sh -c '...'` too (`child_dirs()`, `child_cd()`). A subfolder
+  of the run's folder is denied as well: with one allowed, `with_dir("<run>/a", ...)` and then a `../` path that
+  resolves inside the folder before the move writes outside `tempdir()` after it. So the working folder never
+  moves, and file targets, a relative one now resolved against the run's folder (`project_root()`) and not
+  `getwd()`, hold. Formerly each literal `setwd()` was judged alone against the starting folder, so
+  `setwd(".."); setwd("..")`, `withr::with_dir()` and a shell `cd` escaped the fence. A string of the code that
+  begins with such a command word counts as a move even when it is only data.
+- Rule (scripts): the fence denies every `peter$script` row of `r` code and every `script` tool call ("it runs no
+  script with peter$script(), which may start R with code gptr cannot read"), and `nested_rules()` also judges a
+  nested `script` call and writes a nested `sh` call's `wd` into the code it judges, so a computed call meets the
+  fence as the literal one does. This is stricter than the review's proposal, which denied only an R or unknown
+  interpreter: R code never shows the interpreter, and the precise rule would add two more cross-layer edges
+  (`bridge_script_argv()`, `bridge_chr()`). A run can still use `peter$sh("python x.py")`. Amends D-281.
+- Contract-visible: 04 sections 7.6 (`dispatch_nested()`) and 15.11 IC-86, IC-89; 03 sections 6.8.4 and 6.19; 08
+  sections 3.2, 3.3 and 3.5 (honest limit 4).
+- Tests: test-gptr-child.R "the fence denies writes outside, moving away from the folder, installs, R processes",
+  "a run's child runs no R script and keeps its shell commands in its folder"; test-agent-dispatch.R "nested sh,
+  bg, script, write and edit calls meet every rules-like policy". Evidence: progress/P29.md Review fixes.
+- Amended by D-297 (F-54): a folder changer's name is a move only where R calls it, where
+  `do.call()`, `match.fun()` or `get()` names it, or where the classifier reads it passed on as a
+  value; `Set-Location` folds case on every OS.
+
+## D-285 - P29 Process-tree markers stay in `tempdir()` while R CMD check runs examples (2026-10-28)
+- Rule: `proc_dir()` is `tempdir()/gptr-procs` while `check_running()` is `TRUE` and testthat is not running, else
+  `R_user_dir("gptr", "cache")/procs`, so an example writes nothing outside `tempdir()`. Formerly the `\donttest{}`
+  example of `?gptr_coach`, which `--as-cran` runs, left `procs/` in the user's cache folder through its seven
+  processes, and R CMD check lists new files in that folder. Tests keep the user folder, which `setup.R`
+  redirects: under R CMD check their processes also carry `_R_CHECK_PACKAGE_NAME_`, and a per-process
+  `tempdir()` would hide a child's markers from its parent's sweep.
+- Contract-visible: 04 sections 3.2 (`_R_CHECK_PACKAGE_NAME_`), 7.4 (`proc_spawn()`) and 15.5 IC-60; 03 section
+  6.7; `cran-comments.md`.
+- Tests: test-proc-supervise.R "proc_dir() stays in tempdir() while R CMD check runs the examples". Evidence:
+  progress/P29.md Review fixes.
+
+## D-286 - P29 `gptr_coach()` refuses what a run cannot use and stops when no starting run worked (2026-10-28)
+- Rule (before anything starts): after the `gptr.unsafe_no_permissions` check, `coach_args_check()` refuses
+  `.run`, `background`, `.stdin`, `envir`, `parallel`, `choices`, `levels`, `threshold`, `min_confidence` and
+  `uncertain`, given in `...` or fixed in the harness, as `gptr_error_invalid_argument` with `arg` that name; it
+  checks `budget`, `replay` and `.opts` with `peter()`'s own `gateway_args()`, and tool names with
+  `prompt_tools_check()` when every `tools` entry is a name and no extension or plugin is given, leaving `mcp__`
+  names to the run's session. Formerly these reached every child, whose runs ended `error` (or idle after 0 turns)
+  while the coaches still spent their sessions.
+- Rule (after the starting runs): when every starting run ended `error` or took no turns, the call stops before
+  any coach with `gptr_error_invalid_argument` (`arg = "..."`): "The starting run failed, so gptr did not coach:
+  <the first one's error, else "it ended with an error." or "it took no turns.">". Formerly coaching built from
+  runs that never ran could be kept, since an idle, empty start and an idle, empty final pass `coach_passes()`. The
+  task as given cannot be coached, so the class is `invalid_argument`, and no class is added.
+- Contract-visible: 04 section 15.11 IC-84 (order step 4, loop step 1); 08 section 3.4; `?gptr_coach` (`...`).
+- Tests: test-gptr-coach.R "every refusal comes before anything starts", "starting runs that all failed or took no
+  turns stop the call before any coach", "tool names only a run's session can know are left to the run". Evidence:
+  progress/P29.md Review fixes.
+
+## D-287 - P29 Under replay, an offline coaching call with no block runs unrecorded (2026-10-28)
+- Rule: `gptr_coach()` sets `offline` on the call record it gives `doc.coach`: `TRUE` when `replay_guard()` in replay
+  mode accepts both the runs' model (`model =`, else the harness's fixed model) and the coach model, which the judge
+  also uses; a `NULL` (configured default) model is not offline. Under `replay`, a recordable coaching call with no
+  block whose record is `offline` gets `"none"` from `doc.coach` and coaches without recording, as offline models
+  answer `peter()` under replay. Formerly it signalled `not_recorded`, so the `\donttest{}` example of `?gptr_coach`
+  failed when run as a script under the check variables (forced replay, IC-45). A call with any model that is not
+  offline, a local server included, still signals `not_recorded`, and a stale block still signals `stale_block`.
+- Rule (answer): `doc.coach` returns `list(action, site, harness)`; the `reason` no caller read is gone, and the
+  one case a person must hear about, a statement of another shape, still says why in its notice.
+- Contract-visible: 04 sections 7.0 (`doc.coach`) and 15.11 IC-84 (order step 3), IC-87; 08 sections 3.4 and 3.6.
+- Tests: test-gptr-coach.R "the call record tells the document route whether every model is offline";
+  test-doc-coach.R "replay mode refuses a coaching call that has no recorded block" (and runs it offline).
+  Evidence: progress/P29.md Review fixes.
+
+## D-288 - P29 Coaching data: skill names, hidden characters and one note section per coaching (2026-10-28)
+- Rule (skill names): `coaching_skills()` refuses a coaching skill named like a registered skill or like any
+  `SKILL.md` that `skill_discover()` lists (project skills, trusted or not, the person's, gptr's, packages' and
+  plugins'), checked when a harness is made, loaded or coached (`coaching_validate(fresh = TRUE)`); a harness call
+  skips it (`harness_spec_check(fresh = FALSE)`). Formerly the check read only the registry, which fills when a
+  session syncs: before a sync a coaching skill replaced the person's skill of that name, and after it the same
+  harness was refused on every call. Untrusted project skills count, so trusting the project later cannot let a
+  coaching skill shadow one. `skill_discover()` (P17, L4) is a twelfth contract edge of area `gptr`
+  (`arch_contract_edges()`); amends D-279.
+- Rule (text): `coaching_text()` also refuses format (`\p{Cf}`), line and paragraph separator and tag (U+E0000 to
+  U+E007F) characters, the known way to hide instructions in text people review; console display
+  (`ui_escape()`) is unchanged.
+- Rule (note section): the factory registers the note as the prompt section `coaching_<coaching hash>`, and the
+  tag check refuses any `coaching_` name. Formerly every harness registered `coaching`, and a session keeps one
+  prompt section per name. The policies keep the names `coaching` and `harness_rules`: every policy applies
+  whatever its name, and `nested_rules()` selects them by name.
+- Contract-visible: 04 sections 12.2 (`helper-arch.R`) and 15.11 IC-83, IC-85, IC-86; 03 section 6.19; 08 section
+  3.2.
+- Tests: test-gptr-tailor.R "a coaching skill takes no skill's name, synced or not, and is checked when made",
+  "coaching_validate() refuses every invalid part by name (08 3.2)", "continuing with another coached harness
+  keeps both harnesses' coaching"; test-arch-layers.R "internal calls respect the layer table and the kernel SDK
+  (IC-33)". Evidence: progress/P29.md Review fixes.
+
+## D-289 - P29 A harness shows every fixed argument that is not plain data; HARNESS.md has no record (2026-10-28)
+- Rule (notice): `gptr_tailor()`, also as `gptr_tailor(readRDS(f))`, lists as R source every fixed argument that
+  is not plain data (`harness_plain()`: `NULL`, text, numbers, logicals and lists of them, with no attribute but
+  names), plus `mode = "yolo"`. Formerly it named only `extensions`, `plugins` and `mode = "yolo"`, so a tool's
+  `execute` function, an `uncertain` function, a provider built on a function or a function in `.opts` loaded
+  without a word, although 08 3.1 said loading shows any code the harness carries. `plugins = "name"`, plain
+  text, is no longer announced.
+- Rule (folder): `dir =` writes no record in `HARNESS.md`; `gptr_tailor()` always returns an empty record, so the
+  section always read "none".
+- Contract-visible: 04 section 15.11 IC-83; 08 section 3.1.
+- Tests: test-gptr-tailor.R "a harness that loads code or loosens checks says so when it is made", "dir = writes
+  the harness for people to read and returns it invisibly". Evidence: progress/P29.md Review fixes.
+- Amended by D-297 (F-57, F-60): the notice always lists the fixed `extensions` and `plugins`, text
+  included, and a fixed `.opts` holding `system`; `prompt` cannot be fixed.
+
+## D-290 - P29 A run's result reaches the parent within the reader's limits (2026-10-28)
+- Rule (encoding): `plain_encode()` keeps within `plain_decode()`'s limits: it counts depth from the result's
+  root and summarises at depth 20, and it threads one value count through the whole result, giving each value the
+  budget less one value for each later sibling, so no result holds more than 1e5 values; a list or data frame
+  that cannot fit becomes its printed summary. `child_result_new()` puts `value` and `objects` last, so every
+  other field is encoded whole first, and `child_main()` writes the result again with the value and each object
+  as its summary when the JSON is over 64 MiB (`plain_max$bytes`). Formerly a large or deep value (a list of
+  150,000 numbers, a 400,000 by 20 data frame) made the parent refuse the whole result, so the run read `error`
+  and its usage was lost. Amends D-278.
+- Rule (reading): `child_read()` checks the shape of every field, not only `status` and `risk`, and refuses a
+  mismatch as `gptr_error_untrusted`, which `child_exit()` turns into an error result for that job alone.
+  Formerly a forged two-element `text`, or `usage` with text columns, stopped the whole `gptr_coach()` call with
+  an error that did not explain itself.
+- Rule (task): the result gains `first_user`, the session's first user message alone (`child_text()`, clipped at
+  50,000 characters), which the coaches and the judge see as the task. Formerly the task was cut from the
+  transcript at the first blank line followed by `## `, which also cut a heading of the person's own prompt.
+- Contract-visible: 04 section 15.11 IC-84, IC-86; 08 section 3.3; the plan's interface 8.
+- Tests: test-gptr-child.R "a value too large or deep for the reader travels as its summary (08 section 3.3)", "a
+  run's result too large for the parent keeps all but its value and objects", "a result whose fields have the
+  wrong shape is refused, as a forged one is", "a run's result holds its first user message on its own";
+  test-gptr-coach.R "the coaches and the judge see the starting run's whole first message as the task". Evidence:
+  progress/P29.md Review fixes.
+
+## D-291 - P29 A keyed factory new to a frozen session refreezes its prompt (2026-10-29)
+- Rule: a keyed factory that `gateway_register()` loads into a session whose prompt is already
+  frozen (another harness on a continuation, or the same harness in a fork or resumed session this
+  process has not loaded it for) clears `.d$frozen` and sets `.d$refreeze`. The next request is then
+  composed afresh and carries every loaded harness's note and skills. A refused call restores both
+  (D-251). A continuation with a harness already loaded keeps the frozen prompt. A pending refreeze
+  is a stated break of the prompt cache: `gateway_continue_session()` calls `prefix_reset()`, so no
+  `cache_break` is recorded. The fresh composition uses the continuing call's preset and tool
+  modifiers. This is the one case where a session's frozen blocks change, an exception to 04
+  section 9.3. Formerly the second harness's note section never reached the frozen prompt, and a
+  later block naming it read stale (P29 commit `7655f88f`, review fix 11).
+- Rule (edge, DEC-28): a refreeze applies the continuing call's tool modifiers to the prompt only.
+  With `h2`'s fixed `tools = "-write"`, the refrozen prompt no longer lists `write`, while the tool
+  stays registered and callable, and `gateway_continue_session()` still says that tools cannot be
+  removed from a running conversation. Documented, no code change: a prompt that leaves out a tool
+  the session still has is the conservative side.
+- Contract-visible: 04 sections 9.3, 15.2 IC-52 (`gptr_resume(path)`) and 15.11 IC-85 (Factory); 03
+  section 6.19 (The call); 08 section 3.1 (Continuations).
+- Tests: test-gptr-tailor.R "continuing with another coached harness keeps both harnesses'
+  coaching". Evidence: progress/P29.md Review fixes item (11); progress/fixes.md FIX-48.
+
+## D-292 - FIX-37 A project inside a protected folder classes paths below its root (2026-10-29)
+- Rule (DEC-5, ledger L-1): `path_class_one()` classes a path inside the project by its part below
+  the project root, so a protected name (`.git`, `.claude`, `.aws`) counts only below the root.
+  Formerly a project inside a protected folder, such as Claude Code's `.claude/worktrees/<name>`,
+  made every path protected: every read was level 3, every delete level 4, and `setwd('.')` asked in
+  every mode. A protected folder inside the project is still protected, and so is every path outside
+  it. F-80's checkpoint filter (D-298) reads `path_class()`, so without this rule such a project
+  would capture nothing.
+- Contract-visible: `gptr_risk()`'s `path_class` and levels in such a project (03 section 6.8.1;
+  `?gptr_security`).
+- Tests: test-utils-paths.R "a project in a protected folder classes a path by its part below the
+  root (D-292)". Evidence: progress/fixes.md FIX-37 (F-10).
+
+## D-293 - FIX-37 Loops, listings, moves, working folders and computed commands (2026-10-29)
+- Rule (loops and listings, DEC-6, F-9; amends D-211): a `for` variable takes the folded values of
+  its sequence, so `for (f in c('/tmp/a')) unlink(f)` reads that path, and `list.files()` and
+  `dir()` with `full.names = TRUE` and `fs::dir_ls()` of a literal folder fold to a file in it
+  (`file.path(d, "x")`, the plan's glob `file.path(d, "*")` not needed), `Sys.glob()` to its
+  pattern. A deleter handed to `lapply()`, `Map()` or `purrr::walk()` stays a path the code computes
+  (level 3), as `?gptr_security` says. D-211's "a `for` variable" among the computed names no longer
+  holds for a loop over a vector the classifier folds.
+- Rule (computed commands, DEC-7, F-20; ledger L-3): `pipe()`, `processx::run()` and
+  `data.table::fread(cmd =)` with a command the code computes are refused in auto and yolo, as a
+  computed `system()` is (D-262); the rest of L-3 stays documented.
+- Rule (working directory, DEC-8, F-16, F-6, F-15): after the arguments of `withr::with_dir()` and
+  `xfun::in_dir()` the tracked directory is where R was, so a later relative `setwd()` is read
+  there. `here::here()` of literal parts folds to the project root. A computed directory that R
+  moves back to reads level 3: `with_dir()`, `in_dir()`, and `owd = setwd(d); ...; setwd(owd)` or
+  `owd = getwd()`, where the name counts as saved only in the scope that saved it (`local()`
+  restores the saved set, a function body starts with none) and only when the code binds it no other
+  way anywhere (another value, a loop variable, a formal, a replacement, `<<-`, `assign()`,
+  `list2env()`, an assignment inside `eval()`, `evalq()`, `with()` or `within()`, or a masked
+  `setwd` or `getwd`). `setwd(owd)` to any other computed directory stays level 4, and the branch
+  and loop forms of the idiom (`if (p) owd = setwd("data")`) read 3. Relative paths after a move are
+  read in the directory R is in. A directory with more than 64 candidates is one the code computes
+  (level 4, not the plan's 3), so the classifier's time no longer doubles with each branched
+  `setwd()`. Residual: `assign()` or `list2env()` rebinding a saved name inside a loop after the
+  read is seen in walk order only.
+- Rule (moves, DEC-9, F-19; ledger L-5): the source of `file.rename()`, `fs::file_move()`,
+  `os.rename()` and `shutil.move()` is a delete, as the shell's `mv` already was; one rule for every
+  language.
+- Rule (partial names, F-18; ledger W6-1): an argument named in part is matched by partial name
+  against the formals of the table's package functions when the namespace is not loaded, so a
+  reading no longer depends on load state; the plan proposed hand-written formals.
+- Contract-visible: `gptr_risk()` levels, paths and rows; the computed-command refusal
+  (`?gptr_security`, NEWS); 03 section 6.8.1.
+- Tests: test-perm-classify.R "a for loop over a vector and a listing of a folder are read as its
+  files (D-293)", "with_dir() and in_dir() leave R where it was (D-293)", "here(), a restored
+  directory and paths after a move are read (review F-6)", "more directories than a reading follows
+  are one the code computes (D-293)", "a move deletes its source in R, Python and the shell alike
+  (D-293)", "an argument named in part is read while its namespace is not loaded (review F-18)";
+  test-perm-gate.R "only auto and yolo refuse a computed command; a literal one is gated as before".
+  Evidence: progress/fixes.md FIX-37.
+
+## D-294 - FIX-37 Permission rules and the classifier's stated limits (2026-10-29)
+- Rule (`sh:` globs, DEC-2, F-4): an `sh:` glob matches the command as written, with `(?i)` on macOS
+  and Windows, as D-147's ignore rules do; options placed before a subcommand (`git -C dir push`)
+  are not matched. No second matching model on the classifier's (program, subcommand) reading.
+- Rule (relative `cd`, DEC-1, F-8): a relative `cd` target is joined to the directory the line moved
+  to last; later commands are still read in the union of the line's folders, so
+  `cd sub && rm -rf ../build` asks in auto and yolo (telling `&&` from `;` needs a new token kind).
+- Rule (Python text, DEC-4, F-17): `risk_python()` reads no comment and no `chdir(` inside a string;
+  code holding a triple-quoted string is read whole, with its comments, and the comment strip
+  honours backslash escapes. D-061's literal scan of command lines in quoted text stays, so
+  `system("echo 'rm -rf /'")` reads 4 (it catches `ssh host 'rm -rf ~'`).
+- Rule (tool-name rules, DEC-11, F-22; ledger V6S-3): a tool-name rule (`deny = "script"`) names a
+  tool the model calls, never a `peter$` member, served or not.
+- Rule (forms not read, DEC-3, F-88): `glue` and `cli` template braces are not read as code; the
+  classifier is advisory and such code is not written by accident. `?gptr_security` lists them with
+  the other limits this pass keeps.
+- Contract-visible: `?gptr_permissions`; `?gptr_security`; 04 section 15.4 IC-57.
+- Tests: test-perm-rules.R "sh: globs match in any case where file names do (D-294)";
+  test-perm-classify.R "a relative cd moves from the directory the line moved to last (D-294)",
+  "Python comments and a chdir( in a string are no code (D-294)". Evidence: progress/fixes.md FIX-37
+  and FIX-44.
+
+## D-295 - FIX-38 A failed secret scan asks; command lines are sources; children redact (2026-10-29)
+- Rule (fail closed, F-1): `risk_secret_scan()` returns no findings only for text that does not
+  parse, which never runs. When code parses and `secret_scan()` fails on it, the block gets one
+  guarded finding (rule `secret_scan_failed`) at level 4, not the plan's 3: yolo asks only for level
+  4 or a flow, and a failed scan cannot rule out a secret sent over the network.
+- Rule (command lines, DEC-14, F-28; ledger V6S-1): when the code starts a process (the process
+  functions or `peter$sh()`, `peter$bg()`, `peter$script()`), its strings are read with the
+  classifier's environment-name pattern `risk_env_name_re` (`$NAME`, `${NAME}`, `$env:NAME`,
+  `%NAME%`, `os.environ`, `getenv()`): a registered name, in any letter case, is
+  `secret_env_registered`, and each word `scan_env_file()` matches is a `secret_file`. Both are
+  sources for the secret-to-network question and taint the names they are assigned to, so a send
+  asks in every mode, also split over two `r` calls. Only registered names count.
+- Rule (gptr's store, DEC-12, F-29): `scan_env_file()` also matches a file named `auth.json`,
+  wherever `tools::R_user_dir()` puts it, so a read of gptr's credential store through a computed
+  path is guarded and asks in auto; `~/.codex/auth.json` is guarded too. Other secret files
+  (`~/.ssh`, `~/.aws`, `~/.netrc`) stay level 3 without the guard. The rest of gptr's config folder
+  holds no secret, so no rule covers it.
+- Rule (children, DEC-13, F-86, F-53): a worker's spec and a coaching child's spec carry, as
+  `secrets`, only the parent's registered redacting secrets whose values occur in the data the child
+  is sent (`secrets_held()`: the shipped objects, and for a coaching child its jobs and their
+  objects file), and the child registers them inactive (redaction only: no credential lookup, no
+  literal rewrite) before it starts. DEC-13 said to ship the parent's registered values; shipping
+  all of them would put provider keys in `spec.rds`, which IC-70 forbids (test-secrets-e2e.R "worker
+  spec and result files and worker output carry no key" failed with that version), and registering
+  them active let a child resolve a credential it was not given (fixed at integration, `c9a60b0c`).
+  Formerly a registered secret inside a shipped object reached the child's model raw.
+- Contract-visible: `?gptr_security` (secret reads, environment dumps, `auth.json`); 04
+  sections 15.8 IC-70 and 15.11 IC-86 (`secrets`); 08 section 3.3.
+- Tests: test-perm-classify.R "a secret scan that fails on code that parses is a guarded level 4
+  (D-295)"; test-perm-gate.R "a secret scan that fails asks a person in auto and yolo (D-295)";
+  test-auth-secrets.R "a command line that reads a registered secret or a .env file is a source
+  (FIX-37)", "gptr's credential store is a guarded read, through a computed path too (FIX-37)";
+  test-secrets-e2e.R "yolo asks before a command line's or ps_environ()'s secret is sent (FIX-37)",
+  "auto refuses a secret read beside an empty argument or of auth.json (FIX-37)";
+  test-subagent-worker.R "a registered secret in a shipped object reaches the worker's model
+  redacted"; test-gptr-coach.R "a registered secret in a run's objects reaches its child's model
+  redacted (D-295)". Evidence: progress/fixes.md FIX-37, FIX-38, FIX-42 and FIX-45.
+
+## D-296 - FIX-43 The person's own !code output prints as R prints it (2026-10-29)
+- Rule (DEC-16, F-93; amends D-245): the output, messages and warnings of the person's own `!code`
+  and `!!code` print as R prints them: live, at R's width and wrapped by the terminal. Only the
+  error row and the closing blank row use the console margin. The agent's `r` tool keeps the margin
+  and width 100. `eval_open()` echoes into the margin only for guarded (agent) code; no option.
+  Formerly the person's output was held until each top-level expression ended and cut at the console
+  width while R printed at width 100.
+- Contract-visible: D-245's output vocabulary for `!code`; `?peter` (the console paragraph);
+  `repl_passthrough()`'s note.
+- Tests: test-eval-core.R "the person's own code prints as R does, the agent's in the console margin
+  (D-296)"; the `!code` tests of test-console-repl.R. Evidence: progress/fixes.md FIX-43.
+
+## D-297 - FIX-41 Harnesses: the fence's folder rule, the Codex hook, the load notice (2026-10-29)
+- Rule (fence, DEC-30, F-54; amends D-284 and IC-86): a folder changer's name (`setwd`, `with_dir`,
+  `local_dir`, `in_dir`) is a move only where R calls it, where `do.call()`, `match.fun()` or
+  `get()` names it, or where the classifier reads it passed on as a value that leaves the project or
+  goes to a folder the code computes. Ordinary code that only names one (`lapply(dirs, setwd)`
+  aside) is no longer denied. `Set-Location` folds case on every OS. The `cd`-word string rule of
+  D-284 stays as documented.
+- Rule (computed paths and functions, DEC-24, F-58; landed in FIX-49): the fence denies `dynamic`
+  rows and `file_write` or `file_delete` rows with `path_class` `unknown`, coaching only. Its first
+  commit `6879ea8d` refused `write.csv(x, "out.csv")` and its kin to a literal path, because the
+  classifier read every unnamed argument as a possible path and kept the worst, so `d3bef645`
+  reverted it. FIX-49 reads the literal path (an unmatched named path argument marks `one`, computed
+  candidates drop when some are read, a level tie keeps the worse class, a named option in `...` is
+  no path) and reverts `d3bef645` (`a0bbe5ed`). So `Filter(Negate(is.null), l)`,
+  `fun = mean; fun(1:3)` and `do.call(f, list(1))` are refused in coaching runs as functions the
+  code computes. Residual, a documented limit (IC-86, 08 section 3.5 limit 4): where R cannot
+  place the path argument by position, a non-empty literal passed by position is read as the path,
+  so `write.csv('a', file.path(d, 'x.csv'))` reads a workspace write and passes.
+- Rule (Codex hook, DEC-27, F-59): `inst/gptr/codex_hook.R` denies by printing Codex's `PreToolUse`
+  decision (`hookSpecificOutput`, `permissionDecision` `"deny"` with its reason) on stdout and
+  exiting with status 0, which no shell changes, and keeps its log line. Formerly it exited with
+  status 2, which Windows PowerShell, Codex's shell there, reports as 1, a failed hook that does not
+  block. The Windows test runs the hook through `powershell.exe`; it has not run on a Windows host
+  with Codex (a release step).
+- Rule (load notice and `prompt`, DEC-26, F-57, F-60; amends D-289 and IC-83): the notice always
+  lists the fixed `extensions` and `plugins`, text included (a file path there is R code sourced on
+  every call), and a fixed `.opts` holding `system`, besides every fixed argument that is not plain
+  data and `mode = "yolo"`. `prompt` cannot be fixed: `harness_formals()` leaves it out, so
+  `gptr_tailor(peter, prompt = ...)` and a loaded spec that fixes it are
+  `gptr_error_invalid_argument`, while `gptr_coach(prompt = ...)` still takes it. A harness is
+  called exactly like `peter()`, and each call's prompt is its task.
+- Rule (hidden characters, DEC-25, F-71): coaching text keeps the one conservative rule, no format
+  character (zero-width joiners included), and `?gptr_tailor` says so: a script or emoji sequence
+  that needs U+200C or U+200D cannot appear in coaching.
+- Contract-visible: 04 section 15.11 IC-83, IC-86 and IC-88 and the `model_refused` row of
+  section 2.2; 08 sections 3.3, 3.5 and 3.7; `?gptr_tailor`.
+- Tests: test-gptr-child.R "the fence reads a folder changer's name as a move only where R calls
+  it", "the fence refuses R code that writes to a path or calls a function it computes";
+  test-cli-codex.R "the Codex hook writes its start line and lets a run use only gptr's tools",
+  "the hook command in the argv runs through the shell, logs its start, denies a tool";
+  test-gptr-tailor.R "the notice names extension files, plugins and a replaced system prompt".
+  Evidence: progress/fixes.md FIX-41, FIX-42 and FIX-49.
+
+## D-298 - FIX-43 Output caps, checkpoint scope, lock age and the compaction wait (2026-10-29)
+- Rule (output cap, DEC-32, F-79): `proc_run()` and `bridge_run()` kill the process tree once a
+  redirect file passes `proc_output_cap` (64 MiB per stream), checked in the existing 200 ms loop;
+  the text keeps the first 40% and the last 60% of the cap, cut at whole UTF-8 characters, and ends
+  with `[output exceeded 64 MB; process tree killed]`. No option. Formerly 150 MB of output cost 2.2
+  GB of memory and a spill file of that size.
+- Rule (checkpoint scope, DEC-33, F-80): `ckpt_files_baseline()` and `ckpt_capturable()` skip paths
+  whose `path_class()` is `protected` or `control`, so `.env`, `.Renviron`, `.Rprofile`, `renv.lock`
+  and keys are never stored and a rewind's row for one reads "no pre-image", as writing them is
+  already a level-4 question. It needs D-292. Cost: `path_class()` takes about 0.31 ms a path (5,000
+  files: 1.57 s of a 2.16 s baseline); classifying only the rows under the size cap was rejected,
+  since protected rows (copies under `.claude/worktrees`) would use up the budget first.
+- Rule (locks, DEC-38, F-104; amends IC-59): a lock holder that its pid and creation time prove
+  alive holds the lock whatever its heartbeat's age; a dead one is stale; the 24 h heartbeat age
+  applies only to a holder that cannot be checked (no creation time, or an unknown process state).
+  Formerly an idle attached session lost its lock after 24 h, and a second process could resume it
+  without `split_brain`. `ckpt_foreign_lock()` applies the same rule with the L0 process helpers, so
+  `ckpt_gc()` keeps the blobs of a live idle holder past 24 h (integration `0a3a6cd2`, `541ca003`).
+- Rule (compaction wait, F-91): after a threshold compaction on a known window the next one waits
+  until the context grew by 20% of the threshold (`min(window, threshold)`, which is the threshold),
+  as the unknown-window rule already measured against the cap; formerly 20% of the window, so
+  `compact_at = 20000` on a 1e6-token window let the context grow by about 200k.
+- Contract-visible: 04 sections 11.4 and 15.5 IC-59 (locks) and 15.8 (the compaction floor row);
+  `?gptr_rewind` and `?gptr_security` (protected files); the 64 MB status line.
+- Tests: test-proc-spawn.R "proc_run() output past 64 MiB keeps its head and tail and a status
+  line"; test-bridge-sh.R "peter$sh() output past 64 MiB ends with the status line";
+  test-ckpt-files.R "protected and control files are never stored; their rows have no pre-image";
+  test-session-live.R "a live holder keeps its lock after 24 h idle; an unverifiable one does not";
+  test-compaction-acceptance.R "compact_at bounds the context after the first compaction on a large
+  window". Evidence: progress/fixes.md FIX-43 and FIX-45.
+
+## D-299 - FIX-44 Extensions: plugin ranks and paths, reloads, MCP trust and merging (2026-10-29)
+- Rule (plugin rank, DEC-44, F-113): settings plugins enable and list at the plugin rank 5, not 3,
+  so a user skill wins over a settings plugin's skill of the same name, as the documented order
+  says; formerly they tied and the order of registration decided.
+- Rule (relative plugins, DEC-46, F-118): a `./` or `../` entry of the `plugins` setting is resolved
+  against the project root, as `skills.paths` is (`?gptr_config`).
+- Rule (reload, DEC-47, F-114): `gptr_reload()` keeps only the loaded (`TRUE`) entries of
+  `res_state()$loaded`, so an extension file that failed to load is tried again at the next session
+  start.
+- Rule (trust-gated MCP files, DEC-45, F-83): the project MCP files of other applications,
+  `.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`, `.vscode/mcp.json` and `.pi/mcp.json`, are
+  trust-gated paths (`trust_gated_paths()`, so `trust_resources_present()` too): a pulled change
+  asks again, and a project holding only `.mcp.json` asks the trust question.
+- Rule (gptr's own MCP writes, F-82): `gptr_mcp_add()` and `gptr_mcp_remove()` at project scope take
+  `trust_holds()` before the locked write of `.gptr/mcp.json` and `trust_carry()` with the sha256 of
+  the bytes written, as `settings_write()` does, so the project stays trusted. P18 (`mcp-config.R`,
+  L4) calls these two P08 (L6) functions, two contract edges of the layering test
+  (`arch_contract_edges()`).
+- Rule (merging foreign servers, F-109, F-110, F-111): foreign servers merge by transport, command,
+  args, url, env, headers and cwd, fields of zero length ignored, so an empty `env` or `headers`
+  object is the same server as none; their tool-list cache key adds env and cwd (stdio) or headers
+  (HTTP) only when present, so keys of servers without them are unchanged. A colliding name becomes
+  `<harness>_<name>`, then `_2`, `_3` until unique, and no entry is lost. In an untrusted project
+  every project source ranks after every user source, and gptr's own-file shadowing applies only
+  between gptr's two files.
+- Contract-visible: 04 sections 7.18 (`mcp_config_all()`), 10.1 (ranks), 11.9 (the MCP cache keys),
+  12.2 (`helper-arch.R`) and 15.2 IC-52; `?gptr_trust`, `?gptr_config`, `?gptr_reload`; NEWS.
+- Tests: test-ext-plugins.R "a user skill wins over a settings plugin's skill of the same name
+  (F-113)", "a relative plugins entry is found from the project root (F-118)"; test-ext-load.R
+  "gptr_reload() retries an extension file that failed to load (F-114)"; test-mcp-config.R "the MCP
+  files of other harnesses in a project are trust-gated (F-83)", "gptr's own project mcp.json writes
+  keep the project trusted (F-82)", "foreign servers that differ only in env, headers or cwd stay
+  apart (F-109)", "an empty env or headers object is the same server as none (F-109)", "colliding
+  foreign names are made unique; no entry is lost (F-110)", "an untrusted project's servers never
+  take a user server's name (F-111)". Evidence: progress/fixes.md FIX-44.
+
+## D-300 - FIX-48 Decisions of the comprehensive review taken without a code change (2026-10-29)
+- Rule (classifier costs, DEC-10; ledger L-62, L-63): the documented variable changes the classifier
+  does not read and the accepted false refusals and questions stay as they are.
+- Rule (console output, DEC-15; ledger R6-SS-6): output the console does not indent is not filtered
+  for secrets; only a tee that shows output at flush points could, which ends live output.
+- Rule (documents, DEC-19, DEC-20, DEC-22; F-43, F-46; ledger L-60): blocks stay independent:
+  regenerating a stale turn leaves later turns' blocks as they are, and a later turn that depends on
+  it is re-asked with `replay = "live"` on that call (the review proposed `"record"`, under which a
+  fresh block replays; `36badf5c`). Only blank lines may separate a call's statement from its
+  blocks; skipping comment lines would conflict with the `#~` undone statements and
+  `gptr_export()`'s run count. `gptr_source(model =)` stays, and applies to every `peter()` or
+  harness call the file asks again; `gptr_coach()`, team and fan-out calls keep their models.
+- Rule (provider timing and routes, DEC-41, DEC-43; F-132, F-165): the idle timeout stays 90 s;
+  `?gptr_options` and the language-models guide suggest `options(gptr.idle_timeout = 300)` for
+  high-effort reasoning on OpenAI or Google, and one live request at the highest effort is a release
+  step. System 1 classifier calls inside a coaching child are allowed and not gated by the model
+  gate: they send only the judged values and keep the egress check; 08 section 3.3 says every chat
+  model request is gated.
+- Rule (costs, DEC-49; F-121): on claude-cli models the dollar figures stay the CLI's API-equivalent
+  estimate, not a charge, and cost limits use them, as `?gptr_usage` says.
+- Rule (security texts, DEC-51, DEC-52, DEC-63; F-88; ledger records-7): `gptr_step()`,
+  `gptr_wait()` and `gptr_export()` get no row in `risk-functions.csv`: an unlisted function reads
+  level 1, and `gptr_export()` from model code is refused at run time (`doc_control_guard()`).
+  `gptr_models(refresh = TRUE)` and `gptr_providers(check =, check_login =)` stay level 0 in plan
+  mode (no key is sent; only gptr's cache is written), and `?gptr_security` says plan mode's
+  read-only does not mean no network or process. The worker reads its child's result with
+  `readRDS()` (R/subagent-worker.R:537; the CVE-2024-27322 pattern before R 4.4, and the exported
+  objects are R objects by design); `?gptr_security` says so, and a two-line R 4.4 guard is added
+  only if model code in a worker is shown to overwrite the result path under auto.
+- Rule (browser close, DEC-35; ledger FIX-35 F2 and F3): F3's retry stays, since it lets a pending
+  lease recover, and F2 is closed: the close fails closed at its 10 s deadline, and open and close
+  took 0.55 s and 0.40 s at loads of 30 to 60.
+- Rule (processx floor, DEC-36; ledger L-58): the floor stays 3.8.0 and a job's end time stays an
+  upper bound; raising it for `get_end_time()` would narrow the install base before the first
+  submission for a sub-second gain.
+- Rule (release, DEC-59, DEC-60, DEC-61, DEC-62): #93 merges first, then the pkgdown deploy (the
+  README links `articles/tailor-and-coach.html`), then the incoming check with remote URLs,
+  win-builder and R-hub on the final tarball, then the submission; no README workaround. No P29 test
+  file joins the CRAN test list, whose 35 files reach all but 12 R files. `cran-comments.md`'s
+  numbers are a submission-day checklist, with no test pinning them. The six pages of session S3
+  methods get no examples (registered methods, not exports).
+- Rule (records, DEC-64, DEC-65): FIX-27..FIX-36 and the long D-262, D-267 and D-272 entries are not
+  condensed (dev/ is outside the package, and the ledger cites them by line). P29h, the live
+  calibration of coached against starting harnesses (08 Part 4), is not part of 1.0: deferred, with
+  D-275's wording kept.
+- Contract-visible: `?gptr_doc`, `?gptr_source`, `?gptr_options`, `?gptr_usage`, `?gptr_security`;
+  08 sections 3.3 and 3.5 (limit 8) and Part 4; `cran-comments.md`; dev/HANDOFF.md's Remaining.
+- Tests: none (no code change). Evidence: progress/fixes.md FIX-40, FIX-43, FIX-44, FIX-45 and
+  FIX-48; progress/open-findings.md.

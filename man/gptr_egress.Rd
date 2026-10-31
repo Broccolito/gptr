@@ -29,6 +29,10 @@ instruction files (\code{AGENTS.md}, \code{CLAUDE.md}, \code{.gptr/vignette.Rmd}
 \item Tool results: the printed output of R code the model ran, the parts of files it read, and
 images of plots it made. In \code{manual} mode every action that is not known to be read-only
 needs your approval before its result can be sent.
+\item With \code{\link[=gptr_coach]{gptr_coach()}}, each coach gets the task, the current coaching and, for each run, its
+answer, a summary of its value and objects, the text of the files it wrote and its
+transcript, up to 50,000 characters each; the judge gets the task and what each final run
+delivered. The coach model can differ from the runs' model.
 }
 
 A System 1 question (a classifier model such as Jev) sends the inputs themselves: each
@@ -37,7 +41,9 @@ description of larger objects, and for a piped session its last answer (at most
 \code{gptr.s1_state_max} characters). Do not ask System 1 questions about data that may not leave
 your machine.
 
-Registered secrets are replaced by markers before anything is sent.
+Registered secrets, and their URL-encoded, JSON-escaped and base64 forms, are replaced by
+markers before anything is sent; a copy the code changes in another way, such as reversed or
+cut, is not recognized.
 }
 
 \section{Limiting automatic context}{

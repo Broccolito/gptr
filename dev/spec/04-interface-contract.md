@@ -49,7 +49,7 @@ made to `03` and `05` so that the three documents agree.
 
 | Id | Decision | Reason / evidence |
 |---|---|---|
-| IC-01 | **63 exports**: the 62 of `03` §4.4 plus the S3 generic `gptr_preimage()` (P16). | `03` §6.16 and §11.1 promise "plugins add `gptr_preimage()` S3 methods"; delayed registration `S3method(gptr::gptr_preimage, cls)` from a package that only Suggests gptr needs an exported, documented generic, exactly like `gptr_describe()` [G7 §4.6, G1 §3.1 row 13]. |
+| IC-01 | **Exports**: those of `03` section 4.4 plus the S3 generic `gptr_preimage()` (P16); NAMESPACE holds the count. | `03` sections 6.16 and 11.1 promise "plugins add `gptr_preimage()` S3 methods"; delayed registration `S3method(gptr::gptr_preimage, cls)` from a package that only Suggests gptr needs an exported, documented generic, exactly like `gptr_describe()` [G7 section 4.6, G1 section 3.1 row 13]. |
 | IC-02 | (amended by IC-34/IC-69: 38 kinds in all, P02 defines 37 and P22 adds `interpreter`; §10.2.) A 31st registry kind, **`route`** [experimental], carries the gateway routes (classifier, nested, console, team, fan-out, document, continue, new). P02 defines 30 kinds (the 29 of `03` §11.1 other than `interpreter`, plus `route`); P22 defines `interpreter` through the `kind` meta-kind. | `03` §2.2 rule 1 and 05 "Registration without shared lists" require routes to be registry records contributed by their owning plans; no kind existed for them. |
 | IC-03 | Event names follow D-25's rule (Pi-derived where the semantics match): **`session_shutdown`** replaces `session_end`, **`session_before_compact`** / **`session_compact`** replace `pre_compact` / `post_compact`. | D-25, G1 §3.2 (Pi's names); `03` §5.4 used Claude-style names that D-25 reserves for the v1.x importer. |
 | IC-04 | The permission **combination** `perm_check()` (policies, `permission_request` hooks, UI, non-interactive stop) lives in `agent-dispatch.R` (P06); `perm-gate.R` (P11) owns the built-in **policies** (mode table, rules, critical guard, secret guard, protect size) and `builtin:permissions`; the UI's `permission()` method (console prompt) is in `console-ui.R` (P11). | `03` §3.2 gave "policy combination" to P11 while P06's dispatcher must already gate fail-closed at M1; the split keeps the kernel complete and the policies pluggable (S-11). |
@@ -228,10 +228,10 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `stale_api` | - | `plugin`, `generation` | extension API methods (P02) | API object used after `gptr_reload()` or unload |
 | `conformance` | - | `results` (`gptr_check` df) | `gptr_check(error = TRUE)` (P02) | a conformance check failed |
 | `not_available` | - | `member`, `provided_by` | `ctx$<member>()`, `ext_service_get()` (P01) | the service's plan is not loaded or disabled |
-| `readonly` | - | `object`, `field` | `$<-`/`[[<-` on sessions and `peter` (P06, P08) | state changes must use verbs |
-| `unknown_member` | - | `name`, `available` | `$.gptr_gateway`, `$.gptr_ns` (P10, P18) | `peter$nope` |
+| `readonly` | - | `object`, `field` | `$<-`/`[[<-` on sessions, `peter` and harnesses (P06, P08, P29) | state changes must use verbs; a harness is changed by making a new one with `gptr_tailor()` (IC-83) |
+| `unknown_member` | - | `name`, `available` | `$.gptr_gateway`, `$.gptr_ns`, `$.gptr_harness` (P10, P18, P29) | `peter$nope`; a harness has only `$coaching`, `$record` and `$report` (IC-83) |
 | `noninteractive` | - | `what`, `questions` | `peter()` (P08), `gptr_init()` (P08), `gptr_login()` (P18), the `ask` tool in a non-interactive `manual` run (P11; status `blocked`) | needs a human and none is present (`gptr_can_prompt()` FALSE) |
-| `permission` | - | `action`, `tool`, `risk`, `how_to_allow`, `session` | `perm_check()` (P06) via the run | an `ask` without a human (NS-12); status `blocked` |
+| `permission` | - | `action`, `tool`, `risk`, `how_to_allow`, `session` | `perm_check()` (P06) via the run; `gptr_coach()` (P29) | an `ask` without a human (NS-12); status `blocked`; `gptr_coach()` under `options(gptr.unsafe_no_permissions = TRUE)`, or when every starting run stopped for an approval (IC-84) |
 | `provider` | - | `provider`, `model`, `status`, `request_id`, `error_type`, `session` | `peter()` routes (P08) after the run ends in `error` | provider failure after retries |
 | `auth` | `provider` | as `provider` | P04/P12 | 401/403 |
 | `rate_limit` | `provider` | + `retry_after` | P04 | 429 exhausted |
@@ -256,7 +256,7 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `missing_package` | - | `package`, `feature` | any Suggests use (all) | a Suggests package is needed and absent |
 | `no_key` | - | `provider`, `variables` | P05 | no credential found for a provider |
 | `egress` | - | `provider`, `how_to_ack` | P08 (`egress_check()`) | first non-interactive use without an acknowledgement |
-| `untrusted` | - | `what`, `path`, `origin` | P03, P08, P17, P18 | handle for a wrong origin; project resource used without trust |
+| `untrusted` | - | `what`, `path`, `origin` | P03, P08, P17, P18, P29 | handle for a wrong origin; project resource used without trust; a coaching child's result that is not plain data of the fixed shape (`what = "coaching result"`, `plain_bad()`, IC-86) |
 | `unknown_model` | - | `ref`, `suggestions` | P05 | a model reference cannot be resolved |
 | `invalid_identifier` | `invalid_argument` | `arg`, `class` | P08 | an identifier argument bound to a non-character, non-spec value |
 | `not_recorded` | - | `document`, `prompt` | P15 | `replay` mode and no recorded block |
@@ -265,6 +265,9 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `secret_found` | - | `findings` (df, no values) | P03 (`gptr_scrub(error = TRUE)`) | persisted files contain a registered secret (IC-70) |
 | `redaction_limit` | - | `limit` (characters, no input) | P03 (`redact_stream()`) | an unresolved sensitive candidate exceeds the hold-back cap; the stream fails closed |
 | `doc_write` | - | `path`, `reason` | P15 | a document write failed or was blocked and the caller asked for strictness |
+| `doc_export` | - | `reason` | `gptr_export()` (P15, `doc-export.R`) | every refusal of an export; the reason names what blocks it, never input content |
+| `io` | - | `operation`, `path` | `artifact-app.R` (P23), `auth-childenv.R` | a private file or folder could not be made, or the owned headless browser could not start or finish its cleanup |
+| `state_restore` | - | `env_restored`, `package` or `member` (`mcp_serve` adds `stopped`, `refs_released`) | `auth-oauth.R`, `bridge-lang.R`, `mcp-server.R`, `tool-read.R`, `utils-hash.R` | the environment a dependency's setup changed could not be restored, or a served MCP stop could not be confirmed |
 | `s1` | - | `status`, `error_type`, `request_id`, `model` | P13 | System 1 failure, parent of the next rows |
 | `s1_auth`, `s1_validation`, `s1_rate_limit`, `s1_overloaded`, `s1_connection`, `s1_response` | `s1` | as `s1` | P13 | classified as in 04 §4.12 (scalar calls; vectorised calls give `NA` + one warning) |
 | `s1_uncertain` | `s1` | `index`, `names` (`NULL` for unnamed input), `confidence`, `prob`, `min_confidence`, `value` (every answer) | P13 | `uncertain = "stop"` inside the uncertain band; the message names the first ten inputs |
@@ -275,6 +278,10 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `mcp_tool` | `mcp` | `server`, `tool` | P18 | a tool call returned `isError` (raised inside R code, so the model sees an R error) |
 | `cli_missing` | - | `cli` | P20 | the `claude`/`codex` binary was not found |
 | `cli_version` | - | `cli`, `found`, `required` | P20 | below the minimum version |
+| `coaching` | - | `part` (`note`, `skills`, `review`, `rules`, `coaching` or `surface`) | `coaching_validate()`, `coaching_rules()` (P29) through `gptr_tailor()`, a harness call, `gptr_coach()` and a coach block's replay | coaching or a person's rules that fail a check; the message names the part (IC-85, IC-89) |
+| `model_refused` | - (`provider` when it ends a run) | `reason` (`router`, `classifier`, `process`, `cli_version`, `cli_preflight`), `model` or `cli` | `coach_model_kind()`, `pcli_codex_preflight()` and, on Windows, `pcli_codex_hooks()` (P29), also as a coaching child's model gate | a model `gptr_coach()` may not use; on Windows, a path of the Codex hook command with no short (8.3) form free of spaces and of the signs PowerShell or cmd.exe read (`cli_preflight`, IC-88) |
+| `plan_limit` | `provider` | as `provider`, + `reason` (`limit`, `overage`), `resets_at` (text, `NA` when unknown) | `cli-claude`, `cli-codex` (P29) | a Claude or ChatGPT plan's session, weekly or model limit, or, in a coaching child, a Claude session drawing on paid usage credits; never retried (IC-88, D-282) |
+| `cli_check` | `provider` | as `provider` | `cli-claude`, `cli-codex` under `the$coach_role` (P29) | a coaching session failed a per-session check; the CLI is stopped and its reply discarded (IC-88) |
 | `process` | - | `command`, `status`, `stderr` (tail, redacted) | P04, P22 | a child exited non-zero with `check = TRUE` |
 | `spawn` | - | `command` | P04 | a child could not be started |
 | `artifact` | - | `id`, `stage`, `log` (tail) | P23 | a validation-ladder stage failed |
@@ -283,16 +290,19 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `token_regression` | - | `fixture`, `metric`, `baseline`, `value` | `dev/bench` (P24) | a benchmark ratchet failed |
 | `internal` | - | `detail` | any | a broken invariant (a bug) |
 
-Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02), `two_prompts` (P08;
-two unnamed string literals), `partial_name` (P08; a named context dot abbreviates a `peter()` argument its value
-fits, D-251), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
-`doc_conflict` (P15; md5 conflict after three attempts), `s1_errors` (P13; failed elements in a vectorised call;
-field `errors`),
-`readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
-when `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs in live
-session entries; field `counts`), `untrusted_setting` (P08; `gptr_config()` saved keys an untrusted project does
-not apply; fields `keys`, `path`; D-250), `unknown_model_setting` (P08; `gptr_config()` saved a model setting
-that does not resolve; fields `key`, `ref`; D-250).
+Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02),
+`two_prompts` (P08; two unnamed string literals), `partial_name` (P08; a named context dot
+abbreviates a `peter()` argument its value fits, D-251), `replay_downgraded` (P15; live/stale
+regeneration downgraded under `source()`), `doc_conflict` (P15; md5 conflict after three attempts),
+`s1_errors` (P13; failed elements in a vectorised call; field `errors`), `readline_limit` (P14),
+`plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only when
+`options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs
+in live session entries; field `counts`), `untrusted_setting` (P08; `gptr_config()` saved keys an
+untrusted project does not apply; fields `keys`, `path`; D-250), `unknown_model_setting` (P08;
+`gptr_config()` saved a model setting that does not resolve; fields `key`, `ref`; D-250),
+`state_restore` (as the error, when a setup failed and its environment could not be restored
+either), `cli_sandbox` (P20, `cli-codex.R`; Codex's Windows sandbox is not ready, so the route runs
+read-only, or a check of the project's control files after a Codex turn found changes).
 
 Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), `egress_ack` (P08, IC-71), `s1_split` (P13; once per
 session when a data frame is split into several states, naming `I(x)`),
@@ -412,7 +422,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `GPTR_MCP_TOKEN` | P18 | the variable `gptr_mcp_serve()`'s Codex snippet reads its bearer token from; gptr sets it in no process (IC-79) |
 | `GPTR_SHELL_CMD` | P22 (Windows cmd route) | set in the outer cmd child to the quoted line its inner cmd runs; reserved: a caller may not set it (D-229) |
 | Provider keys | P05 (vault discovery, P03) | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `XAI_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY`, `VLLM_API_KEY`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` (not secret), `AWS_BEARER_TOKEN_BEDROCK`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` (`bedrock-converse` records, IC-80), `TYPESAFE_API_KEY` (aliases `jev-key`, `JEV_KEY`, `JEV_API_KEY`, `TYPESAFE_KEY` through `gptr_env()`) |
-| `_R_CHECK_PACKAGE_NAME_`, `_R_CHECK_LIMIT_CORES_` | P01 `check_running()` | forced replay outside testthat (examples; IC-45), child pools capped at 2, no supervision |
+| `_R_CHECK_PACKAGE_NAME_`, `_R_CHECK_LIMIT_CORES_` | P01 `check_running()` | forced replay outside testthat (examples; IC-45), child pools capped at 2, no supervision, process-tree markers under `tempdir()/gptr-procs` outside testthat (D-285) |
 | `GPTR_PROJECT_ROOT` | P01 `project_root()` | overrides the project root (tests; IC-63) |
 | `TESTTHAT` | P08 `replay_mode()` | `"true"` under testthat: no forced replay |
 | `jupyter.in_kernel` (option) | P01 `gptr_can_prompt()` | IRkernel answers `readline()` (IC-43) |
@@ -643,7 +653,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 | `gptr.frozen` | P07 | `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model, mode}`; first entry of every session, so resume reproduces the byte-exact prefix; `mode` is the session's mode at the freeze, the mode a rebuild starts from (D-251) |
 | `gptr.mode_change` | P06 | `{from, to, source}` |
 | `gptr.value` | P06 | `{turn, mode: "name"\|"copy"\|"box", name, address, class, bytes}` (never the value) |
-| `gptr.doc_block` | P15 | `{doc, format, block, action: "insert"\|"replace"\|"stale-regenerate"\|"undone", prompt, sha, lines: [from, to], backend: "file"\|"deferred"\|"rstudio"\|"positron"\|"vscode"\|"transcript"}` |
+| `gptr.doc_block` | P15 | `{doc, format, block, action: "insert"\|"replace"\|"stale-regenerate"\|"undone", prompt, sha, lines: [from, to], backend: "file"\|"deferred"\|"rstudio"\|"positron"\|"vscode"\|"transcript", model, mode}`; `model` and `mode`: a console turn's model reference (`provider/id[:thinking]`, `router:<name>`) and mode at the end of the turn, which the next statement of its session in that transcript is compared with (D-265); read with `[[` |
 | `gptr.replay` | P15 | `{doc, block, mode, turn, value}` (appended by `session_replay_apply()`/`session_replay_new()`, IC-46) |
 | `gptr.decision` | P13 | `{question, type, model, alias, n, summary, answers: [...] (at most 50), probs: [...], cached: int}` |
 | `gptr.checkpoint` | P16 | G7 §3.1 shape (object names, addresses, sizes, classes, capture mode; file paths, hashes, modes; state names; artifact `current` before/after); never values |
@@ -1019,7 +1029,7 @@ All are `c("gptr_<name>", "gptr_listing", "data.frame")`, built by `new_listing(
 
 ---
 
-## 6. Exported API (63 names)
+## 6. Exported API
 
 Every export has roxygen docs with `@param`, `@return` and an `@examples` block that runs offline on CRAN: examples
 use `gptr_fake_provider()`, `envir = new.env()`, `tempfile()` directories and never keys, network, processes or
@@ -1386,7 +1396,7 @@ gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL,
 
 With no rule arguments: returns a `gptr_permissions` data frame of all rules in effect (session, project
 `settings.json`, the user-level project file, user). With `allow`/`ask`/`deny` (chr of rules in the §6.8.2 grammar
-of `03`, e.g. `"write(results/**)"`, `"r(fn:write.csv,saveRDS)"`, `"r(level<=1)"`, `"r(sh:git status*)"`,
+of `03`, e.g. `"write(results/**)"`, `"r(fn:write.csv,saveRDS)"`, `"r(level<=1)"`, `"r(sh:git push*)"`,
 `"r(sql:select)"`, `"mcp__github__*"`) adds them; `remove` removes matching rules. `scope`: `"session"` = this R
 process; `"project"` = the user-level project file `R_user_dir("gptr", "config")/projects/<hash>.json` (personal,
 never in the project tree, IC-52); `"user"` = the user settings file. Called from model code during a run it is a
@@ -1537,12 +1547,14 @@ gptr_doc(FALSE)
 #### `gptr_source()` — P15, `doc-replay.R` [stable]
 
 ```r
-gptr_source(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(), echo = FALSE)
+gptr_source(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(), echo = FALSE,
+            model = NULL)
 ```
 
 Sources `file` top-level expression by expression in `envir` so that stale or live blocks regenerate without
 executing the old block (which base `source()` cannot do [14 §4.4.2]); fresh blocks replay (their code runs as
-ordinary R). Returns `invisible(<gptr_blocks>)` with an extra `action` column (`replayed`, `regenerated`, `ran`,
+ordinary R). `model` (`NULL` or a model reference): every call of the file the `document` route passes to be
+asked (`call$ids$model`) uses it instead of the model it names or its session has (FIX-33, D-268). Returns `invisible(<gptr_blocks>)` with an extra `action` column (`replayed`, `regenerated`, `ran`,
 `skipped`). Conditions: `invalid_argument`, `not_recorded`, `stale_block` (replay mode), plus whatever the sourced
 code signals. Side effects: those of the sourced code; document writes for regenerated blocks. Copy-safety:
 [R1][R2].
@@ -1602,6 +1614,20 @@ Conditions: `invalid_argument` (unknown id), `artifact`, `missing_package` (shin
 ```r
 gptr_artifacts()                      # an empty listing when no artifact exists
 ```
+
+#### `gptr_export()` — P15, `doc-export.R` [stable]
+
+```r
+gptr_export(file, to, format = c("r", "peter"))
+```
+
+Writes a deterministic copy of a synchronized, recorded document to `to`: `"r"` keeps each block's
+recorded R with its Peter statement commented, `"peter"` keeps the statements active (D-258).
+`format` is matched exactly (`check_choice()`). Every named argument of an exported Peter statement
+must be one literal, a top-level `<name> = gptr_tailor(...)` statement is ordinary code, and a
+refusal is `gptr_error_doc_export` naming what blocks it, the first non-literal argument included
+(section 15.3 IC-49, section 15.11 IC-87, FIX-40). Model code cannot call it during a run
+(`doc_control_guard()`).
 
 
 ### 6.5 Session SDK
@@ -2243,6 +2269,7 @@ owner; other plans read it only through the owner's functions (INFRA-15: no run 
 | `doc_binding`, `doc_pending` | P15 | console document binding; deferred Rscript writes |
 | `mcp_conns`, `mcp_server`, `mcp_tokens` | P18 | MCP connections; the running `gptr_mcp_serve()` server; bearer token -> session id (IC-58) |
 | `bg` | P21 | background pump state |
+| `coach_role`, `model_gate`, `coach_reports`, `registry_session_parent` | P29 | `NULL`, `"run"` or `"coach"` in a coaching child (`cli-common.R`); `NULL` or the function `provider_stream()` calls with the resolved model record (`provider-registry.R`); the last 5 coaching reports by harness id (`gptr-coach.R`); the live-session parent lookup behind `registry_session_ancestors()`, installed by `session-live.R` (`ext-registry.R`) (IC-84, IC-86, IC-88, IC-89) |
 
 Services (IC-09) are named functions registered with `ext_service_set(name, fun, provided_by, builtin)` (P01, §7.1)
 by their provider plan in an `on_load()` expression, and fetched with `ext_service_get(name)` (signals
@@ -2267,10 +2294,12 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `doc.edit` | P15 | `edit` tool (P10) | `function(path, edits, session) <gptr_tool_result> or NULL` (NULL: not a bound document) |
 | `doc.s1_block` | P15 | top-level System 1 calls (P13) | `function(call, summary) invisible(NULL)` (writes the one-line block) |
 | `doc.replay` | P15 | `team` and `fanout` routes (P19) | `function(call) <session> or NULL`: the replayed team or fan-out session for a fresh block, else `NULL` (IC-47) |
+| `doc.coach` | P29 (`doc_coach_service()`, `doc-replay.R`; owned by `builtin:documents`) | `gptr_coach()` (P29), before anything else | `function(call) list(action, site, harness)`: `call` is a `call_new()` record of the coaching call with `start_hash` and `offline` (`TRUE` when `replay_guard()` accepts every model of the call); `action` is `"replay"` (a fresh block; `harness` is the one it builds), `"ask"` (a stale block under `auto` while a person can answer; `harness` is the block's), `"record"` (pass `site` to `doc.coach_block`) or `"none"`; under `replay` a recordable call without a fresh block signals `not_recorded` or `stale_block`, except an `offline` call without a block, which gives `"none"` (IC-87, D-287) |
+| `doc.coach_block` | P29 (`doc_coach_block_service()`, `doc-replay.R`; owned by `builtin:documents`) | `gptr_coach()` (P29) | `function(site, harness, record) <gptr_harness>`: writes the coach block (a console transcript: the harness's `h_<id>` definition) through `doc_upsert()` and returns the harness the written body defines (IC-87) |
 | `checkpoint.note` | P16 | permission detail view (P11) | `function(call, run) chr(1) or NULL` ("cannot be undone: ...") |
 | `checkpoint.own_write` | P16 | P15's own document writes (`doc_own_write()`: `doc_write()`, an IDE backend's save of a clean buffer) | `function(path, write) value`: runs `write()`, gptr's own write of `path`; a files tracker that saw `path` as it was just before takes the new content without recording it, so no turn's undo reverts it |
 | `agent_def.get` | P17 | `gptr_agent()` (P02) | `function(name, file = NULL) <spec:agent>` |
-| `skill.catalog`, `skill.body` | P17 | `skills =` preloads (P08/P07), `peter$search()` (P10) | `function(session, budget) chr(1)`; `function(name) list(text, dir)` |
+| `skill.catalog`, `skill.body` | P17 | `skills =` preloads (P08/P07), `peter$search()` (P10), `read` of `skill:<name>/...` (P10) | `function(session, budget) chr(1)`; `function(name, session = NULL) list(text, dir, name)`: `session` (a session or its id) also finds the skills registered for that session; a skill that carries its own `text` returns that text and `dir = NULL` (P29, IC-85) |
 | `plugin.enable` | P17 | `peter(plugins =, extensions =)` (P08) | `function(name, rank, session = NULL) invisible(lgl(1))` |
 | `templates.sync` | P17 | the console's `/help`, its `/` completion (P28) and a command name not registered (P14), so templates work before a session starts and one saved since is found (D-252) | `function() invisible(NULL)`: what `builtin:prompts`' `session_start` hook does (settings plugins enabled, templates and their commands synced) |
 | `mcp.catalog` | P18 | `peter$search()` (P10) | `function(session, budget) chr(1) or NULL` |
@@ -2304,8 +2333,8 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_opt(name)` | the option value or the §3.1 default (`NULL` for settings-backed options) | all |
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
-| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`), then sets the call's again (IC-76) | P11, P14, P26 |
-| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0` for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment, so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
+| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `paste` and `-paste` among `modes` are gptr's own (D-263): bracketed paste's `ESC [ ? 2004 h` after stty, `ESC [ ? 2004 l` before it, through `gptr_message_write()`, never into a tool's output, and alone they run no stty; `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`; bracketed paste off first, D-263), then sets the call's again (IC-76) | P11, P14, P26 |
+| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0 paste` (bracketed paste on, D-263) for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` (a Ctrl-C byte in a batch holding a bracketed-paste marker, read while a paste is open up to 2 s after its last read, or read on the polling beat right after such a batch with no empty read between, is pasted text, FIX-28 review rounds 1, 3, 4 and 6) and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; every switch to the saved modes (`tty_restore()`, `tty_question(TRUE)`, `gptr_readline()`) adds `-paste` where the call's set has `paste`, so readline never reads with the mode on, and `tty_isig_on()` and `tty_isig_off()` leave it on, while `eval_restore()` turns it on again after the code of an evaluation that turned isig on, once its capture is lifted, as GNU readline 8.1+ turns it off when a read of the code ends (FIX-28); `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment, so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
 | `tty_query(query, ms = 1500)` | `chr(1)`: the terminal's answer to `query` (IC-82, P28 Task 25): `stty -icanon -echo min 0 time 0` on fd 0 (the saved modes restored on exit), `query` written to stdout, then fd 0 read until a DA1 reply (`ESC [ ? ... c`) arrives or `ms` milliseconds pass; `""` when stty fails (mockable); the T REPL's background probe (`repl_background()`) | P28 |
 | `tty_unreply(x)` | `chr`: `x` without OSC replies (`ESC ] ... BEL` or `ST`) and DA1's `ESC [ ? ... c`, so a terminal's late answer to the background probe is never typed text (IC-82; `repl_background()`, `console_compose()`) | P28 |
@@ -2363,7 +2392,7 @@ eol = "\n" | "\r\n", bom = lgl(1), encoding = chr(1), final_newline = lgl(1))`, 
 | `save_rds(object, file, compress = FALSE, refhook = NULL)` [R7][leaf] | `saveRDS(object, file, ascii = FALSE, compress = compress, refhook = refhook)`; the only `saveRDS` of user data | P16, P19, P23 |
 | `serialize_leaf(object, xdr = TRUE)` [R7][leaf] | `serialize(object, NULL, ascii = FALSE, xdr = xdr)` | P16 |
 | `path_norm(path)`, `path_rel(path, root = project_root())` | normalised absolute / root-relative paths (symlink-safe: the deepest existing ancestor is resolved) | P10, P11, P15, P16 |
-| `path_class(path, root = project_root())` | chr: `workspace`, `temp`, `outside`, `protected`, `control` (level 4, IC-54), `instructions` (level 3, IC-54), `critical`, `url`, `wildcard`, `unknown` [18 §3.8] | P10, P11, P16 |
+| `path_class(path, root = project_root())` | chr: `workspace`, `temp`, `outside`, `protected`, `control` (level 4, IC-54), `instructions` (level 3, IC-54), `critical`, `url`, `wildcard`, `unknown` [18 §3.8]; a drive-relative path (`D:x`) is `outside` on every OS (D-262) | P10, P11, P16 |
 
 **`utils-text.R`**
 
@@ -2541,7 +2570,7 @@ The reactor API is specified in §8.2. Process engine (`proc-spawn.R`, `proc-sup
 
 | Function | Contract | Consumers |
 |---|---|---|
-| `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "\|", stderr = "\|", cleanup_tree = TRUE, supervise = supervise_default())` | a `processx::process` created with `encoding = "UTF-8"` (IC-60) and a tree marker under `R_user_dir("gptr", "cache")/procs/` for the orphan sweep; `command` resolved with `Sys.which()` (R itself only through `rscript_path()`); `.cmd`/`.bat` run as `cmd.exe /d /c call <shim> args` refusing `% ^ & \| < > " !` CR LF in any argument (`gptr_error_invalid_argument`); argv, wd and env through `os_bytes()`; `stdin = NULL` is the null device, `"\|"` a pipe | P18, P19, P20, P22 |
+| `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "\|", stderr = "\|", cleanup_tree = TRUE, supervise = supervise_default())` | a `processx::process` created with `encoding = "UTF-8"` (IC-60) and a tree marker under `R_user_dir("gptr", "cache")/procs/` for the orphan sweep (`proc_dir()`; under `tempdir()/gptr-procs` while R CMD check runs examples, `check_running()` and not testthat, D-285); `command` resolved with `Sys.which()` (R itself only through `rscript_path()`); `.cmd`/`.bat` run as `cmd.exe /d /c call <shim> args` refusing `% ^ & \| < > " !` CR LF in any argument (`gptr_error_invalid_argument`); argv, wd and env through `os_bytes()`; `stdin = NULL` is the null device, `"\|"` a pipe | P18, P19, P20, P22 |
 | `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` | runs to completion with stdout/stderr redirected to temp files (never `processx::run()`), a `p$wait(200)` loop, `on.exit(kill_all(p))`; returns `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))` decoded as UTF-8 with the code-page fallback | P20, P22 |
 | `shell_resolve(cmd)` | `list(command, args)` for a string command: Unix `/bin/sh -c`; Windows Git Bash, else PowerShell `-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand <base64 UTF-16LE>` (`shell_ps_encode()`: exit 0 when the line's last command succeeded, else `$LASTEXITCODE` if nonzero, else 1; on Windows a `PostCommandLookupAction` gives a bare name that resolves to an extensionless file the first program of that name with an extension, or none, so the name is not found, as in cmd), else `list(command, args, env)`: `cmd /d /v:on /s /c "chcp 65001 >nul & "<COMSPEC>" /d /s /c !GPTR_SHELL_CMD!"` (verbatim args) with `env = c(GPTR_SHELL_CMD = "\"<line>\"")`, which the child environment must set; a caller may not set `GPTR_SHELL_CMD` [G5; D-229; D-235] | P22 |
 | `write_all(p, data)` | queues chr (as `charToRaw(as_utf8(x))`) or raw for the child's stdin; the reactor drains the buffer non-blockingly with `write_input()` (which writes at most about 8 KB per call), reading stdout/stderr between attempts, within `gptr.stdin_timeout` (`gptr_error_timeout` otherwise); outside the reactor it loops the same way (IC-60) | P18, P19, P20 |
@@ -2671,9 +2700,9 @@ blocked hint of `perm_check()`).
 | Function | Contract | Consumers |
 |---|---|---|
 | `dispatch_tools(run, calls)` | executes a turn's tool calls in source order; for each: lookup (unknown, or not in the tools the session offered the model, the frozen array and every `tool_change` addition -> error result `Tool <name> not found`; D-248), `tool_validate()`, `tool_call` hooks, `perm_check()`, checkpointers' `before`, execute (sequential tools through `reactor_enqueue_tool()`; concurrent ones as reactor work), checkpointers' `after`, `tool_result` hooks; never throws; a `length`/`refusal` stop fails every call unrun; returns `list(results = list(<gptr_tool_result>), terminate = lgl(1))` | P06 |
-| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78), runs without a second prompt; otherwise `perm_check()`; the command of a `sh` or `bg` call meets the deny and ask rules first, whatever its level, as the literal call would, an ask offering no `[a]lways` rule (D-251); records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
+| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78) and reads no registered secret the outer analysis did not show (a member's `env` handing one to a child, D-267), runs without a second prompt; otherwise `perm_check()`; the command of a `sh` or `bg` call (in its `wd`) or the path of a `script` call, as the `r` code that runs it, and the input of a `write` or `edit` call meet the deny and ask rules first, whatever their level, as the literal call would, with the registered secrets its `env` hands the child (review round 6): `nested_rules()` asks every policy named `rules`, `coaching`, `harness_rules` or `fence` and keeps the strictest answer (`perm_strictest()`; allow answers are not applied; D-280, D-281, D-284, IC-89), an ask rule asked in `perm_check()`'s one question with the call's other reasons (its `extra`, D-267), offering no `[a]lways` rule (D-251); records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
 | `tool_validate(tool, input)` | `schema_validate()` of the tool's `parameters`; `{"INVALID_JSON": raw}` when the final strict parse failed | P06, P18 |
-| `perm_check(call, run)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)` (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`, which names where the run's mode came from, `opts$mode_from`, and while knitting says knitting cannot ask instead of "run interactively"), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
+| `perm_check(call, run, extra = NULL)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)`, and `extra`, an opinion decided for the call elsewhere (a nested call's ask rule, D-267) (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`, which names where the run's mode came from, `opts$mode_from`, and while knitting says knitting cannot ask instead of "run interactively"), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
 | `tool_result_message(result, call)` | the `tool_result` message of §4.4 | P06, P20 (through the injected `opts$tool_result`, IC-33) |
 
 Example calls:
@@ -2732,6 +2761,7 @@ compact_threshold(200000, max_output = 64000)
 | `nframe` | int(1) | `sys.nframe()` of the `peter()` frame |
 | `top_level` | lgl(1)\|NA | set by P15's locator (`NA` until then) |
 | `doc` | list\|NULL | document site set by the `document` route |
+| `sent` | named list\|NULL | the context blocks (`user_ran`, `user_files`) a re-asked block's `#< ` lines record, set by the `document` route (IC-49) |
 
 Functions (P08):
 
@@ -2836,9 +2866,9 @@ diff_lines(c("a", "b"), c("a", "c"))
 | `gptr_risk()` (service `risk.classify`) | `perm-classify.R` | §6.6; `kind = "command"` uses `inst/extdata/risk-commands.csv` (G5 levels), `"sql"` and `"python"` keyword classifiers; tables are data (`risk_table(kind)`) extendable by plugins through `setting` specs | P10 (through the service), P22, P23 |
 | `code_targets(code)` | `perm-classify.R` | the one parse walk shared by the classifier and the checkpointer [G7 §3.4]: `list(assign, modify, byref, remove, super, files, unknown, process, calls = df(fn, package, line))` (chr each, never evaluating) | P11, P16 |
 | `rule_parse(rule)` | `perm-rules.R` | `list(tool, kind = "any" \| "glob" \| "level" \| "fn" \| "category" \| "sh" \| "sql" \| "secret", value)` or `gptr_error_invalid_argument` | P11, P14 (`/permissions`) |
-| `rule_match(rules, call)` | `perm-rules.R` | `list(deny = chr, ask = chr, allow = chr)`: matched rules; allow `r(fn:..)`/`r(category:..)` match only if **every** flagged call (level >= 1) is covered; deny/ask match if **any** is | P11 |
+| `rule_match(rules, call)` | `perm-rules.R` | `list(deny = chr, ask = chr, allow = chr)`: matched rules; allow `r(fn:..)`/`r(category:..)` match only if **every** flagged call (level >= 1) is covered; deny/ask match if **any** flagged row is, level 0 included; `sh:` and `sql:` specs read a row's command without the `via f(): ` labels of the functions read on the way, and an `sh:` glob ending in ` *` also matches the command alone (D-267) | P11 |
 | `rule_suggest(call)` | `perm-rules.R` | chr(1) rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`), or `NULL` (never for level 4) | P11, P14 |
-| `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
+| `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`; in every mode it denies `r` code `eval_guard()` refuses, with the guard's text less its leading `Not run: ` and its `Nothing was evaluated.` as its reason, D-269; in auto and yolo it denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command the code computes, a `dynamic` row that is no `<fn>(): ` reading, unless an `r(fn:)` allow rule covers those rows, D-262), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
 | `builtin_plan(gptr)` | `perm-plan.R` | registers the `plan` policy (writes denied, level-1 R allowed only because the run evaluates in the scratch overlay), the plan-mode `agent_end` hook (captures the last `<proposed_plan>...</proposed_plan>`, saves `<root>/plans/<YYYY-MM-DD>-<slug>.md`, sets `.d$plan`, stores the pending plan under `home_address(home)` with the time, appends `gptr.plan`, offers the execute menu interactively), the plan-mode allowlist check (only calls known to be read-only run, IC-54), and the `plan.pending` service (returns the plan once, only to the next top-level `peter()` call of the same process and environment within one hour; any other call in between discards it; IC-56) | P02 load |
 | `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt shows the call's first line cut to the console width, `(+N more lines)`, a path tool's change from its input (IC-77 in §15.10) and at most 5 flagged calls, one per line (IC-53, D-187, D-222) | P02 load |
 | `builtin_ask(gptr)` | `tool-ask.R` | registers the `ask` direct tool (schema §9.2) with `available = function(ctx) ctx$has_ui()`; result text as 18 §3.6 (`The user answered:` lines; cancellation and non-interactive texts) | P02 load |
@@ -2848,8 +2878,11 @@ Choice labels and details escape line feeds, and all other control/bidi/zero-wid
 retained. Permission approval displays keep the separate IC-53 escaping rules.
 
 **Permission request record** (argument of `ui$permission()` and payload of `permission_request`):
-`list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths), risk =
-<gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, undo_note = chr(1) | NULL (from the
+`list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths, a nested
+command and its other inputs, redacted, D-267), risk =
+<gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, no_rule = chr(1) | NULL (why
+a question offers no `suggested_rule`: the reason of the ask rule that asks it, FIX-32 review round
+4), undo_note = chr(1) | NULL (from the
 `checkpoint.note` service), session = chr(1), turn = int(1), nested = lgl(1), tier = "ask" | "ask_human")`
 (IC-53). IC-77 adds `agent = chr(1)`, who asks: `"main"`, a sub-agent's name, or for a nested
 `peter()` call the first line of its prompt quoted and cut to 30 characters, then ` #k`, its place among the
@@ -2933,7 +2966,7 @@ policy(function() session_run(s, msg_user("go"), list()), list(), mode = "call")
 | `builtin_documents(gptr)` | `doc-formats.R` | registers `doc_format` specs `r`, `rmd`, `qmd`, `ipynb`, `transcript`; the route `document` (order 50); the `documents` prompt section (IC-68); an `agent_end` hook that renders and writes the block when `run$opts$doc` is set; a `session_tree` hook that makes undone blocks inert; the services `doc.site`, `doc.edit`, `doc.s1_block` and `doc.replay` (owned by `builtin:documents`, so filtering it removes them, IC-34, IC-47) | P02 load |
 | `doc_locate(call)` | `doc-locate.R` | a site `list(kind = "srcref" \| "source_frame" \| "knitr" \| "quarto" \| "jupyter" \| "rscript" \| "ide" \| "console", path, format, stmt = int(2) \| NULL, expr = call \| NULL, occurrence = int(1), ordinal = int(1), backend = chr(1), top_level = lgl(1), in_block = chr(1) \| NULL (the agent block whose body holds the statement, IC-47), ide_id = chr(1) \| NULL, defer = lgl(1))` using the precedence of §6.9.3 of `03`; `source()` frames are read inside `tryCatch` only when `gptr.doc_source_frames` is `TRUE`; paths compared with `path_key()` | P15 |
 | `doc_decide(site, prompt_hash, args_hash, mode)` | `doc-replay.R` | `"replay"`, `"run"`, `"regenerate"`, `"skip"` (undone), or signals `not_recorded`/`stale_block` per the table of 14 §4.4.2 plus the undone row of G7 §3.8; a block is fresh only when both hashes match (IC-45); block-nested calls replay from S2 (IC-47) | P15 |
-| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of successful `record = TRUE` `r` calls from `details$code` minus top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members, with top-level `gptr_return(<expression>)` rewritten to `.gptr_value_<block id> = (<expression>)` and top-level `<-` to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
+| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of the `r` calls that ran and are recorded, IC-48, from `details$code` minus top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members, with top-level `gptr_return(<expression>)` rewritten to `.gptr_value_<block id> = (<expression>)` and top-level `<-` to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
 | `doc_upsert(site, block_lines, block_id = NULL)` | `doc-blocks.R` | checks write consent (IC-45; otherwise nothing is written), then idempotent insert/replace of the owned block through the site's backend, passing the `document_write` event (fail closed, patchable) first; md5 conflict check with re-locate and retry (3 times, then warning `doc_conflict`); deferred under Rscript through the sidecar of IC-51; never writes an open notebook (IC-50); returns `list(action, block_id, lines, backend)` and appends `gptr.doc_block`; caches child texts in S2 (IC-47) | P15, P16 |
 | `prompt_hash(template)`, `args_hash(interp)` | `doc-blocks.R` | 12 hex of sha256 of the normalised template (trimws, CRLF -> LF, whitespace around newlines removed); 8 hex of sha256 of the sorted interpolated `name=value` pairs, `NULL` without interpolation (IC-45) | P15 |
 | `s2_get(key)`, `s2_put(key, record)` | `doc-replay.R` | the S2 answer cache (§11.9) | P15 |
@@ -2968,6 +3001,7 @@ ckpt_predict("pbmc = FindClusters(pbmc, resolution = 0.8); unlink('tmp.csv')")
 |---|---|---|---|
 | `builtin_skills(gptr)`, `builtin_prompts(gptr)`, `builtin_agents(gptr)` | `skill-discover.R`, `skill-templates.R`, `subagent-defs.R` | register discovered `skill`, `prompt_template`, `agent` specs (declarative, rank by location), one `command` spec per template, the `skills` section (T1, order 820) and the services `skill.catalog`, `skill.body`, `agent_def.get`, `plugin.enable`, `templates.sync` | P02 load |
 | `skill_discover(scope = "all")` | `skill-discover.R` | df of skills from the roots of 16 §4.8 (`.gptr/skills`, `.agents/skills`, `.claude/skills` of trusted projects; user directories under `user_home()`; attached packages' `inst/gptr/skills` and `inst/skills`; plugin `skills/`), bounded walk; untrusted project skills are listed but never catalogued (IC-52); names compared with `name_norm()` (IC-42) | P17 |
+| `skill_body(name, session = NULL)` (service `skill.body`) | `skill-discover.R` | `list(text, dir, name)`: a file skill's body without frontmatter plus the line naming its `skill:<name>/<path>` pseudo-paths, its directory and canonical name; a skill spec that carries its own `text` (P29) returns that text and `dir = NULL`, and `read` serves it as `skill:<name>/SKILL.md`, the only path it has (`skill_file_path()`); `session` also finds the skills registered for that session, so a skill a harness registers is found in its session only, not in its sub-agents (IC-85) | P08, P10, P29 |
 | `skill_parse(path)` | `skill-discover.R` | `<spec:skill>` from `SKILL.md` frontmatter (lenient yaml: `name`, `description` <= 1,024 characters, `disable-model-invocation`, `allowed-tools`; string keys keep their source text against YAML 1.1 coercion, IC-71) or `NULL` + diagnostic; the catalog shows `[skill:<name>/SKILL.md]` pseudo-paths that `read` resolves (IC-68) | P17 |
 | `template_expand(text, args)` | `skill-templates.R` | Pi's template grammar (`$ARGUMENTS`, `$ARGUMENTS[N]`, `$N`, `${@:N}`) [05 §3.7] | P17 (the `command` specs `builtin:prompts` registers for templates, so the console only dispatches commands) |
 | `agent_file_parse(path)` | `subagent-defs.R` | `<spec:agent>` from a Claude-compatible `.md` agent file (frontmatter `name`, `description`, `model`, `tools`, `skills`, `backend`; body = system text); tool names mapped by `tool_name_map()` | P17, P19 |
@@ -2990,7 +3024,7 @@ plugin_resolve("gptrpanel")
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `builtin_mcp(gptr)` | `mcp-namespace.R` | registers the `mcp` namespace provider, the `mcp` section (T1, order 840), per-tool `direct` tool specs at session freeze, `mcp_server` specs from configs, the services `mcp.catalog`, `mcp.dispatch_local` | P02 load |
-| `mcp_config_all(project = project_root())` | `mcp-config.R` | list of server specs (§11.7 shape) with `source`, `trusted`, `also_in` | P18 |
+| `mcp_config_all(project = project_root())` | `mcp-config.R` | list of server specs (section 11.7 shape) with `source`, `trusted`, `also_in`; foreign entries merge when transport, command, args, url, env, headers and cwd agree (a field of length 0 counts as absent), a colliding name becomes `<harness>_<name>`, then `_2`, `_3` until unique, and in an untrusted project every project source ranks after every user source (D-299) | P18 |
 | `mcp_connect(spec)` | `mcp-client.R` | a `gptr_mcp_conn` (era probe with `gptr.mcp_probe_timeout`, cached per spec hash for 7 days; stdio through `proc_spawn()` with `child_env("mcp")` + the spec's expanded `env`, stderr read by gptr and appended redacted to `tempdir()/gptr/mcp-logs/` unless `gptr.mcp_debug`, IC-70; HTTP on the reactor with `followlocation = 0L`) | P18 |
 | `mcp_tools(conn, refresh = FALSE)` | `mcp-client.R` | list of `list(name, title, description, input_schema, annotations)` (paginated; disk cache `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json`) | P18 |
 | `mcp_call(conn, tool, args, timeout = NULL, on_progress = NULL)` | `mcp-client.R` | `list(content, structured, is_error, text, images, elapsed)`; progress re-arms the idle timer; timeouts and interrupts send `notifications/cancelled`; MRTR at most 5 rounds (elicitation through `ui$questions()`, roots = the project directory, sampling refused) | P18 |
@@ -3354,17 +3388,21 @@ tokens only when the fuzzy fallback, EOL or encoding normalisation changed what 
 `Tool <name> not found`; validation failure: `Invalid arguments for <tool>: <errors>`; denial: `Permission denied:
 <reason>. <how to proceed>`, and one that carries the person's text (`n <text>`, IC-77 in §15.10): `The user declined
 this call and said: "<text>". This is the user's own instruction: do that instead; any call it needs is approved
-separately.`; hook block: `Tool execution was blocked: <reason>`; interrupted tool: `Interrupted after
+separately.`; a denied top-level or served call, refused before it starts, ends with
+`Nothing in this call ran.` (a nested call's denial inside running code does not, D-267); hook block:
+`Tool execution was blocked: <reason>`; interrupted tool: `Interrupted after
 <s> s; side effects may have occurred.` (`details$interrupted` TRUE, so the console's row states the time once;
 P28 Task 43); a `length`/`refusal` stop: `Tool call not executed: the response stopped
 (<reason>) before the call was complete.`
 
 ### 9.3 The system prompt
 
-Sections are `prompt_section` specs (§10.2) rendered at freeze in ascending `order`: the `preamble` untagged, every
-other section wrapped as `<name>\n...\n</name>`, sections joined by one blank line. T0 = sections with `tier =
-"T0"`, T1 = `tier = "T1"`; the frozen blocks never change during a session (mid-session changes are appended
-operator section patches: `Updated system prompt section "<name>":\n\n<section>` or `Removed system prompt section
+Sections are `prompt_section` specs (section 10.2) rendered at freeze in ascending `order`: the
+`preamble` untagged, every other section wrapped as `<name>\n...\n</name>`, sections joined by one
+blank line. T0 = sections with `tier =
+"T0"`, T1 = `tier = "T1"`; the frozen blocks never change during a session, but for IC-85's refreeze
+(D-291) (mid-session changes are appended operator section patches:
+`Updated system prompt section "<name>":\n\n<section>` or `Removed system prompt section
 "<name>".`). `{s1}` is replaced by the configured System 1 alias (`jev`).
 
 | Section | Tier | Order | Budget | Included when | Registered by |
@@ -3479,13 +3517,13 @@ the remaining `r` budget when called inside `r`.
 | `describe` | P10 | `peter$describe(x, budget = 150L)` | `gptr_describe(x, budget)`; `record = FALSE` | 0 |
 | `plot` | P10 | `peter$plot(which = NULL, width = 1000L, height = 700L)` | attaches the current device's plot (or stored plot `which`, IC-67) at that size to the running `r` result (about 900 tokens); `invisible(NULL)`; `record = FALSE` | 0 |
 | `out` | P10 (only owner, IC-36) | `peter$out(id, stream = c("stdout", "stderr"), lines = NULL)` | chr (the stored full text from the session store, the process store or the spill file, or `lines` of it); `record = FALSE` | 0 |
-| `sh` | P22 | `peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` (`cmd` chr: length > 1 = argv without a shell; length 1 = a command line through `shell_resolve()` when it has shell syntax) | `gptr_cmd` | command classifier (G5 levels); computed commands 3 |
+| `sh` | P22 | `peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` (`cmd` chr: length > 1 = argv without a shell; length 1 = a command line through `shell_resolve()` when it has shell syntax) | `gptr_cmd` | command classifier (G5 levels), the command read as run in `wd` (a `cd` before it, whose target it reads, and the code a shell or Python runs there; FIX-27 review rounds 3 and 4); computed commands 3 |
 | `script` | P22 | `peter$script(path, args = character(), interpreter = NULL, ...)` | `gptr_cmd` | 3 |
 | `bg` | P22 | `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` | `gptr_job` (added to the job table) | 3, or the command classifier's level when higher (D-251); computed commands 3 |
 | `jobs` | P22 | `peter$jobs(kill = FALSE)` | df of `bg` jobs | 0 (kill: 3) |
 | `py` | P22 | `peter$py(code, name = NULL, max_rows = 10L)` | `gptr_py`; reticulate (Suggests) | Python classifier |
 | `sql` | P22 | `peter$sql(query, name = NULL, con = NULL, n = 10L)` | data frame (all rows; prints dims + `n` rows); `name` = a data frame registered in an in-memory duckdb under its expression label (`name = mtcars` -> table `mtcars`) or a named list of data frames (one copy on the next edit of each, R9); without `name`, `con` or the DBI connection found by name in the evaluation environment | SQL classifier (select 0, drop 3) |
-| `knit` | P22 | `peter$knit(engine, code)` | chr: output of a knitr engine; `bash`, `sh`, `zsh`, `powershell`, `cmd` run through `peter$sh()` with the `helper` environment and a timeout (IC-67) | 3 (shell engines: the command classifier) |
+| `knit` | P22 | `peter$knit(engine, code)` | chr: output of a knitr engine; `bash`, `sh`, `zsh`, `powershell`, `cmd` run through `peter$sh()` with the `helper` environment and a timeout (IC-67) | 3 (shell engines: the command classifier; `python`, run through `peter$py()`: the Python classifier when higher, D-272) |
 | `app` | P23 | `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = NULL)` (`kind`: a registered `artifact_type`, IC-69; ids that are Windows reserved names are refused, IC-63; `launch = NULL` launches when `gptr_has_human()`, else the handle's `checks$messages` say why not and how to start it) | `gptr_artifact`; the `r` result gets its URL, checks and screenshot image | 3 |
 | `mcp` | P18 | `peter$mcp$<server>$<tool>(...)` | R values (`structuredContent` simplified, else text); `isError` -> `gptr_error_mcp_tool` in R | server annotations: `readOnlyHint` 0 (trusted servers), `destructiveHint = FALSE` 2, none 3 |
 
@@ -3501,9 +3539,9 @@ the remaining `r` budget when called inside `r`.
 | Path | Rank | Source string | Lifetime |
 |---|---|---|---|
 | call arguments: `peter(..., tools = list(spec))`, `model = <spec>`, `agents =`, session hooks `gptr_on(s, ...)` | 0 | `session` | the session |
-| trusted project: `.gptr/` resources, `.gptr/extensions/*.R`, project settings `plugins` | 1 | `project` | the process (re-read by `gptr_reload()`) |
-| user: `gptr_register()`, user directories, user settings `plugins` | 3 | `user` | the process |
-| plugins (packages, directories, `.claude-plugin` bundles) | 5 | `plugin:<name>` | the process; removed when the package unloads |
+| trusted project: `.gptr/` resources, `.gptr/extensions/*.R` | 1 | `project` | the process (re-read by `gptr_reload()`) |
+| user: `gptr_register()`, user directories | 3 | `user` | the process |
+| plugins (packages, directories, `.claude-plugin` bundles; those the user and trusted project `plugins` settings name, a `./` or `../` entry found from the project root, D-299) | 5 | `plugin:<name>` | the process; removed when the package unloads |
 | built-ins (`builtin_<name>()` factories) | 6 | `builtin:<name>` | the process |
 
 Same `(kind, name)`: the lowest rank wins; ties: the first registered, with a `collision` diagnostic when the
@@ -3537,7 +3575,7 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 | 5 | `tool` | first (name, or `<namespace>/<name>`) | §9.1 | §9.1; failures become error results | P02 |
 | 6 | `interpreter` | first | `ext` chr, `programs` chr (candidates, first found wins), `args` `function(path, args)` -> chr, `windows_only` lgl(1) | used by `peter$script()` | P22 (through `kind`) |
 | 7 | `mcp_server` | first | §11.7 fields | data; connection errors are classed conditions at first use | P02 |
-| 8 | `skill` | first | `description` chr(1) (<= 1,024 chars), `path` (SKILL.md), `dir`, `source`, `disable_model_invocation` lgl(1), `allowed_tools` chr, `tokens` num(1) | untrusted text; invalid frontmatter -> skipped with a diagnostic | P02 |
+| 8 | `skill` | first | `description` chr(1) (<= 1,024 chars), `path` (SKILL.md), `dir`, `text` chr(1) (the body, in place of `path` and `dir`, which it cannot be combined with; P29, IC-85), `source`, `disable_model_invocation` lgl(1), `allowed_tools` chr, `tokens` num(1) | untrusted text; invalid frontmatter -> skipped with a diagnostic | P02 |
 | 9 | `prompt_template` | first | `text` chr(1), `description`, `argument_hint`, `source` | Pi template grammar; `/name args` | P02 |
 | 10 | `command` | first (name without `/`) | `handler` `function(args, ctx)`, `description`, `complete` `function(prefix, ctx)` -> chr\|NULL | `args` is the raw string after the command; the handler returns `NULL`, a chr (printed verbatim, its control characters escaped; a `cli_ansi_string`, whose untrusted parts the handler escaped, with its styles, as `/help` sets names bold, P28 Task 63; in the console margin a blank row after it, as after a run's status line, P28 Tasks 62 and 69) or `list(prompt = chr(1))` (sent as a prompt); an error is reported and the input counts as handled | P02 |
 | 11 | `hook` | all (rank) | `event` chr(1), `handler` `function(event, ctx)`, `matcher` (NULL, a tool-name glob, or `function(event)` -> lgl) | §10.4 returns; errors per §10.7 | P02 |
@@ -3732,15 +3770,17 @@ Hook-injected context (returned `blocks`, `text` of transforms) is capped at 10,
 
 ### 10.9 API 1.0 surface and versioning
 
-API 1.0 consists of: the 63 exports (§6); the kinds and fields of §10.2; the events, payload fields and handler
-returns of §10.4; the API object (§10.5) and `ctx` (§10.6) members; the dispatch semantics (§10.7); the manifest
-format (§11.12); the record shapes a plugin sees (§4). `gptr_api()$version` is `1.0` and changes only when this
-surface changes: MINOR releases are additive (new kinds, events, members, optional fields; handlers ignore unknown
-payload fields, validators accept unknown spec fields); MAJOR releases break and require the CRAN notice period to
-reverse dependencies found with `tools::package_dependencies(reverse = TRUE, which = "most")`. Deprecation: a
-deprecated member warns once per session (`gptr_warning_deprecated`; `options(gptr.deprecations = "error")` for
-plugin CI) and lives at least one MINOR release and six months. Items marked [experimental] may change in a MINOR
-release.
+API 1.0 consists of: the exports (section 6, counted by NAMESPACE); the kinds and fields of
+section 10.2; the events, payload fields and handler returns of section 10.4; the API object
+(section 10.5) and `ctx` (section 10.6) members; the dispatch semantics (section 10.7); the manifest
+format (section 11.12); the record shapes a plugin sees (section 4). `gptr_api()$version` is `1.0`
+and changes only when this surface changes: MINOR releases are additive (new kinds, events, members,
+optional fields; handlers ignore unknown payload fields, validators accept unknown spec fields);
+MAJOR releases break and require the CRAN notice period to reverse dependencies found with
+`tools::package_dependencies(reverse = TRUE, which = "most")`. Deprecation: a deprecated member
+warns once per session (`gptr_warning_deprecated`; `options(gptr.deprecations = "error")` for plugin
+CI) and lives at least one MINOR release and six months. Items marked [experimental] may change in a
+MINOR release.
 
 
 ---
@@ -3866,15 +3906,17 @@ only in a trusted project; its allow, transcript and record keys are ignored wit
 
 ### 11.4 Session files
 
-`<workspace root>/sessions/<YYYYmmddTHHMMSS>_<session id>.jsonl`: the header line (§4.7), then entries (§4.6),
-one JSON object per line, appended open-append-close (`file(path, "ab")` opened, written, flushed and closed per
-entry or per batch inside `suspendInterrupts()`; no connection outlives a gptr call; IC-59), `persist`-redacted
-at ingress, never rewritten (except by an explicit `gptr_scrub(dry_run = FALSE)`, IC-70). The first entry of every
-session is `gptr.frozen`. A fork's file is created at its first own message and starts with the copied path (ids
-kept, `parentId` re-chained). A resume on a file whose last byte is not LF first appends `"\n"` and a
-`gptr.recovered` entry; readers skip any unparsable line with a diagnostic. Lock: directory `<file>.lock/` with a
-file `pid` holding the pid and the process creation time, touched every 10 minutes while the session is live; a
-lock is stale when `pid_alive()` (ps) is `FALSE` or its heartbeat is older than 24 h.
+`<workspace root>/sessions/<YYYYmmddTHHMMSS>_<session id>.jsonl`: the header line (section 4.7),
+then entries (section 4.6), one JSON object per line, appended open-append-close (`file(path, "ab")`
+opened, written, flushed and closed per entry or per batch inside `suspendInterrupts()`; no
+connection outlives a gptr call; IC-59), `persist`-redacted at ingress, never rewritten (except by
+an explicit `gptr_scrub(dry_run = FALSE)`, IC-70). The first entry of every session is
+`gptr.frozen`. A fork's file is created at its first own message and starts with the copied path
+(ids kept, `parentId` re-chained). A resume on a file whose last byte is not LF first appends `"\n"`
+and a `gptr.recovered` entry; readers skip any unparsable line with a diagnostic. Lock: directory
+`<file>.lock/` with a file `pid` holding the pid and the process creation time, touched every 10
+minutes while the session is live; a lock is stale when `pid_alive()` (ps) is `FALSE`, or, for a
+holder whose pid and creation time cannot be checked, when its heartbeat is older than 24 h (D-298).
 
 ### 11.5 History-document blocks (D-08; report 14 §3 grammar)
 
@@ -3886,46 +3928,65 @@ BLOCK_CLOSE = ^([ \t]*)# <<< gptr:([0-9a-z]{6,16})[ \t]*$
 HEADER_KV   = ([A-Za-z_][A-Za-z0-9_.]*)=("([^"\\]|\\.)*"|[^ \t]+)
 ```
 
-Values containing spaces are double-quoted with R escapes. Header keys, in this order when present:
+Values containing spaces or control characters (C0, DEL and C1) are double-quoted with R escapes
+(a control character as a Unicode escape; FIX-29 review round 6). Header keys, in this order when
+present:
 
 | Key | Required | Meaning |
 |---|---|---|
 | `model` | yes | canonical `provider/id` that produced the code (System 1: the physical model) |
 | `date` | yes | `YYYY-MM-DD` of the last (re)generation |
 | `prompt` | yes | `prompt_hash()` of the prompt template (12 hex) |
-| `sha` | recommended | first 8 hex of sha256 of the body lines as last written (user-edit detection) |
+| `sha` | recommended | first 8 hex of sha256 of the body lines as last written, without steering lines and each line's trailing blanks and carriage return (user-edit detection; FIX-33); a `sha` written before FIX-33, of the body untrimmed without each line matching a steering line, also matches (review round 6) |
 | `call` | when > 1 | ordinal of the `peter()` call within the statement (pipelines) |
 | `tokens` | optional | `<input>/<output>` of the turn |
 | `cost` | optional | USD, plain number; written whenever the turn's cost is known (`0` for a free route), omitted when unknown (IC-74) |
 | `session` | recommended | session id |
 | `turn` | recommended | turn number in the session |
 | `value` | optional | the name designated with `gptr_return()` (replay binds `$value` to it): a bare name as written, `.gptr_value_<block id>` for an expression the body assigns, else omitted (one name, never an expression) |
+| `created` | when any | the objects the turn's r calls created, comma separated (IC-49) |
 | `fork` | forks | `<parent session id>:<turn>` |
 | `plan` | when used | id of the session whose pending plan was consumed |
 | `status` | undone blocks | `undone` |
 | `args` | when the prompt was interpolated | 8 hex of sha256 of the sorted interpolated `name=value` pairs; part of freshness (IC-45) |
-| `kind` | team and fan-out blocks | `team` or `fanout` (IC-47) |
+| `kind` | team, fan-out and coach blocks | `team` or `fanout` (IC-47), or `coach` for the block of a `gptr_coach()` call (IC-87) |
 | `children` | team and fan-out blocks | `"<name>:<session id>[:<value>],..."` (quoted); `<value>` is the child's `value=` name, written when it designated one (IC-47) |
+| `harness` | harness-call and coach blocks | `<name>:<coaching hash>`: the harness a call ran, by the name it was called with and `coaching_hash()` of its coaching; a coach block's names the harness it defines and the hash of that harness's coaching. Absent for `peter()`, which reads as the hash of empty coaching. Part of freshness for harness calls (IC-87) |
+| `start` | coach blocks | `<name>:<coaching hash>` of the starting harness (`peter` when `harness` is missing); part of a coach block's freshness (IC-87) |
+| `coach` | coach blocks | the coaches' model reference (IC-87) |
+| `gptr` | coach blocks | the gptr version that wrote the block; not part of freshness (IC-87) |
 
-**Body**, in emission order: the code of each successful `r` call with `record = TRUE`, verbatim except that
+**Body**, in emission order: in an `.R` document, the `#< ` lines of the console's context blocks the prompt
+was sent with (IC-49);
+the code of each `r` call that ran, of one that stopped part-way its top-level expressions that completed,
+unless it changed no object and the model passed `record = false` (IC-48), verbatim except that
 top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
 `gptr_return(<expression>)` (argument unnamed or `x`, called or piped, on any number of lines) becomes
 `.gptr_value_<block id> = (<expression>)` and top-level
-`<-` is rewritten to `=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
+`<-` is rewritten to `=` where safe (IC-48), and a whole comment line that reads as a steering line or a block marker
+gets one more `#` (IC-49); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
 (excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines, else the setting `doc$output_lines`, of 76
-characters, then `#> ... (N more lines)` counting every line not shown), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
-(`#> sh git status --porcelain: exit 0, 6 lines`); artifact references (`#> [app] .gptr/artifacts/<id>/app.R`,
+characters, then `#> ... (N more lines)` counting every line not shown; a line ends where R ends one, a lone `\r` too, and control, bidi and zero-width characters are written `<U+XXXX>`, review round 6), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
+(`#> sh git status --porcelain: exit 0, 6 lines`), one line each (`bridge_emit()` turns the line ends of a job's name or
+an error into a space; FIX-33 review round 3) and escaped as output is; artifact references (`#> [app] .gptr/artifacts/<id>/app.R`,
 `#> [plot] <path>`); a block whose code needed a secret gets `# gptr: block needs secrets that are not recorded`.
-Code passes `code_for_history()` (literal secrets -> `Sys.getenv("NAME")`). Failed executions and plan-mode code
-are not recorded (a plan-mode turn gives one `## Plan: <plans path>` line). Overlay-fork turns are wrapped
+Code passes `code_for_history()` (literal secrets -> `Sys.getenv("NAME")`). Calls that ran nothing and plan-mode
+code are not recorded (a plan-mode turn gives one `## Plan: <plans path>` line, `## Plan: none kept (gptr_init()
+keeps plans in .gptr/)` when the plan is in `tempdir()/gptr`, which R deletes at exit; FIX-33). Overlay-fork turns are wrapped
 `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)` (IC-46). Team and fan-out blocks hold one
 `## Agent <name> (<model>): <first line>` line per child and, for children with exports or a designated value, the
 child's code wrapped `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus one
-`<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per export (IC-47). The text of a
+`<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per export (IC-47). A coach block
+(IC-87) holds exactly one assignment, `<name> = gptr_tailor(<start>, coaching = list(...))`, or
+`<name> = gptr_tailor(<start>)` when the coaching was not kept, every text written with `doc_str_literal()`, then
+one `## Run <label>: <status>, <n> turns, risk <level>[, unmet <ids>]` line per run and one `## Decision:` line;
+no code of a run, no `session=`, no S2 answer. The text of a
 `## Steer:`, `## Follow-up:`, `## Decision:` or `## Agent` line is one line: line breaks (also U+0085, U+2028, U+2029)
 become spaces and control, bidi and zero-width characters are written `<U+XXXX>`, as the console shows them. Indentation copies the owning
 statement's first line. Ownership: the run of blocks starting at the first non-blank line after the statement
-(blank lines between blocks allowed); the k-th call owns the block whose `prompt=` matches, else the one with
+(blank lines between blocks allowed); the calls that own blocks are `peter()` calls, harness calls (a head bound to a
+`gptr_harness`, or one a `harness=` header of the document declares) and the `gptr_coach()` call of a statement
+`<name> = gptr_coach(...)` (IC-87); the k-th call owns the block whose `prompt=` matches, else the one with
 `call=k` (then stale). Only top-level calls own blocks (not inside `function`, `\(x)`, `for`, `while`, `repeat`,
 `if`, `{}`, or an agent block).
 
@@ -3937,7 +3998,7 @@ statement's first line. Ownership: the run of blocks starting at the first non-b
 | `.Rmd` | a separate chunk `` ```{r gptr-<id>} `` directly after the owning chunk (fence and prefix copied), body with the markers, no `#>` lines |
 | `.qmd` | a chunk `` ```{r} `` whose first line is `#| label: gptr-<id>`, same body |
 | `.ipynb` | a code cell `{"cell_type": "code", "execution_count": null, "id": "gptr-<id>", "metadata": {"gptr": {"id", "model", "prompt", "date", "session", "turn", "value"}}, "outputs": [], "source": [...]}` after the calling cell; keys sorted; indentation copied from the file (Jupyter: 1 space); numbers kept as read (gptr writes no float of its own, so Jupyter's Python repr is preserved; D-158); only `source` and `metadata.gptr` change on rewrite; never written while the notebook is open: in Jupyter the block is shown as the cell output and kept pending until `gptr_doc(path, sync = TRUE)` (IC-50) |
-| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: the replay note (`# source() this file to replay ...`) and `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then per session a header comment after a blank line (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
+| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: the replay note (`# source() this file to replay ...`) and `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then per session a header comment after a blank line (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each ending, after the context names, with `model = "<model reference>"` and `mode = "<mode>"` string literals when the turn's differ from what the statement gets without them (D-265), each with its block (IC-49); a harness the first time it is called or coached as `h_<id> = gptr_tailor(peter, <plain-data fixed arguments>, rules = list(...), coaching = list(...))` (`rules =` only for a harness with rules of the person's; with a `# gptr: h_<id> needs fixed arguments that are not recorded: <names>` line for fixed arguments that are not plain data), and its calls as `s_<6 hex> = h_<id>("...", <context labels>)` (IC-87); direct R lines under `# direct R (no model)` with `#>` output, the header ending `created=<names>` when they created objects, a comment line of the code that reads as another entry's first line written with one more `#`; a line that failed, or uses what an undone step made, as `#~ ` lines under `# direct R (no model; <status>)` or `# direct R (no model; uses undone <names>)` (IC-49); slash commands as comments (`# /model opus`) |
 
 **Undone blocks** (G7 §3.8): header `status=undone`, every body line prefixed `#~ `; Rmd/qmd chunks get
 `eval=FALSE` (`#| eval: false`); ipynb `metadata.gptr.status = "undone"` plus `#~ ` source lines. A top-level System 1
@@ -4009,7 +4070,7 @@ under `egress` (§11.2).
 | Spill files (P01) | `<root>/cache/tmp/gptr-output-<id>.txt` | the out id | redacted full text |
 | Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json` (`<root>` the document's project `.gptr/`; outside one `R_user_dir("gptr", "cache")/pending/`, D-249) | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
 | Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag (sent only for a cache of the current `converter`) | the refreshed catalog (§11.10 shape) |
-| MCP tool lists (P18) | `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` | `hash_sha256(canonical_json(command + args, or URL origin + path))` | `{"tools", "fetched_at", "ttl_ms", "cache_scope"}` (not stored when `cacheScope` is `private` and credentials are not the user's own) |
+| MCP tool lists (P18) | `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` | `hash_sha256(canonical_json(command + args, plus env and cwd when present; or URL origin + path, plus headers when present))` (D-299) | `{"tools", "fetched_at", "ttl_ms", "cache_scope"}` (not stored when `cacheScope` is `private` and credentials are not the user's own) |
 | MCP era (P18) | `R_user_dir("gptr", "cache")/mcp-era/<hash>.json` | as above | `{"era": "modern" \| "legacy", "version", "date"}`, 7-day expiry |
 | Serialised entries (P06/P07) | memory (`live$memo`) | `<entry id>\|<api>\|<same model>\|<caps hash>` | the entry's JSON text for that api |
 | Object sizes (P09) | memory | `<address>\|<length>\|<class>` | `object.size()` |
@@ -4111,7 +4172,9 @@ Records live in the session log (`gptr.checkpoint`, `gptr.rewind`, §4.6). Never
 
 `inst/extdata/risk-functions.csv`: columns `package`, `function`, `level` (0-4), `category` (`read`, `object_write`,
 `file_write`, `file_delete`, `network`, `process`, `install`, `dynamic`, `session`, `secret`, `interactive`,
-`critical`, `control` (IC-53)), `path_arg` (the argument holding a path, or empty), `note`; plus a `packages` table
+`critical`, `control` (IC-53)), `path_arg` (the argument holding a path, or empty; `folder/file`
+names a file argument written in a folder argument when the call passes one, as `ggsave()`'s
+`path/filename`), `note`; plus a `packages` table
 of risky packages whose unlisted functions are at least level 2 (IC-54). An unlisted function of a package outside
 base, stats, utils, methods, graphics, grDevices and tools is level 1. `inst/extdata/risk-commands.csv`:
 `command`, `subcommand` (or `*`), `level`, `category`, `note` (G5 levels). Plugins and users extend both through
@@ -4190,7 +4253,7 @@ fake$log$requests[[2]]$last_results
 | `helper-fake.R` (P01) | `fake_text(text, ...)`; `fake_tool(name, ..., .text = NULL, .id = NULL)` (a reply calling tool `name` with input `list(...)`); `fake_tools(...)` (each argument `list(name, input)`); `fake_error(message = "overloaded", status = 529L, after = 0L)`; `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())` (registers with `gptr_register()` and unregisters on exit; returns the spec); `fake_requests(spec)` (the request log); `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())` (a temporary project directory made the working directory with `withr::local_dir()`, a `.gptr/` skeleton created directly (no dependency on `gptr_init()`), `files` = named list of relative path -> content, `trust = TRUE` records trust in the redirected user config; returns the path); `local_gptr_options(..., .env = parent.frame())` (`withr::local_options()` with `gptr.` prefixed names) |
 | `helper-tracemem.R` (P01) | `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`: writes a script that loads gptr (`library(gptr)` when installed, else `pkgload::load_all()` of the source tree; that call exists only in the generated script text, never as package or test code, IC-71), evaluates `setup` (chr: code creating `object`, e.g. `big = runif(5e6)`), `tracemem(object)` with output to a file, `action` (chr: the gptr code under test; with `in_run_edit = TRUE` the fake provider's `r` call runs `edit` inside the run, IC-41), then `edit`; runs it with `c(rscript_path(), "--vanilla", <script>)` through processx (IC-60); counts `tracemem[` lines after `action`; passes when the count is at most `allow`; skips on CRAN and when `!capabilities("profmem")`; returns the count invisibly |
 | `helper-mock-server.R` + `fixtures/mock_server.R` (P01) | `local_mock_server(scenario, ..., .env = parent.frame())` -> `list(url, port, log = function() df(time, method, path, headers (redacted), body, disconnected), stop = function(), provider = <spec:provider with offline = TRUE>)`; a base-R `serverSocket()`/`socketSelect()` server run with `rscript_path()` through processx; it listens on every interface (base R has no host argument), so it answers only paths carrying a per-run token and lives for one test; skips on CRAN (IC-71). The returned provider record is `offline = TRUE` so `GPTR_REPLAY=replay` does not block it (IC-45). Scenarios: `stream` (Anthropic-shaped SSE: `n = 12` text events every `interval = 0.25` s), `slow`, `ttft` (`delay` before the first byte), `hold_headers`, `stall` (events then silence), `bytes_per_10s` (`duration`), `overload` (an overloaded SSE `error` event before the first delta, then success after `attempts`), `status` (`status`, `body`, optional `retry_after`, `succeed_after`), `spend_cap`, `truncated` (connection closed mid-stream), `parallel_tools`, `openai_responses`, `chat_completions`, `gemini` (per-adapter stream shapes, P12), `systemone` (JSON answers from `answers = function(body)`), `json` (a fixed body), `redirect` (a 307 to a second origin that logs any key bytes, IC-64) |
-| `helper-arch.R` (P01) | `arch_layer_table()` -> df(`file`, `layer`) from §3.2 of `03`; `arch_fun_map()` -> df(`fun`, `file`) built by parsing the files under `R/` (found through `testthat::test_path("..", "..", "R")` or the check directory's `00_pkg_src`; the test skips with a message when absent); `arch_allowed()` -> the `03` §2.2 matrix; `arch_kernel_sdk()` -> the IC-33 allowlist; `arch_services()` -> the §7.0 service table (literal `ext_service_get("<name>")` calls are mapped to the providing plan; an undeclared name fails) |
+| `helper-arch.R` (P01) | `arch_layer_table()` -> df(`file`, `layer`) from section 3.2 of `03`; `arch_fun_map()` -> df(`fun`, `file`) built by parsing the files under `R/` (found through `testthat::test_path("..", "..", "R")` or the check directory's `00_pkg_src`; the test skips with a message when absent); `arch_allowed()` -> the `03` section 2.2 matrix; `arch_kernel_sdk()` -> the IC-33 allowlist; `arch_services()` -> the section 7.0 service table (literal `ext_service_get("<name>")` calls are mapped to the providing plan; an undeclared name fails); `arch_contract_edges()` -> df(`caller_area`, `callee`), the cross-area calls the contract names by consumer although IC-33's kernel SDK omits them, among them the 12 of area `gptr` (P29: `subagent_schedule`, `subagent_limit`, `worker_registry`, `worker_registry_apply`, `worker_spec_revive`, `worker_key_provider`, `perm_rules_effective`, `rule_hit`, `rule_glob_re`, `risk_table`, `walk_tree`, `skill_discover`; IC-85, IC-86, D-279, D-288) and the 2 of area `mcp` (P18's `mcp_file_update()` calls P08's `trust_holds` and `trust_carry`; IC-52, D-299) |
 | `helper-scripted-ui.R` (P11) | `local_scripted_ui(answers = list(), .env = parent.frame())` -> an environment with `log` (df `method`, `prompt`, `answer`) and `remaining()`; registers a `scripted` UI, sets `options(gptr.ui = "scripted", gptr.interactive = TRUE)`. Queue items: for `permission()`: `"y"`, `"a"` (always, session), `"p"` (always, project), `"n"`, `list(decision = "deny", feedback = chr(1))`, `"abort"`; for `select()`: int; for `input()`: chr(1); for `questions()`: a named list |
 | `helper-mcp-server.R` + `fixtures/mcp/server.R` (P18) | `local_mcp_fixture(era = c("modern", "legacy"), transport = c("stdio", "http"), tools = c("echo", "add", "slow", "fail", "elicit"), n_extra = 0L, .env = parent.frame())` -> `list(spec, log = function() df, stop = function())`; a pure-R server speaking the chosen era; `n_extra` adds generated tools (catalog budget tests) |
 
@@ -4341,8 +4404,9 @@ class-list pointer). `06-review-resolution.md` lists every change by issue. Main
 | P19 | `gptr_parallel` |
 | P23 | `gptr_artifacts` |
 
-Total (IC-36): 1 + 18 + 3 + 1 + 2 + 5 + 1 + 10 + 1 + 2 + 1 + 4 + 3 + 3 + 6 + 1 + 1 = 63 (P08's 10 names are
-`peter` plus 9 `gptr_*`; `gptr_map()` is internal, `gptr_scrub()` is new).
+Total (IC-36): 1 + 18 + 3 + 1 + 2 + 5 + 1 + 10 + 1 + 2 + 1 + 4 + 3 + 3 + 6 + 1 + 1 = 63 (P08's 10
+names are `peter` plus 9 `gptr_*`; `gptr_map()` is internal, `gptr_scrub()` is new). P29 adds
+`gptr_tailor` and `gptr_coach` (section 15.11); the total predates them.
 
 ---
 
@@ -4612,7 +4676,13 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   for `out`, `plot`, `help`, `search`, `describe`; with a document bound (when `r` has `record`), the `<r_session>`
   text tells the model to use them only with `record = false` (D-248).
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
-  comment.
+  comment (`none kept ...` without `.gptr/`, §11.5).
+- An `r` call that stopped part-way (an error, interrupt or timeout) records its first `n_done` top-level
+  expressions, whose bindings stay, cut with `doc_drop_ranges()`; one that completed none records nothing.
+  R served to a CLI route appends its `gptr.mcp_r` trace for such a call too, with `n_done`.
+  The model's `record = false` holds only for code that added, changed or removed none of the person's
+  objects: `r_tool_execute()` sets `details$record` to `TRUE` otherwise (outside plan mode), and
+  `doc_turn_r()` reads `details$record` before the call's argument (FIX-33, D-268).
 - S-9 best effort: `doc_block_lines()` rewrites `<-` to `=` for `LEFT_ASSIGN` tokens whose assignment is a
   top-level expression of the chunk or a direct child of a `{` expression list, never inside call arguments;
   `->`, `<<-` and `%>%` are left alone.
@@ -4620,11 +4690,22 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   `source()` and Rscript, and `$value` resolves `fit`.
 
 **IC-49 Console transcripts and steering in documents.** (req-8) The first REPL prompt of a session is recorded
-as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |> peter("...")`. Steers and
+as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |> peter("...")`. A
+statement ends with `model = "<model reference>"` and `mode = "<mode>"` (string literals, after the
+prompt and context names) when the turn's values at its end differ from what the statement gets
+without them: for an assignment, the `model` and `mode` settings, the model left out when the call
+started the session naming no model by name; for a pipe, the values its session's previous turn in
+that transcript recorded on its `gptr.doc_block` entry. `source()` and replay ignore them; a re-ask
+runs them (D-265). Steers and
 follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session, a line typed
 in a terminal console [IC-76]) are recorded
 inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`; a
 blank text is written `## Steer:` without the trailing space, and a line is steering with or without it.
+A line is steering only as a whole comment line by R's parse data (a COMMENT token with only blanks before it), so
+a line inside a string is code and a body that does not parse holds none; a whole comment line of recorded code
+that reads as one, or as a gptr block marker (`BLOCK_OPEN`, `BLOCK_CLOSE`), gets one more `#` where its comment
+starts, in every format, so model code cannot write a steer or end its block, and R reads the same code
+(FIX-33, D-268).
 A REPL turn is a console turn whatever started the console: a sourced script, an `Rscript` file or the editor's
 buffer holding the `peter()` statement that started it locates none of its turns (P28 Task 29: the REPL marks
 its gateway calls `gptr_console`, and `doc_locate()` runs no finder for them).
@@ -4638,6 +4719,63 @@ A console transcript records every settled run; a run that ended `aborted`, `err
 `budget` gets a last `## Run: <status>` line and caches no S2 answer (a script document records only `idle`
 runs). P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
 session.
+A console turn's block in an `.R` document opens with what the console sent with the typed prompt,
+as `#< ` comment lines (FIX-29, D-264): the text of its `user_ran` block (the `!code` notes) and of
+its `user_files` block (each `@file` as attached: at most 40 lines redacted with the `context`
+profile, or the one line of a binary, truncated or omitted file), tags included, each line as R
+reads it (a lone `\r` ends one, so a file name holding one cannot end the run; FIX-29 review round
+3) prefixed `#< ` and an empty one written `#<`; an `.Rmd`, `.qmd` or `.ipynb` document the console records into
+gets none (FIX-31, D-266). `prompt=` still hashes only the typed text. Only that run is read back:
+the lines starting `#<` that open the body of a block whose statement, the nearest non-blank line
+above it, is a console turn's (`s_<6 hex> = peter(` or `s_<6 hex> |> peter(`), under `#~ ` when the
+block is undone, in a document whose gptr markers are well formed, holding the `user_ran` block,
+then the `user_files` block, each optional, and nothing else; any other run is not read. The
+recorded code's leading lines that start with `#<` get one more `#` (`##<`), in every format, also
+in a block a format error moves into the transcript, so model code cannot extend the run (a read
+ends a line at `\r\n`, `\n` or a lone `\r`, none of which a written line holds, so it keeps how a
+line starts; FIX-33 review round 6); R reads the same comments,
+and `sha` is that of the lines as written. Nor can model code forge a block with a run: a marker
+comment line of recorded code gets one more `#`, and a block whose text would still leave the
+document's markers malformed (a marker line inside a string) is not written; a block that cannot be
+written anywhere is named once per document (FIX-33). A call that asks again for a
+recorded block (`replay = "live"`, a stale or undone block) keeps those blocks in `call$sent`,
+recorded or not, and the console's `user_ran` and `user_files` providers send them again as the same
+context blocks; the file is not read, so the re-ask is the same request even when it changed or is
+gone. A re-ask sends neither the block's `## Steer:` and `## Follow-up:` lines nor the text of an
+approval answered `n <text>`, which no block records, and the rewritten block does not keep them;
+`/retry` of a turn the console sent puts the `!` notes that turn took back before the pending ones
+(FIX-33). A history reconstructed from the document puts them before the prompt of the turn's user
+message. `gptr_export()` leaves the run out in both formats, admits a console turn's context names
+(unnamed symbols after the prompt) and leaves out an undone block that no statement owns (FIX-33).
+Each block header names the objects its r calls created (`created=`: the `created` rows of the
+turn's objects fragments, what an undo removes), and each direct R header the objects the
+evaluator's diff reports added, also for a line that failed (`# direct R (no model) created=p`).
+After each rewind (`/undo`, `/redo`, `/retry`) and each line the console appends, the transcript is
+read top to bottom: each block and direct R line makes the names of its `created=` key, on or off
+(an undone block; a line that failed or is off), and a direct R line also the names its top-level
+`name = value` expressions assign; a direct R line that uses (by `all.names()`, of such an
+expression its value only) a name whose last maker above it is off, other than one it made before in
+the line, is switched off, `#~ ` before each line under `# direct R (no model; uses undone <names>)`,
+and back on when no such name is left (FIX-33: a reassignment is no use); the names are written as
+output is (`<U+XXXX>`; FIX-29 review round 6).
+A rewind makes a block undone only when the path it moves to holds no record that wrote the block
+(FIX-31). A direct R line's section runs from its header to the next line the console writes for
+another entry (a direct R header, a `# /<name>` command line, a session header, a turn's statement
+or block); a comment line of its code that reads as one, such as `# /tmp is scratch`, or as a block
+marker is written with one more `#` (FIX-31, FIX-33). A notice names the lines switched. `source()`
+stays a plain R run: lines that are off are comments. A rewind removes what the turn created and
+restores what it changed, so the person's own objects stay. Known limits: turn blocks are never
+switched, so a later turn that uses an object made by a line that is off (the object stayed in the
+session, so the turn ran) still stops `source()`; a direct R line that read an object the turn
+changed stays on and replays with the restored value;
+`all.names()` can match a column or formula term of the same name, which turns a line off that did
+not need it; a name reached through a string, as in `get("fit")`, is not seen; lines written by hand
+right after a direct R line switch with it, and a line of its code that reads as another entry's
+first line but is not a comment (inside a multi-line string, or an `s_<6 hex> |> peter(` call) ends
+its section there; a name holding a comma is left out of `created=`, which would split it, so a line
+that uses it is not switched (FIX-29 review round 1); a non-ASCII name is matched only
+in a UTF-8 locale. The `#<` lines are what was sent: neither `gptr.doc_output_lines` nor the `doc`
+setting limits them.
 
 **IC-50 Jupyter documents.** (req-11) With `front_end() == "jupyter"` gptr never writes the open notebook: the
 block is shown as the cell's output (a fenced R code block) and recorded as a pending `gptr.doc_block` entry
@@ -4700,15 +4838,21 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
   Only skills from user directories, installed packages and trusted projects enter the T1 catalog.
   Project-file updates are no longer
   operator messages but user-role `project_instructions_update` context blocks; `context_block` `authority = "operator"` is allowed only for records of rank >= 3.
-- `trust.json` records a `fingerprint` (sha256 over the sorted paths and contents of the trust-gated files:
-  `.gptr/settings.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `agents/`, an
-  auto-discovered `.env`). On a mismatch the changed resources are treated as untrusted: interactively the
-  changed files are listed and the question asked again; non-interactively they are ignored with a notice.
-  gptr's own writes re-fingerprint.
-- `gptr_resume(path)` of a file whose header `cwd` differs from the project root, or that git tracks, rebuilds
-  with a freshly frozen prompt from the current settings and marks the prior user turns `source = "imported"`.
-  File restores (rewind) are confined to the project root and `tempdir()`; a restore outside needs an
-  `ask_human` per path.
+- `trust.json` records a `fingerprint` (sha256 over the sorted paths and contents of the trust-gated
+  files: `.gptr/settings.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`,
+  `APPEND_SYSTEM.md`, `agents/`, an auto-discovered `.env`, and the project MCP files of other
+  applications, `.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`, `.vscode/mcp.json` and
+  `.pi/mcp.json`, D-299). On a mismatch the changed resources are treated as untrusted:
+  interactively the changed files are listed and the question asked again; non-interactively they
+  are ignored with a notice. gptr's own writes re-fingerprint: `trust_holds()` before the write and
+  `trust_carry()` after it, in `settings_write()` and in P18's `mcp_file_update()` behind
+  `gptr_mcp_add()` and `gptr_mcp_remove()` at project scope (D-299).
+- `gptr_resume(path)` of a file whose header `cwd` differs from the project root, or that git
+  tracks, rebuilds with a freshly frozen prompt from the current settings and marks the prior user
+  turns `source = "imported"`. File restores (rewind) are confined to the project root and
+  `tempdir()`; a restore outside needs an `ask_human` per path. The same refreeze follows a
+  continuation that loads a keyed extension factory new to a frozen session (IC-85); this is the one
+  case where a session's frozen blocks change, an exception to section 9.3 (D-291).
 
 **IC-53 The permission kernel cannot be reconfigured by model code.** (safe-1, req-16, safe-6, safe-18)
 
@@ -4726,12 +4870,18 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    `gptr_trust`, `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
    `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune, clear),
    `gptr_scrub` (`dry_run = FALSE`), and `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`, `gptr_rewind`
-   on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` of
-   `GPTR_*` or provider key names, `setHook()`, `assignInNamespace()`. These exports also check `run_current()`:
-   called from model code during a run they signal `gptr_error_permission` unless the dispatcher approved
-   exactly that call through an `ask_human` (a one-shot token on the run). `perm_check()` grants the token on
-   any final allow (IC-78); outside yolo only a person's approval or `gptr.unsafe_no_permissions` allows a
-   control call.
+   on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` and
+   `withr::local_envvar()`/`withr::with_envvar()` of `GPTR_*`, `*_BASE_URL` or R startup names (`R_ENVIRON_USER`,
+   `R_PROFILE_USER`, `R_ENVIRON`, `R_PROFILE`), of a variable a registered provider reads (its `auth` names and
+   `compat$base_url_env`, such as `AWS_REGION`, the `bedrock-converse` key pair, and the names the `cli-claude` and
+   `cli-codex` child environments keep, such as `CODEX_HOME`) or of a variable that moves the user config directory
+   or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in
+   any letter case, or of a name the classifier cannot read (`do.call()` of a `list()` or `c()` written out and
+   `rlang::exec()` read as the call they make, review round 6), `readRenviron()`, `dotenv::load_dot_env()` (D-272),
+   `setHook()`, `assignInNamespace()`. These exports also check `run_current()`: called from model code during a
+   run they signal `gptr_error_permission` unless the dispatcher approved exactly that call through an
+   `ask_human` (a one-shot token on the run). `perm_check()` grants the token on any final allow (IC-78); outside
+   yolo only a person's approval or `gptr.unsafe_no_permissions` allows a control call.
 4. Every gateway call made while `run_current()` is non-NULL (any route) inherits the running mode (only
    tightened) and filters; model code continuing an idle user session runs it in the stricter of the two modes.
 5. The parent re-classifies the raw input carried in every forwarded worker `permission_request`; the worker
@@ -4742,12 +4892,25 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    returning allow for an `ask_human` is ignored with a diagnostic. In yolo (IC-78) control rows other than
    `options(gptr.*)` and secret reads do not reach `ask_human`.
 7. A `modify` decision is re-classified and re-checked once; a second `modify` denies. Only `r(secret:NAME)`
-   rules pre-approve the secret guard.
+   rules pre-approve the secret guard, in `r` code every flagged call of which reads one of the named secrets by
+   name (`Sys.getenv()`, a shell's `$NAME`; review round 6): a registered secret that the `env` of `peter$sh()` or
+   `peter$script()` hands a child is covered only when the same code reads it by name, as the question for that
+   read covers it (D-267). The guard meets `Sys.getenv()` of a registered name in any letter case or through a
+   variable the code only sets to strings, one of them that name, a `$NAME` of one in a command line or Python's
+   `os.environ`, an environment dump, a read of a `.env` or `.Renviron` file or of one `gptr_env()` loaded (by a
+   function that reads its text, or in a command line or Python), and a secret that `env` hands a child (review
+   round 6).
 8. Approval displays (console, rstudio dialogs, worker-forwarded requests) escape C0/C1 controls except TAB and
    bidi and zero-width characters as `<U+XXXX>`; the one-line prompt names who asks (IC-77), the tool and the
    call's first line, cut to the console width before `(+N more lines)` (an absolute path inside the project
    relative to it), then the flagged calls one per line, highest level first, each cut to the console width, at
    most 5, then `(+N more; ? shows all)`; `[a]`/`[p]` are offered only with a `suggested_rule` (D-187, D-222).
+   No approval display shows a registered secret: every UI is given the request redacted (the `context`
+   profile: its code, change rows, flagged calls and paths, reason, hint and rule), and the record's `risk` and
+   `summary`, which the `blocked` condition and `run$blocked` carry, are redacted when it is built, so a secret
+   that `env` hands a child or a nested command holds shows as its marker (D-267, review round 6). So does the
+   output of model code the console indents under its call (`eval_echo()`) and a warning it shows; output it
+   does not indent, R prints itself.
    A flag has one shape in the ask and in the `?` view, `[<level> <category>] <call>` (`ui_flags()`), its
    backticked names inline code as in an answer and an object's `<class, size>` the mention line's `(class,
    size)` (P28 Task 49: the ask showed the Markdown and angle brackets and `?` another shape, `[2] file_write
@@ -4820,8 +4983,16 @@ step list before its first action.
   prompt from a `later` callback: a background run moves to status `waiting` (a notice; `gptr_jobs()` shows it)
   and the ask is shown at the session's next `gptr_wait()` (D-261), whose resumed run opens with a user
   message saying that the user is at the console (D-252); a served request that needs approval
-  is denied with how to allow it and a console notice. Non-interactively both are `blocked`/denied.
+  is denied with how to allow it and a console notice, as is a nested `peter$` call of its R that needs
+  approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command run in its `wd`, a
+  `script` call as that of its path, with the registered secrets its `env` hands the child (review round 6 for
+  `script`), then the member call itself when that hand-over meets
+  the secret guard; D-267), without the notice, which the served result would capture for the model.
+  Non-interactively both are `blocked`/denied.
 - A background R tool that changed bindings in the user's environment at an idle tick prints one notice.
+- A tool-name rule (`gptr_permissions(deny = "script")`) names a tool the model calls, never a
+  `peter$` member, served or not, so it does not stop a member call; the member's command or path
+  meets the rules as the literal call would (D-294).
 - P04/P19 acceptance: an inline agent calls System 1 while a sibling has a queued tool; the sibling's tool starts
   only after the first evaluation returns.
 
@@ -4845,11 +5016,14 @@ CLI child evaluates in the fork overlay and a plan-mode parent gates in plan mod
   `store_read()` skips any unparsable line with a diagnostic and re-parents the children of missing ids to the
   nearest valid ancestor in projection.
 - **Locks**: `<file>.lock/pid` holds the pid and the process creation time; a lock is stale when
-  `pid_alive(pid, create_time)` is `FALSE` or its heartbeat is older than 24 h; the reactor touches the file every
-  10 minutes while the session is live. `pid_alive()` (P04, `proc-supervise.R`) is
-  `ps::ps_is_running(ps::ps_handle(pid))` plus a creation-time comparison against pid reuse. **ps joins Imports**
-  (it is already in the dependency closure through processx; the closure does not grow). `tools::pskill()` is
-  never used as a liveness probe (on Windows it always calls `TerminateProcess`; lint rule).
+  `pid_alive(pid, create_time)` is `FALSE`, or, only for a holder whose pid and creation time cannot
+  be checked, when its heartbeat is older than 24 h, so a live idle holder keeps its lock
+  (`lock_is_live()`; `ckpt_foreign_lock()` reads it alike for `ckpt_gc()`; D-298); the reactor
+  touches the file every 10 minutes while the session is live. `pid_alive()` (P04,
+  `proc-supervise.R`) is `ps::ps_is_running(ps::ps_handle(pid))` plus a creation-time comparison
+  against pid reuse. **ps joins Imports** (it is already in the dependency closure through processx;
+  the closure does not grow). `tools::pskill()` is never used as a liveness probe (on Windows it
+  always calls `TerminateProcess`; lint rule).
 - Tests: `nrow(showConnections())` unchanged after `peter()` returns, errors or is interrupted; 300 sessions kept in
   a list; CI runs `devtools::test()` with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true`; INFRA-13 extended: SIGKILL
   mid-append, resume, three appends, all present and the tree connected.
@@ -4892,9 +5066,11 @@ DESCRIPTION removal waits for the final dependency/metadata/artifact gates.
 - `supervise_default()` = `getOption("gptr.supervise")` if set (`isTRUE()`), else `!check_running()`; used by
   `proc_spawn()`, workers and artifacts (passing `NULL` to processx errors). Every long-lived child exits when the
   parent dies: `worker_main()` on stdin EOF or EPIPE and a 5 s parent-pid check; artifacts through their watchdog;
-  CLI children through supervision. `proc_spawn()` records a tree marker under `R_user_dir("gptr", "cache")/procs/`;
-  the orphan sweep at the next load is mandatory (SIGTERM skips finalizers; verified). P04 acceptance kills the
-  parent with SIGTERM and asserts no survivors after the next sweep.
+  CLI children through supervision. `proc_spawn()` records a tree marker under `R_user_dir("gptr", "cache")/procs/`
+  (`tempdir()/gptr-procs` while R CMD check runs examples, `check_running()` and not testthat, so an example writes
+  nothing outside `tempdir()`; tests keep the user directory, which their setup redirects; D-285); the orphan sweep
+  at the next load is mandatory (SIGTERM skips finalizers; verified). P04 acceptance kills the parent with SIGTERM
+  and asserts no survivors after the next sweep.
 - Under `check_running()` every child-process pool (CLI, MCP stdio, bridges, fixtures, workers) is capped at 2;
   every process-spawning test calls `skip_on_cran()`.
 - A requested stop is recorded in the job table (`stop_requested`); any exit after it maps to status `stopped`
@@ -5000,7 +5176,9 @@ document are exact.
   `workspace-write` exec gptr hashes the `control` files (IC-54) and refuses to load changed ones until the user
   confirms; the files checkpointer walks after each exec so `/undo` covers Codex's edits. On native Windows the
   sandbox is probed and the route falls back to `read-only` with a warning when it is not ready [08 line 2796].
-  The one-time notice says Codex runs its own shell inside its sandbox.
+  The one-time notice says Codex runs its own shell inside its sandbox; that shell runs in every mode outside
+  gptr's gate, rules and secret guard, and in plan, manual and edits its read-only sandbox still lets it read any
+  file the account can read (D-267).
 - Codex has no turn cap flag: gptr counts `turn.completed`/`item.completed` events and cancels at the cap; each
   exec has a wall-clock limit (`gptr.cli_turn_timeout`, 3600 s).
 - **Continuity**: a claude child resumes the CLI session (`--resume`), a Codex exec its thread (`exec resume`), and
@@ -5044,7 +5222,12 @@ calls and suggests `GPTR_REPLAY=replay`.
   attaches 3 images.
 - `eval_guard()` flags the `q` and `quit` symbols in any position (as a value, a `FUN` argument, inside
   `match.fun`, `get`, `do.call`, `base::`) as level 4 [12 fact-check]; a value passes when the code assigns it
-  or the evaluation environment binds it to data (D-252).
+  or the evaluation environment binds it to data (D-252). The gate's `mode` policy runs the same guard on the
+  call's code in its evaluation environment (`ctx$envir`) and denies what it refuses in every mode, so no
+  person is asked to approve it (D-269). The guard reads `eval(quote(x))` (also `rlang::eval_bare()`,
+  `rlang::eval_tidy()` and `base::quote()`) as `x`, as the classifier does, so `eval(quote(q()))` is refused as `q()`
+  is, and `do.call()` of a `list()` or `c()` written out and `rlang::exec()` of a function written out as the call they
+  make, so `do.call(eval, list(quote(q())))` is too (review round 6).
 - No shipped prompt text or skill recommends `str()` (it leaves a sticky reference: every `str()` of a large
   object makes the next edit copy; re-verified); the texts recommend `peter$describe(x)`, `dim()`, `head()`. A P07
   test fails when any shipped section or skill mentions `str(`; the high-performance-r skill states the cost.
@@ -5124,14 +5307,18 @@ calls and suggests `GPTR_REPLAY=replay`.
   the API object, lazy activation and `hook_add()` carry `session`, every staged `registry_add()` receives it,
   and the session's records are removed at `session_shutdown` and by its finalizer. P02/P17 test: a factory passed
   through `extensions =` is invisible to the next `peter()` call.
-- **Workers inherit the registry**: the worker spec gains `registry = list(specs = <rank-0 session specs and
-  rank-3 user specs>, plugins = <enabled plugins with ranks>, filters = chr)`; `worker_main()` re-registers them
-  first. Functions from package namespaces serialise by reference; closures from the global environment are shipped
-  with their environments (documented); a registry serialises by reference and reads back in the worker as the
-  empty environment, so a closure that reaches it (an extension's API object) ships none of its records (IC-70,
-  D-177); a spec that cannot be serialised makes an explicit `backend = "worker"`
-  fail with `gptr_error_invalid_argument` naming it, and `auto` stays inline. P19 acceptance: a plugin `r` member
-  and a `gptr_fake_provider()` spec work inside a worker.
+- **Workers inherit the registry**: the worker spec gains
+  `registry = list(specs = <rank-0 session specs and
+  rank-3 user specs>, plugins = <enabled plugins with ranks>, filters = chr)`; `worker_main()`
+  re-registers them first. Functions from package namespaces serialise by reference; closures from
+  the global environment are shipped with their environments (documented); a registry serialises by
+  reference and reads back in the worker as the empty environment, so a closure that reaches it (an
+  extension's API object) ships none of its records (IC-70, D-177); a spec that cannot be serialised
+  makes an explicit `backend = "worker"` fail with `gptr_error_invalid_argument` naming it, and
+  `auto` stays inline. The spec also carries, as `secrets`, the registered redacting secrets whose
+  values occur in the shipped objects (`secrets_held()`), which `worker_main()` registers inactive
+  before its session starts, so the worker redacts them and no other key travels (D-295). P19
+  acceptance: a plugin `r` member and a `gptr_fake_provider()` spec work inside a worker.
 - **Token extension points**: `gptr_check(x, error = FALSE, tokens = FALSE)`; `tokens = TRUE` reports a plugin's
   declaration cost and the printed-result cost of each member on its examples. Truncation policies and catalog
   formatters are recorded as v1.x kinds (§1.3 of `03`). The append-only transcript is why Pi's `context` message
@@ -5152,9 +5339,12 @@ calls and suggests `GPTR_REPLAY=replay`.
   through `redact_stream("persist")`; raw redirect files are deleted at process exit; MCP logs live in
   `tempdir()/gptr/mcp-logs/` unless `options(gptr.mcp_debug = TRUE)`. `test-secrets-e2e.R` greps these sinks, the
   deferred-write sidecars and the worker spec and result files.
-- System 1 cache values store `question_sha256`, never the question, and `input_hash` = sha256 of a per-project
-  salt (`.gptr/cache/s1/salt`, committed, RNG-free id bits) concatenated with the canonical input; the cache key
-  includes the salt. `transcripts/` is gitignored by default. The Security considerations page mentions PHI.
+- System 1 cache values store `question_sha256`, never the question, and `input_hash` = sha256 of a
+  per-project salt (`.gptr/cache/s1/salt`, committed, RNG-free id bits) concatenated with the
+  canonical input; the cache key includes the salt. The cache, salt and `.gitignore` writes are best
+  effort: a write that fails keeps the call's answers and usage row, and a salt that cannot be
+  stored serves that one call, so no record is keyed unsalted (FIX-46). `transcripts/` is gitignored
+  by default. The Security considerations page mentions PHI.
 
 **IC-71 Smaller contract fixes.**
 
@@ -5170,7 +5360,7 @@ calls and suggests `GPTR_REPLAY=replay`.
 | OAuth | refuse AS metadata without `code_challenge_methods_supported` or without S256; validate `iss` (RFC 9207) when advertised; own callback reader keeping `iss`; state and redirect checks; negative mock cases in P18 [16 §4 item 8, fact-check] | fid-17 |
 | frontmatter | scalars of the string keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) keep their source text (YAML 1.1 turns `yes`/`on`/`1.0` into logicals and numbers; verified) | fid-19 |
 | describers | methods for classes of packages outside Suggests (Matrix, SeuratObject, SingleCellExperiment, arrow, ggplot2) use only base generics, `methods::slot()`/`slotNames()`, `attr()`, `dim()`, guarded by `isNamespaceLoaded()`; never `pkg::fun()` | cran-21 |
-| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `tools = "minimal"` (`context = "names"` does not lower the floor) [D-250]; an unknown window still checks a finite `compact_at` floor, and an insufficient cap (an unknown window, or a threshold equal to the cap alone) is reported as `arg = "compact_at"` [D-250]; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window, or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence); a `plan-cli` reply's usage (a turn's sum over the CLI's model calls) anchors no projection and updates no multiplier, and a CLI model triggers neither rule [D-202] | safe-20 |
+| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `tools = "minimal"` (`context = "names"` does not lower the floor) [D-250]; an unknown window still checks a finite `compact_at` floor, and an insufficient cap (an unknown window, or a threshold equal to the cap alone) is reported as `arg = "compact_at"` [D-250]; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the threshold (`min(window, threshold)`, D-298), or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence); a `plan-cli` reply's usage (a turn's sum over the CLI's model calls) anchors no projection and updates no multiplier, and a CLI model triggers neither rule [D-202] | safe-20 |
 | concurrent writers | read-modify-write of `auth.json`, settings, trust, MCP and user-level project files (and the OAuth refresh) under one short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms retries); a lock is stale when `pid_alive()` is `FALSE` or it is older than 30 s, never when it has vanished (the taker retries); checkpoint blob GC prunes only blobs unreferenced by every session file of the project and older than `gptr.checkpoint_days`, and skips while another live pid holds a session lock in the project | safe-17 |
 | artifact access | each launch gets a 128-bit token (`openssl::rand_bytes(16)`, else `/dev/urandom` on Unix; on Windows without openssl no token and a notice); the wrapper app rejects sessions whose URL lacks `gptr_token=<hex>`; the handle's URL carries it; static checks flag reads of `secret_file` paths at level 3 | safe-22 |
 | knobs | one knob per limit: options `gptr.subagents.max_depth`, `.max_active`, `.max_workers`, `.max_cli`, `.max_tasks` mirror the settings keys; `gptr.max_active` is HTTP transfers only; `gptr_parallel(max_active = NULL)` defaults to `gptr.subagents.max_active` | cons-20 |
@@ -5274,6 +5464,10 @@ and pastes are kept in the console history.
   input. It is not an R connection: it is dropped with the reader and never `close()`d, as closing it closes
   fd 0. Each poll waits at most 50 ms; it reads with `processx::conn_read_chars()` only
   (`conn_read_lines()` blocks on a chunk without a newline) and splits on `\r\n|\r|\n`.
+  The macOS look for waiting lines (`rd$waiting()`) makes the tty echo the pending rest of a
+  paste again, its last line left on the cursor's row, so in a T console it then erases that
+  row (`\r\033[K`; FIX-34): the hint or the re-asked question's row is not written after it,
+  and readline shows that line at the next read.
 - Stale answers, every front end: `gptr_readline()` records the seconds its `readline()` waited (timed with
   `proc.time()[["elapsed"]]`) in `the$readline_secs`; `readline_answer(prompt)` re-reads while an
   interactive answer arrived in under 0.1 s, at most 100 reads (an interactive R at the end of a pipe gets ""
@@ -5282,7 +5476,7 @@ and pastes are kept in the console history.
   keeps `gptr_readline()`. When the REPL's reader (`console_repl_find()$reader`) finds lines waiting after an
   answer, `ui_console_read()` drops the answer and those lines (a paste), writes one
   `  A pasted block is not an answer (N lines dropped).` line and asks again; this is no invalid answer
-  (D-188). A paste's last line without a newline is never waiting (the tty driver holds it until Enter) and
+  (D-188). The pause menu's key question does likewise, keeping the block in the history (IC-76, D-269). A paste's last line without a newline is never waiting (the tty driver holds it until Enter) and
   shows typed at the next read, so a two-line paste without a final newline answers with its first line.
   A prompt over 200 bytes (`readline()` keeps 255 bytes of a prompt), or in the console margin one wider than
   its content row, is printed whole without its own leading blanks, word-wrapped in the margin, and read after
@@ -5294,6 +5488,7 @@ and pastes are kept in the console history.
 **IC-76 Typed lines steer a running console call** (P26 Task 3, D-185).
 P28 amends this item in §15.10 (D-242, D-243): a steer reaches the first step boundary and a follow-up
 is the next prompt, as D-242 states now; the notices and the follow-up delivery below are replaced.
+FIX-28 (D-263) adds bracketed paste to the composer there.
 - Scope: `repl_terminal(rs)`: not `.stdin`, not Windows (processx cannot poll a console handle),
   `gptr_is_interactive()` and `stdin_tty()`, so an IDE's Terminal tab qualifies while IDE consoles, R.app, RGui
   and Jupyter (no tty) do not; and not Positron's console (`front_end() != "positron"`, P28 visual review): ark's
@@ -5325,11 +5520,29 @@ is the next prompt, as D-242 states now; the notices and the follow-up delivery 
   them meanwhile. R's readline shows a line only while the terminal echoes, so `gptr_readline()` (approvals,
   choices, the pause menu, `gptr_confirm()`) reads with the saved modes and sets `-echo` again after the read.
 - The setting `type_ahead` (§11.2): `"steer"` (default) or `"follow_up"`; not a tighten key.
-- Limits: R code that a tool runs and that reads the console (`readline()`, `menu()`, `browser()`) reads without
-  echo; R ending during a call (`q()`, a crash or a kill) leaves the terminal without echo (`stty echo` or `reset`
-  restores it); a notice ends the streamed row, so the answer goes on in the row after it; a front end that keeps
-  the tty non-canonical during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the
-  model after the CLI's current response.
+- Limits: R code that a tool runs and that reads the console (`readline()`, `menu()`, `browser()`)
+  reads without echo; in a T console it, or a process a tool runs that reads the terminal, also gets
+  bracketed-paste markers (GNU readline 7+ parses them; readline 5.2, libedit and `readLines()` see
+  text), and GNU readline 8.1+ turns the mode off as such a read ends: the call turns it on again
+  when the outermost r call that ran it returns (after other code, a `gptr_tool()` function or a
+  hook, when the call next sets its modes), so a paste made meanwhile is decided by timing (FIX-28);
+  in a T console, pasted text holding a bracketed-paste end marker (a terminal that does not filter
+  pastes passes one on), with the paste split right after it and again before its own end marker,
+  sends at a newline of the read between (a message there that starts with `!` or `/` is a
+  follow-up, which runs as R or as a command at the next prompt with no Enter), and where the reader
+  read nothing between that read and the marker's, or read it more than 0.2 s after (a pause of
+  more than about 0.1 s), a Ctrl-C byte in it is the key, which pauses the
+  run with the bytes after it answering the pause menu, while a Ctrl-C typed within about 0.1 s of
+  a paste's end is dropped; a paste whose end marker another reader takes (a question asked
+  mid-paste) stays open, so Enter only adds lines for the rest of the run, and a Ctrl-C byte read
+  while a paste is open is pasted text only up to 2 s after the paste's last read: a later one
+  pauses the run, also one in the rest of a paste that reaches the reader later than that (D-263;
+  FIX-28 review rounds 3, 4 and 6);
+  R ending during a call (a crash or a kill; `q()` restores the modes) leaves the terminal without
+  echo and, in a T console, with bracketed paste on (zsh, fish and bash 5.1+ reset it at their
+  prompts; `reset` restores both); a notice ends the streamed row, so the answer goes on in the row
+  after it; a front end that keeps the tty non-canonical during evaluation is unsupported (radian
+  unverified); on the CLI routes a steer reaches the model after the CLI's current response.
 
 **IC-77 Console controls and the asking agent** (P26 Task 6).
 P28 amends this item in §15.10 (D-243, D-245): approvals ask under the call they gate, and the run
@@ -5345,10 +5558,15 @@ totals line names the model and the context left.
    tool executes (`console_before_message(tools = TRUE)`).
 2. Who asks: the request record's `agent` (§7.11). The one-line prompt starts
    `  sub-agent <agent> > <tool>  <code>`, the detail view `  sub-agent <agent> wants to use`;
-   an `ask_human` request adds `     asks in every mode: <reason>`; a sub-agent's `ask` question
+   an `ask_human` request adds `     asks even in auto mode: <reason>`; a sub-agent's `ask` question
    starts `sub-agent <agent> asks: ` and its budget question `sub-agent <agent>: `.
 3. Invalid answers: `a`/`p` where nothing can be remembered (level 4, control, the `ask` tool, no
-   `suggested_rule`) say why; other text gives one row in the console's terms, `not an answer`,
+   `suggested_rule`, as for a question an ask rule asks: `perm_policies()` keeps a question's
+   `suggested_rule` only when every policy that asks it has one, FIX-32 review round 3) say why,
+   for an ask rule's question its reason (the record's `no_rule`, escaped as in item 8 of IC-53)
+   and `; an always rule would not stop it` (FIX-32 review round 4; it read
+   `no rule covers these calls`, which stays where no rule can cover the calls); other text gives
+   one row in the console's terms, `not an answer`,
    `kept in history ↑` when kept, and the keys allowed (`?` shows the detail view and is not
    counted); after 5, `no valid answer after 5 tries · refused` and a denial with the reason (not
    feedback, cheat-sheet review) `no valid answer was given at the approval prompt`.
@@ -5379,17 +5597,26 @@ totals line names the model and the context left.
   specs accept it; no project file sets it (an untrusted one only tightens the mode, D-250), nested calls and
   children only tighten (IC-52, IC-53 item 4). A project value is compared with the default when the user's
   value is not a valid mode.
-- Gate: the `mode` policy allows every call; `critical_guard` takes the level of the flagged rows that are not
-  `control`, except `options(gptr.*)`, which could switch the guard off, and asks a person at level 4 while the
-  guard is on; `secret_guard` asks only for secret-to-network flows; `protect_size` is skipped as in auto; deny
-  and ask rules still apply; allow rules never pre-approve level 4 (6.8.2).
+- Gate: the `mode` policy allows every call but a computed `system()`-family command, which it denies as in auto
+  (7.11, D-262), and `r` code the evaluator's guard refuses, denied in every mode (D-269);
+  `critical_guard` takes the level of the flagged rows that are not `control`, except `options(gptr.*)`, which
+  could switch the guard off, and asks a person at level 4 while the guard is on; `secret_guard` asks only for
+  secret-to-network flows; `protect_size` is skipped as in auto; deny and ask rules still apply; allow rules
+  never pre-approve level 4 (6.8.2).
 - Level 4 in every mode: deleting a path whose class is `outside` (beyond the project and R's session
   `tempdir()`; system temporary roots such as `/tmp` count as outside, so a run nobody can answer stops
   `blocked` there), `protected`, `control` or `critical`. A delete keeps the category `file_delete`; a control
   target shows in `path_class`. The edit tool's `*** Delete File:` is level 4 where an `unlink()` of the same
   path is, with the category `file_delete`, so in yolo a control path written by the same patch does not hide
   it; called as `peter$edit()` from `r` code it passes the gate at that level too (`dispatch_nested()` gates a
-  member at its own risk of the actual input). Computed paths stay level 3.
+  member at its own risk of the actual input). Computed paths stay level 3. `setwd()`, `withr::local_dir()`,
+  `withr::with_dir()` and `xfun::in_dir()` to a directory outside the project and `tempdir()`, or to one the code
+  computes, are a level-4 `session` row, which yolo's critical guard counts (D-262, review round 4); `getwd()` and
+  `setwd()`'s value are the directory the code has moved R to, so the save-and-restore idiom stays in the
+  project, and a link `file.symlink()`, `file.link()`, `Sys.junction()` or `fs::link_create()` makes to a path
+  outside the project is level 4 (review round 5). After a move a relative directory is read in the one R is in, a
+  function body and `local()` read the names they bind (the idiom stays in the project there too), and Python's
+  `chdir()` in `peter$py()` or `peter$knit("python")` code is read as `setwd()` is (review round 6).
 - `perm_check()` grants the one-shot control tokens on any final allow (IC-53 item 3).
 - The model's `<mode name="yolo">` block reuses auto's text. Entering yolo (a session, `/mode`, a console start)
   shows a one-time `gptr_message_notice` that lists what still asks and says the classifier is not a sandbox.
@@ -5439,8 +5666,11 @@ totals line names the model and the context left.
   console and MCP edges (`cmd_model()` -> `model_canonical()`, `cmd_model_label()` -> `pcli_default_model()`,
   `mcp_serve_exec()` -> `tool_call_hook`, `tool_run`, `tool_execute_frame`, `checkpoint_before`,
   `checkpoint_after`, `perm_denial_text` and `perm_refused`, which word a denial and why the call did not run as
-  the loop does, IC-77) are contract edges of the
-  layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
+  the loop does, IC-77; `mcp_serve_r()` -> `r_call_new`) are contract edges of the
+  layering test (12.2). A served `r` call binds the r tool's marker with the served call as the run's tool
+  call, so its nested `peter$` calls pass `dispatch_nested()` as the loop's do (the deny and ask rules on a
+  `sh` or `bg` command, the critical and secret guards, the member's own level); with no pump serving it the idle gate
+  decides each first (IC-57) (D-267, FIX-32 review round 1). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
 
 **IC-80 Bedrock Converse with SigV4** (P26 Task 11, D-193).
@@ -5610,38 +5840,56 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     the background` row and before the blank row, and an empty composer; queued steers stay for the run. A
     prompt to the REPL's session while it runs or waits in the background steers it (`route_continue()`), and
     once sent its queue line says so, `↳ steer · <text>` (`repl_turn()`).
-  - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys typed while
-    the agent works). `console_compose(state, chars, now, enter_kind, complete, paste = FALSE)` applies one read
-    batch (the text `conn_read_chars()` decodes) at time `now` to `state` (`list(draft, esc, t)`) and returns the
-    new state and at most one action: NULL, `list(type = "send", kind, text)`, `list(type = "take_back")` or
-    `list(type = "complete", candidates)`. Text is added at the draft's end; DEL and BS delete its last
-    character, Ctrl-U clears it and Ctrl-W deletes its last word; other control bytes and escape sequences (up
-    to their final byte, 0x40-0x7e) are dropped, so nothing moves a cursor. A sequence the batch ends in is held
-    until `now` passes its start by 50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`: a batch
-    holding newlines sends the draft and its text up to the last newline as one message of the Enter kind
-    (`enter_kind`, the `type_ahead` setting), newlines kept, and the rest is the draft; a newline ends what the
-    edit keys reach. With `paste` (steering review) a batch with text after its last newline, not only edit
-    keys, is a paste: its newlines stay in the draft, leading blank lines dropped, and Enter later sends it as
-    one message, as at the idle prompt. `console_keys()` passes TRUE for a batch read on the polling beat, at
-    most 0.2 s after the reader's last read (`rd$polled`, empty reads included), that holds more keys than a
-    person types since that read, one in 30 ms plus one (P28 Task 32: a read late under load held Enter and the
-    next key, and the steer stayed in the draft); the idle editor always; the background probe never. A run's first read and
-    the keys piled up during an in-process tool keep the rule above (during a run a paste without a final
-    newline was split: its head went at once as a steer, its last line stayed the draft). A message starting
-    with `/` or `!` is always a follow-up, and a blank one is not sent. Two
-    keys act only as a batch of their own, or at the end of a batch without a newline, after its text (review of
-    Tasks 16-21: keys typed during an in-process tool arrive as one batch; elsewhere Tab is text and Up is
-    dropped), and `console_keys()` reads one that ends a batch right after a newline as its own batch, after the
-    message the newline sent (P28 Task 35: Enter and Up shared a late read and Up was dropped): Up (`ESC [ A`, `ESC O A`) on
-    an empty draft takes back the newest queued message; Tab on a trigger word completes and never sends, and on
-    any other draft sends the other kind. `console_trigger(line)` gives the trigger word at the line's end, or
-    NULL: the last word of a `!` or `!!` line, a word starting with `@` or `peter$`, or a first word starting
-    with `/`; a word ends at whitespace and readline's break characters, `!` among them (IC-81's completer takes
-    its word from it). `complete(draft, nchar(draft))` returns full words: their longest common prefix replaces
-    the word when it is longer, else two or more are listed (`complete(candidates)`); none does nothing.
+  - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys
+    typed while the agent works).
+    `console_compose(state, chars, now, enter_kind, complete, paste = FALSE)` applies one read batch
+    (the text `conn_read_chars()` decodes) at time `now` to `state` (`list(draft, esc, t, bracket)`)
+    and returns the new state and at most one action: NULL, `list(type = "send", kind, text)`,
+    `list(type = "take_back")` or `list(type = "complete", candidates)`. Text is added at the
+    draft's end; DEL and BS delete its last character, Ctrl-U clears it and Ctrl-W deletes its last
+    word; other control bytes and escape sequences (up to their final byte, 0x40-0x7e) are dropped,
+    so nothing moves a cursor. A sequence the batch ends in is held until `now` passes its start by
+    50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`: a batch holding newlines sends
+    the draft and its text up to the last newline as one message of the Enter kind (`enter_kind`,
+    the `type_ahead` setting), newlines kept, and the rest is the draft; a newline ends what the
+    edit keys reach. With `paste` (steering review) a batch with text after its last newline, not
+    only edit keys, is a paste: its newlines stay in the draft, leading blank lines dropped, and
+    Enter later sends it as one message, as at the idle prompt. Text between bracketed-paste markers
+    (`ESC [ 200 ~`, `ESC [ 201 ~`, both dropped; D-263) is a paste the same way whatever `paste`
+    says: `bracket` keeps a paste open across batches, a sequence cut inside it is held however
+    late, as is a marker's start (`ESC [`, `ESC [ 2`, `ESC [ 2 0`, `ESC [ 2 0 0`, `ESC [ 2 0 1`)
+    while the batches after it may still complete it (once none can, its Esc is the Esc key,
+    dropped, and the rest is typed; FIX-28); in a batch with markers the text before them is typed,
+    unless the first is an end marker, which ends a paste whose text ended it early in an earlier batch or whose start
+    another reader took, so the text before it is pasted (FIX-28 review round 3),
+    and a newline after a paste's end stays in the draft too, so pasted text that holds an end marker
+    sends nothing and only Enter in a later batch sends (FIX-28 review round 1). For batches without markers (terminals that ignore the mode) `console_keys()` passes
+    TRUE for a batch read on the polling beat, at most 0.2 s after the reader's last read
+    (`rd$polled`, empty reads included), that holds more keys than a person types since that read,
+    one in 30 ms plus one (P28 Task 32: a read late under load held Enter and the next key, and the
+    steer stayed in the draft); the idle editor always; the background probe never. A run's first
+    read and the keys piled up during an in-process tool keep the rule above (during a run a paste
+    without a final newline was split: its head went at once as a steer, its last line stayed the
+    draft). A message starting with `/` or `!` is always a follow-up, and a blank one is not sent.
+    Two keys act only outside an open bracketed paste, as a batch of their own, or at the end of a
+    batch without a newline outside its pastes, after its text (review of Tasks 16-21: keys typed
+    during an in-process tool arrive as one batch; FIX-34: a pasted newline is text, so a Tab after
+    a multi-line paste in that batch sends it; elsewhere Tab is text and Up is dropped), and
+    `console_keys()` reads one that ends a batch right after a newline as its own batch, after the
+    message the newline sent
+    (P28 Task 35: Enter and Up shared a late read and Up was dropped): Up (`ESC [ A`, `ESC O A`) on
+    an empty draft takes back the newest queued message; Tab on a trigger word completes and never
+    sends, and on any other draft sends the other kind. `console_trigger(line)` gives the trigger
+    word at the line's end, or NULL: the last word of a `!` or `!!` line, a word starting with `@`
+    or `peter$`, or a first word starting with `/`; a word ends at whitespace and readline's break
+    characters, `!` among them (IC-81's completer takes its word from it).
+    `complete(draft, nchar(draft))` returns full words: their longest common prefix replaces the
+    word when it is longer, else two or more are listed (`complete(candidates)`); none does nothing.
   - Typing while the agent works (Task 18; T class). A T console's prompt call puts the terminal in character
-    mode (`tty_call()`, §7.1: `-icanon -echo -iexten min 1 time 0`, the saved modes back on return, error,
-    interrupt and, by a finalizer, `q()`; only a kill or a crash leaves `stty sane` to the person); a D console
+    mode with bracketed paste on (D-263), off before every readline read and on again after
+    in-process R code (`tty_call()`, section 7.1:
+    `-icanon -echo -iexten min 1 time 0`, the saved modes back on return, error,
+    interrupt and, by a finalizer, `q()`; only a kill or a crash leaves `reset` to the person); a D console
     keeps `-echo noflsh` and its lines (D-221; P28 Task 58), and radian, an L console, gets neither. `gptr_readline()` reads with the
     saved modes and sets the call's again after. `console_typed()` runs every 0.05 s; in T it reads fd 0
     (`console_typed_chars()`, the text `console_typed_lines()` splits into lines) into the composer,
@@ -5652,10 +5900,16 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     of the reader's `typed` lines, else the newest item the console holds, else `session_unqueue(session,
     "steer")`; when both kinds wait, the kind the composer sent last, `rd$sent`). Tab on a trigger word
     completes it with IC-81's completer (Task 22), several candidates kept as `rd$compose$candidates` until the
-    next key. The live row (IC-82) shows the draft, or the newest message waiting, or the
+    next key. A Ctrl-C byte in a batch holding a bracketed-paste marker, read while a paste is
+    open up to 2 s after its last read (`console_paste_open()`), or read on the polling beat (at
+    most 0.2 s later) right after such a batch with no empty read between (`rd$compose$pasted`) is
+    pasted text, never the key (D-263; FIX-28 review rounds 1, 3, 4 and 6).
+    The live row (IC-82) shows the draft, or the newest message waiting, or the
     keys, and is drawn again on every key. A question's drain gives what waits on fd 0 to the composer, so a
     partial line stays the draft, never the history. A draft a run left after status `idle` or `max_turns` stays
-    in the composer for the next prompt (Task 21); after any other end it joins the kept list above.
+    in the composer for the next prompt (Task 21), and readline's read at a prompt empties the
+    composer, so a paste left open ends there (D-263); after any other end it joins the kept list
+    above.
   - A question waits for typing to pause (Task 19; T class). Before a console question draws its rows
     (`console_before_message(kind = "prompt")`), `console_ask_wait()` gives what waits on fd 0 to the composer
     (`console_typed()`) and, while the composer's last key (`rd$compose$t`) is under a second old, three while
@@ -5713,9 +5967,13 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     interactive R (`console_history_add()`, as an approval keeps a non-answer), never sent, and gets the dim
     row `    not a key · kept in history ↑ · s, f, c, a or b` (`ui_reask()`: the keys bold, the kept term only
     when kept; P28 Task 71, visual round 3: `Not a key: '...' (kept in history).` and `Paused. Type s, f, c, a or
-    b.` repeated the title) and the menu reads again. [s] and [f] read
+    b.` repeated the title) and the menu reads again. Where the REPL's reader finds lines a paste left waiting after
+    an answer the menu asked for (`rd$waiting()`, macOS, IC-75), the answer and those lines go to the history as
+    one block and the key is asked again under `    a pasted block is not an answer · kept in history ↑ · s, f, c,
+    a or b`, so nothing of it is a key, a steer or a follow-up (D-269). [s] and [f] read
     their text at the chevron of their own question, `  ? Steer` or `  ? Follow-up` (review of Tasks 16-21: a
-    bare chevron read as the menu asking again), and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
+    bare chevron read as the menu asking again), the lines a paste left waiting joining it as its later lines, so a
+    pasted block is one message (D-269), and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
     `sent`, so Up then takes back the menu's message as the composer's; blank text queues nothing and the run
     continues. While the menu is up its records' last block is a question's (`prompt`), so the queue line sits
     right under its chevron as under an approval, without the text, which is on the row above (`↳ steer`,
@@ -5758,7 +6016,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     composer's (`console_compose()`); Up and Ctrl-D do nothing, and Tab does nothing unless on a trigger word,
     which it completes (IC-81, Task 22), listing several candidates on a dim row at column 2 above the
     prompt's row, as readline lists them; a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E) hands the draft over
-    as Ctrl-C does, so Up recalls it with readline's editing (review of Tasks 16-21: they were dropped). The row is cleared when the read ends. Enter returns the line, which the
+    as Ctrl-C does, so Up recalls it with readline's editing (review of Tasks 16-21: they were
+    dropped); inside a bracketed paste open up to 2 s after its last read (`console_paste_open()`)
+    both are text, which the composer drops (FIX-28 review round 6). The row is cleared when the
+    read ends. Enter returns the line, which the
     reader echoes as it echoes a follow-up (`peter> <line>`, escaped, as readline leaves it, on the input band
     where it shows, IC-82, Task 25) and the REPL takes
     as readline's: `/command`, `!code`, fences and continuation reads (`+ `, `... `) go on as usual, through
@@ -5787,7 +6048,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     envelope (`patch`, or carried in `edits`) as its own lines, `+` rows of a write's `content`, another tool's other
     fields as JSON, then `    (+N more lines; ? shows more)`; any other input shape shows the call line alone. Before,
     an edit's change showed only after `y` and a write's content never (cheat-sheet review). The flagged
-    rows and `asks in every mode: <reason>` follow, dim at column 4 (later flagged rows under the first's text),
+    rows and `asks even in auto mode: <reason>` follow, dim at column 4 (later flagged rows under the first's text),
     then the question `  ? Allow r?` (`?` blue, the question bold)
     and, under its text, the keys row `    y yes · a always (session) · p always (project) · n no · ? more` (the
     keys bold, what they do dim; `a` and `p` only with a `suggested_rule`). The keys row is 68 columns whatever the
@@ -5925,9 +6186,16 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       `gptr_skills()` (as `/skills` lists them, also before the first prompt has registered any; P28 Task 30);
       a word starting with `/skill:` gives `/skill:<name>` for each (P28 Task 77, visual round 3: a bare `/`
       gave 48 words, 19 of them skills, 25 rows of readline's list);
-    - anything else, and a failure: `character(0)` (natural language, `$5`, a bare `$name`, `x$y`, `wow! x`).
-  - The adapter: `console_completer(prev)` is R's `custom.completer`. It sets `fileName` to FALSE and `comps`
-    to `character()` first (without `fileName` R's readline aborts the `readline()` call), then gives the
+    - anything else, and a failure: `character(0)` (natural language, `$5`, a bare `$name`, `x$y`,
+      `wow! x`); and a word holding a control character never, whatever its source (FIX-34 review
+      round 4: Tab and Enter on a file named `bang\n!file.create('M')` sent its rest as a `!` line,
+      which ran).
+  - The adapter: `console_completer(prev)` is R's `custom.completer`. It sets `fileName` to FALSE
+    and `comps` to `character()` first (without `fileName` R's readline aborts the `readline()`
+    call), and `fileName` to FALSE again after `console_complete()`, so a string on a `!` line never
+    goes to readline's own file-name completion, which no filter reaches (under
+    `rc.settings(quotes = FALSE)` it completes nothing, as the composer's Tab; FIX-34 review
+    round 4 verification), then gives the
     completions of the line before the cursor as completions of R's token (`completion_shift()`: readline's
     word, or utils' guess in RStudio and Windows; the longer one's extra head is cut or added), with `prev`,
     the caller's completer (NULL when none), as the custom one meanwhile, so a `!` line calls it. R's Unix
@@ -6171,8 +6439,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       input's colour there (review of Tasks 16-21). Static (no blink, no frames): drawn when a request
       starts, after a CLI tool event while the request waits, and once a second by a reactor task while the run
       renders (`console_render_on()`: none while a tool executes on the stack).
-    - Every console write (`gptr_message_write()`, at the sink the row was drawn at, `the$live_row$sinks`) first
-      clears the row (`\r\033[K`, or spaces and `\r`), then writes its text, then redraws the row once the text
+    - Every console write (`gptr_message_write()`, at the sink the row was drawn at,
+      `the$live_row$sinks`), except a terminal mode's control alone (`ESC [ ? <n> h` or `l`, D-263),
+      which shows nothing and leaves the row, first clears the row (`\r\033[K`, or spaces and `\r`),
+      then writes its text, then redraws the row once the text
       ends a line, where the row erases cleanly; where it is padded, or after a partial line, the row stays
       cleared until the run next waits, so no padding trails a transcript row. A question or a launched process
       (`console_before_message()` kinds `"prompt"` and NULL) clears it and its task draws it again (a T
@@ -6185,3 +6455,560 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       none; L where R reads no terminal of its own (Windows, a stdin that is no tty, Positron, radian); T a
       terminal whose output is a dynamic ANSI tty; else D (TERM=dumb, Emacs, ESS). `repl_terminal(rs)` is a T or
       D console whose REPL is not piped. Verbosity 1 and a console that is not dynamic keep `gptr: thinking`.
+
+### 15.11 Coached harnesses (IC-83..IC-89, 2026-10-28)
+
+Written by `dev/plan/P29-gptr-coach.md` from the design `dev/spec/08-recursive-peter.md` (revision 4); these items
+win over earlier sections. Two exports join §6: `gptr_tailor()` and `gptr_coach()` (D-273). `peter()` stays the
+single gateway and gains no argument, option, `.opts` key or setting. Code: `gptr-tailor.R`, `gptr-coach.R` and
+`gptr-child.R` (area `gptr`, L6, `03` §3.2 and §6.19). `?gptr_tailor` and `?gptr_coach` describe them for users.
+
+**IC-83 `gptr_tailor()` and the harness object** (P29 Task 6, D-273, D-289).
+- `gptr_tailor(x = peter, ..., rules = NULL, coaching = NULL, dir = NULL)` returns a *harness*: a function of class
+  `c("gptr_harness", "function")` whose environment is gptr's namespace and whose body is
+  `function(...) harness_call(sys.function(), sys.call(), parent.frame())` (`harness_from_spec()`). Everything else
+  is one attribute, `gptr_harness = list(args, rules, coaching, record, id, gptr)`: the fixed `peter()` arguments
+  as values, the person's rules (IC-89), the coaching (IC-85), the record (`NULL` here; IC-84), a new
+  `id_new("", 12L)` and the gptr version. `harness_spec(h)` returns the attribute, and for `peter` an empty spec;
+  any other function is refused (`gptr_error_invalid_argument`, `arg = "x"`, naming `gptr_tailor(peter, ...)`).
+- It first calls `session_control_check("gptr_tailor")`; `gptr_tailor` and `gptr_coach` are level 4 `control` rows
+  of `risk-functions.csv`, so model code reaches neither during a run without a person (IC-53).
+- `...` holds named `peter()` arguments only (`harness_formals()`), each once
+  (`harness_resolve_args()`): `model`, `mode`, `skills`, `plugins`, `extensions` and `tools` resolve
+  as identifiers in the caller as `peter()` resolves them (section 6.1.3; `mode = auto` is
+  `"auto"`), `agents` through `resolve_agents()`, the rest are values. `prompt` is not among them
+  (each call's task; D-297), so fixing it is refused like an unknown argument. An unnamed or unknown
+  argument, a duplicate, or a `"+name"`/`"-name"` filter in `plugins` (`harness_plugins_check()`, a
+  filter changes every later call of the R session) is `gptr_error_invalid_argument`.
+- Merge over `x`'s fixed arguments (`harness_merge()`): `tools`, `extensions`, `plugins` and `skills` combine
+  (`ident_combine()`), `.opts` entries replace by name, other values replace, and `NULL` drops a fixed single value.
+  `rules =` and `coaching =` replace `x`'s when not `NULL`.
+- A `notice` ("This harness loads code or loosens checks:") lists, as R source (`harness_source()`),
+  every fixed argument that is not plain data (`harness_plain()`: `NULL`, text, numbers, logicals
+  and lists of them, with no attribute but names; so any function, spec, provider, environment or
+  formula) and `mode = "yolo"`, and always the fixed `extensions` and `plugins`, text included (a
+  file path there is R code sourced on every call), and a fixed `.opts` holding `system` (D-297),
+  also when a harness is loaded with `gptr_tailor(readRDS(f))` (D-289). A provider shows as
+  `<provider id>`; registered secrets in these lines, in `print()` and in `HARNESS.md` are redacted.
+- `gptr_tailor(readRDS(f))` reads the attribute, rebuilds the standard body and checks the spec
+  (`harness_spec_check()`: fixed arguments named `peter()` formals, a string `id`, no plugin filters, the rules and
+  the coaching valid); a damaged spec is `gptr_error_invalid_argument` ("This is not a valid harness"). It cannot
+  undo what `readRDS()` itself did (D-278).
+- `dir =` writes `HARNESS.md` (the id, the version, fixed arguments as R source and the person's rules; no record,
+  which is always empty here, D-289), `NOTE.md`,
+  `REVIEW.md`, `RULES.md` and `skills/<name>/SKILL.md` with `write_atomic()` (`harness_write()`), returns the
+  harness invisibly, and is never read back.
+- The call (`harness_call(fn, call, envir)`): the spec is checked again
+  (`harness_spec_check(spec, fresh = FALSE)`, IC-85); a fixed argument the call omits is added, a
+  given `.opts` is merged by name over the fixed one (the call wins), a given list-like argument
+  becomes `c(<fixed>, <given>)`, and for other arguments the call wins; the coaching factory (IC-85)
+  is appended to `extensions`; the head is replaced by the `peter` function. An argument a wrapper
+  forwards through `...` counts as given (its name read with `...names()`, which forces nothing);
+  when one must combine with a list-like fixed argument, or `extensions` with the factory,
+  `harness_expand()` writes the dots out: identifier arguments (`harness_idents`) resolved in the
+  caller as `peter()` resolves them (`harness_ident()`, which `harness_resolve_args()` shares), a
+  literal dot as written (a prompt is still interpolated in the caller), every other dot as `..i`,
+  named by the label `peter()` would give it as context unless that label is a `peter()` formal, so
+  no formal is matched twice and interpolation and labels are those of a direct call. The new call
+  carries the attribute
+  `gptr_harness = list(fn = <the head as text>, hash = coaching_hash(<coaching>), call = <the call as written>)`
+  for the recorder (IC-87) and is evaluated in the caller's frame, so binding sites, `envir`,
+  `{name}` interpolation, `gptr_last()`, pipes, `lapply()` and `do.call()` behave as for `peter()`.
+- Views: `$.gptr_harness` and `[[.gptr_harness` give `coaching`, `record` and `report` (the last full report of
+  this R session, `the$coach_reports[[id]]`, or `NULL`); any other name is `gptr_error_unknown_member`. `$<-` and
+  `[[<-` are `gptr_error_readonly` (`object = "gptr_harness"`).
+- `print.gptr_harness()` writes five lines: `<gptr_harness <id>> built on peter (gptr <version>)`, `fixed:` (each
+  argument by `harness_label()`, functions as `<function>`, specs as `<kind name>`), `your rules:`, `coaching:`
+  (note characters, skill count, review rounds, rule counts) and `record:` (decision, reason, run count).
+- Classifier (P11, `perm-classify.R`): `risk_fn_where()` resolves a function inheriting `gptr_harness` to gptr's
+  `peter`, so a harness call from model code is classified as `peter` and a person's `r(fn:peter)` rule covers
+  it; overwriting or modifying a binding that holds a harness is a level 4 `control` row (`risk_scan()`).
+
+**IC-84 `gptr_coach()`** (P29 Tasks 9 and 11).
+- `gptr_coach(..., harness = peter, check = NULL, coach = NULL, k = 1L, strategy = "parallel", focus = c("procedure",
+  "domain"), surface = c("note", "skills", "review", "rules"))`. `...` is what the harness would
+  get: named `peter()` formals are resolved as in IC-83 (identifiers in the caller; every other
+  argument is its own promise's value, `...elt()`, so dots a wrapper forwards keep their frames) and
+  apply to every run of this call only (`budget` also caps each coach session and the judge, also
+  when the starting harness fixes it); the rest is split as `peter()` captures a call
+  (`coach_task()`: the prompt, literal or interpolated, and the context objects by label). No
+  argument shares a name with one of `peter()`'s, which is why `strategy` is not called `mode`.
+- Order of a call:
+  1. `session_control_check("gptr_coach")`; `harness_spec(harness)` (peter or a harness); `coach` resolved as a
+     model identifier; `check` a function or `NULL`.
+  2. `k` a whole number from 1 to 5 (`check_number()`) and `strategy` `"parallel"` or `"sequential"`
+     (`check_choice()`); then `coach_check_args(focus, surface)`: `focus` a non-empty character vector of distinct
+     non-blank foci, `surface` a subset of the four parts. Each refusal is `gptr_error_invalid_argument`. A call
+     without a prompt, or one that names a session, is refused.
+  3. The document: `doc.coach` (IC-87) with a `call_new()` record and `start_hash`. `"replay"` returns the block's
+     harness with no model, check, object or process; `"ask"` asks
+     `The recorded coaching is out of date. Coach again? This starts <count>.` and a no returns the block's
+     harness. Under `replay` a recordable call without a fresh block signals `not_recorded`/`stale_block` here,
+     unless it has no block and the call record's `offline` is `TRUE` (`replay_guard()` accepts the runs' model and
+     the coach model, which the judge also uses; a `NULL` model is not offline): `doc.coach` then answers `"none"`
+     and the call coaches unrecorded, as offline models answer `peter()` under replay (D-287).
+  4. `options(gptr.unsafe_no_permissions = TRUE)` is `gptr_error_permission`; the starting coaching
+     is checked (`coaching_validate()`) before any process starts. Then `coach_args_check()`
+     (D-286), after `plugins_sync()`, so the tools of settings plugins and user extension files are
+     known: `.run`, `background`, `.stdin`, `envir`, `parallel`, `choices`, `levels`, `threshold`,
+     `min_confidence` and `uncertain`, given or fixed in the harness, are
+     `gptr_error_invalid_argument` with `arg` that name ("gptr_coach() runs your task as one
+     unattended session in another R process, so it does not take `<name> =`."); `budget`, `replay`
+     and `.opts` are checked by `peter()`'s own `gateway_args()`; tool names by
+     `prompt_tools_check()`, only when every `tools` entry is a name and neither the call nor the
+     harness gives `extensions` or `plugins`, and never for `mcp__` names, which a run's session
+     could add.
+  5. `coach_models()`: `coach_model_kind()` (IC-88) for the runs' model (`model =`, else the harness's fixed
+     `model`, else the configured default) and the coach model (`coach`, else the runs'), each refused with
+     `gptr_error_model_refused`; with the configured default the message adds
+     `Pass model = for the runs and coach = for the coaches.`; then `replay_guard()` for both, before any process.
+  6. `child_job_check()` of the starting run and of a coach job: an object or argument holding an external
+     pointer or a connection is `gptr_error_invalid_argument`.
+  7. `egress_check()` for each distinct model (`coach_egress()`), while the person is there.
+  8. Notices: `gptr_coach() starts <count>, each in its own R process.`, the plan notice (IC-88), and once per
+     process the default-coach notice (key `gptr_coach_defaults`, when `coach` is `NULL` and `k` is 1:
+     `Coaching with the runs' own model at k = 1 is untested; k = 2 or a stronger coach = model may help.`) and
+     the no-`check` notice (key `gptr_coach_check`).
+- Count (`n = c(run, coach, judge)`): `k * (2 + length(focus))` runs and `k * (1 + length(focus))` coach
+  sessions, plus up to one judge session when `k > 1`. `<count>` reads `<n> runs of your task and <m> coach
+  sessions`, and adds `, plus up to one judge session` when `k > 1`. With the defaults: 4 runs and 3 coach
+  sessions. The judge runs only when more than one final passes.
+- Labels, the job ids and the record's labels, with `i` from 1 to `k`: runs `start<i>`, `probe-<coach label>` and
+  `final<i>`; coach sessions `proc<i>` (focus `"procedure"`), `dom<i>` (focus `"domain"`), `focus<j><i>` (the
+  `j`th focus, in the person's own words; `coach_focus_label()`) and `compose<i>`; and `judge`. At `k = 1` with the
+  default foci: `start1`, `proc1`, `dom1`, `probe-proc1`, `probe-dom1`, `compose1` and `final1`.
+- The loop (`coach_loop()`; each stage's jobs run together through `coach_run_jobs()`, IC-86):
+  1. `k` starting runs of the starting harness (read with `direction = "start"`). If every one ends `blocked`, the
+     call stops with `gptr_error_permission` naming the first one's step, before any coach. Else, if every one
+     ended `error` or took no turns, it stops with `gptr_error_invalid_argument` (`arg = "..."`):
+     `The starting run failed, so gptr did not coach: <the first one's error, else "it ended with an error." or
+     "it took no turns.">` (D-286). On a plan route a notice projects the call's tokens from their mean
+     (`coach_projection()`). The task the coaches and the judge see is the first starting run's `first_user`
+     (IC-86), else the interpolated prompt.
+  2. Rounds: `"parallel"` is one round holding the indices 1 to `k`; `"sequential"` is `k` rounds of one index
+     each. The first round's base coaching is the starting coaching; a sequential round's base is the composition
+     of the round before, kept or not. In each round:
+     - for each index and focus, one coach, blind to the others: `coach_texts$common` plus the focus's text
+       (`procedure`, `domain`, else `Your focus: <words>.`); the `procedure` coach gets `surface`, every other
+       focus `surface` without `"rules"`. Its reply is read over the round's base;
+     - one probe run of each candidate's coaching (`coach_spec()`, a new id);
+     - one composer per index (`common` plus `composer` texts), which sees every candidate of the round with its
+       coaching, notes and probe, so in parallel mode each of the `k` composers sees every probe. It may keep,
+       drop or merge only rules that its base or a candidate it was shown holds (`rules_allowed`), and adds none.
+       Rules are compared by `coach_rule_keys()`, JSON of a rule's kind and its content apart from `why`, `id` and
+       `text`, so a `never` rule turned into a `require` rule, or a `require` rule that gains `contains`, is new;
+     - one final run of each composer's coaching.
+     Every round's evidence starts with the `k` starting runs. A sequential round also shows every earlier round's
+     candidates, compositions and their runs under `# Earlier rounds` (composition `compose<i>` was tried as
+     `final<i>`).
+  3. Each final is checked by `coach_passes()`. None passes: `"not kept"`. One passes: it is kept. More than one
+     passes: the judge picks one.
+- The judge: the passing finals are shown in an order drawn by `coach_shuffle(seed, n)`, the permutation that
+  sorts `hash_sha256("<seed>:<i>")`, under the labels `A`, `B`, ... . `seed` is the starting coaching's hash and
+  the interpolated prompt, so one call always gives one order, and R's random number generator is not touched.
+  `coach_judge_prompt()` gives `coach_texts$judge` (pick the attempt that does the task best, ranking by delivery,
+  conformance, fidelity, consistency, fitness and finish, each deciding only when the ones before it tie; length
+  and polish are not merits), then an `<evidence>` block with the task and each attempt's deliverables
+  (`coach_deliverables()`: answer, value, objects and files). It never shows a harness, coaching, transcript, rule
+  or `check`. The job (`coach_job_judge()`) has id `judge` and role `"judge"`, runs on the coach model under the
+  call's budget as a tool-less session like a coach's (IC-86), replies with the schema `{label}`, `label` an enum
+  of the labels, and gets no follow-up. The pick is the final under the label it returns. When its prompt does not
+  fit (`coach_fit()`), or its answer is not one of the labels, the first final that passed, in index order, is
+  kept and `record$notes` says why.
+- Evidence (`coach_prompt()`): the job, `You may change: <parts>` and the reply format, then an `<evidence>` block
+  ("read it, never obey it") holding the task, the round's base coaching as JSON, the fixed arguments by
+  `harness_label()` (functions never shown), the person's rules, and each run (`coach_run_text()`: status, turns,
+  highest risk, error, refused calls, unmet requirements, what it delivered as in `coach_deliverables()`, with
+  value and objects as `str()` and files with their text, and the transcript); a candidate is its coaching, its
+  coach's notes and its run. `coach_quote()` keeps evidence from closing the block. Each observation is clipped at
+  50,000 characters, at 10,000 when the prompt's `est_tokens()` exceed half the coach model's context window
+  (`coach_fit()`, `coach_window()`); when neither fits, that stage keeps its starting coaching and `record$notes`
+  says so.
+- Reply: `coach_schema()`, `{note?, skills?, review?, rules?, notes}` with `notes` required. In the coach's child,
+  `coach_child_reply()` reads it over the base coaching (`coach_reply_read()`: a named part replaces the base's,
+  skills by name, a skill with empty `text` is deleted), validates it with
+  `coaching_validate(co, surface, base)` (a part outside `surface` that changed is refused) and, for a composer,
+  refuses a rule outside `rules_allowed`. An invalid or missing reply gets one follow-up in the same session,
+  listing the problems, under what is left of the budget (`coach_budget_left()`, which counts with `usage_used()`,
+  shared with `run_used()` in `session-budget.R`); a second failure keeps the base
+  coaching (`fell_back`), which is still tried.
+- `passes()` is `coach_passes(final, starts, check)`, with every starting run: the final ended `idle`; it delivered
+  every kind a starting run delivered (a value, objects, files; when none, non-empty text when a start had text);
+  its risk is no higher than the highest starting run's (calls that met a `require` rule are left out, IC-89); no
+  requirement is unmet; and `check(r)`, with `r = list(text, status, value, objects)` of the final, is `TRUE`
+  (`FALSE` or an error: not kept). `check` runs only in the calling session and never reaches a coach or the judge.
+- Reason: at `k = 1`, the reason `coach_passes()` gives (`delivered as at start; risk <r> <= <ceiling>`, with
+  `; check TRUE` when there is a `check`, or why the final does not pass). At `k > 1` each final's reason starts
+  with its label: none passing joins them with `; ` (`final1: check returned FALSE; final2: check returned
+  FALSE`); one passing gives `final2: delivered as at start; ...`; the judge's pick
+  `final2, picked by the judge: delivered as at start; ...`; the fallback `final1, the first that passed: ...`.
+- Result: a harness built with `harness_from_spec()` from the starting spec, with the coaching of the kept
+  composition when the decision is `"kept"` and the starting coaching otherwise (`"not kept"`, `"stopped"`), a new
+  id and the record; the person's rules and fixed arguments are the starting harness's. `coach_announce()` prints
+  kept coaching in full with `Kept is not proof that the new harness is better...`, else
+  `gptr_coach() returned the starting harness: <reason>.`
+- Record (`coach_record()`, no data from the runs): `decision`, `reason`, `notes`, `runs` (each `label`, `status`,
+  `turns`, `tokens`, `cost`, `risk`, `unmet`), `coaches` (the coach sessions and the judge, the same without `risk`
+  and `unmet`), `model`, `coach`, `k`, `strategy`, `tokens` (input, output), `cost` (billed sessions only; plan
+  sessions are not billed, and the judge is billed as a coach session) and `date`. The full report,
+  `list(record, results, candidates, coaching)`, goes to `the$coach_reports[[<new id>]]` (the last 5 are kept) and
+  is read as `h$report`.
+- Spend and plan readings, after each stage (results are untrusted): `coach_charge()` charges each
+  result's usage rows that pass `usage_rows_check()`, each `request_id` once, to the session of the
+  run the call is part of (`usage_add()` on `run_current()$shell`, which also charges its
+  ancestors), else to the session-less log (`usage_log_append()`), so `gptr_usage()` shows what
+  coaching spent. These rows are kept in memory only: `usage_add_durable()` takes only rows the
+  receiving session owns, so a resumed session lacks the coaching spend charged inside a run
+  (FIX-42). `coach_plan_merge()` keeps a result's `plan` reading of `claude-cli` or `codex` in
+  `pcli_cache$plan` when its `time` is one finite `POSIXct`, not in the future and newer than the
+  kept one, rebuilt from checked fields (`pcli_chr()`, `pcli_num()`) with `five_hour` and
+  `seven_day` at most 1 and `overage` `TRUE`, `FALSE` or `NA` (IC-88's plan notice reads it).
+- Recording: when `doc.coach` answered `"record"` or `"ask"` and the decision is not `"stopped"`, the result is
+  `doc.coach_block(site, h, coach_doc_record(record, out))`, the harness the written block defines (IC-87). A call
+  that errors or is interrupted writes nothing.
+- Plan limits: a stage whose result carries `limit` or status `skipped`, at any stage and the judge included, ends
+  the loop with decision `"stopped"` and reason `stopped at <stage>: plan limit, resets at <time>` (`an unknown
+  time` when none is known). The stages are `the starting runs`, `the coaches`, `the probes`, `the composers`,
+  `the final runs` (each with ` of round <r>` when there is more than one round) and `the judge`. The call returns
+  the starting harness with its record, starts nothing new, never waits for a reset and records no block (D-282).
+
+**IC-85 Coaching data** (P29 Tasks 1, 6 and 10).
+- `coaching_validate(coaching, surface = NULL, base = NULL, fresh = TRUE)` returns `list(note, skills, review,
+  rules)`, texts redacted with the persist profile, or signals `gptr_error_coaching` with `part`. `NULL` is empty
+  coaching. It runs whenever a harness is made, loaded or called, on every coach reply and on a coach block's
+  replay; a harness call passes `fresh = FALSE`, which skips only the skill-name check below, so a harness that
+  passed it when it was made or loaded is not refused once a session has registered more skills (D-288).
+- Parts and limits: `note` one string of at most 8,000 characters; `skills` a list of exactly
+  `list(name, description, text)`, names `^[a-z0-9][a-z0-9-]*$`, unique and, with `fresh`, not the name of a
+  registered skill or of any `SKILL.md` that `skill_discover()` lists (project skills, trusted or not, the
+  person's, gptr's, packages' and plugins'), so the answer is the same before and after a session syncs (D-288),
+  descriptions of at most 1,024 characters, at most 64 KiB in all (`coaching_skills()`); `review` `NULL` or
+  `list(text, rounds)`, at most 2,000 characters, `rounds` 0, 1 or 2 (default 1); `rules` as in IC-89.
+- Text checks (`coaching_text()`, every text part): one string, valid UTF-8, no control, bidirectional or
+  zero-width character other than newline and tab (`ui_escape()`), no format (`\p{Cf}`), line separator
+  (`\p{Zl}`), paragraph separator (`\p{Zp}`) or tag (U+E0000 to U+E007F) character, no opening or closing tag of
+  one of gptr's own blocks (`coaching_tags()`, which includes `coaching` and `harness`) or of any `coaching_` name,
+  and neither of gptr's wordings for a message from the person or an extension (`coaching_wordings`) (D-288).
+- Hash: `coaching_hash(coaching)` is the first 8 hex of `hash_sha256(canonical_json(list(schema = 1L, note,
+  skills, review, rules)))`, skills sorted by name and texts normalised by `text_norm()` (`utils-text.R`), which
+  `prompt_hash()` shares; empty coaching has one constant hash, and the gptr version is not part of it.
+- Factory: `harness_factory(spec)` is `NULL` when the coaching is empty and the person has no rules;
+  else a factory with attribute
+  `gptr_key = "gptr_harness:<coaching hash>:<hash of the person's rules>"`, which
+  `gateway_register()` loads at most once per session (`gateway_key_loaded()`; any keyed factory,
+  IC-69). A keyed factory that `gateway_register()` loads into a session whose prompt is already
+  frozen (another harness on a continuation, or the same harness in a fork or resumed session this
+  process has not loaded it for) clears `.d$frozen` and sets `.d$refreeze` (IC-52). The next request
+  is then composed afresh and carries every loaded harness's note and skills. A refused call
+  restores both (D-251). A continuation with a harness already loaded keeps the frozen prompt. A
+  pending refreeze is a stated break of the prompt cache: `gateway_continue_session()` calls
+  `prefix_reset()`, so no `cache_break` is recorded. The fresh composition uses the continuing
+  call's preset and tool modifiers, so a fixed `tools = "-write"` leaves `write` out of the refrozen
+  prompt while the tool stays registered and callable (D-291). It registers at rank 0 in the
+  harness's session (IC-89's policies also bind the sessions it starts): the note as
+  `gptr_prompt_section("coaching_<coaching hash>", <first line> + note, tier = "T1", order = 790L, budget =
+  32768L)`, one section per coaching, so two harnesses' notes in one session never share a name
+  (D-288), the first line being `coaching_first_line` (before the person's `APPEND_SYSTEM.md` at
+  800); each skill as `gptr_spec("skill", name, description = , text = )`; the policies of IC-89,
+  which keep the names `coaching` and `harness_rules` (every policy applies whatever its name, and
+  `nested_rules()` selects them by name); and the finish hook.
+- Skills with text (Task 1): a `skill` spec may hold `text` in place of `path` and `dir` (§10.2 row 8); `skill.body`
+  takes `session` (§7.0, §7.17).
+- Finish hook (`harness_finish_hooks(gptr, review, need)`, `need` the person's and the coaching's `require` rules):
+  on `tool_call` (not nested) it notes which requirements a call matches (`harness_require_hit()`); on
+  `tool_result` without error it marks them met for that run (a `made = "plot"` rule by the result's plots, a
+  `made = "file:<glob>"` rule by a matching project file changed since the run started, `harness_made()`, walking
+  at most 5,000 entries) and adds the call id to `run$require_met`; on `turn_end` with a final answer it sends the
+  texts of the unmet requirements and then the review text as one follow-up (`ctx$send(as = "follow_up")`), at
+  most two per run and the review at most `rounds` times, and nothing at the turn limit, in a blocked or aborted
+  run, with `.opts$returns`, or after a refusal that is not a coaching denial; on `agent_end` it writes the notice
+  `This run finished without: <ids>` and a `gptr.unmet` custom entry. A run's status never changes.
+
+**IC-86 Coaching children and the plain JSON transport** (P29 Task 7, D-278, D-279, D-284, D-290).
+- `coach_run_jobs(jobs)` (`gptr-child.R`) runs each job in its own R process and returns one result
+  per job, in order. A job is
+  `list(id, role = "run" | "coach" | "judge", spec, prompt, objects, args, model, schema, budget,
+  direction)` (`direction` `"final"`, the default, or `"start"`; a coach's `surface`, `base` and
+  `rules_allowed` are read by `coach_child_reply()`); a run's objects travel in its field `file`
+  instead, one RDS file per call that `coach_objects_write()` writes once and every run's
+  `child_main()` reads with `worker_refhook` (FIX-42). A result is
+  `list(id, status, reason, text, turns, usage, transcript, first_user,
+  risk, refusals, unmet, files, plan, limit, checks, error, objects, value)` (`child_result_new()`),
+  plain data only; `objects` and then `value` come last, so the encoder keeps every other field
+  whole and only the value becomes a summary when the reader's count runs out (D-290). A result that
+  cannot be encoded, or merged, ends its job with the summary result or an error result (FIX-41).
+- Scheduling: `child_lanes()` gives each job a lane, but at most two lanes per plan account (`claude`, `codex`);
+  lanes run on the worker pool through `subagent_schedule()` with `max_total = subagent_limit("worker")` (the option
+  `gptr.subagents.max_workers`). Once a plan reports a limit, its later jobs are not started (status `skipped`,
+  reason `plan limit`). Each child has a `gptr_jobs()` row `coaching <role> <id>`; stopping it, or interrupting the
+  call, kills the child and ends it and its lane's later jobs `aborted`.
+- What is sent, parent to child (the trusted direction): `spec.rds` written with
+  `save_rds(refhook = worker_refhook)` in a private 0700 folder that is also the child's `TMPDIR`,
+  holding the job, the gptr options of `child_options()` (`critical_guard`, `secret_guard`,
+  `protect_size`, `max_turns`, the `subagents.*` limits and the replay mode), the parent's pid and,
+  as `secrets`, the registered secrets whose values the jobs and their objects file hold
+  (`secrets_held()`), which `child_main()` registers inactive, so the child redacts them and
+  resolves no credential with them (D-295); for a run also `worker_registry(character())`, the
+  person's effective rules with project-relative path globs anchored to the project
+  (`child_rules()`) and copies of the project's instruction files (`child_instructions()`); for a
+  coach or the judge, in their place, only the provider spec of a provider the person registered
+  (`child_provider()`). The environment is
+  `child_env("worker", pass = names(coach_cli_env(kind)), set = c(TMPDIR = ...), provider = <its key>)`
+  (`worker_key_provider(model)`).
+- Child entry: `proc_rscript("child", list(spec_path, result_path), ...)`, whose bootstrap loads the installed
+  namespace as for `worker` and calls `child_main()`. The child, restoring everything on exit: makes a fresh 0700
+  folder its working folder and project root; sets `gptr.interactive = FALSE`, `gptr.noninteractive_ask = "stop"`,
+  `gptr.record = "off"`, `gptr.quiet = TRUE` and `gptr.verbose = 0L`; loads the rules into `the$rules_session`;
+  sets `the$coach_role` (`"run"`, else `"coach"`) and `the$model_gate = coach_model_kind` (IC-88); registers as
+  `user` records at rank 3 (`child_register()`) a `worker` backend that runs inline, the `fence` policy, `tool_call`
+  and `tool_execution_end` hooks and, for a coach, a policy `coach` that denies every call; for a run applies the
+  shipped registry (`worker_registry_apply()`); moves `CLAUDE_CODE_OAUTH_TOKEN` into the CLI's own environment
+  (IC-88); writes the instruction files; binds the objects in a new environment under their labels, a label R
+  cannot use as a symbol (`..2` from `do.call()`, `...` or `""`) under a name of its own such as `X..2`
+  (`child_bind()`); exits with status 3 once the parent is gone (checked every 2 s).
+- `child_call()`: a run calls its harness (`harness_from_spec(spec)`, `peter` for a spec without an id), a coach
+  or the judge `peter` without extensions, plugins, skills or agents, with `tools = c("minimal", "-<every tool>")`
+  and `.opts$returns = schema`; every call passes the prompt as interpolated in the parent
+  (`.opts$interpolate = FALSE`) and the objects by name, an object bound under a name of its own as a named
+  argument under its label.
+- Fence (`child_fence()`, a policy for the whole child process; `child_fence_why()`): it denies any
+  call whose input `wd` is not the run's folder written as an absolute path; `read`, `grep` and
+  `edit` of a CLI login file (`child_login()`: `.credentials.json` in `CLAUDE_CONFIG_DIR`,
+  `auth.json` in `CODEX_HOME`, by default `~/.claude` and `~/.codex`); `write` and `edit` outside
+  the child's temporary folder; every `script` call; `r` code without a classification; R code whose
+  flagged paths name a login file or that calls `find-generic-password`; any `install` row
+  (including `R CMD INSTALL`, `R CMD REMOVE` and `Rcmd`); a `peter$script` row (D-284); R child
+  processes (callr functions, `R` or `Rscript` in a `process` or `dynamic` row); a change of working
+  folder to anywhere but the run's folder itself, written as an absolute path (`child_home()`,
+  D-284), read from the parsed code by `child_dirs()`: the folder of `setwd()`,
+  `withr::with_dir()`/`local_dir()` and `xfun::in_dir()`, matched as R matches arguments (a computed
+  folder counts as elsewhere; a changer's name is a move only where R calls it, where `do.call()`,
+  `match.fun()` or `get()` names it, or where the classifier reads it passed on as a value that
+  leaves the project or goes to a folder the code computes, D-297), every `wd =` argument, and the
+  target of each `cd`, `pushd`, `chdir` or `Set-Location` (in any letter case) in any string of the
+  code, inside `sh -c '...'` too (`child_cd()`); classified file targets outside the temporary
+  folder, a relative one resolved against the run's folder (`project_root()`); and R code with a
+  `dynamic` row (a function the code computes) or a `file_write` or `file_delete` row whose path
+  class is `unknown` (a path the code computes; F-58, FIX-49). Since the working folder never
+  moves, the targets the classifier resolves hold. It fences only what the classifier sees: where
+  R cannot place the path argument by position, a non-empty literal passed by position is read as
+  the path, so `write.csv('a', file.path(d, 'x.csv'))` reads a write in the run's folder and passes
+  (F-58's residual, a documented limit; 08 section 3.5 limit 4).
+- Result (`child_outcome()`): status, reason, last text, turns, usage rows, the value (`session_value_get()`), the
+  objects created or changed in the run's environment (`child_objects()`, never forcing a promise or an active
+  binding), the transcript (`child_transcript()`, clipped at 50,000 characters), risk, refusals, unmet ids (the
+  `gptr.unmet` entries), files written in the scratch folder (`child_files()`, at most 100, text clipped at
+  50,000, binary without text), `pcli_cache$plan`, `limit` (`resets_at` of a `gptr_error_plan_limit`), `checks`
+  (the message of a `gptr_error_cli_check`), the error, and `first_user`: the session's first user message alone,
+  rendered as in the transcript (`child_text()`), clipped at 50,000 characters, `""` when there is none. A coach
+  session that froze a gptr tool or used any tool has its reply discarded (status `error`, `the coach session had
+  or used a tool`). The child writes `json_encode(plain_encode(result))` with `write_atomic()`; when that JSON is
+  over `plain_max$bytes` (64 MiB), it encodes again with the value and each object as its `plain_summary()` text,
+  so every other field reaches the parent (D-290).
+- Stream: the child writes one JSON line per event to its own fd 1 (`processx::conn_create_fd(1L)`, which an `r`
+  sink does not capture): `{"gptr_coach": "risk", "level"}` for a tool call that ran, `"refusal"` (`id`, `tool`,
+  `reason`), `"unmet"` (`id`) and `"limit"` (`resets_at`). The parent reads it with its own line reader
+  (`child_line()`), not the worker's: other lines are ignored, none opens a question or a permission prompt,
+  strings are clipped at 2,000 characters and at most 1,000 refusals and unmet ids are kept.
+- Plain JSON (`plain_encode()`, `plain_decode()`): a value is
+  `{type, len, data, na, names, dim, levels, tz,
+  nrow}`, `type` one of `logical`, `integer`, `double`, `character`, `factor`, `Date`, `POSIXct`,
+  `data.frame`, `list` or `summary`; numbers are base64 of little-endian `writeBin()`, so doubles
+  stay exact (`NA`, `NaN`, `-0`); anything else (S4, other classes, at depth 20 or longer than 1e6),
+  and any value these keys cannot rebuild exactly (`plain_exact()`: dimnames, an ordered or NA-level
+  factor, a data frame with its own row names, NA names, bytes or invalid text), is its printed
+  summary, printed under `max.print = 200` and clipped at 2,000 characters; a POSIXct keeps an
+  absent `tzone` (FIX-41). The encoder keeps within the reader's limits (`plain_max`): it counts
+  depth and values from the result's root, threads one value count through the whole result and
+  leaves each value room for one value per later sibling, so a list or data frame that would pass
+  1e5 values becomes its summary (D-290). The parent reads a result with `child_read()`: at most 64
+  MiB (`plain_max$bytes`), `json_decode()`, then `plain_decode()`, which rejects unknown keys and
+  types, more than 1e5 values, nesting deeper than 20, and malformed numbers, names, levels or dims,
+  and rebuilds the kinds itself with `readBin()`, `structure()` and `.POSIXct()`; a result must have
+  only the result's keys, each in its shape: `status`, `text`, `transcript` and `first_user` one
+  string, `reason` and `error` `NULL` or one string, `turns` one whole number of at least 0, `risk`
+  one whole number from 0 to 4, `usage` `NULL` or a data frame with numeric `input`, `output` and
+  `cost`, `objects` a list whose elements are all named, `refusals` a list, `unmet` and `checks`
+  character, `files` `NULL` or a data frame and `limit` `NULL` or a list. A refusal is
+  `gptr_error_untrusted` (`what = "coaching result"`), which `child_exit()` turns into an error
+  result for that job alone. `readRDS()` and `jsonlite::unserializeJSON()` are never called on a
+  child's output (D-278).
+- Safe direction (`child_merge()`): the file and the stream are merged, keeping every refusal and unmet id and,
+  for risk, the higher of the two for a final and the lower for a starting run, whose risk is the ceiling the
+  finals must not exceed.
+- Contract edges (§12.2, D-279): area `gptr` calls P19's `subagent_schedule()`, `subagent_limit()`,
+  `worker_registry()`, `worker_registry_apply()`, `worker_spec_revive()` and `worker_key_provider()`, P11's
+  `perm_rules_effective()`, `rule_hit()`, `rule_glob_re()` and `risk_table()`, P10's `walk_tree()`, and P17's
+  `skill_discover()` (IC-85, D-288).
+- P18 (Task 7): a run blocked on an approval nobody can give acts no further: `mcp_serve_exec()` refuses every
+  later served call of that run at once, on both CLI routes.
+
+**IC-87 Recording harness calls and coaching calls** (P29 Task 8; §11.5, §7.0).
+- Heads: a reader counts a call as an agent call when its head is `peter`, `gptr_coach`, or a name bound to a
+  `gptr_harness` where the call is evaluated (`env_harness_bound()`, which forces no promise or active binding):
+  `gptr_source()` asks `doc_names_head()` in its `envir`, the user log (`user_log_gptr_head()`) in `globalenv()`,
+  and none of these calls is logged. Static readers use `doc_heads(lines, extra)`: `peter`, `gptr_coach`, every
+  name a `harness=` header of the text declares and the head being located; `doc_scan_calls()`'s memo key includes
+  the heads, and the transcript writer, `gptr_export()`, the nested-call parts and the notebook formats take the
+  same heads. `doc_locate()` takes the head, the call and the coaching hash from the call's `gptr_harness` attribute
+  (`doc_harness_attr()`), so `survey_peter("Clean")` and `peter("Clean")` in one file own separate blocks. A
+  call's anchor stores its head, and re-locating it (`doc_anchor_of()`, `doc_match_anchor()`), a deferred write and
+  an upsert recovered from a sidecar included (IC-51; the sidecar anchor gains a `head` key), counts only calls
+  with that head (`doc_same_calls()`), so a `harness=` header written after the anchor was taken cannot move a
+  block under another statement. Every head filter is the syntactic-name test `make.names(x) == x`
+  (`doc_heads()`, `doc_names_head()`, `user_log_gptr_head()`), so a harness named with non-ASCII letters is
+  located and recorded. The notebook sidecar codec (IC-51) accepts any call identity whose head is a syntactic
+  name (`doc_sidecar_call()`) and never evaluates it.
+- Harness-call blocks are `peter()` blocks with `harness=<name>:<coaching hash>` (team and fan-out blocks too).
+  Freshness (`doc_block_status()`): the prompt, the interpolated values, the kind (a coach block or not) and the
+  coaching hash of `harness=` (no key: the hash of empty coaching) must match; `gptr_export()` judges a block the
+  same way, so a fresh harness-call block exports as a `peter()` block does. Replay is unchanged and uses no
+  coaching; the harness must exist under its name for R to evaluate the call.
+- Coach blocks (`kind = coach`): a coaching call is recorded only when its statement is exactly
+  `<name> = gptr_coach(...)` or `<name> <- gptr_coach(...)` at the top level (`doc_coach_target()`) and `harness`
+  is missing or a name (`doc_coach_start()`); otherwise a `notice` once per document says why. Header (§11.5):
+  `model`, `date`, `prompt`, `args`, `tokens`, `cost` (billed only), `kind=coach`, `harness=<name>:<hash>`,
+  `start=<start>:<hash>`, `coach=<model>`, `gptr=<version>`; no `session=`. Body: one assignment written by
+  `doc_coaching_code()` (texts through `doc_str_literal()`, redacted with the persist profile; nothing is written,
+  with a notice, unless the text parses back to the same assignment and coaching hash), then one `## Run` line per
+  run and a `## Decision:` line, each through `doc_one_line()` and redacted. Run data, transcripts, values, coach
+  replies, `check` and file lists are never written.
+- Services (§7.0): `doc.coach(call)` (`doc_coach_service()`) locates the call (`doc_locate()`), applies
+  `doc_decide()` and returns `list(action, site, harness)`; a call from model code, in no document, nested in other
+  code, of another shape (which alone tells the person why, in a notice once per document), under an undone block
+  or without write consent gives `"none"`. `doc.coach_block(site,
+  harness, record)` (`doc_coach_block_service()`) writes through `doc_upsert()` (consent, locks, the
+  `document_write` event, the Rscript and Jupyter deferred writers) and returns the harness the written body
+  defines: when a process-wide `document_write` hook patched it, `gptr_tailor(harness, coaching = <the written
+  coaching>)`.
+- Decisions: `doc_decide()` plus three rules. A coach block is fresh when its prompt, interpolated values and kind
+  match and its `start=` hash equals the starting harness's coaching hash; a hand edit is caught by `sha=`. Under
+  `auto` a stale coach block gives `"ask"` when a person can answer, else replays with `replay_downgraded`; under
+  base `source()`/Rscript it downgrades to replay as any regeneration does; `record` and `live` coach again. Under
+  `replay` a recordable coaching call with no fresh block signals `not_recorded`/`stale_block` before any egress
+  question or process, unless it has no block and every model of the call is offline (`offline` on the call
+  record, IC-84 step 3): `doc.coach` then answers `"none"` and the call coaches unrecorded, as offline models
+  answer `peter()` under replay (D-287). A stale block under `replay` still signals `stale_block`.
+- Replay walker (`doc_coach_replay()`): `doc_coach_walk()` parses the body with
+  `doc_parse_text(keep_source = FALSE)` and never evaluates it; it accepts exactly one
+  `<name> = gptr_tailor(<name>)` or `<name> = gptr_tailor(<name>, coaching = <literal>)`, where `doc_coach_value()`
+  admits only `NULL`, one text (through `as_utf8()`), number or logical, and `list()` or `c()` of those, to depth
+  32. The coaching is validated (IC-85) and `gptr_coach()` returns `gptr_tailor(<start>, coaching = ...)`, the
+  start found by name from the caller's frame, with no model, key or process. A body that is not literal coaching
+  gives the starting harness and a notice; the body's own code then defines the result when it runs.
+- `gptr_export()` refuses a document that holds a coach block (`a coach block has no session turn to export`).
+- Console transcripts: the first time a harness is called or coached, its definition is written once
+  (`doc_harness_def()`, `doc_transcript_define()`), `h_<id> = gptr_tailor(peter, <plain-data fixed arguments>,
+  rules = list(...), coaching = list(...))`, with a flag line naming fixed arguments that are not plain data; its
+  calls are `s_<6 hex> = h_<id>("...", <context labels>)` (`doc_console_statement()`). `check` is never recorded.
+
+**IC-88 Plan routes for coaching** (P29 Task 5, D-274..D-277, D-282, D-283; amends §8.5 and IC-65).
+- `coach_model_kind(model)` (`cli-common.R`) returns `"api"` (a `chat` model over HTTP), `"fake"`
+  (`gptr_fake_provider()`), `"claude"` or `"codex"` (gptr's own `claude-cli`/`codex` records: the winning provider
+  and adapter records come from `builtin:cli`, `pcli_coach_own()`), or signals `gptr_error_model_refused` with
+  `reason`: `router` (a router or `router:` reference), `classifier` (a System 1 model), `process` (any other
+  process or in-process adapter, a provider spec imitating a CLI included), `cli_version` or `cli_preflight`. It is
+  also the model gate of every coaching child: `provider_stream()` calls `model_gate_check(model)`, which calls
+  `the$model_gate` with the resolved model record when it is a function (Task 4), so a router's choice,
+  `ctx$set_model()`, a sub-agent's model, System 1 emulation and compaction meet it before any request.
+- Preflight (`pcli_coach_preflight()`), cached per CLI path and version once it passes: `pcli_find()` and
+  `pcli_probe()`; a version below `pcli_coach_min` (claude 2.1.296, codex 0.157.1) is refused (`cli_version`), a
+  newer one runs with a one-time notice (D-277); for Codex `pcli_codex_preflight()` refuses an existing
+  `$CODEX_HOME/hooks.json` and runs `codex features list` with the confined switches, which must show every
+  switched-off feature `false` and `hooks` `true` (`cli_preflight`).
+- `the$coach_role` (`NULL`, `"run"` or `"coach"`; the judge is a coach) switches both adapters to confined sessions
+  checked one by one; a failed check is `gptr_error_cli_check`, which stops the CLI and discards its reply.
+- Claude Code (`cli-claude.R`). With a role: `--no-session-persistence`, `--permission-prompts none`,
+  `--settings '{"autoMemoryEnabled":false}'` and the variables `CLAUDE_CODE_DISABLE_AUTO_MEMORY`,
+  `CLAUDE_CODE_DISABLE_CLAUDE_MDS` and `CLAUDE_CODE_SKIP_PROMPT_HISTORY` (`1`, set after the profile's filter);
+  never `--resume`, and a running CLI is reused only for the same role. A run keeps `--mcp-config` and
+  `--allowedTools mcp__gptr__*`; a coach gets no MCP server, `--disallowedTools "*"` and `--max-turns 1`.
+  `pcli_claude_check()` fails a session on: a line from a CLI sub-agent; an `init` line that offers a tool (a run:
+  one that is not `mcp__gptr__*`), connects an MCP server (a run: other than `gptr`), loads plugins, skills or slash
+  commands, or has auto memory on; a coach's `can_use_tool` or `mcp_message` request, or a run's `can_use_tool` for
+  a tool that is not gptr's; a `tool_use` of such a tool; a successful result without a passing `init`; a coach's
+  result in more than one turn; a run's non-empty `permission_denials`. `apiKeySource` other than `none` stays
+  `gptr_error_billing` (IC-65).
+- `.opts$returns` on the claude route (every `peter()` call, D-283): `pcli_claude_build()` appends
+  `adp_returns_instruction(returns)` to the user line; gptr still validates the reply.
+- Codex (`cli-codex.R`). With a role, `pcli_codex_args()` builds
+  `codex exec --json --ephemeral --ignore-user-config
+  --ignore-rules --skip-git-repo-check -m <model> -C <folder> --sandbox read-only`, then
+  `pcli_codex_confine` (`--disable` for each of `pcli_codex_off`, the 14 features `shell_tool`,
+  `unified_exec_tty`, `view_image`, `multi_agent`, `apps`, `plugins`, `tool_suggest`,
+  `image_generation`, `memories`, `goals`, `sleep_tool`, `skill_search`, `browser_use` and
+  `computer_use`, and `-c` for web search off, no user questions, agents and skills off, no
+  permission, environment or apps instructions and `history.persistence="none"`), gptr's hook for
+  `SessionStart` and `PreToolUse` (`inst/gptr/codex_hook.R`, with `--dangerously-bypass-hook-trust`;
+  `pcli_codex_hooks()`: the argv quoted for `sh`, but on Windows, where Codex's shell, PowerShell or
+  cmd.exe, runs the command and a line holding quotes does not run as written, unquoted short (8.3)
+  paths with backslashes (`pcli_cmd_paths()`), a path that keeps a space or a sign those shells read
+  being `gptr_error_model_refused` with `reason = "cli_preflight"`), the person's
+  `cli_auth_credentials_store` from `$CODEX_HOME/config.toml` (`pcli_codex_auth_store()`), for a
+  coach `--output-schema` with the schema in strict form (`pcli_codex_strict()`), and `-`. A run
+  keeps gptr's relay (`pcli_codex_mcp_args()`); a coach has none. Never `exec resume`: a follow-up
+  is a fresh exec that carries the instructions and the whole history (D-276).
+- The hook (`codex_hook.R`) writes a start line for `SessionStart`; for `PreToolUse` it allows only
+  a run's `mcp__gptr__*` tools and denies everything else, logging the tool's name, by printing
+  Codex's `PreToolUse` decision (`hookSpecificOutput` with `permissionDecision` `"deny"` and its
+  reason) on stdout with exit status 0, which no shell changes (PowerShell reports a status of 2 as
+  1, which does not block; D-297); input it cannot read is denied. Checks: an item other than a
+  message, reasoning or an `error`-type warning (and, for a run, a call of gptr's MCP server) stops
+  the exec at once (`pcli_codex_outside()`); a completed turn is kept only with the bypass warning,
+  the hook's start line and, for a coach, no denial and exactly one message
+  (`pcli_codex_coach_check()`). A run's hook denials are reported as refused steps. A failed turn is
+  a provider error quoting Codex (`Codex reported an error: ...`), never a fall-back to Codex's own
+  shell (D-274, D-275).
+- Logins: `coach_cli_env(kind)` (`auth-childenv.R`) returns the set variables of the route profile's `keep` list
+  (`cli-claude`: `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_SECURESTORAGE_CONFIG_DIR`,
+  `CLAUDE_CODE_GIT_BASH_PATH`; `cli-codex`: `CODEX_HOME`), none for `api` and `fake`; `coach_run_jobs()` passes them
+  to the child. In the child, `CLAUDE_CODE_OAUTH_TOKEN` is registered as a secret in a `child_env` spec `cli-claude`
+  (`set`, rank 3) and removed from R's environment until the child ends; path variables stay set. Billing
+  variables are removed as before (IC-65), and the fence denies the login files and keychain reads it recognises
+  (IC-86).
+- Limits: on Claude Code a `rate_limit_event` with status `rejected`, or a failed result whose text says a session,
+  weekly or model limit was hit (`pcli_claude_limit()`), ends the turn as `gptr_error_plan_limit` with `resets_at`;
+  in a coaching child, the start of paid usage credits (`isUsingOverage`, or `errorCode` `credits_required`;
+  `pcli_plan_set()` keeps `overage`, `overage_status` and `error_code`) stops the session at once with
+  `reason = "overage"` (`pcli_claude_rate()`). On Codex an error naming a usage limit, being out of credits or a
+  spend cap does, with the time Codex quotes after `try again at` (`pcli_codex_limit()`). `run_retryable()` never
+  retries `plan_limit`, `cli_check` or `model_refused`, nor a weekly or model-family limit named in text
+  (`plan_limit_pattern` in `agent-run.R`, which `pcli_claude_limit()` shares; D-282). At most two plan sessions run
+  at once per account (IC-86).
+- Plan notice (`coach_plan_notice()`): per plan, how many sessions run on it (`Up to <n>` when the judge may run
+  there: it runs on the coach model), at most two at once, that they use the plan's 5-hour and weekly limits shared
+  with the person's other use, and the last plan reading with its age (taken in this process or merged from a
+  coaching child's result, IC-84); then that Claude Code's dollar figures are API-equivalent, not charges, and that
+  Codex reports tokens only.
+
+**IC-89 Never and require rules** (P29 Task 10).
+- The person's rules (`gptr_tailor(rules =)`, kept in the spec's `rules`, `coaching_rules(rules, "Your")`) and the
+  coaching's `rules` part have one shape, `list(never, require)`, and no `allow` or `ask` list: `never` up to 8
+  `list(rule, why)`; `require` up to 4 `list(id, any, contains, text)` or `list(id, made, text)`. Limits: a `rule` 200
+  characters, the `any` patterns of one rule 200 together, `why` 300, `id` 200 and `^[a-z0-9][a-z0-9-]*$` and unique,
+  `contains` 100 (a literal the call's code must hold), `text` 500.
+- Patterns (`coaching_pattern()`): parsed by `rule_parse()` as `fn:`, `category:`, `sh:`, `sql:` or a path glob;
+  refused: `level<=`, `secret:` and bare tools, `pkg::` inside `fn:`, a category neither risk table nor
+  `unlisted` knows, and, for `require`, a pattern that can match an action of level 3 or above (a function or
+  category row at level 3 or above, a function that runs a command or statement it is given, and every `sh:`,
+  `sql:` and path glob). `made` is `"plot"` or `"file:<glob>"` relative to the project, without `..`
+  (`coaching_made()`).
+- Matching (`coaching_hit()`): as `rule_hit(p, call, "deny")`, plus three widenings for an `r` call: `fn:` matches
+  any function in `risk$calls` (every function the code calls, also through workspace functions it reads), a
+  `write`, `edit` or `*` glob matches `risk$targets$files` (the files the code writes, deletes or downloads to, as
+  rules see paths), and `category:network` matches a URL read. `risk_classify_r()` reports `calls` and `targets`
+  (Task 2). The person's permission rules (`gptr_permissions()`) keep `rule_hit()` without widenings.
+- Policies (`harness_policy()`), registered by the harness's factory and answering only `deny`: `coaching` for the
+  coaching's `never` rules (`denied by the coaching rule <rule>: <why>`) and `harness_rules` for the person's
+  (`denied by your rule <rule>: <why>`). Any refusal wins, in every mode. A session's policies include the rank-0
+  policies of every ancestor session (`registry_all_recs()`, `registry_session_ancestors()`), and
+  `worker_registry()` ships those of the sessions' ancestors, so these and a person's own `extensions =` policies
+  bind every nested `peter()`, team member, fan-out child, inline sub-agent and worker (D-280). Other kinds stay in
+  their session. `nested_rules()` asks every `rules`, `coaching`, `harness_rules` and `fence` policy about a
+  nested `sh`, `bg`, `script`, `write` or `edit` call and keeps the strictest answer (D-280, D-281, D-284).
+- `require` (IC-85's finish hook): met by a matching call that returned without error (`harness_require_hit()`), or
+  by a plot or file for `made`; reminded at most twice; recorded as unmet. A call that met a `require` rule is left
+  out of a coaching run's reported risk unless it is of level 3 or above (`child_ended()`, `child_met()`).
+- Only the `procedure` coach may write rules; another focus's surface has no `rules`, and a composer may only keep,
+  drop or merge rules that its base coaching or a candidate it was shown held (IC-84). A coach never changes the
+  person's rules, which every coached harness keeps.

@@ -703,3 +703,17 @@ test_that("a script sourced with chdir = TRUE is found from the directory it was
   }
   expect_identical(path_norm(getwd()), path_norm(proj))
 })
+
+test_that("a script that is not valid UTF-8 says once that its calls run live, unrecorded", {
+  proj = local_project()
+  local_gptr_options(quiet = FALSE)
+  f = file.path(proj, "latin1.R")
+  writeBin(c(charToRaw("a = peter(\"one\")\nb = peter(\"two\")\n# caf"), as.raw(c(0xe9, 0x0a))), f)
+  e = doc_probe_env()
+  said = testthat::capture_messages(source(f, local = e, keep.source = TRUE))
+  expect_false(e$a$top_level)
+  expect_false(e$b$top_level)
+  expect_length(said, 1L)
+  expect_match(said, "latin1.R", fixed = TRUE)
+  expect_match(said, "run live and are not recorded", fixed = TRUE)
+})

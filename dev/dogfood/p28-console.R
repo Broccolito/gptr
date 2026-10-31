@@ -488,6 +488,8 @@ run_scenario = function(route, name, out, script) {
   t0 = now()
   tmux(d, "-f", "/dev/null", "new-session", "-d", "-s", "dog", "-x", sc$cols %||% 100L,
        "-y", 32L, paste("/bin/sh", shQuote(file.path(dir, "run.sh"))))
+  # an error in a scenario still ends the server and the R under test
+  on.exit(tmux(d, "kill-server"), add = TRUE)
   tmux(d, "set", "-g", "remain-on-exit", "on")
   tmux(d, "set", "-g", "history-limit", "50000")
   if (is.null(sc$pipe)) {

@@ -192,10 +192,10 @@ The `context` setting controls built-in generative-model descriptions, rather th
 availability. Prompt text, tool results, images and other context blocks can still be sent.
 System 1 decisions encode their supplied input states separately; `context = "none"` is not a
 way to omit those states. See [Execution model](execution-model.html),
-[Token efficiency](token-efficiency.html) and [System 1 decisions](system-one.html).
+[Token efficiency](token-efficiency.html) and [Typed decisions](system-one.html).
 
-Recording and replay are separate controls; see [Script as history](script-as-history.html) and
-[Token efficiency](token-efficiency.html).
+Recording and replay are separate controls; see
+[Record, replay and export](script-as-history.html) and [Token efficiency](token-efficiency.html).
 
 | Extension and interaction setting | Default and purpose |
 |---|---|

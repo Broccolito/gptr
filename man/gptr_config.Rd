@@ -35,7 +35,9 @@ The \code{"session"} scope means this R process, not one conversation. User sett
 \code{tools::R_user_dir("gptr", "config")/settings.json}; project settings live in \verb{.gptr/}.
 A no-argument call always reads effective values, even when \code{.scope} is supplied. Inspect
 \code{attr(gptr_config(), "sources")} to see their origins. Named lists merge with lower layers;
-protected objects such as \code{providers} must be set as a whole named list.
+protected objects such as \code{providers} must be set as a whole named list. A \code{plugins} entry
+starting with \verb{./} or \verb{../}, like a relative \code{skills.paths} entry, is found from the project
+root, not from R's working directory.
 }
 \section{Choosing controls}{
 

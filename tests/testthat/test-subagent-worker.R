@@ -541,7 +541,10 @@ test_that("a worker selects the installed Rscript entry without shipping its fun
 test_that("objects are shipped by name from the caller's environment", {
   e = new.env()
   e$d = 1:3
-  expect_identical(worker_ship_objects("d", e), list(d = 1:3))
+  expect_identical(worker_ship_objects(c("d", "d"), e), "d")
+  path = withr::local_tempfile(fileext = ".rds")
+  worker_spec_save(list(object_names = "d"), e, path)
+  expect_identical(readRDS(path)$objects, list(d = 1:3))
   expect_error(worker_ship_objects("nope", e), class = "gptr_error_invalid_argument")
 })
 
@@ -554,6 +557,23 @@ test_that("only remote providers registered for the process pass their key to a 
 test_that("the worker registry ships the filters of each scope by name (IC-69)", {
   reg = worker_registry(character())
   expect_named(reg$filters, c("user", "project", "session"))
+})
+
+test_that("the worker registry ships the rank-0 policies of the sessions' ancestors (08 3.2)", {
+  local_project()
+  top = session_new("fake/fake-1", "auto", home = new.env())
+  team = session_new("fake/fake-1", "auto", home = new.env(), kind = "team", parent = top)
+  child = session_new("fake/fake-1", "auto", home = new.env(), kind = "child", parent = team)
+  tid = session_data(top)$id
+  ids = c(registry_add(gptr_policy("no_touch", function(call, ctx) NULL), "session", 0L,
+                       session = tid),
+          registry_add(gptr_prompt_section("top_only", "Top."), "session", 0L, session = tid))
+  withr::defer(for (id in ids) registry_remove(id))
+  specs = worker_registry(c(session_data(team)$id, session_data(child)$id))$specs
+  names = vapply(specs, function(r) r$spec$name, "")
+  expect_true(specs[[match("no_touch", names)]]$session)
+  # only policies: what a session sees of its ancestors in process
+  expect_false("top_only" %in% names)
 })
 
 test_that("an explicit worker for a remote model is refused in replay mode before it starts", {
@@ -628,6 +648,35 @@ test_that("a worker child answers through its proxy session and returns its expo
   expect_identical(subagent_export(h, e), "m")
   expect_identical(e$m, 2)
   expect_length(worker_pids(), 0L)
+})
+
+# Added (FIX-37, F-86, D-295): the child starts with the parent's registered secrets that the
+# shipped objects hold, so such an object reaches the child's model as [secret:NAME]; no other
+# value travels in the spec (IC-70). The fake runs in the child and answers with what its second
+# request held.
+test_that("a registered secret in a shipped object reaches the worker's model redacted", {
+  local_worker_lib()
+  local_vault()
+  key = "p19-cfg-value-fakefakefake0042"
+  secret_register(key, "CFG_TOKEN")
+  secret_register("p19-other-value-fakefake0043", "OTHER_TOKEN")
+  path = withr::local_tempfile(fileext = ".rds")
+  worker_spec_save(list(object_names = "cfg"), list2env(list(cfg = list(token = key))), path)
+  expect_identical(readRDS(path)$secrets, list(list(name = "CFG_TOKEN", value = key)))
+  worker_spec_save(list(object_names = character()), emptyenv(), path)
+  expect_null(readRDS(path)$secrets)
+  local_team_fake(eval(bquote(function(request) {
+    if (!length(request$last_results)) return(list(tool = "r", input = list(code = "str(cfg)")))
+    seen = paste(unlist(request$messages), collapse = "\n")
+    if (grepl(.(key), seen, fixed = TRUE)) "raw" else
+      if (grepl("[secret:CFG_TOKEN]", seen, fixed = TRUE)) "redacted" else "neither"
+  }), baseenv()))
+  parent = session_new("fake/fake-1", "auto", home = new.env(), kind = "team")
+  e = new.env()
+  e$cfg = list(token = key)
+  h = start_worker(parent, "describe cfg", base = e, objects = "cfg")
+  expect_true(run_wait(list(h$run), timeout = 120))
+  expect_identical(h$session$text, "redacted")
 })
 
 test_that("a plugin r member and a fake provider spec work inside a worker (IC-69)", {

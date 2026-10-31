@@ -547,7 +547,7 @@ plugin_type_paths = function(p, type) {
 #' dir, rank)`
 #'
 #' With `listing = TRUE` (`gptr_skills()`, `gptr_agents()`) also those enabled for a live session
-#' (`plugins_session_end()` forgets them) and, at rank 3, the `plugins` setting's not enabled yet,
+#' (`plugins_session_end()` forgets them) and, at rank 5, the `plugins` setting's not enabled yet,
 #' read without running code and skipped where `plugin_enable()` would not trust them.
 #' @noRd
 res_plugin_dirs = function(type, listing = FALSE) {
@@ -556,7 +556,7 @@ res_plugin_dirs = function(type, listing = FALSE) {
   done = unlist(lapply(es, function(e) if (e$enabled || e$failed) e$path))
   if (listing) for (n in plugins_setting()) {
     p = tryCatch(plugin_resolve(n), error = function(e) NULL)
-    if (!is.null(p) && !p$path %in% done && plugin_trusted(p)) ps = c(ps, list(c(p, rank = 3L)))
+    if (!is.null(p) && !p$path %in% done && plugin_trusted(p)) ps = c(ps, list(c(p, rank = 5L)))
   }
   out = list()
   for (e in ps) {
@@ -1242,11 +1242,15 @@ plugins_session_end = function(session) {
 
 # ---- listing ---------------------------------------------------------------------------------
 
-#' The `plugins` setting without filter entries (`+x`, `-x`)
+#' The `plugins` setting without filter entries (`+x`, `-x`); a `./` or `../` entry is joined to
+#' the project root, as relative `skills.paths` entries are (skill_setting_paths())
 #' @noRd
 plugins_setting = function() {
   pl = as.character(unlist(setting_get("plugins", default = list()), use.names = FALSE))
-  pl[grepl("^[^+-]", pl)]
+  pl = pl[grepl("^[^+-]", pl)]
+  rel = grepl("^[.][.]?[/\\\\]", pl)
+  pl[rel] = file.path(project_root(), pl[rel])
+  pl
 }
 
 #' Plugins that could be enabled, read without loading or running anything
@@ -1338,9 +1342,8 @@ ext_files = function(dir) {
 #' Enable settings plugins and extension directories; collect `resources_discover` paths
 #'
 #' Called first by the `session_start` hooks of `builtin:skills`, `builtin:prompts` and
-#' `builtin:agents` (top-level sessions). The `plugins` setting merges the user layer and a
-#' trusted project layer, which this L0 file cannot tell apart, so its plugins enable at the user
-#' rank 3; a trusted project's `.gptr/extensions/*.R` load at rank 1 and the user's
+#' `builtin:agents` (top-level sessions). The `plugins` setting's plugins enable at the plugin
+#' rank 5; a trusted project's `.gptr/extensions/*.R` load at rank 1 and the user's
 #' `extensions/*.R` at rank 3 (contract 10.1). `resources_discover` is dispatched at the first
 #' sync in a project root (`startup`) and after `gptr_reload()` (`reload`). Idempotent; failures
 #' are diagnostics, never errors (10.8).
@@ -1355,7 +1358,7 @@ plugins_sync = function() {
   st$sync_gen = gen
   st$sync_root = root
   for (n in plugins_setting()) {
-    tryCatch(plugin_enable(n, 3L), error = function(e) {
+    tryCatch(plugin_enable(n, 5L), error = function(e) {
       registry_diagnostic("user", "plugin", class(e)[1L], conditionMessage(e))
     })
   }

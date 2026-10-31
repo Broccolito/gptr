@@ -159,10 +159,36 @@ is_abs_path = function(path) {
   grepl("^([/\\\\]|[A-Za-z]:[/\\\\])", path)
 }
 
+#' Is each path drive-relative ("D:x", "D:"), under drive D's own current directory on Windows?
+#' The classifier joins it to no directory and cannot place it: on every OS it is outside.
+#' @noRd
+is_drive_rel = function(path) {
+  grepl("^[A-Za-z]:(?![/\\\\])", path, perl = TRUE)
+}
+
+#' A command (an argv, or one command line) as run in the directory `wd`, as the command
+#' classifier reads it: `cd <wd> && <command>`, an argv quoted into one line; the command itself
+#' when `wd` is absent or "."
+#' @noRd
+cmd_in_wd = function(cmd, wd = NULL) {
+  if (!rlang::is_string(wd) || identical(wd, ".")) return(cmd)
+  if (length(cmd) > 1L) cmd = paste(shQuote(cmd, "sh"), collapse = " ")
+  paste("cd", shQuote(wd, "sh"), "&&", cmd)
+}
+
+#' The literal `peter$` call a nested sh or bg call (its command, cmd_in_wd()'s line in its `wd`)
+#' or script call (its path) is read as by the nested gates (dispatch_nested(), mcp_nested_gate())
+#' @noRd
+nested_literal = function(name, input) {
+  arg = if (identical(name, "script")) input$path else cmd_in_wd(unlist(input$cmd), input$wd)
+  paste0("peter$", name, "(", deparse1(arg), ")")
+}
+
 #' Normalise one path: absolute, forward slashes, symlinks resolved on the deepest existing
 #' ancestor (macOS /var -> /private/var), "." and ".." removed from the rest
 #' @noRd
 path_norm_one = function(path) {
+  path = fs_path(path)
   # "~" is expanded before backslashes become slashes, so the result has forward slashes whatever
   # user_home() returns (CI-5, D-111); "~name" is that user's home, as R's file functions expand it
   if (identical(path, "~") || grepl("^~[/\\\\]", path)) {
@@ -175,7 +201,9 @@ path_norm_one = function(path) {
   rest = character()
   current = path
   while (!file.exists(current)) {
-    parent = dirname(current)
+    # on Windows a UNC path climbs no higher than its share: R < 4.4's dirname("//host") is "."
+    if (is_windows() && grepl("^//[^/]*(/[^/]*)?/?$", current)) break
+    parent = sub("^\\\\\\\\", "//", dirname(current))
     if (identical(parent, current)) break
     rest = c(basename(current), rest)
     current = parent
@@ -192,7 +220,7 @@ path_norm_one = function(path) {
   if (nchar(out) > 1L && endsWith(out, "/") && !grepl("^[A-Za-z]:/$", out)) {
     out = substr(out, 1L, nchar(out) - 1L)
   }
-  out
+  as_utf8(out)
 }
 
 #' Does the last component of each path end in an extension? (R 4.6's rule, without basename())
@@ -403,10 +431,29 @@ path_class = function(path, root = project_root()) {
   if (!is.character(path)) arg_abort(path, "path", "a character vector")
   check_string(root, "root")
   context = path_class_context(root)
-  vapply(path, path_class_one, "", context = context, USE.NAMES = FALSE)
+  # one encoding mark for the vector: a C locale cannot match marked and unmarked text together
+  path = as_utf8(path)
+  out = rep("unknown", length(path))
+  ok = !is.na(path) & nzchar(path)
+  out[ok & is_drive_rel(path)] = "outside"
+  out[ok & grepl("[*?]", path)] = "wildcard"
+  out[ok & grepl("^(https?|ftps?|s3|gs)://", path, ignore.case = TRUE)] = "url"
+  todo = which(ok & out == "unknown")
+  expanded = gsub("\\", "/", path[todo], fixed = TRUE)
+  rel = !is_abs_path(expanded) & !startsWith(expanded, "~")
+  expanded[rel] = file.path(root, expanded[rel])
+  resolved = path_class_key(path_key(expanded), context)
+  # Both the requested pathname and its symlink target carry policy authority.
+  lexical = vapply(expanded, path_lexical, "", USE.NAMES = FALSE)
+  if (is_windows() || is_macos()) lexical = tolower(lexical)
+  guarded = c("control", "critical", "protected", "instructions")
+  rank = pmin(match(path_class_key(lexical, context), guarded), match(resolved, guarded),
+              na.rm = TRUE)
+  out[todo] = ifelse(is.na(rank), resolved, guarded[rank])
+  out
 }
 
-#' Precomputed keys used by path_class_one()
+#' Precomputed keys used by path_class_key()
 #' @noRd
 path_class_context = function(root) {
   env_target = function(name, default) {
@@ -415,7 +462,6 @@ path_class_context = function(root) {
   }
   home = user_home()
   list(
-    root = root,
     root_key = path_key(root),
     home_key = path_key(home),
     temp_key = path_key(tempdir()),
@@ -429,63 +475,49 @@ path_class_context = function(root) {
   )
 }
 
-#' @noRd
-path_class_one = function(path, context) {
-  if (is.na(path) || !nzchar(path)) return("unknown")
-  if (grepl("^(https?|ftps?|s3|gs)://", path, ignore.case = TRUE)) return("url")
-  if (grepl("[*?]", path)) return("wildcard")
-  expanded = gsub("\\", "/", path, fixed = TRUE)
-  if (!is_abs_path(expanded) && !startsWith(expanded, "~")) {
-    expanded = file.path(context$root, expanded)
-  }
-  key = path_key(expanded)
-  resolved = path_class_key(key, context)
-  # Both the requested pathname and its symlink target carry policy authority.
-  lexical = path_lexical(expanded)
-  if (is_windows() || is_macos()) lexical = tolower(lexical)
-  requested = path_class_key(lexical, context)
-  guarded = c("control", "critical", "protected", "instructions")
-  ranks = match(c(requested, resolved), guarded)
-  if (all(is.na(ranks))) return(resolved)
-  guarded[min(ranks, na.rm = TRUE)]
-}
-
-#' Classify one absolute lexical or resolved path without resolving it again
+#' Classify absolute lexical or resolved path keys without resolving them again
 #' @noRd
 path_class_key = function(key, context) {
   has = function(pattern) grepl(pattern, key, ignore.case = TRUE, perl = TRUE)
-  inside = function(base) key == base || startsWith(key, paste0(sub("/$", "", base), "/"))
-  control = has("(^|/)\\.gptr/settings[^/]*\\.json$") ||
-    has("(^|/)\\.gptr/mcp\\.json$") ||
-    has("(^|/)\\.gptr/(extensions|plugins|agents)(/|$)") ||
-    has("(^|/)\\.gptr/(system|append_system)\\.md$") ||
-    has("(^|/)\\.git/hooks(/|$)") ||
-    has("(^|/)\\.git/config$") ||
-    has("(^|/)\\.rprofile$") ||
-    has("(^|/)(rprofile|renviron)\\.site$") ||
-    key %in% context$control_files ||
-    inside(context$config_key) ||
+  inside = function(base) key == base | startsWith(key, paste0(sub("/$", "", base), "/"))
+  control = has("(^|/)\\.gptr/settings[^/]*\\.json$") |
+    has("(^|/)\\.gptr/mcp\\.json$") |
+    has("(^|/)\\.gptr/(extensions|plugins|agents)(/|$)") |
+    has("(^|/)\\.gptr/(system|append_system)\\.md$") |
+    has("(^|/)\\.git/hooks(/|$)") |
+    has("(^|/)\\.git/config$") |
+    has("(^|/)\\.rprofile$") |
+    has("(^|/)(rprofile|renviron)\\.site$") |
+    key %in% context$control_files |
+    inside(context$config_key) |
     startsWith(tolower(key), paste0(tolower(context$makevars_key), "/makevars"))
-  if (control) return("control")
-  if (key %in% c("/", context$home_key, context$root_key, context$temp_key) ||
-        grepl("^[a-z]:/?$", key, ignore.case = TRUE)) {
-    return("critical")
-  }
-  protected = has("(^|/)\\.git(/|$)") ||
-    has("(^|/)\\.renviron$") ||
-    has("(^|/)\\.env([.][^/]*)?$") ||
-    has("(^|/)[^/]+[.]env$") ||
-    has("(^|/)\\.(secrets|ssh|codex|claude|aws|gnupg)(/|$)") ||
-    has("(^|/)\\.netrc$") ||
+  critical = key %in% c("/", context$home_key, context$root_key, context$temp_key) |
+    grepl("^[a-z]:/?$", key, ignore.case = TRUE)
+  temp = inside(context$temp_key)
+  # a path in the project is guarded by its part below the root, as a project may sit in a
+  # protected folder (Claude Code's worktrees in .claude/worktrees)
+  ws = inside(context$root_key)
+  key[ws] = substring(key[ws], nchar(sub("/$", "", context$root_key)) + 1L)
+  protected = has("(^|/)\\.git(/|$)") |
+    has("(^|/)\\.renviron$") |
+    has("(^|/)\\.env([.][^/]*)?$") |
+    has("(^|/)[^/]+[.]env$") |
+    has("(^|/)\\.(secrets|ssh|codex|claude|aws|gnupg)(/|$)") |
+    has("(^|/)\\.netrc$") |
     has("(^|/)renv\\.lock$")
-  if (protected) return("protected")
-  instructions = has("(^|/)(agents|claude)\\.md$") ||
-    has("(^|/)\\.gptr/vignette\\.rmd$") ||
+  instructions = has("(^|/)(agents|claude)\\.md$") |
+    has("(^|/)\\.gptr/vignette\\.rmd$") |
     has("(^|/)\\.gptr/(skills|prompts)(/|$)")
-  if (instructions) return("instructions")
-  if (inside(context$root_key)) return("workspace")
-  if (inside(context$temp_key)) return("temp")
-  "outside"
+  # each key takes the first class that applies: control, critical, protected, instructions,
+  # workspace, temp, else outside
+  out = rep("outside", length(key))
+  out[temp] = "temp"
+  out[ws] = "workspace"
+  out[instructions] = "instructions"
+  out[protected] = "protected"
+  out[critical] = "critical"
+  out[control] = "control"
+  out
 }
 
 #' Normalise one path lexically, without the file system: "/" separators; ".." never climbs above

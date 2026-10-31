@@ -196,9 +196,12 @@ eval_run = function(st) {
 
 #' Harness options, the anonymous-file sink and plot capture (undone by eval_restore()); the
 #' message sink in use is noted, so one the code leaves open is undone. Teed output is split to the
-#' console as R prints it, except in the console margin, where eval_echo() shows it (D-245); the
-#' evaluation's frame (`st$frame`) is where that display looks for the writer below it. During a T
-#' console's call isig is on while the code runs, so Ctrl-C interrupts it (tty_isig_on())
+#' console as R prints it, except for the agent's code in the console margin, where eval_echo()
+#' shows it (D-245); the agent's code prints at width 100, the person's own (`guard = FALSE`) at
+#' R's width, as R would print it (D-296). The evaluation's frame (`st$frame`) is where that
+#' display looks for the writer below it. During a T console's call isig is on while the code
+#' runs, so Ctrl-C interrupts it (tty_isig_on()), and bracketed paste is turned on again after it
+#' (eval_restore())
 #' @noRd
 eval_open = function(st) {
   force(st)
@@ -209,11 +212,12 @@ eval_open = function(st) {
   }
   st$pad = console_pad()
   st$colors = console_colors()
-  st$echo = st$tee && nzchar(st$pad)
+  st$echo = st$tee && st$guard && nzchar(st$pad)
   st$split = st$tee && !st$echo
   st$width = max(20L, cli::console_width() - nchar(st$pad))
   st$frame = sys.nframe() - 1L
-  st$old_opts = options(max.print = 1000L, width = 100L, rlang_interactive = FALSE,
+  width = if (st$guard) 100L else getOption("width")
+  st$old_opts = options(max.print = 1000L, width = width, rlang_interactive = FALSE,
                         cli.dynamic = FALSE, cli.num_colors = 1L, askYesNo = eval_no_ask)
   st$msg_sink = sink.number(type = "message")
   st$con = file("", "w+b")
@@ -293,8 +297,9 @@ eval_flush = function(st) {
 }
 
 #' Show printed output in the console margin as a tool's result rows are (D-245): each line at
-#' column 4, escaped, dim in the console's colours and cut to its width, written by the writer below
-#' this evaluation with its own sink lifted; a sink the code left on top keeps the output
+#' column 4, registered secrets redacted (as the question above it shows them), escaped, dim in the
+#' console's colours and cut to its width, written by the writer below this evaluation with its own
+#' sink lifted; a sink the code left on top keeps the output
 #' @noRd
 eval_echo = function(st, txt) {
   if (sink.number() != st$sink_n) return(invisible())
@@ -302,6 +307,7 @@ eval_echo = function(st, txt) {
   on.exit(sink(st$con, split = st$split), add = TRUE)
   rlang::local_options(cli.num_colors = st$colors)
   sym = console_style()
+  txt = redact(txt, "context")
   lines = console_escape(strsplit(sub("\n$", "", txt), "\n", fixed = TRUE)[[1L]], FALSE)
   rows = console_cut(paste0("    ", lines), st$width, sym$ellipsis)
   rows = ifelse(nzchar(lines), sym$dim(rows), "")
@@ -497,8 +503,8 @@ eval_on_message = function(st, cnd) {
 
 #' Warning handler: record and muffle; under options(warn = 2) R turns the warning into an error
 #' next. Teed, it shows as it comes, `Warning: <text>`, in the console margin at column 4 with the
-#' output (eval_echo()), else on stderr: R would defer it to its top level, which a console or a run
-#' reaches only when it ends, and name the evaluator's own call
+#' output (eval_echo()), else on stderr, redacted: R would defer it to its top level, which a
+#' console or a run reaches only when it ends, and name the evaluator's own call
 #' @noRd
 eval_on_warning = function(st, cnd) {
   w = getOption("warn", 0)
@@ -511,7 +517,7 @@ eval_on_warning = function(st, cnd) {
     if (isTRUE(st$echo)) {
       eval_echo(st, text)
     } else {
-      gptr_message_write(text, "stderr", from = st$frame)
+      gptr_message_write(redact(text, "context"), "stderr", from = st$frame)
     }
   }
   tryInvokeRestart("muffleWarning")
@@ -680,7 +686,8 @@ eval_finish = function(st) {
 eval_restore = function(st) {
   if (isTRUE(st$restored)) return(invisible())
   st$restored = TRUE
-  tty_isig_off(st$tty)
+  tty = st$tty
+  tty_isig_off(tty)
   st$tty = NULL
   setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
   if (!is.null(st$hook)) {
@@ -701,6 +708,9 @@ eval_restore = function(st) {
     tryCatch(if (isOpen(st$con)) close(st$con), error = function(e) NULL)
     st$con = NULL
   }
+  # GNU readline 8.1+ turns bracketed paste off as a read of the code ends: on again, at the
+  # console now that the capture is lifted (D-263)
+  if (!is.null(tty$saved)) tty_modes("paste")
   if (!is.null(st$old_opts)) {
     host_width = Sys.getenv("RSTUDIO_CONSOLE_WIDTH", unset = "")
     if (!is.null(st$host_width) && !identical(host_width, st$host_width) &&

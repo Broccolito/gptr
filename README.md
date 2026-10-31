@@ -119,9 +119,9 @@ and [Data sent to
 providers](https://broccolito.github.io/gptr/reference/gptr_egress.html).
 
 In the default `manual` mode, actions classified as read-only run
-directly; actions classified as changes ask for approval unless an
-existing rule allows them. The check is advisory and provides no
-sandbox; see [Security
+directly and actions classified as changes ask for approval, unless a
+permission rule applies; an allow rule never approves a critical action.
+The check is advisory and provides no sandbox; see [Security
 considerations](https://broccolito.github.io/gptr/reference/gptr_security.html)
 or `?gptr_security` in R.
 
@@ -152,9 +152,10 @@ its side effects, and requires that code's input data, files and
 packages.
 
 To ask the model again, use
-`gptr_source("analysis.R", replay = "live")`. The new run can produce
-different code or results. `gptr_export()` can turn an eligible recorded
-`.R` file into an ordinary R script.
+`gptr_source("analysis.R", replay = "live")`; `model =` picks your own
+model. The new run can produce different code or results.
+`gptr_export()` can turn an eligible recorded `.R` file into an ordinary
+R script.
 
 Recording also supports R Markdown, Quarto and Jupyter. See [Record,
 replay and
@@ -189,13 +190,36 @@ conversational agents **System 2**. See [Typed
 decisions](https://broccolito.github.io/gptr/articles/system-one.html)
 for scores, uncertainty, calibration and a complete offline example.
 
+## A peter of your own
+
+`gptr_tailor()` builds a harness, a function you call exactly like
+`peter()`, with fixed arguments, your own hard rules and coaching (a
+note, skills, a review). `gptr_coach()` improves the coaching by running
+your task in separate R processes and keeps a change only when the new
+run passes gptr's checks and your `check`. Rules and coaching never
+loosen permission checks. A `gptr_coach()` call runs your task several
+times (4 runs and 3 coach sessions by default) and takes minutes.
+
+``` r
+auto_peter = gptr_tailor(peter, mode = "auto")
+slope_peter = gptr_coach("Regress mpg on wt in mtcars; store the slope as b.", mtcars,
+                         harness = auto_peter, check = function(r) is.numeric(r$objects$b))
+slope_peter("Regress mpg on hp in mtcars; store the slope as b.", mtcars)
+saveRDS(slope_peter, "slope_peter.rds")
+slope_peter = gptr_tailor(readRDS("slope_peter.rds"))  # load and check it in a later session
+```
+
 ## Learn more
 
 Start with [Getting
 started](https://broccolito.github.io/gptr/articles/getting-started.html);
-its examples run offline with a scripted `gptr_fake_provider()`. In R,
-open it with `vignette("getting-started", package = "gptr")`.
+its examples run offline with a scripted `gptr_fake_provider()`. With a
+CRAN install, open it in R with
+`vignette("getting-started", package = "gptr")`.
 
+- [Harnesses and
+  coaching](https://broccolito.github.io/gptr/articles/tailor-and-coach.html):
+  your own peter, improved by running your task.
 - [Interactive
   console](https://broccolito.github.io/gptr/articles/interactive-console.html):
   chat, commands and instructions sent while an agent works.

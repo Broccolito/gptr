@@ -59,19 +59,21 @@ eval_guard_head_name = function(head) {
   if (eval_guard_is_ns(head)) as.character(head[[3L]]) else ""
 }
 
-#' match.call() of a call to the base or utils function `fname`, never evaluating anything.
-#' NULL when the call passes `...` (its arguments are unknown) or when R would refuse its
+#' match.call() of a call to the base or utils function `fname` (or to `def`), never evaluating
+#' anything. NULL when the call passes `...` (its arguments are unknown) or when R would refuse its
 #' arguments (unused or ambiguous names): such a call fails before it runs.
 #' @noRd
-eval_guard_match = function(fname, e) {
+eval_guard_match = function(fname, e, def = NULL) {
   for (i in seq_along(e)[-1L]) {
     el = e[[i]]
     if (!missing(el) && identical(el, as.name("..."))) return(NULL)
   }
-  def = if (startsWith(fname, "read.")) {
-    getExportedValue("utils", fname)
-  } else {
-    get0(fname, envir = baseenv(), mode = "function", inherits = FALSE)
+  if (is.null(def)) {
+    def = if (startsWith(fname, "read.")) {
+      getExportedValue("utils", fname)
+    } else {
+      get0(fname, envir = baseenv(), mode = "function", inherits = FALSE)
+    }
   }
   if (!is.function(def)) return(NULL)
   tryCatch(match.call(def, e), error = function(err) NULL)
@@ -85,6 +87,34 @@ eval_guard_arg = function(mc, arg) {
   value = mc[[arg]]
   if (missing(value)) return(list(given = FALSE, value = NULL))
   list(given = TRUE, value = value)
+}
+
+#' The call do.call(f, list(...)) (or c(...)) or rlang::exec(f, ...) makes, as the classifier
+#' reads them, for a function `f` written out (a name, `pkg::name` or a string); else NULL
+#' @noRd
+eval_guard_direct = function(fname, e) {
+  if (!fname %in% c("do.call", "exec")) return(NULL)
+  exec = fname == "exec"
+  mc = eval_guard_match(fname, e, if (exec) function(.fn, ..., .env) NULL)
+  f = eval_guard_arg(mc, if (exec) ".fn" else "what")$value
+  args = if (exec) as.list(mc)[-1L] else eval_guard_arg(mc, "args")$value
+  if (exec) {
+    args = args[!names(args) %in% c(".fn", ".env")]
+  } else if (is.call(args) && eval_guard_head_name(args[[1L]]) %in% c("c", "list")) {
+    args = as.list(args)[-1L]
+  } else {
+    return(NULL)
+  }
+  if (is.character(f) && length(f) == 1L && !is.na(f) && nzchar(f)) f = as.name(f)
+  # the call runs a quote()'s code, unless do.call() is told to quote
+  if (!isTRUE(eval_guard_arg(mc, "quote")$value)) {
+    args = lapply(args, function(x) {
+      q = !missing(x) && is.call(x) && length(x) == 2L &&
+        (identical(x[[1L]], quote(quote)) || identical(x[[1L]], quote(base::quote)))
+      if (q) x[[2L]] else x
+    })
+  }
+  if (is.symbol(f) || eval_guard_is_ns(f)) as.call(c(list(f), args))
 }
 
 #' Does a call read standard input (stdin(), readLines(), readLines("stdin"), scan() without
@@ -184,7 +214,10 @@ eval_guard_walk = function(e, acc, scope = character()) {
   } else {
     eval_guard_walk(head, acc, scope)
   }
-  if (fname %in% c("~", "quote", "bquote", "expression")) return(invisible())
+  # quoted code is data; bquote()'s `.()` and a one-sided formula (a lambda) are code
+  if (fname %in% c("quote", "expression") || (fname == "~" && length(e) != 2L)) {
+    return(invisible())
+  }
   if (identical(fname, "function") && length(e) >= 3L && is.pairlist(e[[2L]])) {
     inner = c(scope, names(e[[2L]]), eval_guard_fun_locals(e[[3L]]))
     fm = e[[2L]]
@@ -212,6 +245,17 @@ eval_guard_walk = function(e, acc, scope = character()) {
     if (is.character(v) && length(v) == 1L) acc$strings = c(acc$strings, v)
     nm = if (is.symbol(v) && fname %in% names(eval_guard_fun_arg)) as.character(v) else ""
     if (nm %in% c("q", "quit") && !(nm %in% scope)) acc$strings = c(acc$strings, nm)
+  }
+  # do.call(f, list(...)) and rlang::exec(f, ...) run f(...), and eval(quote(x)) runs x, as the
+  # classifier reads them (also base::quote())
+  direct = eval_guard_direct(fname, e)
+  if (!is.null(direct)) eval_guard_walk(direct, acc, scope)
+  if (fname %in% c("eval", "eval_bare", "eval_tidy")) {
+    for (i in seq_along(e)[-1L]) {
+      el = e[[i]]
+      h = if (!missing(el) && is.call(el) && length(el) == 2L) el[[1L]]
+      if (identical(h, quote(quote)) || identical(h, quote(base::quote))) e[i] = list(el[[2L]])
+    }
   }
   indirect = fname %in% eval_guard_indirect
   lhs_symbol = fname %in% eval_guard_assign_ops && length(e) >= 2L && is.symbol(e[[2L]])

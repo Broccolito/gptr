@@ -233,11 +233,10 @@ retry_backoff = function(attempt) {
   (0.5 * 2^(min(attempt, 5) - 1)) * (1 - 0.25 * frac)
 }
 
-#' The validated `gptr.max_retry_delay` option (seconds)
+#' The validated `gptr.max_retry_delay` option (seconds; `Inf` waits out any retry-after)
 #' @noRd
 retry_max_delay = function() {
-  check_number(gptr_opt("max_retry_delay"), "gptr.max_retry_delay", min = 0,
-               max = .Machine$double.xmax)
+  check_number(gptr_opt("max_retry_delay"), "gptr.max_retry_delay", min = 0)
 }
 
 # ---- per-provider rate limiter (INFRA-21, IC-64) -------------------------------------------

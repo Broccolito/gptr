@@ -355,6 +355,19 @@ test_that("a user edit made after the turn survives the 3-way restore; the rewin
   expect_match(block, "~ x (conflict", fixed = TRUE)
 })
 
+test_that("names holding 'failed' or 'conflict' do not make a full rewind partial", {
+  skip_on_cran()
+  proj = local_project()
+  local_fake_provider(list(
+    fake_tool("r", code = "failed_models = 1; writeLines('a', 'conflict_notes.txt')"), "one"))
+  e = new.env()
+  s = peter("one", model = "fake/fake-1", mode = "auto", envir = e)
+  expect_no_warning(gptr_rewind(s, 0))
+  expect_false(s$last_rewind$partial)
+  expect_false(exists("failed_models", envir = e, inherits = FALSE))
+  expect_false(file.exists(file.path(proj, "conflict_notes.txt")))
+})
+
 test_that("each rewind replaces the note: a later full rewind tells the model nothing", {
   skip_on_cran()
   local_project()
@@ -660,7 +673,7 @@ test_that("/undo, /redo, /rewind k and /checkpoints drive gptr_rewind()", {
   expect_true("second prompt" %in% out)
   expect_identical(e$x, 1)
   out = ckpt_cmd_redo("", ctx)
-  expect_match(out[1L], "^Rewound")
+  expect_match(out[1L], "^Redone \\(all\\)")
   expect_identical(e$x, 2)
   expect_identical(ckpt_cmd_redo("", ctx), "Nothing to redo.")
   out = ckpt_cmd_rewind("0", ctx)
@@ -671,6 +684,19 @@ test_that("/undo, /redo, /rewind k and /checkpoints drive gptr_rewind()", {
   expect_true(any(grepl("abandoned", lines, fixed = TRUE)))
   expect_identical(lines[length(lines)], "Undo with /undo, or /rewind <turn>.")
   expect_identical(ckpt_cmd_undo("", list(session = NULL)), "There is no session to undo.")
+})
+
+test_that("/redo's heading says some items were not redone (review round 3)", {
+  local_project()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  item = "object fit2: not redone (it was not undone in this R process)"
+  local_mocked_bindings(gptr_rewind = function(s, ...) {
+    d = session_data(s)
+    d$last_rewind = list(id = "e9", restore = "all", partial = TRUE, report = item)
+    invisible(s)
+  })
+  expect_identical(ckpt_cmd_run(s, verb = "Redone"),
+                   c("Redone (all); some items were not redone:", item))
 })
 
 test_that("/undo asks first when the preview finds items it cannot restore", {

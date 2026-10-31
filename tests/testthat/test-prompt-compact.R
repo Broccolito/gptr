@@ -323,6 +323,20 @@ test_that("only a complete proposed_plan block counts as the plan", {
   expect_identical(st$plan, plan)
 })
 
+# Added (FIX-37, F-106): an edit whose edits hold a patch envelope names its files in its result
+# (details$files), not in its path argument; the checkpoint lists those files
+test_that("the files a patch envelope changes are the checkpoint's modified files", {
+  skip_on_cran()
+  local_project(files = list(a.txt = "old line"))
+  env = paste("*** Begin Patch", "*** Add File: new.txt", "+hello", "*** Update File: a.txt",
+              "@@", "-old line", "+new line", "*** End Patch", sep = "\n")
+  call = fake_tool("edit", path = "a.txt", edits = list(list(oldText = "", newText = env)))
+  s = peter("patch the files", model = gptr_fake_provider(list(call, "done")), mode = "auto",
+            envir = new.env())
+  expect_identical(readLines("new.txt"), "hello")
+  expect_setequal(extract_state(entries_path(session_data(s)))$modified, c("new.txt", "a.txt"))
+})
+
 test_that("files of a call whose result is an error are not listed", {
   call = function(id, name, path) block_tool_call(id, name, list(path = path))
   said = function(...) list(type = "message", message = fake_assistant(list(...), "tool_use"))
@@ -1290,8 +1304,9 @@ test_that("finite-cap waiting leaves known-window cold and disabled-cap rules in
   expect_identical(attr(compact_should(s, tokens = 7000, idle_s = 400), "reason"), "cold")
   local_gptr_options(compact_at = 1500)
   target$window = 200000
-  expect_false(compact_should(s, tokens = 46999, idle_s = 0))
-  expect_true(compact_should(s, tokens = 47000, idle_s = 0))
+  # Changed (FIX-37, F-91, D-298): a known window also waits for 20% of the threshold, the cap
+  expect_false(compact_should(s, tokens = 7299, idle_s = 0))
+  expect_true(compact_should(s, tokens = 7300, idle_s = 0))
   expect_length(fake_requests(x$fake), 0L)
   expect_equal(nrow(session_data(s)$usage), 0L)
 })

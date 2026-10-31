@@ -5174,10 +5174,11 @@ maintainer before each of them**:
    `gh run list --workflow R-CMD-check.yaml --limit 1 --json headSha,status,conclusion`, the same
    command with `--workflow Windows-check.yaml`, and `git rev-parse HEAD`. Expected: each latest run
    has `status` `completed` and `conclusion` `success`, which a matrix run has only when every job
-   passed (macOS, Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C` and P01's `bench`
-   job; the four shards each of Windows release and oldrel-4 and their two gates, D-239; 05 P25
-   acceptance 1), and its `headSha` equals `git rev-parse HEAD`, the commit of Step 5 that passed
-   the final gate of Step 4.
+   passed (the shards of Ubuntu `LC_ALL=C`, macOS, the connection gate and Windows release with
+   their gates; the checks with CRAN's test list of Ubuntu oldrel-1, oldrel-4, release without
+   Suggests and Windows oldrel-4; the CRAN-mode jobs of Ubuntu R-devel and Windows release;
+   copy-safety and P01's `bench` job; D-239, CI-107; 05 P25 acceptance 1), and its `headSha` equals
+   `git rev-parse HEAD`, the commit of Step 5 that passed the final gate of Step 4.
 2. Run: `Rscript --vanilla -e 'devtools::check_win_devel()'`. Expected (by email to the
    maintainer, about 30 minutes later; 05 P25 acceptance 2): `Status: 1 NOTE`, the note being
    the incoming-feasibility NOTE naming the maintainer.

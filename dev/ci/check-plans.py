@@ -87,6 +87,10 @@ def main():
     rscript = shutil.which("Rscript")
     if not rscript:
         raise SystemExit("Rscript is required; no plan checks ran")
+    if bounded_run([rscript, "--vanilla", "-e",
+                    "if (!requireNamespace('testthat', quietly = TRUE)) quit(status = 1L)"],
+                   output, env, subprocess.DEVNULL):
+        raise SystemExit("testthat must be on the R library path (R_LIBS_USER); no plan checks ran")
 
     def run(command, name):
         log = output / (name + ".log")

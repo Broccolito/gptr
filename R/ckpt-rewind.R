@@ -225,7 +225,7 @@ ckpt_on_agent_end = function(st, ctx) {
   }
   if (is.null(ck$gc_done)) {
     ck$gc_done = TRUE
-    ckpt_gc()
+    ckpt_gc(dirname(ckpt_store_root(ck$files$root %||% project_root())))
   }
   NULL
 }
@@ -575,11 +575,14 @@ ckpt_ext_state = function(s = NULL) {
 #' random-number state and effects outside R (network, databases, processes) are not restored.
 #' `s$last_rewind$report` lists each object, file and state item once, by its outcome after the
 #' whole rewind; items that were not restored raise the warning `gptr_warning_rewind_partial`.
-#' Files outside the project and `tempdir()` are restored only after you confirm each path. After
-#' a full restore the model is told nothing (the next request's prefix is byte-identical to the
-#' earlier request at the target); after a partial one the next prompt carries a short `<rewind>`
-#' block listing what was not restored. Model code may rewind another session only when you
-#' approve that call.
+#' Protected files and files that configure R or gptr (`.env`, `.Renviron`, `.Rprofile`,
+#' `renv.lock`, keys under `.ssh/`; see [gptr_security]) are never copied to the checkpoint store,
+#' so a turn's edit or deletion of one is not undone. Directories are not tracked: an empty
+#' directory a turn created stays. Files outside the project and `tempdir()` are restored only
+#' after you confirm each path. After a full restore the model is told nothing (the next
+#' request's prefix is byte-identical to the earlier request at the target); after a partial one
+#' the next prompt carries a short `<rewind>` block listing what was not restored. Model code may
+#' rewind another session only when you approve that call.
 #'
 #' @param s A `gptr_session`.
 #' @param turn Integer. Negative counts back from the last turn (`-1` undoes the last turn); `0`
@@ -663,7 +666,8 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
     return(invisible(s))
   }
   report = ckpt_rewind_apply(tree, ops, specs, ctx, force, plan$item)
-  bad = report[grepl("not restored|not redone|conflict|failed", report)]
+  # an item failed when its action says so right after a ": " (its name may hold the same words)
+  bad = report[grepl(": (not |conflict|failed)", report)]
   entry = list(type = "custom", custom_type = "gptr.rewind",
                data = list(from = from, to = tgt$target, keep = tgt$keep, restore = restore,
                            report = I(report), undone = I(ops$undo), redone = I(ops$redo)))
@@ -775,11 +779,11 @@ ckpt_turn_counts = function(cps, ck) {
        disk_mb = mb("disk"))
 }
 
-#' Run gptr_rewind() for a command: the report lines, or the error's message (the partial
-#' warning is muffled: the report lists the items). The undone prompt also goes to the console
-#' history, so Up recalls it (readline() cannot pre-fill)
+#' Run gptr_rewind() for a command: the report lines under `verb` (what the command did), or the
+#' error's message (the partial warning is muffled: the report lists the items). The undone prompt
+#' also goes to the console history, so Up recalls it (readline() cannot pre-fill)
 #' @noRd
-ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all") {
+ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all", verb = "Rewound") {
   d = session_data(s)
   last = d$last_rewind$id
   err = tryCatch(withCallingHandlers({
@@ -792,8 +796,9 @@ ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all") {
   if (!is.null(err) || identical(lr$id, last)) return(err)
   text = d$editor_text
   if (length(text) && gptr_is_interactive()) console_history_add(text)
-  c(paste0("Rewound (", lr$restore, if (lr$partial) "); some items were not restored:" else ")."),
-    lr$report, if (length(text)) c("Undone prompt:", text))
+  end = if (!lr$partial) ")." else
+    paste0("); some items were not ", if (identical(verb, "Redone")) "redone" else "restored", ":")
+  c(paste0(verb, " (", lr$restore, end), lr$report, if (length(text)) c("Undone prompt:", text))
 }
 
 #' /undo: rewind the last turn; asks first when the preview finds items it cannot restore
@@ -843,7 +848,7 @@ ckpt_cmd_redo = function(args, ctx) {
   if (is.null(s)) return("There is no session to redo.")
   tgt = ckpt_redo_target(ckpt_tree(session_data(s)))
   if (is.null(tgt)) return("Nothing to redo.")
-  ckpt_cmd_run(s, to = tgt$to, restore = tgt$restore)
+  ckpt_cmd_run(s, to = tgt$to, restore = tgt$restore, verb = "Redone")
 }
 
 #' /rewind k keeps turns 1..k; /rewind alone offers the turns and what to restore in a menu

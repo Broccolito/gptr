@@ -143,6 +143,7 @@ lower-numbered plans. "Depends on" lists 05's direct dependencies.
 | 26 | [P26 Console and agent fixes](P26-console-agent-fixes.md) | post-M5 | P01-P25 | 11 | pasted blocks, typed steering, `!code` completion, console layout and Markdown code blocks, sub-agent prompts and fan-out status, object sizes, `yolo` mode, Codex stdio relay and CLI streaming, Bedrock SigV4 Converse (issues #10-#20) |
 | 27 | [P27 Windows coverage](P27-windows-coverage.md) | post-M5 | P01-P26 | 12 | every Windows function proven on hosted Windows CI (release, oldrel-4, R-devel; CRAN and NOT_CRAN): CI lanes, shell routes, process trees, links and dangling links, crash recovery, artifacts and Chrome, privacy and CLI stdin, per-turn checkpoints (PR #51) |
 | 28 | [P28 Codex-style peter() console](P28-console-codex.md) | post-M5 | P01-P27 | 28 | a question never takes typed-ahead text (the open bug), steers at the next step boundary and follow-ups as the next prompt, a composer on one live bottom row, approvals under the call they gate, logo glyphs and palette, R highlighting, trigger-only completion, an input band, a status line with the model and context left |
+| 29 | [P29 Coached harnesses](P29-gptr-coach.md) | post-M5 | P01-P28 | 11 | `gptr_tailor()` builds a harness, a function called like `peter()` with fixed arguments, your own rules and coaching (a note, skills, a review, rules); `gptr_coach()` improves the coaching by running your task in separate R processes (`k` from 1 to 5, parallel or sequential, a blind judge), on API keys and on Claude Code and Codex plans |
 
 Tasks per milestone: M0 55, M1 56, M2 58, M3 47, M4 40, M5 51; total 307.
 
@@ -182,13 +183,14 @@ git rev-parse HEAD
 ```
 
 Expected, for both workflows: `status` `completed`, `conclusion` `success`, `headSha` equal to
-`HEAD`. The jobs: `R-CMD-check` (macOS release; Ubuntu devel, release, oldrel-1, oldrel-4),
-`no-suggests`, `c-locale` (`LC_ALL=C`), `copy-safety` (release, devel), `connections`
-(`_R_CHECK_CONNECTIONS_LEFT_OPEN_=true`) and `bench` (token ratchet; P24 appends three steps,
-including the INFRA suite under 60 s); in `Windows-check.yaml`, four shards each of Windows release
-and oldrel-4 and their gates `windows-latest (release)` and `windows-latest (oldrel-4)`. Before P07
-the `bench` job prints that `run.R` does not exist yet, and before P08 `copy-safety` prints that no
-`test-copy-*.R` suite exists. Then tag the milestone.
+`HEAD`. The jobs (CI-107): in `R-CMD-check.yaml`, the shards of `c-locale` (`LC_ALL=C`),
+`macos` and `connections` (the connection-table comparison, IC-59) with their `gates`, which also
+gate `cran-mode` as `ubuntu-latest (devel)`, `cran-check` (Ubuntu oldrel-1, oldrel-4, release
+without Suggests), `cran-mode`, `copy-safety` (release, devel) and `bench` (token ratchet; P24
+appends three steps, including the INFRA suite under 60 s); in `Windows-check.yaml`, ten shards of
+Windows release and their gate `windows-latest (release)`, `windows-latest (oldrel-4)` and `cran`.
+Before P07 the `bench` job prints that `run.R` does not exist yet, and before P08 `copy-safety`
+prints that no `test-copy-*.R` suite exists. Then tag the milestone.
 
 ### 5.2 Milestone-specific checks
 
@@ -281,7 +283,8 @@ provider key unless `GPTR_LIVE_TESTS=true`, and sets `GPTR_REPLAY=replay`.
 |---|---|---|---|
 | `test-live-anthropic.R`, `test-live-openai.R`, `test-live-google.R` | P12 Task 10 | `GPTR_LIVE_TESTS=true` plus `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` or `GOOGLE_API_KEY` | paid; `GPTR_LIVE_TESTS=true Rscript --vanilla -e 'devtools::test(filter = "^live-(anthropic\|openai\|google)$")'`; skipped: `SKIP 3` |
 | `test-live-jev.R` | P13 Task 12 | `GPTR_LIVE_TESTS=true` | reads the Jev key file through `gptr_env()` (default path above; override `GPTR_JEV_KEY_FILE`); under one cent; `PASS 14` |
-| `test-live-cli.R` | P20 Task 11 | `GPTR_LIVE_TESTS=true GPTR_LIVE_HOME="$HOME"` | spends plan quota; needs signed-in `claude` and `codex` (setup.R moves `HOME`); `PASS 7`, skipped: `SKIP 2` |
+| `test-live-cli.R` | P20 Task 11, P29 | `GPTR_LIVE_TESTS=true GPTR_LIVE_HOME="$HOME"` | spends plan quota; needs signed-in `claude` and `codex` (setup.R moves `HOME`); `PASS 7`, skipped: `SKIP 2` before P29, which adds two Claude Code and two Codex coaching cases (a coach with no tools, a run that acts only through gptr's tools); with them 6 tests and 17 expectations pass (2026-10-28), and live-cli with live-coach 10 tests and 58 expectations |
+| `test-live-coach.R` | P29 | `GPTR_LIVE_TESTS=true`; the API route needs `GPTR_BEDROCK_BASE_URL`, `GPTR_BEDROCK_REGION` and an AWS key pair, loaded from `GPTR_LLM_KEY_FILE` (default `.secrets/llm-passwords.env`) or set in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`; the plan routes need `GPTR_LIVE_HOME="$HOME"` and a signed-in `claude` or `codex` that passes the coaching preflight | `gptr_coach()` on Bedrock Claude (model `GPTR_LIVE_COACH_MODEL`, by default Claude Haiku 4.5), a Claude Code plan and a Codex plan (the D-276 check that no prompt reaches `CODEX_HOME`), and a recorded coaching call that replays with no model request; each call starts 4 runs and 3 coach sessions in R processes; a route that is not available skips; `devtools::test(filter = "live-coach")` |
 | All live files at once | conventions section 2 | `GPTR_LIVE_TESTS=true Rscript --vanilla -e 'devtools::test(filter = "live")'` | also selects P06's `test-session-live.R` (offline, harmless) |
 | INFRA-03 (real SIGINTs into an interactive R child) | P14 Task 7 | `CI=true` | Linux and macOS; skipped elsewhere |
 | Quarto record and replay | P15 Task 18 | `quarto` on `PATH` | `SKIP 1` without it |
