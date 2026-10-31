@@ -98,19 +98,19 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   both manuals (600 s).
 * GitHub's CRAN-mode checks took 256 s (Ubuntu R-devel, budget 480 s) and 494 s (Windows
   release, budget 600 s), and the local one 146 s at low load.
-* R-hub (Windows R-devel and R-release, Ubuntu R-devel with gcc 12) and win-builder (R-release,
-  R-oldrelease and R-devel) run on the final tarball before submission.
+* R-hub on `main` (2026-10-30): Windows R-devel, Windows R-release and Ubuntu R-devel with gcc 12.
+* win-builder on the final tarball (2026-10-30): R-devel (2026-10-28 r90783), R-release 4.6.2 and
+  R-oldrelease 4.5.3.
 
 ## R CMD check results
 
 0 errors | 0 warnings | 0 notes locally and in every GitHub Actions job, apart from the
-installed-size NOTE of R 4.2 (oldrel-4; see below). The R-hub and win-builder results of the final
-tarball are added here before submission.
-
-The incoming feasibility check with remote URL checks gives one NOTE: the URL
-https://broccolito.github.io/gptr/articles/tailor-and-coach.html returns 404. It is the article
-for this release's new functions, linked from the README; it returns 200 once the package website
-is deployed from `main` with this release, before submission.
+installed-size NOTE of R 4.2 (oldrel-4; see below). The three R-hub checks passed. The three
+win-builder checks each gave one NOTE, from the incoming feasibility check: the URL
+https://broccolito.github.io/gptr/articles/tailor-and-coach.html returned 404. That article, linked
+from the README, documents this release's new functions and was published when the package website
+was deployed from `main`; it now returns 200, and the incoming feasibility check with remote URL
+checks on the same tarball gives Status: OK.
 
 The local check also reports two INFO lines: 'repr', which gptr enhances, was not available for
 checking, and the installed size.
