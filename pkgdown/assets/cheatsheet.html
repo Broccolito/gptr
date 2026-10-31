@@ -174,50 +174,54 @@ figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
             <path class="edge" d="M172 64H91" marker-end="url(#arrow)"/>
             <text class="tl" x="131" y="76" text-anchor="middle">R code to run</text>
           </svg>
-          <figcaption>R computes on the full objects, while the model receives size-limited descriptions, previews and tool output
-            that may include data values (<code>?gptr_egress</code>).</figcaption>
+          <figcaption>R uses full objects; models see descriptions, previews and tool output, including data values (<code>?gptr_egress</code>).</figcaption>
         </figure>
         <dl>
           <dt>gptr_describe(mtcars)</dt><dd>What a model is shown of an object.</dd>
-          <dt>peter(q, .opts = list(context = "none"))</dt><dd>Leave out the workspace listing, your recent changes and code, and object descriptions.</dd>
+          <dt>peter("Say hello.",
+  .opts = list(context = "none"))</dt><dd>Workspace/object descriptions off; prompts, instructions and environment details still go.</dd>
         </dl>
       </section>
       <section class="panel">
         <h2>Set up</h2>
+        <p>OpenAI for live calls; <a href="#offline">Try it offline</a> needs no key and defines <code>fake</code> and <code>s</code> for page 2.</p>
         <dl>
           <dt>pak::pak("Broccolito/gptr@main")
-library(gptr)</dt><dd>Install gptr 1.0 from GitHub (R 4.2 or later).</dd>
-          <dt>gptr_env("~/keys/.env")</dt><dd>Load keys from a .env file; gptr redacts them.</dd>
-          <dt>gptr_login("openrouter")</dt><dd>Sign in with OAuth or a masked key.</dd>
-          <dt>gptr_providers(); gptr_models("sonnet")</dt><dd>List the routes; search the offline model catalog.</dd>
-          <dt>gptr_config(model = opus, .scope = "user")</dt><dd>Save a default model (session, project or user).</dd>
-          <dt>gptr_init(".")</dt><dd>Create <code>.gptr/</code>, so sessions and recorded answers outlive R.</dd>
+library(gptr)</dt><dd>R 4.2+; first install pak with <code>install.packages("pak")</code> if needed.</dd>
+          <dt>gptr_login("openai")</dt><dd>Interactive R: enter your OpenAI key, masked.</dd>
+          <dt>gptr_providers(); gptr_models("gpt")</dt><dd>List the routes; search the offline model catalog.</dd>
+          <dt>gptr_config(model = "gpt",
+  .scope = "user")</dt><dd>Save a default model (session, project or user).</dd>
+          <dt>gptr_init(".")</dt><dd>Create <code>.gptr/</code>; keep sessions and records.</dd>
           <dt>gptr_trust(".", trust = TRUE)</dt><dd>Trust the project's settings, skills and plugins.</dd>
-          <dt>gptr_permissions(allow = "r(fn:saveRDS)")</dt><dd>Add a rule for this R session, or list the rules.</dd>
-          <dt>e = gptr_config()$egress; e$openai = "ack"
-gptr_config(egress = e, .scope = "user")</dt><dd>Let unattended runs send to openai.</dd>
+          <dt>e = gptr_config()$egress
+e$openai = "ack"
+gptr_config(egress = e, .scope = "user")</dt><dd>Consent to OpenAI context in scripts.</dd>
         </dl>
-        <p>No model set? At the console <code>peter()</code> offers the Claude Code or Codex CLI; <code>peter("...")</code> uses an Anthropic, OpenAI or Google key, else a CLI.</p>
       </section>
     </div>
 
     <div class="col">
+      <section class="panel" id="offline">
+        <h2>Try it offline</h2>
+        <dl>
+          <dt>step = list(tool = "r", input = list(
+  code = "fit = lm(mpg ~ wt, mtcars)"))
+fake = gptr_fake_provider(
+  list(step, "Done."))
+s = peter("Fit mpg on wt.", mtcars,
+  model = fake, mode = "auto"); coef(fit)</dt><dd>After <code>library(gptr)</code>: no key or network. The scripted replies fit the model, then set <code>s$text</code> to “Done.”</dd>
+        </dl>
+      </section>
       <section class="panel">
         <h2>Ask Peter from R</h2>
-        <p><code>peter("...")</code> returns a session, in scripts, loops and functions too. Where nobody can approve (Rscript, knitr), use <code>mode = auto</code> or an allow rule, or the first change stops the run.</p>
+        <p>Live calls follow Set up. <code>mtcars</code> is built in; quoted model names are strings. In functions use <code>envir = new.env()</code> to keep objects.</p>
         <dl>
-          <dt>s = peter("Fit mpg on wt; save as fit.",
-  mtcars)</dt><dd>The prompt first, then the objects to work on.</dd>
-          <dt>s$text; s$value; s$turns</dt><dd>The last answer, the newest <code>gptr_return()</code> value, the prompt count.</dd>
-          <dt>s$usage; s$cost; s$envir</dt><dd>Tokens, cost (NA without prices), the workspace.</dd>
-          <dt>col = "mpg"; peter("Plot {col} by cyl.")</dt><dd>A literal prompt interpolates <code>{name}</code> from R.</dd>
-          <dt>peter("Clean it.", raw, mode = auto,
-  model = "openai/gpt-6-sol")</dt><dd>Name other arguments exactly; bare names work.</dd>
-          <dt>peter("Summarize.", sales,
-  budget = list(tokens = 5e4, turns = 5))</dt><dd>Limits for one call; <code>turns</code> counts model requests.</dd>
-          <dt>gptr_return(coef(fit))  # in agent R code</dt><dd>Mark the result, <code>s$value</code> until a later one.</dd>
-          <dt>tryCatch(peter("Fit.", d),
-  gptr_error = function(e) e$session)</dt><dd>A stopped run carries its session; after Esc or Ctrl-C, <code>gptr_last()</code>.</dd>
+          <dt>fit_s = peter("Fit mpg ~ wt as fit.",
+  mtcars, mode = "auto")</dt><dd>Prompt, then data. <code>auto</code> permits ordinary changes in scripts; critical actions still ask.</dd>
+          <dt>fit_s$text; fit_s$value; fit_s$turns</dt><dd>Answer, newest <code>gptr_return()</code> value (else NULL), prompt count.</dd>
+          <dt>peter("Summarize.", mtcars,
+  budget = list(tokens = 5e4, turns = 5))</dt><dd>Per-call limits; <code>turns</code> counts model requests.</dd>
         </dl>
       </section>
       <section class="panel">
@@ -225,11 +229,11 @@ gptr_config(egress = e, .scope = "user")</dt><dd>Let unattended runs send to ope
         <figure>
           <svg viewBox="0 0 240 58" role="img" aria-label="Three piped peter() calls add turns to one session and one workspace.">
             <rect class="box" x="1" y="2" width="74" height="20" rx="3"/>
-            <text class="tm" x="38" y="15" text-anchor="middle"><tspan class="fn">peter</tspan>(p1)</text>
+            <text class="tm" x="38" y="12" text-anchor="middle" dominant-baseline="middle"><tspan class="fn">peter</tspan>("A")</text>
             <rect class="box" x="83" y="2" width="74" height="20" rx="3"/>
-            <text class="tm" x="120" y="15" text-anchor="middle">|&gt; <tspan class="fn">peter</tspan>(p2)</text>
+            <text class="tm" x="120" y="12" text-anchor="middle" dominant-baseline="middle"><tspan class="fn">peter</tspan>("B")</text>
             <rect class="box" x="165" y="2" width="74" height="20" rx="3"/>
-            <text class="tm" x="202" y="15" text-anchor="middle">|&gt; <tspan class="fn">peter</tspan>(p3)</text>
+            <text class="tm" x="202" y="12" text-anchor="middle" dominant-baseline="middle"><tspan class="fn">peter</tspan>("C")</text>
             <path class="edge" d="M38 22V34M120 22V34M202 22V34"/>
             <rect class="box" x="1" y="34" width="238" height="22" rx="3"/>
             <text class="tl" x="8" y="48">one session, one workspace</text>
@@ -237,11 +241,12 @@ gptr_config(egress = e, .scope = "user")</dt><dd>Let unattended runs send to ope
           </svg>
         </figure>
         <dl>
-          <dt>s |&gt; peter("Now plot the residuals.")</dt><dd>One more turn, same session and workspace.</dd>
-          <dt>s |&gt; peter("Add a caveat.", model = opus)</dt><dd>Switch the model; the history is kept.</dd>
-          <dt>b = gptr_fork(s)
-b |&gt; peter("Try a log model instead.")</dt><dd>Branch off; only in-place edits, such as <code>:=</code>, reach the original.</dd>
-          <dt>s; summary(s); gptr_last()</dt><dd>Print it, its history, the most recent session.</dd>
+          <dt>fit_s |&gt; peter("Plot the residuals.")</dt><dd>Continue the live fit above, with its workspace.</dd>
+          <dt>fit_s |&gt; peter("Check the fit.",
+  model = "gpt:high")</dt><dd>Change reasoning; keep the history.</dd>
+          <dt>b = gptr_fork(fit_s)
+b |&gt; peter("Try a log model.")</dt><dd>Branch; reference-object edits can reach the original.</dd>
+          <dt>fit_s; summary(fit_s); gptr_last()</dt><dd>Answer, history, most recent session.</dd>
         </dl>
       </section>
     </div>
@@ -250,41 +255,39 @@ b |&gt; peter("Try a log model instead.")</dt><dd>Branch off; only in-place edit
       <section class="panel">
         <h2>The console</h2>
         <dl>
-          <dt>session = peter()
-session |&gt; peter()</dt><dd>Open the console; <code>/exit</code> returns the session.</dd>
+          <dt>gptr_doc("log.R")
+session = peter()
+session |&gt; peter()</dt><dd>Interactive R: bind a transcript, then chat. <code>/exit</code> returns the session; the next call reopens it.</dd>
         </dl>
-        <h3>At the <code>peter&gt;</code> prompt</h3>
+        <h3>Input syntax at <code>peter&gt;</code></h3>
         <table>
           <tr><td><code>Fit mpg on wt.</code></td><td>A prompt for the session</td></tr>
-          <tr><td><code>!head(d)</code></td><td>Run R and show the model</td></tr>
+          <tr><td><code>!head(mtcars)</code></td><td>Run R and show the model</td></tr>
           <tr><td><code>!!x = 2</code></td><td>Run R; send no code or output</td></tr>
           <tr><td><code>```r … ```</code></td><td>Fenced R, run like <code>!code</code></td></tr>
           <tr><td><code>""" … """</code></td><td>A multi-line prompt</td></tr>
           <tr><td><code>line \</code></td><td>Continue on the next line</td></tr>
-          <tr><td><code>@notes.md</code></td><td>Attach a file's first 40 lines</td></tr>
-          <tr><td><code>@fit</code></td><td>Attach an object</td></tr>
-          <tr><td><code>{n}</code></td><td>Insert an R value</td></tr>
-          <tr><th colspan="2">Slash commands</th></tr>
+          <tr><td><code>@notes.md</code></td><td>Your existing file: first 40 lines</td></tr>
+          <tr><td><code>@mtcars</code></td><td>Attach an object</td></tr>
+          <tr><td><code>{pi}</code></td><td>Insert an R value</td></tr>
+          <tr><th colspan="2">Slash commands: one at a time</th></tr>
           <tr><td><code>/help [cmd]</code></td><td>Commands and syntax</td></tr>
-          <tr><td><code>/model /mode</code></td><td>Show or switch either</td></tr>
+          <tr><td><code>/model</code> <code>/mode</code></td><td>Show or switch either</td></tr>
           <tr><td><code>/status</code></td><td>Session, model, mode</td></tr>
-          <tr><td><code>/cost /env</code></td><td>Tokens and cost; objects</td></tr>
+          <tr><td><code>/cost</code> <code>/env</code></td><td>Tokens and cost; objects</td></tr>
           <tr><td><code>/tools</code></td><td>Tools and helpers</td></tr>
           <tr><td><code>/compact</code></td><td>Compact the history</td></tr>
           <tr><td><code>/clear</code></td><td>New chat, same objects</td></tr>
-          <tr><td><code>/resume /fork</code></td><td>Resume or fork a session</td></tr>
+          <tr><td><code>/resume</code> <code>/fork</code></td><td>Resume or fork a session</td></tr>
           <tr><td><code>/doc [path]</code></td><td>The history document</td></tr>
-          <tr><td><code>/skills /mcp</code></td><td>List skills, MCP servers</td></tr>
+          <tr><td><code>/skills</code> <code>/mcp</code></td><td>List skills, MCP servers</td></tr>
           <tr><td><code>/&lt;name&gt;</code></td><td>A <code>.gptr/prompts/</code> template</td></tr>
           <tr><td><code>/permissions</code></td><td>Show or change rules</td></tr>
-          <tr><td><code>/undo /redo</code></td><td>Undo or redo a turn</td></tr>
+          <tr><td><code>/undo</code> <code>/redo</code></td><td>Undo or redo a turn</td></tr>
           <tr><td><code>/retry</code></td><td>Resend the last prompt</td></tr>
           <tr><td><code>/rewind [k]</code></td><td>Keep turns 1 to k</td></tr>
           <tr><td><code>/exit</code></td><td>Leave; return the session</td></tr>
         </table>
-        <dl>
-          <dt>gptr_doc("log.R")</dt><dd>Record the console turns and <code>!code</code> as a runnable <code>.R</code> transcript.</dd>
-        </dl>
         <h3>While an answer runs</h3>
         <p>In a terminal (not Windows) type, then Enter steers and Tab follows up. Ctrl-C (RStudio: Esc) pauses: <b>[s]</b>teer, <b>[f]</b>ollow-up, <b>[c]</b>ontinue, <b>[a]</b>bort, <b>[b]</b>ackground. Approvals: <b>[y]</b>es, <b>[a]</b>lways (session), <b>[p]</b> always (project), <b>[n]</b>o (<code>n &lt;text&gt;</code> says what to do instead).</p>
       </section>
@@ -308,37 +311,36 @@ session |&gt; peter()</dt><dd>Open the console; <code>/exit</code> returns the s
             <text class="tm" x="128" y="66">gptr_session</text>
             <text class="tl" x="128" y="77">$text, $value, objects</text>
           </svg>
-          <figcaption>The model decides what <code>peter()</code> returns. A decision model (Jev, Clef) is sent each input and answers once per input; a conversational model works in turns.</figcaption>
+          <figcaption>Jev and Clef return one typed decision per input. Conversational models work in turns with tools and return a session.</figcaption>
         </figure>
         <h3>System 1: typed decisions</h3>
         <dl>
-          <dt>rct = peter("Is this an RCT?", abstracts,
-  model = jev)</dt><dd>Logical: TRUE when P(yes)&nbsp;&ge;&nbsp;<code>threshold</code> (0.5).</dd>
-          <dt>gptr_prob(rct)</dt><dd>P(yes) for each element.</dd>
-          <dt>peter("Which tissue?", cells, model = jev,
+          <dt>gptr_login("typesafe")  # interactive R
+e = gptr_config()$egress
+e$typesafe = "ack"
+gptr_config(egress = e, .scope = "user")</dt><dd>Jev uses its own TypeSafe key and consent.</dd>
+          <dt>abstracts = c("Randomized trial.",
+  "Observational study.")
+rct = peter("Is this an RCT?", abstracts,
+  model = "jev")</dt><dd>Logical: TRUE when P(yes)&nbsp;&ge;&nbsp;0.5 (the default threshold).</dd>
+          <dt>gptr_prob(rct)
+abstracts[rct]; sum(rct)</dt><dd>P(yes); subset and count these typed answers.</dd>
+          <dt>peter("Which tissue?", "Hepatocyte",
+  model = "jev",
   choices = c("liver", "lung", "other"))</dt><dd>One label per input.</dd>
-          <dt>peter("How severe?", events, model = jev,
-  levels = c("low", "mid", "high"))</dt><dd>A score: the expected level from 0, such as 1.88.</dd>
-          <dt>peter(q, x, model = jev,
-  min_confidence = 0.8)</dt><dd>Below it (|2p&minus;1| for yes or no) an answer is NA, or what <code>uncertain</code> says.</dd>
-          <dt>abstracts[rct]; sum(rct)</dt><dd>Plain vectors for subsetting, <code>sum()</code>, <code>if</code> and <code>for</code>.</dd>
-          <dt>s |&gt; peter("Did it succeed?", model = jev)</dt><dd>Judge a session's last answer; adds no turn.</dd>
+          <dt>peter("How severe?",
+  "Pain limits walking.", model = "jev",
+  levels = c("low", "mid", "high"))</dt><dd>A fractional score: the expected 0-based level.</dd>
+          <dt>peter("Is this an RCT?", abstracts,
+  model = "jev", min_confidence = 0.8)</dt><dd>Below the minimum (|2p&minus;1| for yes/no), return NA or what <code>uncertain</code> says.</dd>
+          <dt>fit_s |&gt; peter("Did it succeed?",
+  model = "jev")</dt><dd>Judge the live fit's last answer; add no turn.</dd>
         </dl>
         <h3>System 2: agents</h3>
         <dl>
-          <dt>peter("Plan it.", d, model = opus,
-  .opts = list(thinking = "high"))</dt><dd>More reasoning, <code>off</code> to <code>max</code>, or a suffix such as <code>opus:high</code>.</dd>
-        </dl>
-      </section>
-      <section class="panel">
-        <h2>Try it offline</h2>
-        <dl>
-          <dt>step = list(tool = "r", input = list(
-  code = "fit = lm(mpg ~ wt, mtcars)"))
-fake = gptr_fake_provider(
-  list(step, "Done."))
-s = peter("Fit mpg on wt.", mtcars,
-  model = fake, mode = auto); coef(fit)</dt><dd>The first reply runs R; the second is <code>s$text</code>.</dd>
+          <dt>peter("Plan an mpg analysis.", mtcars,
+  model = "gpt",
+  .opts = list(thinking = "high"))</dt><dd>Reasoning depends on the model; a suffix such as <code>gpt:high</code> works too.</dd>
         </dl>
       </section>
     </div>
@@ -363,7 +365,7 @@ s = peter("Fit mpg on wt.", mtcars,
             <text class="tl" x="135" y="31" text-anchor="middle">model id</text>
             <text class="tl" x="204" y="31" text-anchor="middle">thinking</text>
           </svg>
-          <figcaption>Aliases work too: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>, <code>gpt</code>, <code>flash</code>, <code>jev</code>, <code>claude_code</code>, <code>codex</code>.</figcaption>
+          <figcaption>Aliases: <code>"sonnet"</code>, <code>"opus"</code>, <code>"haiku"</code>, <code>"gpt"</code>, <code>"flash"</code>, <code>"jev"</code>, <code>"claude_code"</code>, <code>"codex"</code>.</figcaption>
         </figure>
         <table>
           <tr><td><code>anthropic/…</code></td><td><code>ANTHROPIC_API_KEY</code></td></tr>
@@ -372,126 +374,118 @@ s = peter("Fit mpg on wt.", mtcars,
           <tr><td><code>openrouter/…</code></td><td><code>OPENROUTER_API_KEY</code></td></tr>
           <tr><td><code>azure/…</code></td><td><code>AZURE_OPENAI_API_KEY</code>, <code>AZURE_OPENAI_ENDPOINT</code></td></tr>
           <tr><td><code>bedrock/…</code></td><td><code>AWS_BEARER_TOKEN_BEDROCK</code>, <code>AWS_REGION</code></td></tr>
-          <tr><td><code>ollama/…</code></td><td>Local, no key; also lmstudio, vllm</td></tr>
-          <tr><td><code>claude-cli</code></td><td><code>claude auth login</code></td></tr>
-          <tr><td><code>codex</code></td><td><code>codex login</code></td></tr>
-          <tr><td><code>jev</code></td><td>System 1: <code>TYPESAFE_API_KEY</code></td></tr>
-          <tr><td><code>ollama/clef</code></td><td>System 1: local, Ollama 0.35.1+</td></tr>
+          <tr><td><code>ollama/…</code></td><td>Local server; also lmstudio, vllm</td></tr>
+          <tr><td><code>claude-cli</code></td><td>Shell: <code>claude auth login</code></td></tr>
+          <tr><td><code>codex</code></td><td>Shell: <code>codex login</code></td></tr>
+          <tr><td><code>jev</code></td><td><code>TYPESAFE_API_KEY</code></td></tr>
+          <tr><td><code>ollama/clef</code></td><td>Installed model; Ollama 0.35.1+</td></tr>
         </table>
         <dl>
           <dt>gptr_models(provider = "ollama",
-  refresh = TRUE)</dt><dd>List the models Ollama has installed.</dd>
-          <dt>m = list(id = "my-id", tool_call = TRUE)
-gptr_config(providers = list(
-  bedrock = list(models = list(m))))</dt><dd>Declare a model for <code>model = "bedrock/my-id"</code>; each call replaces <code>providers</code>.</dd>
-          <dt>gptr_register(gptr_provider("corp",
-  "openai-completions", base_url = u,
-  auth = "CORP_KEY", models = list(m)))</dt><dd>Add any OpenAI-compatible endpoint; registering the name again replaces it.</dd>
+  refresh = TRUE)</dt><dd>Installed models on a running Ollama server.</dd>
+          <dt data-kind="template">gptr_register(gptr_provider("corp",
+  "openai-completions",
+  base_url = "https://HOST/v1",
+  auth = "CORP_KEY", models = list(
+    list(id = "MODEL",
+      tool_call = TRUE))))</dt><dd>Template: replace HOST/MODEL; set CORP_KEY for calls. Same-name registration replaces it.</dd>
         </dl>
       </section>
       <section class="panel">
         <h2>Permissions and trust</h2>
         <table>
-          <tr><td><code>plan</code></td><td>Read only; next call gets the plan</td></tr>
-          <tr><td><code>manual</code></td><td>Default: reads run, changes ask</td></tr>
-          <tr><td><code>edits</code></td><td>Also file edits in the project</td></tr>
-          <tr><td><code>auto</code></td><td>Asks only for critical actions and secret reads</td></tr>
-          <tr><td><code>yolo</code></td><td>Nearly all; critical actions still ask</td></tr>
+          <tr><td><code>plan</code></td><td>Read only; next top-level call gets the plan</td></tr>
+          <tr><td><code>manual</code></td><td>Reads run; classified changes ask</td></tr>
+          <tr><td><code>edits</code></td><td>Also allows file edits in the project</td></tr>
+          <tr><td><code>auto</code></td><td>Critical actions and secret reads ask</td></tr>
+          <tr><td><code>yolo</code></td><td>Broad; critical and secret-flow guards remain</td></tr>
         </table>
         <dl>
-          <dt>gptr_permissions(deny = "r(sh:rm *)")</dt><dd>Rules: <code>deny</code> beats <code>ask</code> beats <code>allow</code>.</dd>
-          <dt>gptr_rewind(s)</dt><dd>Undo the last turn: objects, files, chat.</dd>
+          <dt>gptr_permissions(deny = "r(sh:rm *)")</dt><dd>Rules: deny beats ask beats allow.</dd>
+          <dt>gptr_rewind(s)</dt><dd>Page 1's s. Restore checkpoints; not references or external effects. Limits: <code>?gptr_rewind</code>.</dd>
         </dl>
-        <p><code>auto</code> and <code>yolo</code> refuse a <code>system()</code> command the code computes (use <code>peter$sh()</code>). The gate is advisory, not a sandbox: <code>?gptr_security</code>.</p>
+        <p>Auto/yolo: computed <code>system()</code> needs an explicit <code>r(fn:system)</code> allow rule. Advisory, not a sandbox: <code>?gptr_security</code>.</p>
       </section>
     </div>
 
     <div class="col">
       <section class="panel">
         <h2>Record, replay and export</h2>
-        <p>Bind a document; gptr writes eligible top-level calls and their executed R code into it, with model and execution metadata.</p>
+        <p>R console, in order: use a new writable project and page 1's fake. Leave GPTR_REPLAY unset for this first recording.</p>
         <figure>
-          <svg viewBox="0 0 240 98" role="img" aria-label="A recorded block in analysis.R: the prompt, the block header, the recorded code, its output, a decision note and the closing marker.">
-            <rect class="box" x="1" y="1" width="186" height="96" rx="3"/>
-            <text class="tm" x="8" y="14"><tspan class="fn">peter</tspan>("Fit mpg on wt.")</text>
-            <rect class="mark" x="8" y="21" width="2" height="71"/>
-            <text class="tc" x="15" y="29"># &gt;&gt;&gt; gptr:46d369 model=…</text>
-            <text class="tm" x="15" y="41">fit = lm(mpg ~ wt, mtcars)</text>
-            <text class="tm" x="15" y="53">coef(fit)[["wt"]]</text>
-            <text class="tc" x="15" y="65">#&gt; [1] -5.344472</text>
-            <text class="tc" x="15" y="77">## Decision: linear fit</text>
-            <text class="tc" x="15" y="89"># &lt;&lt;&lt; gptr:46d369</text>
-            <text class="tl" x="194" y="14">prompt</text>
-            <text class="tl" x="194" y="29">header</text>
-            <text class="tl" x="194" y="47">code</text>
-            <text class="tl" x="194" y="65">output</text>
-            <text class="tl" x="194" y="77">note</text>
-            <text class="tl" x="194" y="89">end</text>
+          <svg viewBox="0 0 240 34" role="img" aria-label="Bind the file, run a prompt and then replay the recorded code without a model.">
+            <rect class="box" x="1" y="1" width="66" height="27" rx="3"/>
+            <rect class="box" x="87" y="1" width="66" height="27" rx="3"/>
+            <rect class="box" x="173" y="1" width="66" height="27" rx="3"/>
+            <text class="tm" x="34" y="14.5" text-anchor="middle" dominant-baseline="middle">gptr_doc()</text>
+            <text class="tm" x="120" y="14.5" text-anchor="middle" dominant-baseline="middle">peter()</text>
+            <text class="tm" x="206" y="14.5" text-anchor="middle" dominant-baseline="middle">replay</text>
+            <path class="edge" d="M69 14.5h15m-4-3 4 3-4 3M155 14.5h15m-4-3 4 3-4 3"/>
           </svg>
         </figure>
         <dl>
-          <dt>gptr_doc("analysis.R")</dt><dd>Record into this <code>.R</code>, <code>.Rmd</code>, <code>.qmd</code> or <code>.ipynb</code>; to knit or render, bind in the setup chunk.</dd>
+          <dt>gptr_register(
+  gptr_fake_provider(fake$script))</dt><dd>Reset/register the offline model.</dd>
+          <dt>writeLines("library(gptr)", "analysis.R")
+gptr_doc("analysis.R")
+s = peter("Fit mpg on wt.", mtcars,
+  model = "fake/fake-1", mode = "auto")
+gptr_doc(FALSE)</dt><dd>Create, bind, record a top-level call, then unbind.</dd>
           <dt>gptr_source("analysis.R",
-  replay = "replay")</dt><dd>Rerun with no model call; <code>"live"</code> asks again.</dd>
-          <dt>GPTR_REPLAY=replay Rscript analysis.R</dt><dd>Prove from the shell that a script needs no model.</dd>
-          <dt>gptr_blocks("analysis.R")</dt><dd>Block status: fresh, stale, <span class="nowrap">user-edited</span> or undone.</dd>
-          <dt>gptr_doc("report.Rmd")
-rmarkdown::render("report.Rmd")</dt><dd>Render as usual; blocks become <code>gptr-&lt;id&gt;</code> chunks.</dd>
-          <dt>gptr_doc("analysis.ipynb", sync = TRUE)</dt><dd>Write the blocks queued while it was open.</dd>
-          <dt>gptr_doc(FALSE)</dt><dd>Stop recording.</dd>
-        </dl>
-        <p>Replay runs the recorded code and needs its inputs and packages; a new R session gets <code>s$text</code> back only from <code>.gptr/</code>. A top-level <code>gptr_coach()</code> call replays too.</p>
-        <h3>Export a recorded .R</h3>
-        <p>Export needs fresh blocks and literal arguments (write <code>mode = "auto"</code>), with data objects only as names after the prompt.</p>
-        <dl>
-          <dt>gptr_export("analysis.R", "plain.R")</dt><dd>Plain R: recorded code runs, <code>peter()</code> calls become comments.</dd>
+  replay = "replay")
+gptr_blocks("analysis.R")</dt><dd>Replay; list fresh/stale/edited/undone blocks.</dd>
+          <dt data-language="sh">GPTR_REPLAY=replay Rscript analysis.R</dt><dd>POSIX shell (macOS/Linux), after recording. No model calls.</dd>
+          <dt>gptr_export("analysis.R", "plain.R")</dt><dd>Code runs; peter calls become comments. Needs fresh blocks and literal arguments.</dd>
           <dt>gptr_export("analysis.R", "peter.R",
-  format = "peter")</dt><dd><code>peter()</code> calls run; recorded code is commented.</dd>
+  format = "peter")</dt><dd>Calls run; code is commented. Live runs need the provider.</dd>
+          <dt data-kind="existing-file">gptr_doc("report.Rmd")</dt><dd>Existing report: bind in setup before calls; rmarkdown/Pandoc renders it. Quarto needs its CLI.</dd>
+          <dt data-kind="existing-file">gptr_doc("analysis.ipynb", sync = TRUE)</dt><dd>Existing recorded notebook: close before syncing.</dd>
         </dl>
+        <p>Replay needs the code's inputs/packages; cached text needs .gptr/. Top-level <code>gptr_coach()</code> replays too.</p>
       </section>
       <section class="panel">
         <h2>Learn more</h2>
-        <p>Guides at <a href="https://broccolito.github.io/gptr/articles/">broccolito.github.io/gptr/articles</a>, from Getting started to <a href="https://broccolito.github.io/gptr/articles/tailor-and-coach.html">Harnesses and coaching</a>, and the <a href="https://broccolito.github.io/gptr/reference/">function reference</a>.</p>
+        <p><a href="https://broccolito.github.io/gptr/articles/">Guides</a>, <a href="https://broccolito.github.io/gptr/articles/tailor-and-coach.html">Harnesses and coaching</a>, and the <a href="https://broccolito.github.io/gptr/reference/">function reference</a>.</p>
       </section>
     </div>
 
     <div class="col">
       <section class="panel">
         <h2>Tools, files and artifacts</h2>
-        <p>The model calls <code>read</code>, <code>r</code>, <code>edit</code>, <code>write</code> and <code>ask</code>; in <code>r</code> it uses <code>peter$</code> helpers, which you can call too.</p>
+        <p>In a new writable project. Presets: minimal, standard, readonly (r can write), extended; select with <code>tools = "extended"</code>.</p>
         <dl>
-          <dt>peter("Review R/.", tools = extended)</dt><dd>Presets: <code>minimal</code>, <code>standard</code>, <code>readonly</code> (<code>r</code> can still write files), <code>extended</code> (adds grep, find, ls).</dd>
-          <dt>peter(q, tools = c("-write", "+grep"))</dt><dd>Remove or add single tools.</dd>
-          <dt>peter$read("R/fit.R", limit = 40)
-peter$grep("lm\\(", path = "R")
-peter$find("*.R"); peter$ls("R")</dt><dd>Read, search, find and list files.</dd>
+          <dt>dir.create("R", showWarnings = FALSE)
+peter$write("R/fit.R", "n=10\n")
+peter$read("R/fit.R", limit = 40)
+peter$grep("n=", path = "R")
+peter$find("*.R"); peter$ls("R")</dt><dd>Create the fixture; read, search and list.</dd>
           <dt>peter$edit("R/fit.R", list(list(
   oldText = "n=10", newText = "n=20")))
-peter$write("notes.txt", "done\n")</dt><dd>Edit text in place; write files atomically.</dd>
-          <dt>peter$sh(c("git", "status"))
-peter$bg(c("Rscript", "long.R"))</dt><dd>Run a program, or one in the background.</dd>
+peter$write("notes.txt", "done\n")</dt><dd>Edit the fixture; write files atomically.</dd>
+          <dt>peter$sh(c("Rscript", "--version"))
+peter$bg(c("Rscript", "--version"))</dt><dd>Run/background a program; Rscript uses this R.</dd>
           <dt>peter$sql("SELECT cyl, AVG(mpg)
-  FROM mtcars GROUP BY cyl", mtcars)</dt><dd>SQL on data frames; <code>peter$py()</code> runs Python.</dd>
-          <dt>peter("Make a Shiny app of it.", survey)</dt><dd>An artifact: <code>app.R</code>, launched at the console.</dd>
-          <dt>gptr_artifacts()
-gptr_artifacts("survey-view", open = TRUE)</dt><dd>List apps; open, stop or relaunch a version.</dd>
+  FROM mtcars GROUP BY cyl", mtcars)</dt><dd>Data frames need DBI + duckdb. <code>peter$py()</code>: reticulate + Python.</dd>
+          <dt>apps = gptr_artifacts()
+if (nrow(apps))
+  gptr_artifacts(apps$id[[1]], open = TRUE)</dt><dd>After asking Peter to build a Shiny app: use its actual ID. Shiny required; scripts do not launch by default.</dd>
         </dl>
       </section>
       <section class="panel">
         <h2>Skills, plugins and MCP</h2>
         <dl>
-          <dt>gptr_skills()</dt><dd>Skills of the project, user, plugins and packages.</dd>
-          <dt>peter("Speed up f.", f,
-  skills = "high-performance-r")</dt><dd>Preload a skill; write yours as <code>&lt;name&gt;/SKILL.md</code> in <code>.gptr/skills/</code>.</dd>
-          <dt>peter("Report units.", plugins = "./lab")</dt><dd>Enable a plugin; <code>gptr_plugins()</code> lists them.</dd>
-          <dt>gptr_mcp_add("docs",
-  url = "http://127.0.0.1:8000/mcp")</dt><dd>Add an MCP server, or <code>command =</code> for stdio.</dd>
-          <dt>peter$mcp$&lt;server&gt;$&lt;tool&gt;(...)</dt><dd>MCP tools are R functions the agent calls.</dd>
-          <dt>h = gptr_mcp_serve(); h$config
-h$stop()</dt><dd>Serve this R session to Claude Code or Codex.</dd>
+          <dt>gptr_skills(); gptr_plugins()</dt><dd>List available skills and plugins.</dd>
+          <dt>peter("Review lm().", stats::lm,
+  skills = "high-performance-r")</dt><dd>Bundled skill; needs page 1 model setup.</dd>
+          <dt data-kind="existing-plugin">peter("Report units.", plugins = "./lab")</dt><dd>Requires trusted ./lab with plugin.json.</dd>
+          <dt data-kind="external-service">gptr_mcp_add("docs",
+  url = "http://127.0.0.1:8000/mcp")</dt><dd>Your server's URL (or command for stdio); connects on use.</dd>
+          <dt data-kind="template">peter$mcp[["SERVER"]][["TOOL"]]()</dt><dd>Template: replace names and tool arguments.</dd>
+          <dt data-kind="external-service">mcp = gptr_mcp_serve()
+as.character(mcp$config$claude_code)</dt><dd>httpuv/later/openssl needed. Paste into Claude Code; keep R open. When done: <code>mcp$stop()</code>.</dd>
           <dt>up = gptr_tool("shout", "Upper-case.",
   fun = function(x) toupper(x))
-off = gptr_register(up)</dt><dd>Add a tool; <code>off()</code> removes it.</dd>
+off = gptr_register(up)</dt><dd>Register a tool; off() removes it.</dd>
         </dl>
       </section>
     </div>
@@ -499,39 +493,39 @@ off = gptr_register(up)</dt><dd>Add a tool; <code>off()</code> removes it.</dd>
     <div class="col">
       <section class="panel">
         <h2>Teams, fan-outs, background</h2>
-        <p>Members inherit the mode. A team fails only when no member finishes.</p>
+        <p>Needs page 1's model setup. Modes inherit; a team throws only if all children fail. Inspect statuses.</p>
         <dl>
-          <dt>s = peter("Review fit.", agents = list(
-  stats = agent(system = "Check stats."),
-  code = agent(system = "Check code.")))</dt><dd>A team of named roles; <code>s$stats$text</code> reads one.</dd>
-          <dt>f = peter("Summarize; gptr_return() it.",
-  cohorts, parallel = 2)</dt><dd>One child per element; values in <code>f$value</code>.</dd>
-          <dt>gptr_parallel(
-  a = peter("Plan.", envir = new.env()),
-  b = peter("Test.", envir = new.env()))</dt><dd>Run calls at once, unrecorded; <code>envir</code> keeps their objects apart.</dd>
-          <dt>b = peter("Check.", background = TRUE)
-gptr_wait(b)</dt><dd>Experimental: return at once; also <code>gptr_steer()</code>, <code>gptr_cancel()</code>, <code>gptr_jobs()</code>.</dd>
-          <dt>gptr_usage(s, by = "agent")</dt><dd>Tokens and cost by session, agent, model or route.</dd>
+          <dt>team = peter("Review mtcars.", mtcars,
+  agents = list(
+    stats = gptr_agent(system = "Stats"),
+    code = gptr_agent(system = "Code")),
+  mode = "auto")</dt><dd>Named roles; <code>team$stats$text</code> reads one.</dd>
+          <dt>fan = peter("Count rows; gptr_return().",
+  list(mtcars, iris), parallel = 2,
+  mode = "auto")</dt><dd>One child per element; values in fan$value. <code>gptr_parallel()</code>: unrecorded calls; use separate envir values.</dd>
+          <dt>bg = peter("Count rows.", mtcars,
+  background = TRUE, mode = "auto")
+gptr_wait(bg)</dt><dd>Experimental; wait finishes the run.</dd>
+          <dt>gptr_usage(team, by = "agent")</dt><dd>Usage by session/agent/model/route.</dd>
         </dl>
       </section>
       <section class="panel">
         <h2>Tailor and coach a harness</h2>
-        <p>A harness is <code>peter()</code> with your arguments, rules and coaching (a note, skills, a review) built in, never loosening permission checks. <code>gptr_coach()</code> runs unattended R processes: most tasks need <code>mode = auto</code>.</p>
+        <p>Page 1 model setup required. Coaching runs unattended R processes; most tasks need auto.</p>
         <dl>
-          <dt>h = gptr_tailor(peter, mode = auto,
-  coaching = list(note = "Give units."))</dt><dd>A call's own arguments win; its tools add.</dd>
+          <dt>h = gptr_tailor(peter, mode = "auto",
+  coaching = list(note = "Give units."))</dt><dd>A call's arguments win; its tools add.</dd>
           <dt>h = gptr_tailor(h, rules = list(never =
   list(list(rule = "r(fn:stepAIC)",
-    why = "No stepwise selection."))))</dt><dd>Refused in every mode; <code>require</code> asks for a step.</dd>
-          <dt>s = h("Fit mpg on wt.", mtcars); s$text</dt><dd>Call it exactly like <code>peter()</code>, pipes included.</dd>
-          <dt>q = "Average x; gptr_return() it."
-h = gptr_coach(q, x, harness = h, check =
-  function(r) isTRUE(r$value == 2))</dt><dd>New coaching is kept only if it passes <code>check</code>.</dd>
-          <dt>h = gptr_coach(q, x, harness = h,
-  coach = claude_code)</dt><dd>Coach on a Claude Code plan (or <code>codex</code>).</dd>
+    why = "No stepwise selection."))))</dt><dd>Hard never rule; require requests a missing step.</dd>
+          <dt>h("Describe mtcars.", mtcars)$text</dt><dd>Call like peter, pipes included.</dd>
+          <dt>x = c(1, 2, 3)
+q = "Mean x; gptr_return() it."
+h = gptr_coach(q, x, harness = h,
+  check=function(r) isTRUE(r$value==2))</dt><dd>Kept only if acceptance checks pass. Optional <code>coach = "claude_code"</code> needs its CLI login.</dd>
           <dt>saveRDS(h, "h.rds")
-h = gptr_tailor(readRDS("h.rds"))</dt><dd>Share it; loading checks it and shows any code.</dd>
-          <dt>gptr_tailor(h, dir = "my-harness")</dt><dd>Write it as Markdown; gptr never reads it back.</dd>
+h = gptr_tailor(readRDS("h.rds"))</dt><dd>Rebuild a saved harness; checks it and shows fixed code.</dd>
+          <dt>gptr_tailor(h, dir = "my-harness")</dt><dd>Write a new Markdown output folder; gptr never reads it back.</dd>
         </dl>
       </section>
     </div>
