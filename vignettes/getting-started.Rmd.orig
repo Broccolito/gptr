@@ -186,7 +186,16 @@ session$text
 ```
 
 The first interactive use of a remote provider asks you to acknowledge the data it receives;
-`?gptr_egress` lists what a request contains. For persistent storage, call
+this also applies to `context = "none"`, which retains project instructions and environment
+details. For unattended calls, review `?gptr_egress` and save consent first:
+
+```{r, eval = FALSE}
+gptr_config(egress = utils::modifyList(gptr_config()$egress, list(openai = "ack")),
+            .scope = "user")
+```
+
+Offline scripted providers and local loopback routes need no acknowledgment, with Ollama
+exempt only while local-only inference is on. For persistent storage, call
 `gptr_init("/path/to/project")` to create a `.gptr/` workspace and review its separate trust
 decision. Without a project workspace, session storage is temporary. Defaults and storage
 policy are covered in [Configuration](configuration.html).

@@ -181,7 +181,7 @@ pmf_child_case = function(case, root, failure) {
     "Sys.sleep(40)"), leaf)
   writeLines(c("library(processx)", identity_code,
     sprintf("leaf = process$new(%s, c('--vanilla', %s),", deparse(rs), deparse(leaf)),
-    "  env = c('current'), cleanup = FALSE, cleanup_tree = FALSE, supervise = FALSE,",
+    "  env = NULL, cleanup = FALSE, cleanup_tree = FALSE, supervise = FALSE,",
     "  stdout = NULL, stderr = NULL, windows_hide_window = TRUE)",
     sprintf("saveRDS(identity, %s)", deparse(parent_ready)), "Sys.sleep(40)"), parent)
   writeLines(c(identity_code, sprintf("saveRDS(identity, %s)", deparse(sentinel_ready)),

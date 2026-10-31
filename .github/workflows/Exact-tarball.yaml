@@ -29,7 +29,7 @@ env:
   GPTR_LIVE_TESTS: 'false'
   NOT_CRAN: 'true'
   _R_CHECK_CRAN_INCOMING_: 'true'
-  _R_CHECK_TIMINGS_: '0'
+  _R_CHECK_CRAN_INCOMING_REMOTE_: 'true'
   _R_CHECK_ALWAYS_LOG_VIGNETTE_OUTPUT_: 'true'
   _R_CHECK_LIMIT_CORES_: 'true'
   TESTTHAT_CPUS: '2'
@@ -73,6 +73,11 @@ jobs:
           actual=$(git -C source rev-parse HEAD)
           test "$actual" = "$SOURCE_SHA"
           printf 'source_sha=%s\n' "$actual" >> "$GITHUB_OUTPUT"
+      - name: Check archive identity controls against this workflow
+        shell: bash
+        run: |
+          python3 source/dev/ci/test-exact-source.py \
+            --workflow source/.github/workflows/Exact-tarball.yaml --guides 15
       - uses: r-lib/actions/setup-pandoc@v2
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -162,7 +167,7 @@ jobs:
           docs = [name for name in names if name.startswith('gptr/inst/doc/')]
           counts = {ext: sum(name.endswith(ext) for name in docs)
                     for ext in ('.Rmd', '.html')}
-          assert counts == {'.Rmd': 14, '.html': 14}, counts
+          assert counts == {'.Rmd': 15, '.html': 15}, counts
           manifest = {'source_sha': os.environ['SOURCE_SHA'],
                       'basename': archive.name, 'bytes': archive.stat().st_size,
                       'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
@@ -246,7 +251,7 @@ jobs:
           assert manifest['bytes'] == int(size)
           assert archive.stat().st_size == int(size), 'Tarball byte count changed'
           assert hashlib.sha256(archive.read_bytes()).hexdigest() == digest, 'Tarball digest changed'
-          assert manifest['guide_counts'] == {'.Rmd': 14, '.html': 14}
+          assert manifest['guide_counts'] == {'.Rmd': 15, '.html': 15}
           folder = pathlib.Path('metadata/gptr')
           folder.mkdir(parents=True)
           records = []

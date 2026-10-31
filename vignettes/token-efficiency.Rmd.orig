@@ -169,6 +169,12 @@ its R code. Clearing an answer cache changes what can be reused.
 
 ## Explicit ways to reduce context
 
+These live-call examples assume a configured model. For unattended use of a remote provider,
+save its egress acknowledgment first, as in [Language models](language-models.html).
+`context = "none"` still requires that consent because project instructions and environment
+details remain; offline providers and local loopback routes are exempt (Ollama only while
+local-only inference is on).
+
 ```{r, eval = FALSE}
 peter("Summarize the model fit.", fit, .opts = list(context = "names"))
 peter("Find the mean of x. Return one number.", .opts = list(context = "none"))

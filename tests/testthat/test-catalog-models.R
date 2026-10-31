@@ -1073,7 +1073,9 @@ test_that("model_prepare() discovers only missing or stale evidence and fails be
 })
 
 test_that("a System 2 call prepares its selected Ollama model as System 1 does", {
+  local_gw()
   local_catalog()
+  settings_write("user", list(egress = list(ollama = "ack")))
   # no num_ctx: an unknown window (8K is below the standard preset's compaction floor)
   fx = ollama_fixture()
   fx[["qwen3:1.7b"]]$show$parameters = NULL
@@ -1100,7 +1102,7 @@ test_that("a System 2 call prepares its selected Ollama model as System 1 does",
   expect_identical(srv$calls, rep(found, 2L))
   catalog_reset(discovered = TRUE)
   expect_error(ask("replay"), class = "gptr_error_not_recorded")
-  # a router's fallback default passes no replay guard before its preparation
+  # A router's fallback default is also replay-guarded before preparation.
   local_service("router.call", function(s, reason) stop("router crashed"))
   local_mocked_bindings(model_default = function(role = "chat") "ollama/qwen3:1.7b")
   run = run_new(session_new("router:r", "auto", home = new.env()), list(), NULL)

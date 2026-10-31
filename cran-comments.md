@@ -37,11 +37,11 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   or when model code that the permission mode allowed starts a sub-agent with that model.
   Before automatic session context first goes to a provider, gptr shows what it contains
   (including the R expressions the user ran since the previous prompt) and asks for an
-  acknowledgment; a non-interactive run needs a recorded acknowledgment unless automatic context
-  is off (`context = "none"`): the prompt then goes with project instruction files and a short
-  description of the R environment, but without the workspace listing, the workspace changes or
-  descriptions of attached objects. A System 1 question sends its inputs and always needs the
-  acknowledgment. Offline providers and local providers on a loopback address
+  acknowledgment; a non-interactive run needs a recorded acknowledgment. This also applies to
+  `context = "none"`, which keeps project instructions and a short description of the R
+  environment but omits workspace listings, changes and attached-object descriptions. A System 1
+  question sends its inputs and also needs the acknowledgment. Offline providers and local
+  providers on a loopback address
   (such as a local 'Ollama' server while its local-only inference is on, the default) need none.
   There is no telemetry.
 * The external programs named in SystemRequirements (an 'Ollama' server, 'claude', 'codex',
@@ -56,8 +56,7 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## Examples, tests and vignettes
 
-* Every example runs offline and without keys, and each takes about a second at most, apart from
-  the one in `\donttest{}` (next point). Examples that run a session use the exported scripted
+* Every example runs offline and without keys. Examples that run a session use the exported scripted
   model `gptr_fake_provider()`; scripted models that run R code evaluate it in a new environment
   (`?gptr_rewind`) or in separate R processes (`?gptr_coach`), and every file an example writes,
   including the records of the processes it starts, is under `tempdir()`. While `R CMD check`
@@ -65,9 +64,8 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   where only offline providers answer; no example passes another value, so no example can reach a
   model server, remote or local.
 * No example uses `\dontrun{}` or `@examplesIf`, and one uses `\donttest{}`: `gptr_coach()`
-  coaches one scripted model with another, which starts seven R processes and takes about 4 s on
-  an idle machine and up to 8 s under load, so its call sits in `\donttest{}`; it still runs
-  offline and without keys. Only two
+  coaches one scripted model with another, which starts seven R processes and takes several
+  seconds, so its call sits in `\donttest{}`; it still runs offline and without keys. Only two
   pages keep their examples inside visible `if` guards: `gptr_login()` and `gptr_logout()` under
   `if (interactive())`, because a person enters a key or completes an OAuth sign-in, and
   `gptr_mcp_serve()` under `if (interactive() && ...)`, because it opens a listening loopback
@@ -79,52 +77,43 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   MCP server or a Shiny app) or gptr worker processes are skipped, and the suite needs no network.
   To keep the check short, `tests/testthat.R` runs on CRAN a fixed list of 35 test files (the
   permission, redaction and secret tests and files that reach all but 12 of the R files) without
-  their slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take about 20 s
-  here (FAIL 0, SKIP 954, PASS 3497 in the local check), 33 s in GitHub's Ubuntu R-devel job and
-  92 s in its Windows job. Live provider tests run only when `GPTR_LIVE_TESTS` is `"true"`.
+  their slowest blocks; GitHub Actions runs the whole suite. Consent regressions are included in
+  the CRAN test list. Live provider tests run only when `GPTR_LIVE_TESTS` is `"true"`.
 * The 15 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
 * Under `R CMD check` every pool of child processes is capped at two.
 
 ## Test environments
 
-* Local: macOS 26.7.1 (aarch64), R 4.6.1: `R CMD check --as-cran` on the built tarball with
-  `NOT_CRAN` unset, including the PDF manual.
+* Local: macOS (aarch64), R 4.4.3: isolated offline regressions, the full test suite and release
+  checks. This older R build is not the submission archive.
 * GitHub Actions, `R CMD check --as-cran`, each job failing on any warning: the whole offline test
   suite in shards on macOS (release), Windows (release) and Ubuntu (release, under `LC_ALL=C`), and
   CRAN's test list on Ubuntu (oldrel-1, oldrel-4), Ubuntu without Suggests and Windows (oldrel-4).
   Two jobs check as CRAN does (`NOT_CRAN=false`, CRAN's timing thresholds), each failing on any
   NOTE and over its time budget: Ubuntu R-devel without Suggests (480 s) and Windows release with
   both manuals (600 s).
-* GitHub's CRAN-mode checks took 256 s (Ubuntu R-devel, budget 480 s) and 494 s (Windows
-  release, budget 600 s), and the local one 146 s at low load.
-* R-hub on `main` (2026-10-30): Windows R-devel, Windows R-release and Ubuntu R-devel with gcc 12.
-* win-builder on the final tarball (2026-10-30): R-devel (2026-10-28 r90783), R-release 4.6.2 and
-  R-oldrelease 4.5.3.
+* The exact-tarball workflow builds once with current R-release and checks the same archive on
+  Windows (release and devel), macOS (release), and Ubuntu (release and devel), with both manuals,
+  incoming checks and current HTML Tidy. It retains the source commit, archive hash and full logs.
 
 ## R CMD check results
 
-0 errors | 0 warnings | 0 notes locally and in every GitHub Actions job, apart from the
-installed-size NOTE of R 4.2 (oldrel-4; see below). The three R-hub checks passed. The three
-win-builder checks each gave one NOTE, from the incoming feasibility check: the URL
-https://broccolito.github.io/gptr/articles/tailor-and-coach.html returned 404. That article, linked
-from the README, documents this release's new functions and was published when the package website
-was deployed from `main`; it now returns 200, and the incoming feasibility check with remote URL
-checks on the same tarball gives Status: OK.
-
-The local check also reports two INFO lines: 'repr', which gptr enhances, was not available for
-checking, and the installed size.
+The submission comment records the results for the archive actually uploaded. The exact-tarball
+workflow requires 0 errors, 0 warnings and 0 notes on each of its five platforms; its archived
+logs identify the checked bytes. The older local R 4.4.3 diagnostic and the earlier R-hub and
+win-builder archives are separate evidence and are not presented as checks of the revised tarball.
 
 ## Installed size
 
-The installed size is 7.6 to 8.1 Mb in the CRAN-mode checks (8.0 to 8.1 Mb on macOS, 7.7 Mb on
-Ubuntu R-devel, 7.6 Mb on Windows): R 5.7 to 6.1 Mb and doc 1.3 to 1.4 Mb. R is the byte-compiled
+The earlier CRAN-mode checks reported 7.6 to 8.1 Mb installed: R 5.7 to 6.1 Mb and doc 1.3 to
+1.4 Mb. The final archive's check logs give its platform-specific sizes. R is the byte-compiled
 code of 128 R files, with no data sets and no compiled code; doc holds the 15 HTML vignettes.
-Current R versions report the size as INFO; R 4.2 reports it as a NOTE (11.1 Mb in GitHub's R 4.2
-job, which keeps the package source).
+Current R versions report the size as INFO; the older R 4.2 check reported it as a NOTE while
+keeping the package source.
 
 ## Reverse dependencies
 
-`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-10-30:
+`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-10-31:
 none.
 No package depends on, imports, links to or suggests gptr.

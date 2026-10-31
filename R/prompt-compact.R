@@ -524,6 +524,13 @@ compact_then = function(value, fn, failed = NULL) {
 #' @noRd
 compact_ask_once = function(s, target, text, run = session_live(s)$run, defer = FALSE) {
   live = session_live(s)
+  pr = provider_effective(registry_get("provider", target$provider, session = prompt_sid(s))) %||%
+    provider_get(target$provider)
+  guard_run = run %||% run_current()
+  safety = if (!is.null(guard_run)) guard_run$opts$safety %||% list()
+  call = run$opts$call
+  egress_check(target$provider, pr, safety, context = context_mode(call$args$opts))
+  replay_guard(pr %||% target, mode = replay_mode(call$args$replay))
   req = request_build(s, target, extra = msg_user(text, source = "prompt"))
   memo = live$memo
   key = prompt_view_key(target)
@@ -960,6 +967,7 @@ compact_run = function(s, reason, focus = NULL) {
     input = list(reason = reason, focus = focus, tokens = tokens, target = target)
     run = function(f, name) {
       out = tryCatch(with_prompt_input(ctx, input, function() f(s, ctx)), error = function(e) {
+        if (inherits(e, c("gptr_error_egress", "gptr_error_not_recorded"))) stop(e)
         registry_diagnostic(paste0("compactor:", name), "compact", class(e)[1],
                             conditionMessage(e))
         NULL

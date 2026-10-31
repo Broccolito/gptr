@@ -819,7 +819,9 @@ test_that("missing or old servers and unsupported models or inputs fail before a
 })
 
 test_that("local-only refuses cloud markers and remote endpoints; only a run record relaxes it", {
+  local_gw()
   s1_fresh()
+  settings_write("user", list(egress = list(ollama = "ack")))
   models = ollama_models()
   models[["clef-flash:cloud"]] = list(
     tag = list(name = "clef-flash:cloud", model = "clef-flash:cloud", digest = strrep("5", 64),
@@ -857,17 +859,21 @@ test_that("local-only refuses cloud markers and remote endpoints; only a run rec
                           models = list(list(id = "clef-flash", type = "classifier",
                                              api = "ollama-system-one", locality = "local")))
   expect_error(ask(claimed), class = "gptr_error_untrusted")
-  # the frozen safety record of a run relaxes it: discovery and the preflight then pass for the
-  # remote server, and the egress acknowledgement is still required
+  # A relaxed frozen record still needs consent before remote discovery or inference.
+  settings_write("user", list(egress = list()))
   local({
     local_settings(providers = list(ollama = list(base_url = "http://10.1.2.3:11434/v1")))
     local_mocked_bindings(run_current = function() {
       list(id = "u00000001", session = NULL, opts = list(safety = list(ollama_local_only = FALSE)))
     })
     expect_error(ask(), class = "gptr_error_egress")
+    expect_length(srv$calls, n)
+    expect_length(log$specs, 0L)
+    settings_write("user", list(egress = list(ollama = "ack")))
+    expect_true(isTRUE(ask()))
     expect_true(any(startsWith(srv$calls, "GET http://10.1.2.3:11434/api/version")))
   })
-  expect_length(log$specs, 0L)
+  expect_length(log$specs, 1L)
 })
 
 test_that("no hidden fallback: a failing Ollama System 1 never asks another model", {

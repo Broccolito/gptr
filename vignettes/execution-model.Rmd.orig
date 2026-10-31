@@ -91,7 +91,10 @@ encoded input states under their own size rules; see [Typed decisions](system-on
 `context = "names"` reduces workspace context to names and attachments to headers;
 `context = "none"` omits both built-in workspace and attached-object descriptions. These settings
 leave R objects available to the tools and do not suppress prompt text, tool results or every
-other context block. See [Configuration](configuration.html) and
+other context block. Project instructions and environment details remain even with
+`context = "none"`, so remote routes still require provider acknowledgment. In unattended runs,
+save that consent before calling the model; offline providers and local loopback routes are
+exempt (Ollama only while local-only inference is on). See [Configuration](configuration.html) and
 [Token efficiency](token-efficiency.html).
 
 Ordinary R copy-on-modify rules still apply. Modifying an object, keeping aliases, fitting a

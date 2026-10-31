@@ -139,3 +139,9 @@ unsets
 unsetting
 cli
 subcommand
+ESS
+JSON
+YAML
+stdout
+unevaluated
+precomputed

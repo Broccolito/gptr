@@ -204,9 +204,7 @@ subagent_guards = function(child, opts = list(), model = session_data(child)$mod
   if (startsWith(model, "router:")) return(invisible(TRUE))
   pid = sub("[/:].*$", "", model)
   pr = registry_get("provider", pid, session = session_data(child)$id)
-  if (!identical(context_mode(opts), "none")) {
-    egress_check(pid, pr, asker = model)
-  }
+  egress_check(pid, pr, asker = model, context = context_mode(opts))
   replay_guard(pr %||% model)
 }
 

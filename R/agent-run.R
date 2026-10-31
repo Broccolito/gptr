@@ -478,12 +478,17 @@ run_target = function(run) {
 run_model_ready = function(run, ref) {
   sid = session_data(run$shell)$id
   rec = run_model_resolve(ref, sid)
+  # Router fallbacks and in-run model switches also need consent before model preparation.
+  pr = provider_effective(registry_get("provider", rec$provider, session = sid)) %||%
+    provider_get(rec$provider)
+  call = run$opts$call
+  egress_check(rec$provider, pr, run$opts$safety %||% list(),
+                context = context_mode(call$args$opts))
+  replay_guard(pr %||% rec, mode = replay_mode(call$args$replay))
   if (!catalog_ollama_route(rec, provider_get(rec$provider)) ||
       !is.null(registry_model_spec(ref, sid))) {
     return(rec)
   }
-  # nothing replay-guards a router's fallback default before this; discovery never replays
-  replay_guard(rec, mode = replay_mode(run[["opts"]][["call"]][["args"]][["replay"]]))
   model_prepare(ref, safety = stream_safety(NULL, run))
 }
 

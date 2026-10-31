@@ -1175,12 +1175,20 @@ egress_can_ask = function(safety = egress_safety()) {
 #' (gptr_confirm() appends the ` [y/N] ` hint itself); it names the effective endpoint when there
 #' is one, and the model `asker` of a sub-agent that model code starts
 #' @noRd
-egress_question = function(id, origin = NULL, asker = NULL) {
+egress_question = function(id, origin = NULL, asker = NULL, context = NULL) {
   to = if (is.null(origin)) id else paste0(id, " (", origin, ")")
   lead = if (is.null(asker)) {
     paste0("gptr sends your prompts to ", to)
   } else {
     paste0("The agent's code starts a sub-agent on ", asker, ", which sends its prompt to ", to)
+  }
+  if (identical(context, "none")) {
+    return(paste0(lead, ' with context = "none": prompts, tool results, a description of the ',
+                  "R environment and project instructions still go to this provider. ",
+                  "The workspace ",
+                  "listing, workspace changes and attached-object descriptions are omitted. Other ",
+                  "context settings can include these, and System 1 questions send their inputs. ",
+                  "Allow this for ", id, " from now on?"))
   }
   paste0(lead, " together with automatic context: the workspace listing (object names, classes ",
          "and sizes), the objects you added, changed or removed and the R expressions you ran ",
@@ -1212,7 +1220,7 @@ egress_record = function(id) {
 #' that model code starts.
 #' @noRd
 egress_check = function(provider_id, provider = provider_get(provider_id),
-                        safety = egress_safety(), asker = NULL) {
+                        safety = egress_safety(), asker = NULL, context = NULL) {
   check_string(provider_id, "provider_id")
   pid = provider[["id"]] %||% provider[["name"]] %||% provider_id
   # the id is pasted into the hint the user is told to run, so it must be a plain provider id
@@ -1228,7 +1236,8 @@ egress_check = function(provider_id, provider = provider_get(provider_id),
   how = paste0("gptr_config(egress = utils::modifyList(gptr_config()$egress, list(`", pid,
                "` = \"ack\")), .scope = \"user\")")
   if (is.null(run_current())) asker = NULL
-  if (egress_can_ask(safety) && isTRUE(gptr_confirm(egress_question(pid, st$origin, asker)))) {
+  if (egress_can_ask(safety) &&
+      isTRUE(gptr_confirm(egress_question(pid, st$origin, asker, context)))) {
     path = egress_record(pid)
     gptr_inform(paste0("Recorded that automatic context may go to ", pid, " (", path, ")."),
                 "egress_ack")
@@ -1238,8 +1247,7 @@ egress_check = function(provider_id, provider = provider_get(provider_id),
   gptr_abort(c(paste0("gptr has not been told that it may send session context to ", pid, where,
                       "."),
                st$why,
-               paste0("Acknowledge it once with ", how, ", or, except for a System 1 question, ",
-                      "pass .opts = list(context = \"none\").")),
+               paste0("Acknowledge it once with ", how, ".")),
              "egress", provider = pid, how_to_ack = how)
 }
 
@@ -1961,8 +1969,9 @@ NULL
 #' acknowledgment in your user settings. A non-interactive run with a provider that was never
 #' acknowledged stops with a `gptr_error_egress` condition. Record the acknowledgment once with
 #' `gptr_config(egress = list(anthropic = "ack"), .scope = "user")` (this replaces the stored
-#' list, so name every provider you use), or, except for System 1 questions, run with
-#' `.opts = list(context = "none")`. Offline
+#' list, so name every provider you use). Acknowledgment is required even with
+#' `.opts = list(context = "none")`: prompts, tool results, R-session information and project
+#' instructions can still leave the machine. Offline
 #' providers such as [gptr_fake_provider()] and local providers on a loopback address need no
 #' acknowledgment. An Ollama server can forward requests to cloud models, so Ollama is exempt only
 #' while its local-only inference is on (the default; see `providers` in [gptr_config()]).

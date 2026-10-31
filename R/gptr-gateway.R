@@ -844,7 +844,7 @@ gateway_check_visible = function(call) {
   invisible(TRUE)
 }
 
-#' Egress acknowledgment (unless the context of `call` is "none") under `safety` and the replay
+#' Egress acknowledgment under `safety` and the replay
 #' guard under `call`'s `replay =` (contract 3.1, IC-45), then, when `ready` (a run starts now: a
 #' built session is checked by sdk_check(), a gptr_parallel() member by its request), the model's
 #' readiness (decision-only model, disabled provider, preflight with an Ollama model prepared,
@@ -860,9 +860,7 @@ gateway_guards = function(call, s, safety, m = NULL, ready = TRUE) {
   if (startsWith(ref, "router:")) return(invisible(TRUE))
   pid = m$provider %||% gateway_provider_id(ref)
   pr = provider_effective(gateway_provider(s, pid))
-  if (!identical(context_mode(call$args$opts), "none")) {
-    egress_check(pid, pr, safety, asker = ref)
-  }
+  egress_check(pid, pr, safety, asker = ref, context = context_mode(call$args$opts))
   replay_guard(pr %||% m %||% ref, mode = replay_mode(call$args$replay))
   if (!ready) return(invisible(TRUE))
   rec = run_model_resolve(ref, d$id)

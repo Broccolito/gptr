@@ -15,15 +15,16 @@ import unittest
 from unittest.mock import patch
 
 SOURCE_SHA = "a" * 40
-WORKFLOW = Path(__file__).parent / "baseline" / "Exact-tarball.yaml"
+WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "Exact-tarball.yaml"
+GUIDE_COUNT = 15
 
 
 def inline_blocks(path):
     text = path.read_text()
     blocks = re.findall(r"(?m)^([ ]*)python - <<'PY'\n(.*?)^\1PY$", text, re.S)
-    if len(blocks) != 2:
-        raise AssertionError("Expected exactly two reviewed inline Python blocks")
-    return [textwrap.dedent(body) for _, body in blocks]
+    if len(blocks) < 2:
+        raise AssertionError("Expected the producer and consumer inline Python blocks")
+    return [textwrap.dedent(body) for _, body in blocks[:2]]
 
 
 def source_record(path, data):
@@ -56,7 +57,7 @@ def fixture(count=120):
                 records.append(source_record(path, data))
                 members["gptr/" + path] = data
             records.sort(key=lambda record: record["path"])
-            for index in range(14):
+            for index in range(GUIDE_COUNT):
                 name = f"guide-{index:02d}"
                 members[f"gptr/vignettes/{name}.Rmd"] = b"precomputed source\n"
                 members[f"gptr/inst/doc/{name}.Rmd"] = b"precomputed source\n"
@@ -110,7 +111,8 @@ def consumer(state, mutate=None):
     archive = write_archive(state)
     manifest = {"source_sha": SOURCE_SHA, "basename": archive.name,
                 "bytes": archive.stat().st_size, "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
-                "producer_r": "synthetic R fixture", "guide_counts": {".Rmd": 14, ".html": 14},
+                "producer_r": "synthetic R fixture",
+                "guide_counts": {".Rmd": GUIDE_COUNT, ".html": GUIDE_COUNT},
                 "r_source_count": len(state["records"]),
                 "source_fingerprint_sha256": fingerprint(state["records"])}
     if mutate:
@@ -124,6 +126,18 @@ def consumer(state, mutate=None):
 
 
 class ExactSourceControls(unittest.TestCase):
+    def test_producer_refuses_missing_rendered_guide(self):
+        with fixture() as state:
+            del state["members"]["gptr/inst/doc/guide-00.html"]
+            with self.assertRaises(AssertionError):
+                producer(state)
+
+    def test_consumer_refuses_wrong_guide_count(self):
+        with fixture() as state:
+            with self.assertRaises(AssertionError):
+                consumer(state, lambda value: value.update(
+                    guide_counts={".Rmd": GUIDE_COUNT - 1, ".html": GUIDE_COUNT}))
+
     def test_producer_records_new_120_sources(self):
         with fixture(120) as state:
             result = producer(state)
@@ -200,6 +214,8 @@ class ExactSourceControls(unittest.TestCase):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--workflow", type=Path, default=WORKFLOW)
+    parser.add_argument("--guides", type=int, default=GUIDE_COUNT)
     args, remaining = parser.parse_known_args()
     WORKFLOW = args.workflow.resolve()
+    GUIDE_COUNT = args.guides
     unittest.main(argv=[__file__] + remaining)

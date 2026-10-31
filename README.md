@@ -81,9 +81,20 @@ inference is on by default; a workflow remains local only when every
 model and tool it uses is local.
 
 The first interactive use of a remote provider asks you to acknowledge
-the data it receives. See [Language
+the data it receives, including with `context = "none"`: project
+instructions and environment details still go. For unattended runs,
+review `?gptr_egress`, then save consent for the provider beforehand:
+
+``` r
+gptr_config(egress = utils::modifyList(gptr_config()$egress, list(anthropic = "ack")),
+            .scope = "user")
+```
+
+Use the provider you selected; offline scripted models and local
+loopback routes remain exempt (Ollama only while local-only inference is
+on). See [Language
 models](https://broccolito.github.io/gptr/articles/language-models.html)
-for provider setup and supported routes.
+for setup.
 
 ## Run an analysis
 
