@@ -578,7 +578,8 @@ test_that("the worker registry ships the rank-0 policies of the sessions' ancest
 
 test_that("an explicit worker for a remote model is refused in replay mode before it starts", {
   skip_on_cran()
-  local_project()
+  local_gw()
+  settings_write("user", list(egress = list(wremote = "ack")))
   local_gptr_options(mode = "auto", replay = "replay")
   off = gptr_register(gptr_provider("wremote", api = "openai-completions",
                                     base_url = "https://llm.example.test/v1",

@@ -58,7 +58,7 @@ view$sections
 #> 4    modes   T0     84
 #> 5  context   T0    152
 view$total_tokens
-#> [1] 1848
+#> [1] 1846
 ```
 
 `gptr_prompt()` inspects the system sections and tool definitions with estimated token counts;
@@ -110,21 +110,21 @@ full spilled text can be read through `peter$out(id)` when an output ID was supp
 ``` r
 gptr_usage(session, by = "model")
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 fake/fake-1  2         3330   48      0           0            0
+#> 1 fake/fake-1  2         3382   48      0           0            0
 #>
 #> # 1 row
-#> 2 requests, 3.3k tokens in, $0.0000
+#> 2 requests, 3.4k tokens in, $0.0000
 
 ledger = gptr_usage(session, detail = TRUE)
 aggregate(tokens ~ component, data = ledger, FUN = sum)
 #>       component tokens
 #> 1      attached    132
-#> 2   environment    156
+#> 2   environment    150
 #> 3        images      0
 #> 4         other    156
 #> 5       project      0
 #> 6            t0   2720
-#> 7            t1    566
+#> 7            t1    618
 #> 8  tool_results     53
 #> 9         tools   1926
 #> 10   transcript     70
@@ -206,6 +206,12 @@ the prefix. Document replay makes no model request for a usable recorded call bu
 its R code. Clearing an answer cache changes what can be reused.
 
 ## Explicit ways to reduce context
+
+These live-call examples assume a configured model. For unattended use of a remote provider,
+save its egress acknowledgment first, as in [Language models](language-models.html).
+`context = "none"` still requires that consent because project instructions and environment
+details remain; offline providers and local loopback routes are exempt (Ollama only while
+local-only inference is on).
 
 
 ``` r

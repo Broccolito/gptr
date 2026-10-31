@@ -32,13 +32,13 @@ BugReports: https://github.com/Broccolito/gptr/issues
 Depends:
     R (>= 4.2.0)
 Imports:
-    cli (>= 3.6.0),
+    cli (>= 3.6.2),
     curl (>= 6.0.0),
     graphics,
     grDevices,
     jsonlite (>= 1.8.8),
     methods,
-    processx (>= 3.8.0),
+    processx (>= 3.8.6),
     ps (>= 1.8.0),
     rlang (>= 1.1.0),
     stats,

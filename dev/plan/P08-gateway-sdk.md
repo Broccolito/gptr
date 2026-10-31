@@ -156,7 +156,8 @@ task whose message ends with the attribution line required by the executing harn
   unless `arg` is given"; `replay_guard()` "in replay mode, signals `gptr_error_not_recorded` before
   any request to a provider whose record is not `offline = TRUE`".
 - Egress (IC-29, 03 section 6.10): `egress_check(provider_id)` is "`invisible(TRUE)` if acknowledged
-  (user settings `egress`), local or offline, or `.opts$context = "none"`; when `gptr_can_prompt()`:
+  (user settings `egress`), local or offline; `.opts$context = "none"` still needs acknowledgment.
+  When `gptr_can_prompt()`:
   shows what automatic context is sent and records the acknowledgement at user scope (an
   `ask_human`, IC-53); otherwise `gptr_error_egress`" (fields `provider`, `how_to_ack`); the
   recorded acknowledgement is announced with the message class `egress_ack`.
@@ -1599,8 +1600,8 @@ when R CMD check runs outside testthat (examples), then the option, `GPTR_REPLAY
 provider (IC-30). `egress_check()` is the acknowledgement of 03 section 6.10: local and offline
 providers need none; a missing acknowledgement is asked once when someone can answer (an
 `ask_human`, IC-53; recorded at user scope with the `egress_ack` message) and is `gptr_error_egress`
-otherwise. The `.opts$context = "none"` exemption is applied by the gateway before it calls
-`egress_check()` (Task 9).
+otherwise. The gateway calls `egress_check()` even with `.opts$context = "none"` (Task 9): prompts,
+tool results, R-session information and project instructions can still leave the machine.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1782,8 +1783,7 @@ egress_check = function(provider_id) {
   }
   gptr_abort(c(paste0("gptr has not been told that it may send session context to ",
                       provider_id, "."),
-               paste0("Acknowledge it once with ", how,
-                      ", or pass .opts = list(context = \"none\").")),
+               paste0("Acknowledge it once with ", how, ".")),
              "egress", provider = provider_id, how_to_ack = how)
 }
 ```
@@ -4341,7 +4341,7 @@ environment as home (P06 keeps it only when it is not a function frame) and the 
 filters (call-level filters join the R-process filter layer, since P02 has no per-session scope;
 from model code they are a control-category change). A continuation applies model and mode changes
 and new tools (`session.add_tools`). Both then set `gptr_last()`, check egress (skipped for
-local/offline providers and `.opts$context = "none"`) and the replay guard, apply
+local/offline providers) and the replay guard, apply
 `gptr.prompt_secrets` (04 section 3.1, owner P03, applied here: a secret-looking value is replaced
 by a `[secret:...]` marker with a notice under `"redact"`; under `"ask"` someone who can answer is
 asked first and a no stops the call before anything is sent; P06 redacts at ingress anyway, so the
@@ -4545,6 +4545,9 @@ test_that("a first remote use without an acknowledgement is refused, then replay
   corp = gptr_provider("corp", api = "fake",
                        models = list(list(id = "corp-1", ref = "corp/corp-1")))
   expect_error(peter("x", model = corp, envir = new.env()), class = "gptr_error_egress")
+  expect_error(peter("x", model = corp, envir = new.env(), .opts = list(context = "none")),
+               class = "gptr_error_egress")
+  settings_write("user", list(egress = list(corp = "ack")))
   expect_error(peter("x", model = corp, envir = new.env(), .opts = list(context = "none")),
                class = "gptr_error_not_recorded")
 })
@@ -5214,9 +5217,7 @@ gateway_guards = function(call, s) {
   ref = session_data(s)$model
   if (startsWith(ref, "router:")) return(invisible(TRUE))
   pr = gateway_provider(s)
-  context = call$args$opts$context %||% setting_get("context", default = "summary")
-  local = !is.null(pr) && (isTRUE(pr$local) || isTRUE(pr$offline))
-  if (!local && !identical(context, "none")) egress_check(gateway_provider_id(ref))
+  egress_check(gateway_provider_id(ref))
   replay_guard(if (is.null(pr)) ref else pr)
   invisible(TRUE)
 }

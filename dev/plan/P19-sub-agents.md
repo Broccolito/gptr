@@ -1031,9 +1031,7 @@ subagent_guards = function(child, opts = list(), model = NULL) {
   ref = model %||% d$model
   pid = sub("/.*$", "", sub(":.*$", "", ref))
   pr = registry_get("provider", pid, session = d$id)
-  context = opts$context %||% setting_get("context", default = "summary")
-  local = !is.null(pr) && (isTRUE(pr$local) || isTRUE(pr$offline))
-  if (!local && !identical(context, "none")) egress_check(pid)
+  egress_check(pid)
   replay_guard(if (is.null(pr)) ref else pr)
   invisible(TRUE)
 }

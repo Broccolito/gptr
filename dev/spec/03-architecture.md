@@ -1874,8 +1874,9 @@ model or remote override from egress acknowledgement.
 - **Egress acknowledgement.** The first use of each provider (and each CLI route) shows what automatic context
   is sent (workspace listing, `<r_env>`, project instructions, attached-object descriptions) and records an
   acknowledgement at user scope; a non-interactive run needs a configured acknowledgement
-  (`gptr_config(egress = list(anthropic = "ack"), .scope = "user")`) or `.opts$context = "none"`, otherwise it
-  stops with `gptr_error_egress` [13 C-34, 13 §2.2 line 126]. No telemetry.
+  (`gptr_config(egress = list(anthropic = "ack"), .scope = "user")`), even with `.opts$context = "none"`,
+  otherwise it stops with `gptr_error_egress`: prompts, tool results, `<r_env>` and project instructions can
+  still leave the machine [13 C-34, 13 §2.2 line 126]. No telemetry.
 - **Network, processes, cores, RNG.** No network at load or in examples; catalog refresh only on request; no
   supervised processes or servers in examples; loopback ports chosen from RNG-free candidates (never
   `httpuv::randomPort()`, which calls `sample()`); `browseURL()` only when interactive; at most 2 child processes

@@ -63,8 +63,9 @@ in an interactive session, gptr shows what is sent and records your
 acknowledgment in your user settings. A non-interactive run with a provider that was never
 acknowledged stops with a \code{gptr_error_egress} condition. Record the acknowledgment once with
 \code{gptr_config(egress = list(anthropic = "ack"), .scope = "user")} (this replaces the stored
-list, so name every provider you use), or, except for System 1 questions, run with
-\code{.opts = list(context = "none")}. Offline
+list, so name every provider you use). Acknowledgment is required even with
+\code{.opts = list(context = "none")}: prompts, tool results, R-session information and project
+instructions can still leave the machine. Offline
 providers such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}} and local providers on a loopback address need no
 acknowledgment. An Ollama server can forward requests to cloud models, so Ollama is exempt only
 while its local-only inference is on (the default; see \code{providers} in \code{\link[=gptr_config]{gptr_config()}}).

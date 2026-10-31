@@ -140,6 +140,18 @@ of free execution. Disabling a direct tool does not make in-process R a sandbox.
 
 The `context` setting controls built-in generative-model descriptions, rather than R object
 availability. Prompt text, tool results, images and other context blocks can still be sent.
+In particular, `context = "none"` retains project instructions and environment details;
+it does not waive provider egress consent. A remote provider still asks once interactively,
+or requires a saved acknowledgment for unattended calls. After reviewing `?gptr_egress`, save
+consent for the provider you use, preserving any other acknowledgments:
+
+```{r, eval = FALSE}
+gptr_config(egress = utils::modifyList(gptr_config()$egress, list(openai = "ack")),
+            .scope = "user")
+```
+
+Offline providers and local loopback routes remain exempt, with Ollama exempt only while its
+local-only inference is on.
 System 1 decisions encode their supplied input states separately; `context = "none"` is not a
 way to omit those states. See [Execution model](execution-model.html),
 [Token efficiency](token-efficiency.html) and [Typed decisions](system-one.html).

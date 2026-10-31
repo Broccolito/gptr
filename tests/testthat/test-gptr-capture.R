@@ -862,3 +862,254 @@ test_that("identifier resolution never discovers or prepares a model (IC-74, 07 
   expect_true(identifier_known("sonnet", "model"))
   expect_false(identifier_known("clef_flash", "system1"))
 })
+
+
+test_that("context none still requires provider consent before any public call sends", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = FALSE)
+  corp = gptr_fake_provider(list("first", "second"), name = "corp")
+  corp$offline = FALSE
+  corp$base_url = "https://example.invalid/v1"
+  off = gptr_register(corp)
+  withr::defer(off())
+  fake = local_fake_provider(list("offline"))
+  s = peter("offline", model = fake, envir = new.env())
+  before = list(s$model, s$turns, s$text)
+  for (context in c("none", "names", "summary")) {
+    cnd = expect_error(peter("unsent", model = "corp/corp-1", envir = new.env(),
+                              .opts = list(context = context)), class = "gptr_error_egress")
+    expect_false(grepl("pass .opts", conditionMessage(cnd), fixed = TRUE))
+    expect_error(peter(s, "unsent", model = "corp/corp-1", .opts = list(context = context)),
+                 class = "gptr_error_egress")
+  }
+  expect_identical(list(s$model, s$turns, s$text), before)
+  expect_identical(gptr_last(), s)
+  expect_length(fake_requests(corp), 0L)
+  settings_write("user", list(egress = list(corp = "ack")))
+  remote = peter("allowed", model = "corp/corp-1", envir = new.env(),
+                  .opts = list(context = "none"))
+  expect_identical(remote$text, "first")
+  expect_identical(peter(remote, "continue")$text, "second")
+  expect_length(fake_requests(corp), 2L)
+})
+
+test_that("context none uses the existing consent question once and retains its payload", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = TRUE)
+  corp = gptr_fake_provider(list("first", "second"), name = "corp")
+  corp$offline = FALSE
+  off = gptr_register(corp)
+  withr::defer(off())
+  questions = character()
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    questions <<- c(questions, question)
+    TRUE
+  })
+  e = new.env()
+  e$private_object = 123
+  s = peter("hello", model = "corp/corp-1", envir = e, .opts = list(context = "none"))
+  peter(s, "again")
+  expect_length(questions, 1L)
+  expect_match(questions, 'context = "none"', fixed = TRUE)
+  expect_match(questions, "R environment", fixed = TRUE)
+  expect_match(questions, "project instructions", fixed = TRUE)
+  expect_match(questions, "from now on?", fixed = TRUE)
+  expect_identical(settings_read("user")$egress$corp, "ack")
+  texts = vapply(fake_requests(corp)[[1L]]$messages, msg_text, "")
+  expect_false(any(grepl("<(workspace|workspace_changes|attached)", texts)))
+})
+
+
+test_that("context-none refusal precedes readiness, credentials, workers and CLI startup", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = FALSE)
+  touched = character()
+  local_mocked_bindings(
+    provider_ready = function(...) {
+      touched <<- c(touched, "ready")
+      stop("ready touched")
+    },
+    provider_credential = function(...) {
+      touched <<- c(touched, "key")
+      stop("key touched")
+    },
+    worker_ship_objects = function(...) {
+      touched <<- c(touched, "worker")
+      stop("worker touched")
+    },
+    pcli_start = function(...) {
+      touched <<- c(touched, "cli")
+      stop("cli touched")
+    }
+  )
+  corp = gptr_fake_provider(list("never"), name = "corp")
+  corp$offline = FALSE
+  off = gptr_register(corp)
+  withr::defer(off())
+  expect_error(peter("unsent", model = "corp/corp-1", envir = new.env(),
+                     .opts = list(context = "none")), class = "gptr_error_egress")
+  expect_error(peter("unsent", model = "claude_code", envir = new.env(),
+                     .opts = list(context = "none")), class = "gptr_error_egress")
+  expect_error(peter("unsent", model = "codex", envir = new.env(),
+                     .opts = list(context = "none")), class = "gptr_error_egress")
+  parent = session_new("corp/corp-1", "auto", home = new.env(), kind = "team")
+  agent = gptr_agent("w", description = "worker", model = "corp/corp-1", backend = "worker")
+  expect_error(subagent_start(list(agent = agent, prompt = "unsent", parent = parent,
+                                   base = new.env(), opts = list(context = "none")), NULL),
+               class = "gptr_error_egress")
+  expect_error(coach_egress("corp/corp-1"), class = "gptr_error_egress")
+  expect_length(touched, 0L)
+  expect_length(fake_requests(corp), 0L)
+})
+
+test_that("context-none native and emulated decisions require consent before adapters", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = FALSE)
+  judge = gptr_fake_provider(list(0.9), name = "judge", type = "classifier")
+  judge$offline = FALSE
+  chat = gptr_fake_provider(list(list(json = list(answers = list(answer = 0.9)))), name = "corp")
+  chat$offline = FALSE
+  offs = list(gptr_register(judge), gptr_register(chat))
+  withr::defer(for (off in offs) off())
+  expect_error(peter(prompt = "Is this positive?", "good", model = "judge/judge-s1",
+                     .opts = list(context = "none")), class = "gptr_error_egress")
+  local_gptr_options(system1 = "emulate:corp/corp-1")
+  expect_error(peter(prompt = "Is this positive?", "good", model = "emulate:corp/corp-1",
+                     .opts = list(context = "none")), class = "gptr_error_egress")
+  expect_length(fake_requests(judge), 0L)
+  expect_length(fake_requests(chat), 0L)
+})
+
+
+test_that("context-none consent retains offline and effective-loopback exemptions", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = FALSE)
+  for (kind in c("offline", "loopback")) {
+    p = gptr_fake_provider(list("allowed"), name = kind)
+    if (identical(kind, "loopback")) {
+      p$offline = FALSE
+      p$local = TRUE
+      p$base_url = "http://127.0.0.1:9/v1"
+    }
+    s = peter("hello", model = p, envir = new.env(), .opts = list(context = "none"))
+    expect_identical(s$text, "allowed")
+    expect_length(fake_requests(p), 1L)
+  }
+  expect_null(settings_read("user")$egress)
+})
+
+test_that("context-none router choices cannot send before consent", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = FALSE, model = "fallback/fallback-1")
+  fallback = local_fake_provider(list("fallback"), name = "fallback")
+  corp = gptr_fake_provider(list("allowed"), name = "corp")
+  corp$offline = FALSE
+  offs = list(gptr_register(corp), gptr_register(gptr_router("consent",
+    route = function(request, ctx) "corp/corp-1")))
+  withr::defer(for (off in offs) off())
+  s = peter("hello", model = "router:consent", envir = new.env(),
+             .opts = list(context = "none"))
+  expect_identical(s$text, "fallback")
+  expect_length(fake_requests(corp), 0L)
+  expect_length(fake_requests(fallback), 1L)
+  settings_write("user", list(egress = list(corp = "ack")))
+  s = peter("hello", model = "router:consent", envir = new.env(),
+             .opts = list(context = "none"))
+  expect_identical(s$text, "allowed")
+  expect_length(fake_requests(corp), 1L)
+})
+
+test_that("a router fallback also requires its own provider consent", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = FALSE, model = "fallback/fallback-1")
+  chosen = gptr_fake_provider(list("must not send"), name = "chosen")
+  chosen$offline = FALSE
+  fallback = gptr_fake_provider(list("allowed"), name = "fallback")
+  fallback$offline = FALSE
+  offs = list(gptr_register(chosen), gptr_register(fallback),
+    gptr_register(gptr_router("consent", route = function(request, ctx) "chosen/chosen-1")))
+  withr::defer(for (off in offs) off())
+  local({
+    prepared = FALSE
+    local_mocked_bindings(model_prepare = function(...) {
+      prepared <<- TRUE
+      stop("model preparation must follow consent")
+    })
+    expect_error(peter("unsent", model = "router:consent", envir = new.env(),
+                       .opts = list(context = "none")), class = "gptr_error_egress")
+    expect_false(prepared)
+  })
+  expect_length(fake_requests(chosen), 0L)
+  expect_length(fake_requests(fallback), 0L)
+  settings_write("user", list(egress = list(fallback = "ack")))
+  s = peter("allowed", model = "router:consent", envir = new.env(),
+             .opts = list(context = "none"))
+  expect_identical(s$text, "allowed")
+  expect_length(fake_requests(chosen), 0L)
+  expect_length(fake_requests(fallback), 1L)
+})
+
+test_that("a plugin model switch requires the destination provider's consent", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = FALSE)
+  initial = local_fake_provider(list("initial"), name = "initial")
+  remote = gptr_fake_provider(list("allowed"), name = "remote")
+  remote$offline = FALSE
+  offs = list(gptr_register(remote), gptr_register(gptr_hook("agent_start", function(event, ctx) {
+    ctx$set_model("remote/remote-1")
+    NULL
+  })))
+  withr::defer(for (off in offs) off())
+  expect_error(peter("unsent", model = initial, envir = new.env(),
+                     .opts = list(context = "none")), class = "gptr_error_egress")
+  expect_length(fake_requests(initial), 0L)
+  expect_length(fake_requests(remote), 0L)
+  local_gptr_options(interactive = TRUE)
+  questions = character()
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    questions <<- c(questions, question)
+    TRUE
+  })
+  s = peter("allowed", model = initial, envir = new.env(), .opts = list(context = "none"))
+  expect_identical(s$text, "allowed")
+  expect_length(questions, 1L)
+  expect_match(questions, "^gptr sends your prompts to remote")
+  expect_match(questions, 'context = "none"', fixed = TRUE)
+  expect_identical(settings_read("user")$egress$remote, "ack")
+  expect_length(fake_requests(remote), 1L)
+})
+
+test_that("manual compaction requires consent and respects replay before sending", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = FALSE, context = "none")
+  initial = local_fake_provider(list("initial"), name = "initial")
+  remote = gptr_fake_provider(list("## Goal\n- compacted"), name = "remote")
+  remote$offline = FALSE
+  off = gptr_register(remote)
+  withr::defer(off())
+  s = peter("hello", model = initial, envir = new.env())
+  kernel_model_switch(s, "remote/remote-1")
+  expect_error(compact_run(s, "manual"), class = "gptr_error_egress")
+  expect_length(fake_requests(remote), 0L)
+  settings_write("user", list(egress = list(remote = "ack")))
+  compact_run(s, "manual")
+  expect_length(fake_requests(remote), 1L)
+  local_gptr_options(replay = "replay")
+  expect_error(compact_run(s, "manual"), class = "gptr_error_not_recorded")
+  expect_length(fake_requests(remote), 1L)
+})
+
+test_that("a remote native decision endpoint requires consent before model preparation", {
+  local_gw()
+  local_gptr_options(replay = "auto", interactive = FALSE,
+    providers = list(ollama = list(base_url = "https://example.invalid/v1")))
+  prepared = FALSE
+  local_mocked_bindings(s1_prepare = function(...) {
+    prepared <<- TRUE
+    stop("native model preparation must follow consent")
+  })
+  x = "good"
+  expect_error(peter("Is this positive?", x, model = "ollama/clef-flash",
+                     .opts = list(context = "none")), class = "gptr_error_egress")
+  expect_false(prepared)
+})

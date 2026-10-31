@@ -76,16 +76,20 @@ session$text
 A reply that falls silent for 90 seconds once it has started ends with a timeout; high-effort
 reasoning on OpenAI or Google may need `options(gptr.idle_timeout = 300)`.
 
-At first interactive use of a remote route, gptr asks you to acknowledge the data sent to it.
-For unattended jobs, acknowledge the specific provider beforehand at user scope:
+At first interactive use of a remote route, gptr asks you to acknowledge the data sent to it,
+even with `context = "none"`: project instructions and environment details still go.
+For unattended jobs, review `?gptr_egress` and acknowledge the specific provider beforehand at
+user scope:
 
 ```{r, eval = FALSE}
 gptr_config(egress = utils::modifyList(gptr_config()$egress, list(openai = "ack")),
             .scope = "user")
 ```
 
-This covers automatic context; it does not pre-approve tool actions. Read `?gptr_egress` for the
-request contents and `?gptr_security` before using sensitive data. `gptr_login("openrouter")`
+Repeat this for each provider you use, including a custom provider or remote CLI route. Offline
+providers and local loopback routes need no acknowledgment; Ollama is exempt only while its
+local-only inference is on. Consent does not pre-approve tool actions. Read `?gptr_security`
+before using sensitive data. `gptr_login("openrouter")`
 offers an interactive login; `gptr_login("anthropic", method = "key")` offers masked key entry.
 These credentials are separate from a command-line tool's sign-in.
 

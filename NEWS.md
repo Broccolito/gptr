@@ -19,6 +19,13 @@ generated code can inspect and modify objects already in memory.
 * Providers and models are chosen with the `model` argument or with `gptr_config()`.
 * 'RCurl' is no longer used; HTTP is handled by 'curl'.
 * R 4.2.0 or later is required.
+* Remote providers require a one-time egress acknowledgment even with `context = "none"`.
+  That setting still omits workspace and attached-object descriptions, while retaining project
+  instructions and environment details. Unattended runs need saved provider consent; offline
+  providers and local loopback routes remain exempt, with Ollama exempt only while its
+  local-only inference is on.
+* Require cli >= 3.6.2 and processx >= 3.8.6, matching the APIs and process-startup behavior
+  used by the package.
 * gptr is now licensed under the Apache License 2.0; gptr 0.7.0 was MIT-licensed. Third-party
   notices are in `inst/COPYRIGHTS`.
 

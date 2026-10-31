@@ -3140,7 +3140,8 @@ test_that("an undone block runs under replay = \"live\" and regenerates under \"
 })
 
 test_that("GPTR_REPLAY=replay blocks a real model called in a loop (acceptance 3)", {
-  local_project()
+  local_gw()
+  settings_write("user", list(egress = list(online = "ack")))
   withr::local_options(gptr.replay = NULL)
   withr::local_envvar(GPTR_REPLAY = "replay")
   online = gptr_fake_provider(list("never sent"), name = "online")
@@ -3149,7 +3150,7 @@ test_that("GPTR_REPLAY=replay blocks a real model called in a loop (acceptance 3
   withr::defer(off())
   local_gptr_options(model = "online/online-1", mode = "auto", record = "auto")
   f = file.path(getwd(), "loop.R")
-  # no automatic context, so P08's egress guard (which runs first) lets the replay guard answer
+  # Consent is already recorded, so the replay guard is the reason this call stops.
   writeLines(c("for (i in 1:2) {",
                "  x = peter(\"Summarise step {i}\", .opts = list(context = \"none\"))", "}"), f)
   expect_error(doc_e2e_source(f), class = "gptr_error_not_recorded")

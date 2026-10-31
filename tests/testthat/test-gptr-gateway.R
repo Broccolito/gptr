@@ -644,6 +644,9 @@ test_that("a first remote use without an acknowledgement is refused, then replay
                        models = list(list(id = "corp-1", ref = "corp/corp-1")))
   expect_error(peter("x", model = corp, envir = new.env()), class = "gptr_error_egress")
   expect_error(peter("x", model = corp, envir = new.env(), .opts = list(context = "none")),
+               class = "gptr_error_egress")
+  settings_write("user", list(egress = list(corp = "ack")))
+  expect_error(peter("x", model = corp, envir = new.env(), .opts = list(context = "none")),
                class = "gptr_error_not_recorded")
 })
 
@@ -1129,6 +1132,7 @@ test_that("the call's replay = overrides the process replay mode (contract 3.1, 
   local_gw()
   live = gptr_fake_provider(list("live answer"), name = "livefake")
   live$offline = FALSE
+  settings_write("user", list(egress = list(livefake = "ack")))
   opts = list(context = "none")
   local_gptr_options(replay = "replay")
   expect_error(peter("x", model = live, envir = new.env(), .opts = opts),
@@ -1292,7 +1296,7 @@ test_that("a routed session's guards honour the call's replay = (contract 3.1, I
   expect_length(fake_requests(live), 1L)
 })
 
-test_that("a routed session's egress check honours .opts$context = \"none\" (IC-29, 7.8)", {
+test_that("a routed session requires consent even with context none (IC-29, 7.8)", {
   local_gw()
   local_gptr_options(replay = "auto")
   withr::local_envvar(GPTR_REPLAY = "auto")
@@ -1304,15 +1308,20 @@ test_that("a routed session's egress check honours .opts$context = \"none\" (IC-
   off = list(gptr_register(corp),
              gptr_register(gptr_router("to_corp", route = function(request, ctx) "corp/corp-1")))
   withr::defer(for (o in off) o())
-  # no automatic context is sent, so the unacknowledged provider the router picks answers
+  # A refused router choice uses the configured fallback without calling that provider.
   s = peter("x", model = "router:to_corp", envir = new.env(), .opts = list(context = "none"))
-  expect_identical(s$text, "corp answer")
-  expect_length(fake_requests(corp), 1L)
-  expect_length(fake_requests(fallback), 0L)
-  # outside such a run the context setting applies: the same choice needs the acknowledgement
+  expect_identical(s$text, "fallback answer")
+  expect_length(fake_requests(corp), 0L)
+  expect_length(fake_requests(fallback), 1L)
+  # Direct router use also refuses; acknowledgment allows the same context-none choice.
   s2 = session_new("router:to_corp", "manual", home = new.env())
   cnd = expect_error(ext_service_get("router.call")(s2, "turn"), class = "gptr_error_egress")
   expect_identical(cnd$provider, "corp")
+  expect_length(fake_requests(corp), 0L)
+  settings_write("user", list(egress = list(corp = "ack")))
+  accepted = peter("x", model = "router:to_corp", envir = new.env(),
+                     .opts = list(context = "none"))
+  expect_identical(accepted$text, "corp answer")
   expect_length(fake_requests(corp), 1L)
 })
 
@@ -1481,7 +1490,7 @@ test_that("a call refused before its run changes neither the session nor gptr_la
                        models = list(list(id = "corp-1", ref = "corp/corp-1")))
   refused("gptr_error_egress", s, "UNSENT", model = corp, mode = "plan")
   refused("gptr_error_egress", "UNSENT", model = corp, envir = new.env())
-  settings_write("user", list(egress = list(corp = "ack")))
+  settings_write("user", list(egress = list(corp = "ack", keyless = "ack", openai = "ack")))
   refused("gptr_error_not_recorded", s, "UNSENT", model = corp, mode = "plan", replay = "replay")
   keyless = gptr_provider("keyless", "openai-completions", base_url = "https://keyless.invalid/v1",
                           auth = "GPTR_TEST_ABSENT_KEY",
@@ -1637,6 +1646,7 @@ test_that("an interrupt before a turn starts undoes what the call registered (D-
 
 test_that("a router's choice without a key stops the run, not the default model (D-251)", {
   local_gw()
+  settings_write("user", list(egress = list(keyless = "ack")))
   local_gptr_options(replay = "auto", model = "fake/fake-1")
   withr::local_envvar(GPTR_TEST_ABSENT_KEY = NA)
   fake = local_fake_provider(list("fallback answer"))

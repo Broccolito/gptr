@@ -521,6 +521,7 @@ s1_ready = function(target, safety = s1_safety(), replay = NULL) {
   } else if (emulated) {
     target$model = s1_emu_ready(target$model, safety)
   } else if (native && isTRUE(target$by_ref)) {
+    egress_check(target$model[["provider"]], target$provider, safety)
     target$model = s1_ollama_ready(s1_prepare(target$ref, safety = safety))
   } else {
     target$model = s1_ollama_ready(s1_preflight(target$model, target$provider, safety = safety))
