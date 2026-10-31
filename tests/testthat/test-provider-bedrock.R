@@ -520,8 +520,9 @@ test_that("http_handle() calls spec$sign per attempt with values for the URL's o
 # ---- the agent loop and redaction --------------------------------------------------------------
 
 test_that("a recorded ConverseStream runs a tool through the agent loop (scripted wire)", {
-  local_vault()
-  local_gptr_options(unsafe_no_permissions = TRUE)
+  local_gw()
+  settings_write("user", list(egress = list(`versa-test` = "ack")))
+  local_gptr_options(unsafe_no_permissions = TRUE, replay = "auto")
   withr::local_envvar(AWS_ACCESS_KEY_ID = aws_key_id, AWS_SECRET_ACCESS_KEY = aws_secret,
                       AWS_SESSION_TOKEN = "")
   local_bedrock_provider()
