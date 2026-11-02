@@ -16,6 +16,8 @@ gptr_cancel(x)
 Aborts the run of a session (or of each session in a list): transfers are canceled, child
 processes stopped, the partial turn recorded as aborted, queued items moved to \code{dropped}, and
 the status set to \code{aborted}. Idle sessions are left alone.
+A call from model code that includes another session requires human approval; otherwise it
+signals \code{gptr_error_permission}.
 }
 \examples{
 session = peter("long task", model = gptr_fake_provider(list(list(hang = TRUE))),

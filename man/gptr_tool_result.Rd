@@ -15,7 +15,8 @@ gptr_tool_result(
 \arguments{
 \item{text}{Character vector, joined with newlines into one text block, or \code{NULL}.}
 
-\item{images}{List of image blocks, PNG file paths or raw PNG vectors, or \code{NULL}.}
+\item{images}{Image blocks, PNG/JPEG/GIF/WebP file paths or raw PNG vectors, supplied as a
+list; also accepts a character vector of paths, one raw PNG vector or \code{NULL}.}
 
 \item{details}{Named list of details, or \code{NULL}.}
 

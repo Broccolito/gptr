@@ -805,6 +805,8 @@ file_chunk_lines = function(path, from_end, n) {
 #' replay bound to that block. Resuming restores conversation state, not a complete analysis
 #' workspace, and does not rerun the R tool code. Make required objects available in `envir`; use
 #' document replay when the intention is to execute the recorded analysis again.
+#' A call from model code that resolves another session or rebuilds a stored session requires
+#' human approval; otherwise it signals `gptr_error_permission`.
 #' @param x `NULL` (the most recently updated stored session), a session id, a file path, or a
 #'   detached `gptr_session`.
 #' @param envir The home of a rebuilt session.

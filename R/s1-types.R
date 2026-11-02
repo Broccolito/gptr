@@ -474,7 +474,8 @@ Summary.gptr_s1 = function(...) {
 #'   scores: the confidence), `"confidence"` (decisions: `abs(2 * p - 1)`) or `"probabilities"`
 #'   (a matrix with one row per element and one column per option or level; for decisions the
 #'   columns `FALSE` and `TRUE`).
-#' @return A named numeric vector, or a matrix for `what = "probabilities"`.
+#' @return A numeric vector preserving the names of `x` (including no names), or a matrix for
+#'   `what = "probabilities"`.
 #' @section System 1 options:
 #' `gptr.s1_max_active` (8) concurrent requests, `gptr.s1_rounds` (3) bounded retry rounds,
 #' `gptr.s1_state_max` (2000) characters of a piped session's state and `gptr.s1_max_elements`

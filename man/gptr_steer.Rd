@@ -23,6 +23,8 @@ message while you were working: ..."; a follow-up when the agent would otherwise
 idle session the item is taken when the next run starts. The queue lives in the R process;
 items still queued when it ends are not saved. In a script replayed from its document, a steer
 the replayed block already recorded is not sent again.
+A call from model code targeting another session requires human approval; otherwise it
+signals \code{gptr_error_permission}.
 }
 \examples{
 session = peter("Summarize mtcars", model = gptr_fake_provider(list("ok")),

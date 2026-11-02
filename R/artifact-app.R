@@ -467,7 +467,7 @@ artifact_token = function() {
   paste(sprintf("%02x", as.integer(bytes)), collapse = "")
 }
 
-#' Candidate ports of a launch: the previous port first (a revision keeps its URL), then 20
+#' Candidate ports of a launch: the previous port first, then 20
 #' RNG-free candidates (IC-61)
 #' @noRd
 artifact_ports = function(id) {
@@ -1531,8 +1531,9 @@ artifact_type_get = function(kind, ctx = NULL) {
 #' Launch one version and run the validation ladder: launch, HTTP 200, optional session check
 #' (architecture 6.15)
 #'
-#' The artifact's running process is stopped first (its port is offered again, so the URL
-#' stays). A failing `launch` or `http` stage records its checks in artifact.json, leaves the
+#' The artifact's running process is stopped first and its port is offered again; a new launch
+#' gets a fresh access token, so its URL can change. A failing `launch` or `http` stage records
+#' its checks in artifact.json, leaves the
 #' record with status `failed` (its child is stopped without a stop request) and signals
 #' `gptr_error_artifact` with the stage and the redacted log tail, so the model sees the child's
 #' error; a failing session check is reported in the checks and messages, not raised. On success

@@ -169,7 +169,7 @@ dotenv_bad_key_value = function(variable, value) {
 #' line spelled exactly as the canonical name wins over an alias), registers secret values
 #' in gptr's vault for redaction, and exports the canonical names with [Sys.setenv()]. Plain
 #' configuration fields with suffixes such as `_URL` or `_PATH` are not registered as
-#' secrets. It never prints, logs or returns a value.
+#' secrets. It never prints, logs or returns secret values.
 #'
 #' @param path Path of an existing `.env` file.
 #' @param aliases `NULL`, or a named list of extra aliases, `canonical = c("alias", ...)`,
