@@ -27,6 +27,11 @@ Packages put resources in \verb{inst/gptr/}; directory plugins use a root \code{
 R factories activate lazily only when the manifest declares \code{extension.provides} and does
 not request eager activation. Claude bundles contribute declarative resources; their hooks
 and executable plugin behavior are not imported.
+A marketplace root must be replaced by the path to an individual plugin. A plugin with no
+supported declarative resources or R extension code fails activation; details, including
+skipped components, are available from \code{gptr_registry(diagnostics = TRUE)}. An R factory may
+intentionally register no resources. Listing an unactivated plugin does not verify its
+compatibility, credentials or external programs.
 }
 \examples{
 gptr_plugins(installed = TRUE)

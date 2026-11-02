@@ -675,7 +675,8 @@ plugin_api_req = function(manifest) {
 #' A resolved plugin from a directory, or NULL when the directory is not a plugin
 #'
 #' `plugin.json` makes a gptr directory plugin; `.claude-plugin/plugin.json` (or an empty
-#' `.claude-plugin/`) a Claude bundle; a directory without a manifest counts when it has
+#' `.claude-plugin/`) a Claude bundle; a marketplace-only root is not a plugin. A directory
+#' without a manifest counts when it has
 #' `skills/`, `prompts/`, `agents/`, `extensions/`, `commands/` or `mcp.json`. Without a manifest
 #' name the plugin is named `name`. A given `kind` always resolves: an installed Claude Code plugin
 #' is `kind = "claude-plugin"` named by its key, never by its version directory (D-088).
@@ -693,6 +694,10 @@ plugin_from_dir = function(path, name = basename(path), kind = NULL) {
     kind = kind %||% "claude-plugin"
     man = plugin_manifest_read(cp) %||% list()
   } else if (dir.exists(file.path(path, ".claude-plugin"))) {
+    if (file.exists(file.path(path, ".claude-plugin", "marketplace.json")) &&
+        !has_dirs && !any(file.exists(file.path(path, c("mcp.json", ".mcp.json"))))) {
+      return(NULL)
+    }
     kind = kind %||% "claude-plugin"
   } else if (has_dirs || file.exists(file.path(path, "mcp.json"))) {
     kind = kind %||% "directory"
@@ -786,7 +791,13 @@ plugin_resolve = function(name) {
     p = plugin_from_dir(full)
     if (!is.null(p)) return(p)
   }
-  if (looks_path) {
+  if (looks_path || dir.exists(full)) {
+    if (file.exists(file.path(full, ".claude-plugin", "marketplace.json"))) {
+      gptr_abort(paste0("This path is a plugin marketplace, not a plugin directory. ",
+                        "Choose an individual plugin directory from its marketplace.json ",
+                        "and pass that path in plugins = ."),
+                 "invalid_argument", arg = "name", expected = "an individual plugin directory")
+    }
     gptr_abort(paste0("This path is not a plugin directory (no plugin.json, .claude-plugin/ ",
                       "or resource directories)."), "invalid_argument", arg = "name",
                expected = "a plugin directory")
@@ -812,7 +823,11 @@ plugin_resolve = function(name) {
   }
   cl = plugin_claude_installed()
   hit = res_match(name, names(cl), "plugin")
-  if (length(hit)) return(plugin_from_dir(cl[[hit]], hit, "claude-plugin"))
+  if (length(hit)) {
+    p = plugin_from_dir(cl[[hit]], hit, "claude-plugin")
+    if (!is.null(p)) return(p)
+    return(plugin_resolve(cl[[hit]]))
+  }
   gptr_abort(paste0("No plugin with this name was found: install a package with inst/gptr/, ",
                     "or use a directory with plugin.json or .claude-plugin/, or ",
                     ".gptr/plugins/<name>/."), "invalid_argument", arg = "name",
@@ -1132,6 +1147,10 @@ plugin_enable = function(name, rank, session = NULL) {
     }, error = function(e) e)
     if (inherits(built, "error")) {
       problem = paste0("Plugin ", p$name, " could not be read: ", conditionMessage(built))
+    } else if (!length(built$specs) && is.null(built$code)) {
+      problem = paste0("Plugin ", p$name, " has no supported resources or R extension code. ",
+                        "Choose a plugin with skills, prompts, commands, agents or MCP servers; ",
+                        "see gptr_registry(diagnostics = TRUE) for skipped components.")
     }
   }
   if (!is.null(problem)) {
@@ -1285,6 +1304,11 @@ plugin_candidates = function(installed = FALSE) {
 #' R factories activate lazily only when the manifest declares `extension.provides` and does
 #' not request eager activation. Claude bundles contribute declarative resources; their hooks
 #' and executable plugin behavior are not imported.
+#' A marketplace root must be replaced by the path to an individual plugin. A plugin with no
+#' supported declarative resources or R extension code fails activation; details, including
+#' skipped components, are available from `gptr_registry(diagnostics = TRUE)`. An R factory may
+#' intentionally register no resources. Listing an unactivated plugin does not verify its
+#' compatibility, credentials or external programs.
 #'
 #' @param installed `TRUE` to scan every installed package as well.
 #' @return A `gptr_plugins` data frame with columns `name`, `version`, `api`, `kind`

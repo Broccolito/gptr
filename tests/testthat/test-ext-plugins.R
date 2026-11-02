@@ -406,6 +406,19 @@ test_that("plugin_resolve finds Claude bundles by path and installed Claude plug
   expect_identical(r$path, path_norm(b))
 })
 
+test_that("a marketplace root points to a plugin directory instead of enabling an empty bundle", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, ".claude-plugin", "marketplace.json"),
+             '{"name": "catalog", "plugins": [{"name": "tools", "source": "./plugins/tools"}]}')
+  write_file(file.path(d, "plugins", "tools", ".claude-plugin", "plugin.json"),
+             '{"name": "tools"}')
+  expect_null(plugin_from_dir(d))
+  expect_error(plugin_resolve(d), "marketplace.*plugin directory")
+  # A repository can be both a marketplace and a plugin, with its own resources or manifest.
+  write_file(file.path(d, ".claude-plugin", "plugin.json"), '{"name": "catalog-tools"}')
+  expect_identical(plugin_resolve(d)$name, "catalog-tools")
+})
+
 test_that("plugin_resolve rejects unknown names and ambiguous normalised names", {
   skip_on_cran()
   expect_error(plugin_resolve("no-such-plugin-p17"), class = "gptr_error_invalid_argument")
@@ -681,6 +694,33 @@ test_that("missing rDepends disable a plugin", {
   sid = "s00000000d7"
   expect_warning(plugin_enable(d, 0L, session = sid), class = "gptr_warning_plugin")
   expect_null(registry_get("skill", "np-skill", session = sid))
+})
+
+test_that("a Claude bundle with no usable components is failed with an actionable diagnostic", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, ".claude-plugin", "plugin.json"), '{"name": "hooks-only"}')
+  write_file(file.path(d, "hooks", "hooks.json"), '{"hooks": {}}')
+  withr::defer(plugin_forget(d))
+  expect_warning(expect_false(plugin_enable(d, 3L)), "no supported resources")
+  row = gptr_plugins()[gptr_plugins()$name == "hooks-only", , drop = FALSE]
+  expect_false(row$enabled)
+  expect_identical(row$state, "failed")
+  diag = gptr_registry(diagnostics = TRUE)
+  expect_true(any(diag$source == "plugin:hooks-only" &
+                    grepl("no supported resources", diag$message, fixed = TRUE)))
+  expect_false(plugin_enable(d, 3L))
+})
+
+test_that("a plugin R factory can intentionally register no components", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "empty-factory"}')
+  write_file(file.path(d, "extensions", "empty.R"), 'function(gptr) invisible(NULL)')
+  withr::defer(plugin_forget(d))
+  withr::defer(ext_unload("plugin:empty-factory"))
+  expect_true(plugin_enable(d, 3L))
+  row = gptr_plugins()[gptr_plugins()$name == "empty-factory", , drop = FALSE]
+  expect_true(row$enabled)
+  expect_identical(row$state, "active")
 })
 
 test_that("plugin_enable is idempotent and is the plugin.enable service", {
@@ -1218,6 +1258,7 @@ test_that("a session's plugin entries are forgotten at session_shutdown", {
   skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "ended-plug"}')
+  write_file(file.path(d, "prompts", "ended.md"), "A session-scoped prompt.")
   sid = "s00000000c9"
   plugin_enable(d, 0L, session = sid)
   expect_true("ended-plug" %in% gptr_plugins()$name)
