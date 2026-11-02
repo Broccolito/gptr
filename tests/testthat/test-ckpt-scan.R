@@ -19,6 +19,7 @@ test_that("checkpoint workers keep the caller store and inspect known absences",
 })
 
 test_that("capture limits preserve complete inventory and source files get priority", {
+  skip_on_cran()
   scan_worker_library()
   root = local_project()
   paths = sprintf("a%03d.bin", seq_len(270L))
@@ -35,6 +36,7 @@ test_that("capture limits preserve complete inventory and source files get prior
 })
 
 test_that("the entry cap leaves undiscovered files unknown", {
+  skip_on_cran()
   scan_worker_library()
   root = local_project()
   expect_true(all(file.create(file.path(root, sprintf("f%04d", seq_len(2005L))))))
@@ -156,4 +158,104 @@ test_that("an unreaped scan prevents another worker from starting", {
   result = ckpt_scan_run(tempdir(), character())
   expect_false(result$complete)
   expect_identical(result$reason, "cleanup pending")
+})
+
+test_that("a result read failure preserves the previous checkpoint observations", {
+  scan_worker_library()
+  root = local_project(files = list("a.R" = "old-a", "b.R" = "old-b"))
+  local_gptr_options(checkpoint_scan_timeout = 15, quiet = TRUE)
+  ck = ckpt_ck_new("s0000000801")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  before = list(stat = tr$stat, hash = tr$hash, mode = tr$mode, absent = tr$absent)
+  writeLines("changed-a", file.path(root, "a.R"))
+  writeLines("changed-b", file.path(root, "b.R"))
+  seen = new.env(parent = emptyenv())
+  seen$records = 0L
+  read = readRDS
+  run = ckpt_scan_run
+  environment(run) = list2env(list(readRDS = function(file, ...) {
+    if (grepl("^[0-9]{5}[.]rds$", basename(file))) {
+      seen$records = seen$records + 1L
+      if (seen$records == 2L) stop("synthetic result read failure")
+    }
+    read(file, ...)
+  }), parent = environment(run))
+  local_mocked_bindings(ckpt_scan_run = run)
+  result = ckpt_files_scan(tr)
+  expect_identical(seen$records, 2L)
+  expect_false(result$complete)
+  expect_identical(result$reason, "worker unavailable")
+  expect_equal(nrow(result$walk), 0L)
+  for (field in c("hash", "mode", "absent", "not_files", "uncaptured")) {
+    expect_length(result[[field]], 0L)
+  }
+  ckpt_files_observe(tr, result)
+  expect_identical(tr$stat, before$stat)
+  expect_identical(tr$hash, before$hash)
+  expect_identical(tr$mode, before$mode)
+  expect_identical(tr$absent, before$absent)
+  expect_false(tr$coverage)
+})
+
+test_that("a worker exiting during manifest collection cannot certify a frozen partial result", {
+  scan_worker_library()
+  root = local_project(files = list("first.R" = "first", "last.R" = "last"))
+  local_gptr_options(checkpoint_scan_timeout = 0.01)
+  paths = c("first.R", "last.R")
+  full = file.path(root, paths)
+  info = file.info(full)
+  hashes = ckpt_store_put(full)
+  records = lapply(seq_along(paths), function(i) {
+    list(row = data.frame(path = paths[i], size = info$size[i],
+                          mtime = as.numeric(info$mtime[i]), link = FALSE),
+         hash = hashes[i], mode = ckpt_modes(full[i]))
+  })
+  publish = function(dir, records) {
+    for (i in seq_along(records)) {
+      pending = file.path(dir, "pending.rds")
+      saveRDS(records[[i]], pending)
+      stopifnot(file.rename(pending, file.path(dir, sprintf("%05d.rds", i))))
+      if (i == 1L) {
+        while (!file.exists(file.path(dir, "release"))) Sys.sleep(0.01)
+      }
+    }
+    saveRDS(list(complete = TRUE, capture_capped = FALSE, reason = "", walk_seconds = 0),
+            file.path(dir, "finished.rds"))
+  }
+  seen = new.env(parent = emptyenv())
+  seen$p = NULL
+  seen$published = 0L
+  withr::defer(if (!is.null(seen$p) && seen$p$is_alive()) seen$p$kill(grace = 0))
+  original = proc_rscript
+  local_mocked_bindings(proc_rscript = function(entry, args, dir, env, stdout, stderr, .on_spawn) {
+    p = original("artifact", list(dir, records), dir = dir, env = env, stdout = stdout,
+                  stderr = stderr, .fun = publish, .on_spawn = function(p) {
+                    seen$p = p
+                    .on_spawn(p)
+                  })
+    deadline = Sys.time() + 15
+    while (!file.exists(file.path(dir, "00001.rds")) && p$is_alive() && Sys.time() < deadline) {
+      Sys.sleep(0.01)
+    }
+    stopifnot(file.exists(file.path(dir, "00001.rds")))
+    Sys.sleep(0.02)
+    p
+  })
+  run = ckpt_scan_run
+  environment(run) = list2env(list(list.files = function(path, pattern, ...) {
+    frozen = base::list.files(path, pattern = pattern, ...)
+    stopifnot(file.create(file.path(path, "release")))
+    seen$p$wait(10000L)
+    stopifnot(!seen$p$is_alive(), file.exists(file.path(path, "finished.rds")))
+    seen$published = length(base::list.files(path, pattern = pattern))
+    frozen
+  }), parent = environment(run))
+  result = run(root, ckpt_prune(root), baseline = TRUE)
+  expect_identical(seen$published, 2L)
+  expect_equal(nrow(result$walk), 1L)
+  expect_identical(names(result$hash), "first.R")
+  expect_false(result$complete)
+  expect_identical(result$reason, "time limit")
+  expect_false(seen$p$is_alive())
 })

@@ -121,6 +121,8 @@ ckpt_scan_main = function(spec, dir) {
                  (length(startup_keys) > 0L && path_key(full) %in% startup_keys)) {
       "protected or control path"
     } else if (file.access(full, 4L) != 0L) {
+      st$capture_capped = TRUE
+      if (!nzchar(st$reason)) st$reason = "unreadable file"
       "unreadable file"
     } else if (row$size > maximum) {
       st$capture_capped = TRUE
@@ -274,7 +276,9 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
     total_max = gptr_opt("checkpoint_track_total"),
     capture_max = gptr_opt("checkpoint_capture_max"),
     startup = Sys.getenv(c("R_PROFILE_USER", "R_ENVIRON_USER"), unset = ""))
-  tryCatch({
+  empty = out
+  empty$reason = "worker unavailable"
+  out = tryCatch({
     p = proc_rscript("ckpt_scan", list(spec, dir), dir = dir, env = child_env("worker"),
                       stdout = NULL, stderr = NULL, .on_spawn = function(child) launch$p = child)
     repeat {
@@ -282,9 +286,9 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
       if (!isTRUE(p$is_alive()) || left <= 0) break
       p$wait(as.integer(min(20, ceiling(left * 1000))))
     }
-    # Freeze accepted records before termination: late writes cannot enter this result.
-    records = list.files(dir, pattern = "^[0-9]{5}[.]rds$", full.names = TRUE)
     timed_out = isTRUE(p$is_alive())
+    # A child alive before the manifest freezes cannot certify it complete by exiting later.
+    records = list.files(dir, pattern = "^[0-9]{5}[.]rds$", full.names = TRUE)
     finished = !timed_out && file.exists(file.path(dir, "finished.rds")) &&
       identical(p$get_exit_status(), 0L)
     if (timed_out) p$kill(grace = 0)
@@ -310,10 +314,8 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
       out$walk_seconds = max(0, as.numeric(Sys.time()) - readRDS(file.path(dir, "started.rds")))
     }
     if (!finished && !timed_out) out$reason = "worker stopped"
-  }, error = function(e) {
-    out$complete = FALSE
-    out$reason = "worker unavailable"
-  })
+    out
+  }, error = function(e) empty)
   ckpt_scan_cleanup(launch$p, dir)
   on.exit(NULL)
   out$seconds = proc.time()[["elapsed"]] - started

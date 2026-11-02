@@ -308,8 +308,8 @@ ckpt_files_baseline = function(tr) {
 #' @noRd
 ckpt_files_scan = function(tr) {
   s = ckpt_scan_run(tr$root, tr$prune, old = tr$stat)
-  # Missing post-images can limit redo, but do not erase known pre-images needed for undo.
-  s$coverage = isTRUE(tr$coverage) && isTRUE(s$complete)
+  # Missing captures can hide same-metadata changes; retain known pre-images for observed edits.
+  s$coverage = isTRUE(tr$coverage) && isTRUE(s$complete) && !isTRUE(s$capture_capped)
   s$time = as.numeric(Sys.time())
   old = tr$stat
   w = s$walk

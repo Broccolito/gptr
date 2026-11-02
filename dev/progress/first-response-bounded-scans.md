@@ -1,6 +1,6 @@
 # First-response delay and bounded file checkpoints
 
-Date: 2026-11-02. Implementation and expanded local checks are complete. Remote CI and
+Date: 2026-11-02. Version 1.0.1 is prepared. Implementation and expanded local checks are complete. Remote CI and
 CRAN incoming validation must certify the final PR head; no result is asserted here yet.
 
 ## Reproduction
@@ -123,7 +123,7 @@ Focused checkpoint-file, partial-inventory, real-worker, architecture and option
 The rewind and copy-safety suites passed during the preceding regression run; its one
 obsolete parent-only hash-observer assertion was replaced with real child inventory checks
 and the checkpoint-file suite was rerun. Helper-loaded lint of the changed scanner,
-tracker, bootstrap and new tests passes. An independent review found no remaining issue.
+tracker, bootstrap and new tests passes.
 
 The real worker tests cover entry/capture/aggregate byte limits, cancellation with committed results,
 single-worker cleanup admission, protected files, FIFOs, links, case-only renames and
@@ -135,10 +135,46 @@ partial-to-complete inventories and a directory replaced by an outside symlink. 
 cases verify custom startup exclusions and process/marker/launch-directory cleanup after
 interruption. They exposed and now guard public partial-undo warning propagation.
 
+A further permission regression reproduced an unreadable baseline file becoming readable after
+a native, same-size/same-mtime edit. The old observation had no content hash, so metadata could
+not certify unchanged contents. Unreadable captures and missing follow-up captures now make
+the interval partial, without inventing changes or restoring an unproven original. A later
+complete backup can establish coverage for future intervals. Real chmod/byte-comparison tests
+and capture-limit bookkeeping tests guard this transition.
+
+Final result-collection fault injection also reproduced two unsafe completeness cases: a later
+record read error after accepting an earlier hash, and a child exiting while a frozen manifest
+omitted its last record. A read error now discards the unusable batch and preserves prior
+observations. Completeness requires the child to have exited before the manifest is frozen.
+Both real-child regressions reproduced the old failures and pass 20 assertions after repair.
+The final scanner/partial/integration/lifecycle/architecture run passed 295 assertions without
+failures, warnings or skips. The preceding 1.0.1 checkpoint/undo/MCP regression passed 1,014
+assertions with no failures or warnings and one macOS-specific skip; release metadata tests
+passed 43 assertions. Changed source and tests pass lint.
+
 CI source-mode jobs now force-install their checkout before running worker-bearing tests;
 otherwise cached older installed gptr workers can differ from the source-loaded parent.
 The entry-limit fixture uses real pruned entries so it tests counting without racing the
 separate deadline on slow Windows I/O.
+
+The Windows CRAN-mode check of the preceding head reported Status: OK and 3,724 passing
+assertions, but exceeded its separate 600 s elapsed gate at 702 s. Three bulk stress blocks
+remain in full CI and skip only CRAN; small real-worker, security and coverage tests remain
+in CRAN's selected list. Full-suite shards expand from five to eight on macOS and ten to
+twelve on Windows, separating observed heavy contexts while retaining every test and the
+existing per-job time limits. A separately exposed MCP interruption race now owns its single
+cancellation handler before the initial send, with a deterministic real-stdio regression.
+An artifact integration fixture now retries the existing deferred-settlement result within
+five seconds and still requires the process and every recovery record to be gone; its real
+app relaunch/cleanup case passed all 12 assertions without changing product cleanup policy.
+
+CRAN lists 1.0.0 as published on 2026-11-01. Preparing 1.0.1 removes the version-reuse warning;
+incoming checks can still report an update-recency NOTE for seven days. Record that external
+release-policy result explicitly rather than suppressing incoming checks or claiming a clean
+final archive from earlier-head evidence.
+The local normal 1.0.1 build/check, with incoming checks, examples, vignettes and both manuals,
+reported zero errors, zero warnings and exactly that recency NOTE. It preceded the final
+result-collection hardening; the exact final archive still requires the remote checks below.
 
 Require full CI on the final PR head and the exact-tarball
 workflow with the final source SHA. Retain its archive digest, incoming/manual check logs and
