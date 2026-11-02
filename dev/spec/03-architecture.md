@@ -2242,7 +2242,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   expression or before a notice, a warning as `Warning: <text>` and an R message when they come (`eval_echo()`;
   the result keeps all of it) [D-245]; prompts first clear the live row, also while a tool
   executes, and every other write clears and redraws it, at the sink it was drawn at (a capture in the agent's code is left alone). Children do not stream their conversations;
-  a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
+  a foreground root (including a background session brought forward by `gptr_wait()`) shows one
+  line per sub-agent start and end at verbosity 1+ unless quiet
   (`  ▌ sub-agent a (kid/kid-1) started`, `  ▌ sub-agent a done (1/2) · 2 turns · 12 s` or
   `failed (1/2): <first line of the reason>`, after the agent's blue block [D-245], cut to the console width; `(k/N)` for a team, fan-out or
   `gptr_parallel()` group; a nested `peter()` by its quoted prompt and its number among the parent run's

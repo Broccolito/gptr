@@ -17,5 +17,10 @@
   including ordinary R autoprint, the last child's live row and parent steering/draft retention.
   Targeted console input, render and team tests passed; the mixed-team fixture uses qualified refs
   so the queued-model assertion is independent of the separate alias-resolution change.
+- The comprehensive follow-up also shows children of a background session while `gptr_wait()`
+  brings it into the foreground, and applies the same nested invisibility rule to
+  `gptr_parallel()`. Scheduled abort, retry and partial-failure regressions verify queue limits,
+  unsent steering, row handoff and cleanup. The combined source run passed 1,503 assertions with
+  no failures, warnings or skips; all changed R/test files lint clean.
 - Validation: changed R/test files linted; the teams/background vignette's precompute check,
   `check-docs.R` and `check-files.R all` passed. Hosted CI and CRAN-mode results are tracked in the PR.

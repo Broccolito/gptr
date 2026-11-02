@@ -5570,7 +5570,8 @@ totals line names the model and the context left.
    `kept in history ↑` when kept, and the keys allowed (`?` shows the detail view and is not
    counted); after 5, `no valid answer after 5 tries · refused` and a denial with the reason (not
    feedback, cheat-sheet review) `no valid answer was given at the approval prompt`.
-4. Progress: a child run (depth 1+) whose outermost run is in the foreground prints, at
+4. Progress: a child run (depth 1+) whose outermost run is in the foreground, including a
+   background session brought forward by `gptr_wait()`, prints, at
    verbosity 1+ unless `gptr.quiet`, `  sub-agent <agent> started (<model>)` (the model the child
    calls, for a worker not its proxy's `worker/worker`) at `agent_start` and
    `  sub-agent <agent> done (k/N) · <turns> turns · <secs> s` or

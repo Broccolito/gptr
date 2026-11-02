@@ -865,10 +865,13 @@ test_that("top-level team and fan-out reports remain visible when child answers 
   local_gptr_options(verbose = 2L)
   team = withVisible(peter("Review it", agents = list(stats = agent(model = "fake/fake-1"))))
   fan = withVisible(peter("Review each", list(first = 1), parallel = 1))
+  parallel = withVisible(gptr_parallel(stats = peter("Review it", envir = new.env())))
   expect_true(team$visible)
   expect_true(fan$visible)
+  expect_true(parallel$visible)
   expect_match(format(team$value), "child report", fixed = TRUE)
   expect_match(format(fan$value), "child report", fixed = TRUE)
+  expect_match(format(parallel$value), "child report", fixed = TRUE)
 })
 
 test_that("nested team and fan-out calls do not print their reports into the parent result", {
@@ -878,12 +881,14 @@ test_that("nested team and fan-out calls do not print their reports into the par
     fake_tool("r", code = paste0(
       "team = withVisible(peter('child', agents = list(stats = agent(model = 'fake/fake-1'))))\n",
       "fan = withVisible(peter('child', list(first = 1), parallel = 1))\n",
-      "visibility = c(team$visible, fan$visible)\nvisibility"))
+      "parallel = withVisible(gptr_parallel(stats = peter('child', envir = new.env())))\n",
+      "gptr_parallel(stats = peter('child', envir = new.env()))\n",
+      "visibility = c(team$visible, fan$visible, parallel$visible)\nvisibility"))
   })
   local_gptr_options(verbose = 2L)
   e = new.env()
   parent = peter("delegate", envir = e)
-  expect_identical(e$visibility, c(FALSE, FALSE))
+  expect_identical(e$visibility, c(FALSE, FALSE, FALSE))
   results = Filter(function(m) identical(m$role, "tool_result"), parent$messages)
   expect_length(results, 1L)
   expect_false(grepl("child report", msg_text(results[[1L]]), fixed = TRUE))

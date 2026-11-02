@@ -552,8 +552,10 @@ console_child_shown = function(run) {
   top = run
   while (!is.null(top$outer)) top = top$outer
   live = if (inherits(top$shell, "gptr_session")) session_live(top$shell)
-  isTRUE(run$depth >= 1L) && !is.null(live) && is.null(live$background) &&
-    !isTRUE(top$opts$background) && verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
+  waited = !is.null(live) && session_data(top$shell)$id %in% console_state()$waited
+  isTRUE(run$depth >= 1L) && !is.null(live) &&
+    (waited || is.null(live$background) && !isTRUE(top$opts$background)) &&
+    verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
 }
 
 #' A scheduled group's completed count, active phases and queued names

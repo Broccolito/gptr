@@ -233,7 +233,7 @@ gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("ret
   if (identical(on_error, "stop")) {
     for (ch in session_data(team)$children) subagent_signal(ch, session_data(ch)$condition)
   }
-  team
+  subagent_value(team)
 }
 
 #' Settle a team or fan-out on its children (04 section 6.1.2): it stays idle when every child is;
