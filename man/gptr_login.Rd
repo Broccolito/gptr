@@ -39,7 +39,8 @@ Stores a credential for a model provider (for example \code{"openrouter"}) or fo
 (\code{"mcp:<server>"}). With \code{method = "auto"}, providers and MCP servers that support OAuth
 get the authorization-code flow with PKCE (S256): a page on 127.0.0.1 receives the redirect
 when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
-on. Key entry requires a UI with hidden input; it never falls back to visible typing.
+on. A login inside a tool also uses hidden paste entry because loopback callbacks cannot run
+recursively. Key entry requires a UI with hidden input; it never falls back to visible typing.
 The host prompt shows the destination and storage before entry. Leave it blank to skip,
 or dismiss or interrupt it to cancel. Secret answers are not returned to the model.
 \code{scope = "session"} keeps credentials in this R process until logout or exit; it does not

@@ -370,9 +370,9 @@ ui_undo_note = function(request) {
 #' waiting after the answer (a paste; a last line without a newline is not waiting), the answer and
 #' the lines go to the console history as one entry (a `secret` is dropped) and the question is
 #' asked again (IC-75); Ctrl-C or EOF gives NA, and in a terminal ends the person's row, which
-#' readline() leaves open then. A `secret` is read with the echo off where R reads its own terminal
-#' (tty_secret()); elsewhere the console shows it, which a dim row above the chevron says once in
-#' the session (IC-77). A T console's draft stays in its composer, for the live row after the
+#' readline() leaves open then. A `secret` requires echo-free input (tty_secret()); unsupported
+#' consoles fail before reading. Secret reads never drain or display a composer's draft.
+#' A T console's ordinary draft stays in its composer, for the live row after the
 #' answer; a dim row above the chevron says so (ui_draft_kept(), D-243). A whole line that
 #' `accept(line)` takes, one of the question's answers, typed once its rows showed is its answer:
 #' read by the drain (echoed after the chevron, on the band) or, once the drain read what was typed
@@ -381,6 +381,10 @@ ui_undo_note = function(request) {
 ui_console_read = function(prompt, secret = FALSE, accept = NULL) {
   rd = console_repl_find()$reader
   hide = if (secret) tty_secret()
+  if (secret && is.null(hide)) {
+    gptr_abort("This console cannot provide hidden credential input.", "not_available",
+               member = "hidden credential input", provided_by = "console")
+  }
   # an answer on the input band as the prompts are; a secret off it, as typed without echo
   read = if (secret) function(p) gptr_readline(p, hide = hide) else function(p) {
     band_read(p, gptr_readline)
@@ -389,10 +393,6 @@ ui_console_read = function(prompt, secret = FALSE, accept = NULL) {
     drained = if (secret) FALSE else ui_drain(prompt, accept)
     if (rlang::is_string(drained)) return(drained)
     if (!secret) ui_draft_kept()
-    if (secret && is.null(hide) && once_first("visible", "secret")) {
-      console_write(ui_hint(paste("This console shows the key as you type; gptr_env() loads keys",
-                                  "from a file instead.")))
-    }
     ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead,
                                    if (isTRUE(drained)) accept, read),
                    interrupt = function(e) NA_character_)
@@ -509,7 +509,7 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
 
 #' Console input() (D-243): `? <prompt>`, a dim `Enter = <default>` under its text and the
 #' person's chevron; NA = cancelled; a secret is asked through RStudio's masked dialog there, else
-#' read without echo where the console allows (ui_console_read()); a console command typed there
+#' requires a no-echo terminal (ui_console_read()); a console command typed there
 #' waits for the next prompt (ui_console_command())
 #' @noRd
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
@@ -618,8 +618,8 @@ ui_change_asked = function(request) {
   invisible(NULL)
 }
 
-#' questions() through select() and input() (report 18 ui_questions_via()); every choice
-#' question also takes a typed answer
+#' questions() through select() and input(); text questions accept /skip and /cancel, returning
+#' skipped ids separately, and every choice question also takes a typed answer
 #' @noRd
 ui_questions_via = function(select, input, qs) {
   answers = list()

@@ -505,12 +505,14 @@ oauth_page = function(status, text) {
 #' Where the browser comes back: a loopback listener on 127.0.0.1 (a port from
 #' port_candidates(), started with the seed preserved; IC-61) that keeps the whole query string,
 #' `iss` included (IC-71), or, without httpuv and later, a paste prompt. Returns
-#' list(redirect_uri, wait(timeout), close()).
+#' list(redirect_uri, wait(timeout), close()). Nested pumps and served tools use the paste
+#' fallback: their waits cannot run later callbacks without violating IC-57.
 #' @noRd
 oauth_redirect_setup = function(port = NULL, path = "/callback", state = NULL) {
   st = new.env(parent = emptyenv())
   st$query = NULL
-  if (!oauth_loopback_ok()) {
+  nested = reactor_depth() > 0L || isTRUE(reactor_get()$tool_depth > 0L)
+  if (nested || !oauth_loopback_ok()) {
     p = if (is.null(port)) port_candidates(1L)[1L] else as.integer(port)
     uri = paste0("http://127.0.0.1:", p, path)
     return(list(redirect_uri = uri, close = function() invisible(NULL),
@@ -696,7 +698,8 @@ oauth_login_store = function(key, rec, scope) {
 #' (`"mcp:<server>"`). With `method = "auto"`, providers and MCP servers that support OAuth
 #' get the authorization-code flow with PKCE (S256): a page on 127.0.0.1 receives the redirect
 #' when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
-#' on. Key entry requires a UI with hidden input; it never falls back to visible typing.
+#' on. A login inside a tool also uses hidden paste entry because loopback callbacks cannot run
+#' recursively. Key entry requires a UI with hidden input; it never falls back to visible typing.
 #' The host prompt shows the destination and storage before entry. Leave it blank to skip,
 #' or dismiss or interrupt it to cancel. Secret answers are not returned to the model.
 #' `scope = "session"` keeps credentials in this R process until logout or exit; it does not
@@ -771,7 +774,8 @@ gptr_login = function(provider, method = c("auto", "oauth", "key"),
     if (is.na(value) || !nzchar(value)) return(oauth_login_incomplete(value))
     list(type = "api_key", key = value)
   }
-  rec$resource = destination
+  rec$resource = url_for_log(destination)
+  rec$endpoint_hash = hash_sha256(destination)
   oauth_login_store(provider, rec, scope)
   invisible(TRUE)
 }

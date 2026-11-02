@@ -47,12 +47,14 @@ test_that("login refuses unsupported hidden input and missing humans before read
 test_that("provider login binds the configured endpoint and refuses an endpoint edit", {
   local_user_dirs()
   withr::local_envvar(OPENROUTER_API_KEY = NA_character_)
-  endpoint = "https://first.example/v1"
+  endpoint = "https://first.example/v1?tenant=A"
   local_mocked_bindings(provider_base_url = function(provider) endpoint)
   local_scripted_ui(list(paste0("endpoint-canary-", strrep("a", 16))))
   gptr_login("openrouter", method = "key", scope = "session")
   provider = registry_get("provider", "openrouter")
   expect_s3_class(provider_credential(provider), "gptr_secret")
+  endpoint = "https://first.example/v1?tenant=B"
+  expect_error(provider_credential(provider), class = "gptr_error_no_key")
   endpoint = "https://first.example/other-tenant"
   expect_error(provider_credential(provider), class = "gptr_error_no_key")
   endpoint = "https://second.example/v1"
@@ -145,6 +147,7 @@ test_that("stdio slots reach only the owned child environment and edits invalida
               env = list(DEMO_API_TOKEN = "${DEMO_API_TOKEN}"))
   conns = new.env(parent = emptyenv())
   conns$demo = new.env(parent = emptyenv())
+  conns$demo$transport = "stdio"
   closed = 0L
   local_mocked_bindings(mcp_server_get = function(name, session = NULL) spec,
                         mcp_state = function() list(conns = conns),
@@ -187,6 +190,25 @@ test_that("HTTP MCP path and authentication configuration edits invalidate login
   conn$url = spec$url
   conn$spec$headers = list(`X-Account` = "another")
   expect_null(mcp_http_auth(conn))
+})
+
+test_that("stdio logout closes a cached child when its configuration is unavailable", {
+  local_user_dirs()
+  conns = new.env(parent = emptyenv())
+  conns$`removed-server` = new.env(parent = emptyenv())
+  conns$`removed-server`$transport = "stdio"
+  closed = 0L
+  local_mocked_bindings(mcp_state = function() list(conns = conns),
+                        mcp_server_get = function(...) stop("server is no longer startable"),
+                        mcp_server_resolve = function(...) stop("configuration was removed"),
+                        mcp_close = function(conn) closed <<- closed + 1L)
+  for (name in c("removed-server", "removed_server")) {
+    auth_store_set("mcp:removed-server:env:API_TOKEN",
+                    list(type = "env", key = "removed-server-canary-123456789"), scope = "session")
+    expect_true(gptr_logout(paste0("mcp:", name)))
+    expect_null(auth_store_get("mcp:removed-server:env:API_TOKEN"))
+  }
+  expect_identical(closed, 2L)
 })
 
 test_that("session OAuth refresh stays in memory without creating a credential lock", {
@@ -233,6 +255,26 @@ test_that("pasted OAuth errors cannot echo secret input through an error descrip
                                           redirect, NULL, "https://auth.example"),
                       "declined", class = "gptr_error_provider")
   expect_length(grepRaw(charToRaw(canary), serialize(err, NULL), fixed = TRUE, all = TRUE), 0L)
+})
+
+test_that("nested and served-tool OAuth redirects use hidden paste without a listener", {
+  local_user_dirs()
+  redirect = "http://127.0.0.1:50111/callback?code=example-code"
+  ui = local_scripted_ui(rep(list(redirect), 3L))
+  reactor = reactor_get()
+  old_tool_depth = reactor$tool_depth
+  withr::defer({ reactor$tool_depth = old_tool_depth })
+  depth = 0L
+  local_mocked_bindings(reactor_depth = function() depth,
+                        oauth_loopback_ok = function() stop("must not start a nested listener"))
+  for (state in list(c(1L, 0L), c(0L, 1L), c(1L, 1L))) {
+    depth = state[[1L]]
+    reactor$tool_depth = state[[2L]]
+    cb = oauth_redirect_setup(port = 50111L)
+    expect_identical(cb$wait(), redirect)
+    cb$close()
+  }
+  expect_identical(ui$log$answer, rep("[hidden]", 3L))
 })
 
 test_that("ordinary text questions can be submitted, skipped and cancelled", {

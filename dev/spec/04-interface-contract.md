@@ -1334,7 +1334,8 @@ gptr_logout(provider)
 ```
 
 `provider`: a provider id (`"anthropic"`, `"openrouter"`, ...) or `"mcp:<server>"`. `method = "auto"`: OAuth
-(PKCE S256, loopback callback when httpuv/later are installed, paste fallback otherwise) for providers and MCP
+(PKCE S256, loopback callback when httpuv/later are installed, hidden paste fallback otherwise or
+inside a nested pump or served tool, where loopback callbacks cannot run safely) for providers and MCP
 servers that support it, else masked key entry (`rstudioapi::askForPassword()` when available, else a no-echo
 console read); login refuses a UI that cannot hide input. The host prompt shows the actual destination
 and storage; entry authorizes them. `scope = "session"` holds metadata and vault handles for this R
@@ -6072,11 +6073,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     R's readline (echo on, Enter required; a secret input that no rstudioapi dialog asks reads with the echo
     off where R reads its own terminal, T or D: `gptr_readline()` sets `-echo` as the last mode before readline
     and restores the modes saved before it (a console call's, else `stty -g`) first on exit, an interrupt too,
-    writing the newline of Enter after the answer; elsewhere, or where stty fails, and in Emacs' comint (M-x
-    shell, ESS; `INSIDE_EMACS` names it), whose buffer shows and keeps what is typed whatever the tty's echo
-    (review of Tasks 22-27), a dim row above the chevron
-    says once in the session `This console shows the key as you type; gptr_env() loads keys from a file
-    instead.`, cheat-sheet review);
+    writing the newline of Enter after the answer; elsewhere, where stty fails, and in Emacs' comint (M-x
+    shell, ESS; `INSIDE_EMACS` names it), secret input fails before reading instead of echoing it.
+    Secret reads neither drain nor display a composer's draft);
     answers are unchanged, but a choice's or an input's free-text answer
     whose first word names a console command (`/exit`, `/help mode`; `ui_console_command()`) waits for the next
     prompt as a line typed during the run does (`console_typed_ahead()`) and the question reads again, while a
