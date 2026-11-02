@@ -5577,7 +5577,7 @@ totals line names the model and the context left.
    `  sub-agent <agent> failed (k/N): <reason>` (the first line of the end's `reason`, else its
    status) at `agent_end` through `console_write()`, two columns in as the prompts, each line cut
    to the console width; `(k/N)` counts the settled runs of a `subagent_schedule()` group
-   (`run$group`: `n`, `runs`) (D-224).
+   (`run$group`: `n`, `labels`, aligned `models` and `runs`, with NULL run slots for queued tasks) (D-224).
 5. The `r` tool tees only for a depth-0 run (§7.9); nested calls evaluate in an overlay (§6.1
    `envir`).
 6. Run totals (D-206): a foreground run's status line reads `done · <n> requests · <tokens> tokens ·
@@ -6397,7 +6397,15 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       its console keeps a line entered during the run for the next prompt, unless a question reads it, and
       hides the entered line at its next output, so the row says where it goes).
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
-      while a sub-agent it shows runs, a `peter()` call in the parent's `r` code whose run reads the keys, so the
+      while a sub-agent it shows runs. A scheduled group shows completed/total, active and queued counts and
+      active names with their phases; the short form keeps the counts. Membership changes append rosters
+      above the single live row (eight names per active/queued list, then an explicit remainder), with their
+      models: the requested target while queued, then the resolved target when the backend reports it. A
+      built-in CLI's `default` names the full id it receives, as `/model` does. At verbosity
+      2+ child tool names and retries are notices, without their input or output. Workers report `working`.
+      Direct groups also draw the single live row, handing it between active children; they have no composer
+      or steering target. A direct team/fan-out returns visibly for normal R printing; nested calls at
+      verbosity 2+ remain invisible. A `peter()` call in the parent's `r` code reads the keys, so the
       clock ticks and the queue view shows (steering review: the row said `keys show when sub-agent '…' #1
       returns`, without a clock, and hid the queued message); while the `r` tool evaluates in this process
       (`rec$frozen`, the call's id, set by `console_on_tool_start()` and cleared at that call's end, not a

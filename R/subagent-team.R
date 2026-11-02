@@ -5,13 +5,14 @@
 
 #' Run every item to settlement on the reactor
 #'
-#' `items` is a list of `list(start = function() <handle>, pool = "inline" | "worker" | "cli")`.
+#' `items` is a list of `list(start = function() <handle>, pool = "inline" | "worker" | "cli",
+#' label = <name>, model = <ref>)`; the label and model are optional.
 #' At most `max_total` children run at once and each pool stays within subagent_limit(); an item
 #' whose pool is full waits without holding back the others. `on_settle(i, handle)` is called
 #' once per child, in settlement order. At top level the pump runs under the console interrupt
 #' policy when P14 provides it, with no child run to steer or background (architecture 6.2); any
 #' exit other than a normal finish cancels the running children. Each child run gets `group`, the
-#' size and started runs of the group, so the console can count settled siblings (D-188).
+#' labels, model references and aligned runs (NULL while queued), so the console shows progress.
 #' @return The handles in item order.
 #' @noRd
 subagent_schedule = function(items, max_total, on_settle = NULL) {
@@ -25,7 +26,9 @@ subagent_schedule = function(items, max_total, on_settle = NULL) {
   done = FALSE
   group = new.env(parent = emptyenv())
   group$n = length(items)
-  group$runs = list()
+  group$labels = vapply(seq_along(items), function(i) items[[i]]$label %||% paste0("#", i), "")
+  group$models = vapply(items, function(it) it$model %||% "", "")
+  group$runs = vector("list", length(items))
   on.exit(if (!done) {
     for (h in handles[running]) tryCatch(h$cancel(), error = function(e) NULL)
   }, add = TRUE)
@@ -37,7 +40,7 @@ subagent_schedule = function(items, max_total, on_settle = NULL) {
       run = handles[[i]]$run
       if (is.environment(run)) {
         run$group = group
-        group$runs = c(group$runs, list(run))
+        group$runs[i] = list(run)
       }
       pending = setdiff(pending, i)
       running = c(running, i)
@@ -221,7 +224,7 @@ gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("ret
     m = members[[nm]]
     d = session_data(m)
     backend = subagent_backend(list(), subagent_model_info(d$model, d$id))
-    list(pool = subagent_pool(backend),
+    list(pool = subagent_pool(backend), label = nm, model = d$model,
          start = function() parallel_start(m, nm, backend, team, cur, caller))
   })
   subagent_schedule(items, max_active, function(i, h) subagent_record_end(team, h))
@@ -345,10 +348,10 @@ subagent_run_children = function(container, items, max_total, call) {
   container
 }
 
-#' A container returned from a route: invisible when answers stream (verbosity 2)
+#' Child answers do not stream: a top-level container stays visible; a nested one prints no reports
 #' @noRd
 subagent_value = function(s) {
-  if (verbosity() >= 2L) invisible(s) else s
+  if (!is.null(run_current()) && verbosity() >= 2L) invisible(s) else s
 }
 
 #' Bounded facts from matched R results of the settled child's current task, not its prose
@@ -490,7 +493,8 @@ route_team_run = function(call) {
     team = subagent_container(call, "team", cur, agents[[1L]][["model"]])
     items = lapply(names(agents), function(nm) {
       spec = subagent_team_spec(call, team, agents[[nm]], nm, length(agents) > 1L)
-      list(start = function() subagent_start(spec, cur),
+      list(start = function() subagent_start(spec, cur), label = nm,
+           model = subagent_model_info(spec$model, session_data(team)$id)$ref,
            pool = subagent_pool(spec$backend, registry_get("backend", spec$backend)))
     })
     max_total = call$args$opts$max_active %||% subagent_limit("inline")
@@ -605,7 +609,7 @@ gptr_map = function(call, target = subagent_fanout_item(call)) {
     force(i)
     list(start = function() {
       subagent_start(subagent_fanout_spec(call, fan, agent, target, i, keys[[i]], backend), cur)
-    }, pool = pool)
+    }, pool = pool, label = keys[[i]], model = fd$model)
   })
   subagent_run_children(fan, items, call$args$parallel, call)
 }
