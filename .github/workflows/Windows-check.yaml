@@ -1,4 +1,4 @@
-# R-CMD-check.yaml's Windows rows. Windows release runs the whole offline suite as ten serial
+# R-CMD-check.yaml's Windows rows. Windows release runs the whole offline suite as twelve serial
 # R CMD check shards (vignettes, examples and R's code analysis are the cran job's) behind the
 # required context windows-latest (release), a gate that passes only when the latest attempt of
 # each shard passed. windows-latest (oldrel-4) checks the whole package with CRAN's test list. The
@@ -21,12 +21,12 @@ permissions: read-all
 jobs:
   shards:
     runs-on: windows-latest
-    name: windows-latest (release, shard ${{ matrix.shard }}/10)
+    name: windows-latest (release, shard ${{ matrix.shard }}/12)
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
@@ -34,7 +34,7 @@ jobs:
       _R_CHECK_CRAN_INCOMING_: false
       _R_CHECK_USE_CODETOOLS_: false
       TESTTHAT_PARALLEL: false
-      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/10
+      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/12
     steps:
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
