@@ -51,6 +51,10 @@ R prompt without exporting and reloading a dataset. Model context is a separate,
 description of that workspace; see [Execution model](execution-model.html) for copying and
 storage.
 
+In a CLI footer, `selected` names the model argument sent to the CLI. A model name supplied
+by the CLI is labeled `reported`, with both names shown when they differ. A model's own prose
+does not verify its identity.
+
 For input piped to an R process, `peter(.stdin = TRUE)` explicitly reads standard input using
 the same syntax; end of input returns the session. The console UI can consume permission
 answers from that input too. Configure the model, credentials and permissions before

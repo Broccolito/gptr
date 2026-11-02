@@ -188,6 +188,11 @@ The executable must be on `PATH`, or you can give its path with the `gptr.cli_pa
 Then choose `model = "claude-cli"` (alias `claude_code`) or `model = "codex"` (alias
 `codex-cli`); `/model` in the console accepts the same names.
 
+Refresh a CLI's advertised model choices with
+`gptr_models(provider = "codex", refresh = TRUE)`; use `"claude-cli"` for Claude Code.
+CLI inventories may contain cached or bundled choices and do not verify account access;
+see `?gptr_models` for listing limits.
+
 
 ``` r
 options(gptr.cli_path = list(claude = "/path/to/claude", codex = "/path/to/codex"))
