@@ -723,7 +723,7 @@ test_that("skills and MCP tools are searched from their catalog texts", {
   ))
   local_bootstrap_service("skill.catalog", function(session, budget) stop("no skills"))
   local_bootstrap_service("mcp.catalog", function(session, budget) NULL)
-  expect_identical(nrow(member_search("bslib cards pull requests")), 0L)
+  expect_false(any(member_search("bslib cards pull requests")$kind %in% c("skill", "mcp")))
   local_bootstrap_service("skill.catalog", function(session, budget) character())
   expect_identical(nrow(member_search("bslib cards")), 0L)
 })
@@ -770,7 +770,8 @@ test_that("peter$search() indexes text that is not valid UTF-8 instead of failin
                   "[skill:shiny-bslib/SKILL.md]"),
             "</skills>"), collapse = "\n")
   })
-  expect_identical(member_search("shiny apps")$name[1L], "shiny-bslib")
+  shiny = member_search("shiny apps")
+  expect_identical(shiny$name[shiny$kind == "skill"][1L], "shiny-bslib")
   cv = member_search("cv")
   expect_identical(cv$kind[1L], "skill")
   expect_true(all(validUTF8(c(cv$name[1L], cv$signature[1L]))))

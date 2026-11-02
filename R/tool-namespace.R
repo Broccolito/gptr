@@ -900,6 +900,77 @@ ns_catalog_docs = function(session) {
   do.call(rbind, rows)
 }
 
+#' The loaded package's help database, or current Rd files under pkgload
+#' @noRd
+ns_gptr_rd = function() {
+  path = getNamespaceInfo(topenv(environment(ns_gptr_rd)), "path")
+  man = file.path(path, "man")
+  if (dir.exists(man)) {
+    files = list.files(man, pattern = "\\.Rd$", full.names = TRUE)
+    return(lapply(files, tools::parse_Rd))
+  }
+  tryCatch(tools::Rd_db("gptr", lib.loc = dirname(path)), error = function(e) list())
+}
+
+#' Text of selected top-level Rd fields, without evaluating examples or code
+#' @noRd
+ns_rd_text = function(rd, tags) {
+  fields = vapply(rd, function(x) attr(x, "Rd_tag") %||% "", "")
+  as_utf8(paste(unlist(rd[fields %in% paste0("\\", tags)], use.names = FALSE), collapse = " "))
+}
+
+#' Public exports (pkgload may export every internal, so read its NAMESPACE instead)
+#' @noRd
+ns_gptr_exports = function() {
+  ns = topenv(environment(ns_gptr_exports))
+  path = getNamespaceInfo(ns, "path")
+  if (dir.exists(file.path(path, "man"))) {
+    return(parseNamespaceFile(basename(path), dirname(path))$exports)
+  }
+  getNamespaceExports(ns)
+}
+
+#' A package function for text inspection only; never return it from a member
+#' @noRd
+ns_gptr_fun = function(name) {
+  ns = topenv(environment(ns_gptr_fun))
+  if (!exists(name, envir = ns, inherits = FALSE) || bindingIsActive(name, ns)) return(NULL)
+  get0(name, envir = ns, mode = "function", inherits = FALSE)
+}
+
+#' Search public functions and documented topics using installed Rd and real formals
+#' @noRd
+ns_gptr_docs = function(ctx = NULL) {
+  pages = ns_gptr_rd()
+  aliases = lapply(pages, function(rd) {
+    fields = vapply(rd, function(x) attr(x, "Rd_tag") %||% "", "")
+    vapply(rd[fields == "\\alias"], function(x) paste(unlist(x), collapse = ""), "")
+  })
+  public = ns_gptr_exports()
+  names = sort(unique(c(public, unlist(aliases, use.names = FALSE))))
+  rows = lapply(names, function(name) {
+    at = which(vapply(aliases, function(x) name %in% x, NA))
+    rd = if (length(at)) pages[[at[1L]]] else list()
+    id = paste0("gptr::", name)
+    signature = if (name %in% public) ns_formals_text(ns_gptr_fun(name)) else ""
+    text = paste(id, signature, ns_rd_text(rd, c("title", "description", "arguments")))
+    data.frame(id = id, text = text, kind = "api", stringsAsFactors = FALSE)
+  })
+  do.call(rbind, rows)
+}
+
+#' A compact entry point to package functions and topics, generated from the same index
+#' @noRd
+ns_gptr_index = function() {
+  names = sub("^gptr::", "", ns_gptr_docs()$id)
+  functions = names %in% ns_gptr_exports()
+  c("[help: gptr]", "Use peter$search(\"words\") to find functions, topics, tools and skills.",
+    "Use peter$help(\"gptr::name\") for documentation; source = TRUE for a function definition.",
+    "Internal source requires an explicit \"gptr:::name\"; it is not a public API.",
+    "", "Functions:", strwrap(paste(names[functions], collapse = ", "), width = 90L),
+    "", "Help topics:", strwrap(paste(names[!functions], collapse = ", "), width = 90L))
+}
+
 # ---- member functions (contract section 9.4) -----------------------------------------------------
 
 #' `peter$search(words, limit = 8L)`: BM25 over members, tools, sources, skills and MCP tools
@@ -922,7 +993,14 @@ member_search = function(words, limit = 8L) {
   sig = docs$signature[m]
   sid = if (is.null(s)) NULL else s$id
   specs = registry_all("tool", session = sid)
+  public = if ("api" %in% kinds) ns_gptr_exports() else character()
   for (i in which(is.na(sig))) {
+    if (identical(kinds[i], "api")) {
+      name = sub("^gptr::", "", ids[i])
+      fun = if (name %in% public) ns_gptr_fun(name)
+      sig[i] = paste0(ids[i], if (is.function(fun)) ns_formals_text(fun) else "")
+      next
+    }
     spec = if (kinds[i] %in% c("member", "plugin", "deferred")) specs[[ids[i]]]
     line = if (is.null(spec)) NULL else ns_spec_line(spec, ids[i])
     sig[i] = line %||% ids[i]
@@ -961,6 +1039,12 @@ ns_tool_help = function(spec) {
 #' section 5.2)
 #' @noRd
 ns_r_help = function(topic, package = NULL) {
+  if (is.null(package) || identical(package, "gptr")) {
+    for (rd in ns_gptr_rd()) {
+      aliases = strsplit(ns_rd_text(rd, "alias"), " ", fixed = TRUE)[[1L]]
+      if (topic %in% aliases) return(ns_rd_help(rd, "gptr", topic))
+    }
+  }
   hf = tryCatch(if (is.null(package)) {
     utils::help((topic), help_type = "text")
   } else {
@@ -977,12 +1061,18 @@ ns_r_help = function(topic, package = NULL) {
   if (is.null(rd)) {
     return(paste0("Help page '", basename(path), "' not found in package '", pkg, "'."))
   }
+  more = if (length(paths) > 1L) paste0(" (", length(paths), " matches; first shown)") else ""
+  ns_rd_help(rd, pkg, topic, more)
+}
+
+#' Render one Rd page with the same budgetable text format for source and installed packages
+#' @noRd
+ns_rd_help = function(rd, package, topic, more = "") {
   tf = tempfile(fileext = ".txt")
   on.exit(unlink(tf), add = TRUE)
   tools::Rd2txt(rd, out = tf, options = list(underline_titles = FALSE, width = 80L))
   txt = readLines(tf, encoding = "UTF-8", warn = FALSE)
-  more = if (length(paths) > 1L) paste0(" (", length(paths), " matches; first shown)") else ""
-  c(paste0("[help: ", pkg, "::", topic, "]", more), as_utf8(txt))
+  c(paste0("[help: ", package, "::", topic, "]", more), as_utf8(txt))
 }
 
 #' The spec of a plugin function `"<ns>/<name>"` that ns_resolve() would resolve (its namespace is
@@ -996,16 +1086,37 @@ ns_plugin_spec = function(key, sid = NULL) {
   spec
 }
 
-#' `peter$help(name, package = NULL, budget = 800L)`: the schema of a member, a plugin function
+#' `peter$help(name, package = NULL, budget = 800L, source = FALSE)`: member schema or R help
 #' (`"<ns>/<name>"`) or an MCP tool (`"<server>/<tool>"`) that resolves (IC-37), else R help
 #' @noRd
-member_help = function(name, package = NULL, budget = 800L) {
+member_help = function(name, package = NULL, budget = 800L, source = FALSE) {
   check_string(name, "name")
   check_string(package, "package", null = TRUE)
   check_number(budget, "budget", min = 20)
+  check_flag(source, "source")
+  internal = startsWith(name, "gptr:::")
+  if (startsWith(name, "gptr::")) {
+    if (!is.null(package) && !identical(package, "gptr")) {
+      arg_abort(package, "package", "gptr for a qualified gptr topic")
+    }
+    package = "gptr"
+    name = sub("^gptr:::+|^gptr::", "", name)
+  }
   sid = ns_session_id()
   lines = NULL
-  if (is.null(package)) {
+  if (isTRUE(source)) {
+    fun = if (is.null(package) || identical(package, "gptr")) ns_gptr_fun(name)
+    lines = if (!is.function(fun)) {
+      paste0("No function found for '", name, "' in gptr.")
+    } else if (!internal && !(name %in% ns_gptr_exports())) {
+      paste0("Use 'gptr:::", name, "' to request internal source; it is not a public API.")
+    } else {
+      label = paste0("gptr", if (internal) ":::" else "::", name)
+      c(paste0("[source: ", label, "]"), deparse_code(utils::removeSource(fun)))
+    }
+  } else if (identical(name, "gptr") && (is.null(package) || identical(package, "gptr"))) {
+    lines = ns_gptr_index()
+  } else if (is.null(package)) {
     spec = if (grepl("/", name, fixed = TRUE)) {
       ns_plugin_spec(name, sid)
     } else {
@@ -1528,7 +1639,8 @@ r_session_helpers_text = paste(
   "peter$find(pattern, path, sort), peter$ls(path), peter$describe(x). peter$search(\"words\") and",
   "peter$help(name) find more."
 )
-# The record = false sentence only with a document bound, when `r` has `record` (r_schema())
+#' The record = false sentence only with a document bound, when `r` has `record` (r_schema())
+#' @noRd
 r_session_out_text = function(ctx) {
   out = "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest."
   if (is.null(ctx$input$document)) return(out)
@@ -1539,16 +1651,20 @@ r_session_out_text = function(ctx) {
 # Member-only capabilities: descriptions and schemas
 tool_help_description = paste(
   "Show the full schema of a peter member, a plugin function (\"<ns>/<name>\") or an MCP tool",
-  "(\"<server>/<tool>\"), or else the R help page of a topic."
+  "(\"<server>/<tool>\"), or else the R help page of a topic. Use \"gptr\" for the package index,",
+  "\"gptr::name\" for its API docs, or source = true for a definition",
+  "(\"gptr:::name\" for internals)."
 )
 tool_help_schema = tool_obj(
   "name",
   name = tool_prop("string", "Member, \"<ns>/<name>\", \"<server>/<tool>\" or R topic"),
   package = tool_prop("string", "Package of the R help topic"),
-  budget = tool_prop("number", "Token budget (default 800)")
+  budget = tool_prop("number", "Token budget (default 800)"),
+  source = tool_prop("boolean", "Show a gptr function definition as text (default false)")
 )
 tool_search_description = paste(
-  "Search peter members, plugin functions, MCP tools and skills by keywords (BM25). Returns name,",
+  "Search gptr APIs and help topics, peter members, plugin functions, MCP tools and skills by",
+  "keywords (BM25). Returns name,",
   "kind, signature and score."
 )
 tool_search_schema = tool_obj(
@@ -1651,6 +1767,7 @@ builtin_tools = function(gptr) {
   gptr$register(gptr_prompt_section("plugins", ns_plugins_section, tier = "T1", order = 860L,
                                     budget = 1500L))
   gptr$register(gptr_spec("search_source", "members", docs = ns_search_docs))
+  gptr$register(gptr_spec("search_source", "gptr", docs = ns_gptr_docs))
   invisible(NULL)
 }
 

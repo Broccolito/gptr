@@ -7,7 +7,9 @@ r_tool_description = paste(
   "Run R code in the user's live R session. Objects persist between calls and belong to the user.",
   "Returns printed output, messages, warnings, errors with a traceback, and plots as images.",
   "Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and",
-  "last 60% and names a peter$out(id) handle for the rest."
+  "last 60% and names a peter$out(id) handle for the rest.",
+  "For harness APIs, use peter$search(\"words\") and peter$help(\"gptr\") inside r;",
+  "peter$help(\"gptr::name\") gives docs, source = TRUE gives its function definition."
 )
 r_tool_snippet =
   "Run R code in the user's live session (objects persist; plots come back as images)"

@@ -3512,8 +3512,8 @@ the remaining `r` budget when called inside `r`.
 | `grep` | P10 | `peter$grep(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE, context = 0L, limit = 100L, output = c("content", "files", "count"), sort = c("path", "count", "mtime"))` (`sort` applies to `files` and `count`) | `gptr_matches` (`output = "files"`: `gptr_files`; `"count"`: df `file`, `n`) | 0 (1 outside the project) |
 | `find` | P10 | `peter$find(pattern, path = ".", sort = c("path", "mtime", "size", "relevance"), type = "file", limit = 1000L)` (`relevance`: exact basename > prefix > substring > subsequence, ties by path; REQ-08) | `gptr_files` | 0 / 1 |
 | `ls` | P10 | `peter$ls(path = ".", sort = c("name", "mtime", "size"), long = FALSE)` | `gptr_files` | 0 / 1 |
-| `help` | P10 | `peter$help(name, package = NULL, budget = 800L)` | chr: a tool schema for `"<server>/<tool>"`, `"<ns>/<name>"` or a member name; else R help via `tools::Rd2txt()`; budgeted; `record = FALSE` | 0 |
-| `search` | P10 | `peter$search(words, limit = 8L)` | df `name`, `kind` (`member`, `plugin`, `mcp`, `skill`, `deferred`, or a `search_source` kind), `signature`, `score`; `record = FALSE` | 0 |
+| `help` | P10 | `peter$help(name, package = NULL, budget = 800L, source = FALSE)` | chr: a tool schema for `"<server>/<tool>"`, `"<ns>/<name>"` or a member name; else R help via `tools::Rd2txt()`. `"gptr"` gives a compact package index; `"gptr::name"` resolves a gptr topic. `source = TRUE` returns a gptr function definition as text, with `"gptr:::name"` required for internals; budgeted; `record = FALSE` | 0 |
+| `search` | P10 | `peter$search(words, limit = 8L)` | df `name`, `kind` (`api`, `member`, `plugin`, `mcp`, `skill`, `deferred`, or a `search_source` kind), `signature`, `score`; `api` indexes gptr exports and documented aliases from installed Rd and current function formals, without internal namespace enumeration; `record = FALSE` | 0 |
 | `describe` | P10 | `peter$describe(x, budget = 150L)` | `gptr_describe(x, budget)`; `record = FALSE` | 0 |
 | `plot` | P10 | `peter$plot(which = NULL, width = 1000L, height = 700L)` | attaches the current device's plot (or stored plot `which`, IC-67) at that size to the running `r` result (about 900 tokens); `invisible(NULL)`; `record = FALSE` | 0 |
 | `out` | P10 (only owner, IC-36) | `peter$out(id, stream = c("stdout", "stderr"), lines = NULL)` | chr (the stored full text from the session store, the process store or the spill file, or `lines` of it); `record = FALSE` | 0 |
@@ -3528,6 +3528,13 @@ the remaining `r` budget when called inside `r`.
 | `mcp` | P18 | `peter$mcp$<server>$<tool>(...)` | R values (`structuredContent` simplified, else text); `isError` -> `gptr_error_mcp_tool` in R | server annotations: `readOnlyHint` 0 (trusted servers), `destructiveHint = FALSE` 2, none 3 |
 
 `peter$<ns>$<name>(...)` reaches plugin members (§9.1 `namespace`).
+
+The `gptr` search source reads package documentation and public exports on demand, including
+documented aliases, without adding a manual to the frozen prompt. The shared `r` description
+points to `search` and `help`, including in the minimal preset and subscription CLI routes.
+Source help returns only a bounded textual definition from the actual function's formals and body;
+it never returns a function, environment or closure state, or executes the definition. Explicit
+internal source lookup does not authorize calling internals or changing the permission kernel (IC-53).
 
 
 ---
