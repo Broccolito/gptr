@@ -82,7 +82,8 @@ Provider-qualified references choose the transport: `anthropic/...` uses the API
 `claude-cli/...` uses Claude Code and `codex/...` uses Codex. For example, either kind of main
 agent can delegate with:
 
-```{r, eval = FALSE}
+
+``` r
 reviews = peter("Review this analysis.", analysis,
                 agents = list(stats = agent(model = "claude-cli/sonnet"),
                               code = agent(model = "codex/default")))
@@ -141,7 +142,8 @@ by the main agent keep their reports out of its terminal output for the main age
 A main agent or one of its children can call a decision model from R and use the typed result
 in a later step. For hundreds or thousands of judgements, pass the inputs as one batch:
 
-```{r, eval = FALSE}
+
+``` r
 keep = peter("Is this abstract about a randomised trial?", abstracts, model = "jev")
 selected = abstracts[keep]
 ```
