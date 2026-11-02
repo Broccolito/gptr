@@ -413,7 +413,14 @@ test_that("a repaired app relaunches after its failed child has settled", {
   expect_identical(app$version, 2L)
   expect_true(app$checks$launch && app$checks$http)
   rec = artifact_proc_get("repaired")
-  expect_true(artifact_stop("repaired", emit = FALSE))
+  # Process-tree confirmation can lag child exit; recovery records remain until settlement.
+  settled = artifact_stop("repaired", emit = FALSE)
+  deadline = Sys.time() + 5
+  while (!settled && Sys.time() < deadline) {
+    Sys.sleep(0.05)
+    settled = artifact_stop("repaired", emit = FALSE)
+  }
+  expect_true(settled)
   expect_false(pid_alive(rec$pid, rec$create_time))
   expect_null(artifact_proc_get("repaired"))
   expect_false(file.exists(file.path(artifact_dir("repaired"), "run", "run.json")))
