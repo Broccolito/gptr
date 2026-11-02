@@ -280,6 +280,16 @@ and kept workspace. Use \code{\link[=gptr_fork]{gptr_fork()}} to branch explicit
 so a turn that selects none keeps it. Agent-created objects remain in \code{envir}.
 }
 
+\section{Finding APIs}{
+
+Inside agent R code, \code{peter$search("provider setup")} searches callable members and gptr's
+public APIs and help topics. \code{peter$help("gptr")} lists the functions and topics;
+\code{peter$help("gptr::gptr_mcp_add")} reads installed help. Add \code{source = TRUE} for bounded
+function-definition text, without executing it. Private source requires an explicit name
+such as \code{peter$help("gptr:::member_help", source = TRUE)}; private functions are not supported
+APIs. Documentation and source are loaded on demand rather than added to every prompt.
+}
+
 \examples{
 fake = gptr_fake_provider(list("The data has 32 rows.", "The data has 11 columns."))
 session = peter("How many rows does the data have?", mtcars, model = fake)
