@@ -1403,7 +1403,7 @@ test_that("the status line names the model and the context left; unknown terms g
   expect_identical(status_line("aborted", NULL, usage, NA_real_), "aborted - 2 requests")
   # a CLI keeps its own transcript: no context term
   expect_identical(status_line("idle", NULL, fake_usage(route = "plan-cli", cost = 0.01)),
-                   "done - fake-1 - 1 request - 1.1k tokens - $0.0100")
+                   "done - selected fake-1 - 1 request - 1.1k tokens - $0.0100")
 })
 
 test_that("the status line names the model a CLI's default runs, as /status does (Task 33)", {
@@ -1414,10 +1414,48 @@ test_that("the status line names the model a CLI's default runs, as /status does
   usage = fake_usage("default", route = "plan-cli", cost = 0.01)
   usage$provider = "fakeclaude"
   expect_identical(status_line("idle", NULL, usage),
-                   "done - cli-claude-id - 1 request - 1.1k tokens - $0.0100")
+                   "done - selected cli-claude-id - 1 request - 1.1k tokens - $0.0100")
   usage$model = "claude-sonnet-5-5"
   expect_identical(status_line("idle", NULL, usage),
-                   "done - claude-sonnet-5-5 - 1 request - 1.1k tokens - $0.0100")
+                   "done - selected claude-sonnet-5-5 - 1 request - 1.1k tokens - $0.0100")
+})
+
+test_that("the CLI status line distinguishes selection from reported identity", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  usage = fake_usage("selected-model", route = "plan-cli")
+  expect_match(status_line("idle", usage = usage, response_model = "reported-model"),
+               "selected selected-model; reported reported-model", fixed = TRUE)
+  expect_match(status_line("idle", usage = usage, response_model = "selected-model"),
+               "reported selected-model", fixed = TRUE)
+  text = status_line("idle", usage = usage, response_model = paste0("bad\n\033", strrep("x", 500)))
+  expect_false(grepl("\n|\033", text))
+  expect_lt(nchar(text), 350)
+  expect_match(status_line("idle", usage = usage, response_model = c("a", "b")),
+               "selected selected-model", fixed = TRUE)
+})
+
+test_that("the CLI footer uses only metadata for its last usage request", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 160, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  usage = fake_usage("default", route = "plan-cli")
+  adapter = session_live(s)$adapter
+  adapter$pcli_request_id = usage$request_id[[1L]]
+  adapter$pcli_model_arg = "chosen"
+  session_append(s, entry_message(msg_assistant("answer", api = "cli-codex", provider = "fake",
+    model = "default", response_model = "observed", request_id = usage$request_id[[1L]])))
+  session_append(s, entry_message(msg_assistant("another answer", api = "cli-codex",
+    provider = "fake",
+    model = "chosen", response_model = "unrelated", request_id = "other-request")))
+  out = utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    invisible(console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = usage,
+                                              turns = 1L), ctx))
+  })
+  expect_match(paste(out, collapse = " "), "selected chosen; reported observed", fixed = TRUE)
+  expect_false(any(grepl("unrelated", out, fixed = TRUE)))
 })
 
 test_that("a reason's line breaks fold into one space; other controls stay escaped (sessions-7)", {

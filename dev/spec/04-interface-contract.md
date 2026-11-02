@@ -3068,6 +3068,23 @@ subagent_backend(gptr_agent(model = "codex"), model_resolve("codex"))     # "cli
 | `pcli_find(cli = c("claude", "codex"))` | `cli-common.R` | path from `gptr.cli_path`, then PATH, then the per-OS known locations of IC-65; native binaries only for claude (the npm `claude.cmd` shim is refused with an install hint); `gptr_error_cli_missing` otherwise | P20 |
 | `pcli_version(path)`, `pcli_probe(path)` | `cli-common.R` | `package_version` from `--version` and a capability probe of `--help` (cached per path and mtime; run only on first use or `check = TRUE`); below the minimum (`claude` >= 2.0.0), or a `-p` that defaults to `--bare` without a documented opt-out, signals `gptr_error_cli_version` | P20 (`status()` reads the cache only unless `gptr_providers(check = TRUE)`, IC-65) |
 | `pcli_login_status(cli)` | `cli-common.R` | help-gated CLI login-status commands, closed stdin and 3 s timeout per subprocess; returns only `signed in`, `not signed in`, or `unknown`, never raw auth output; no model request | P05 when `check_login = TRUE` |
+| `pcli_discover_models(provider)` | `cli-common.R`, `cli-claude.R`, `cli-codex.R` | sparse model records from Claude SDK initialization or the help-gated `codex debug models` JSON catalog; no user prompt or inference, no direct credential-file reads, 30 s timeout; unsupported discovery returns `NULL`, a successful empty catalog returns `list()`, failures omit raw CLI/account output | P05 provider discovery |
+
+CLI catalogs describe selectable choices and may be cached or bundled; they do not verify
+account entitlement. Missing capabilities and limits remain unknown. Claude selection aliases
+come from `value`; `resolvedModel` is catalog resolution, not observed inference identity.
+`response_model` holds only a report made by that request's CLI output (Claude init/message
+metadata or a Codex reroute notice). The selected `model` remains separate; a reported
+difference produces a notice. Codex exec normally reports no model identity.
+CLI console footers label the selected model when no identity was reported, and distinguish
+selection from a reported difference using metadata matched to the last request id.
+
+Before a request, a changed small `gptr_runtime` operator context block is appended describing the
+current requested/resolved route, transport, CLI model argument where applicable, and the
+last matching response's reported model or its absence. It points at the R session's
+`gptr_models()`/`gptr_providers()` rather than the enclosing CLI's helper/delegate catalog.
+Past blocks describe historical requests. Unchanged text is not appended again; ordinary
+transcript assembly includes the blocks in token estimates, request views and cache prefixes.
 
 Example calls:
 

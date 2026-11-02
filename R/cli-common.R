@@ -550,9 +550,8 @@ pcli_coach_preflight = function(cli, refuse) {
 #' Full model id behind `<cli provider>/default` (CLI invocations always get full ids, 03 8.4):
 #' the newest Sonnet for claude and the newest GPT for codex from the catalog
 #'
-#' For codex the catalog's GPT is used only when it is one of the full ids pcli_models("codex")
-#' lists: the Codex catalog lags the API's (08 2.C, verification row 44: gpt-6.1-sol is absent),
-#' so an unlisted id falls back to gpt-6-sol, the architecture 8.4 OpenAI default (D-097).
+#' Codex uses a GPT only when its own catalog lists it (including CLI discovery); API-only
+#' additions leave the shipped fallback unchanged. Resolution never starts discovery here.
 #' @noRd
 pcli_default_model = function(api) {
   codex = identical(api, "cli-codex")
@@ -561,7 +560,9 @@ pcli_default_model = function(api) {
   id = if (is.list(m)) m[["id"]] else NULL
   ok = rlang::is_string(id) && nzchar(id)
   if (ok && codex) {
-    ok = id %in% setdiff(vapply(pcli_models("codex"), function(x) x$id, ""), "default")
+    known = tryCatch(model_resolve(paste0("codex/", id), strict = FALSE), error = function(e) NULL)
+    ok = identical(known$provider, "codex") ||
+      id %in% setdiff(vapply(pcli_models("codex"), function(x) x$id, ""), "default")
   }
   if (ok) return(id)
   if (codex) "gpt-6-sol" else "claude-sonnet-5-5"
@@ -664,6 +665,31 @@ pcli_models = function(cli) {
   list(pcli_model_entry("default", "ChatGPT plan default model (Codex CLI)", context = 272000),
        pcli_model_entry("gpt-6-sol", "GPT-6 Sol (Codex CLI)", context = 272000),
        pcli_model_entry("gpt-6-luna", "GPT-6 Luna (Codex CLI)", context = 272000))
+}
+
+#' Discover selectable CLI models without a model request. Catalog entries are metadata,
+#' not proof of account access; absent limits and capabilities stay absent.
+#' @noRd
+pcli_discover_models = function(provider) {
+  if (identical(provider, "codex")) return(pcli_codex_models())
+  if (identical(provider, "claude-cli")) return(pcli_claude_models())
+  NULL
+}
+
+#' A sanitized CLI discovery failure: never include stdout, stderr or initialization account data
+#' @noRd
+pcli_catalog_error = function(cli) {
+  gptr_abort(paste0("Could not discover models from the ", cli, " CLI."), "provider",
+             provider = if (identical(cli, "claude")) "claude-cli" else cli)
+}
+
+#' A string vector from a CLI metadata array, without inventing missing values
+#' @noRd
+pcli_model_strings = function(x) {
+  if (is.null(x)) return(NULL)
+  x = unlist(x, use.names = FALSE)
+  if (!is.character(x)) return(NULL)
+  unique(x[nzchar(x)])
 }
 
 #' The provider record of a fake CLI (contract 12.4, IC-45): `offline = TRUE`, so
@@ -988,10 +1014,27 @@ pcli_turn_new = function(model, opts) {
   s$msg = NULL
   s$response_id = NULL
   s$response_model = NULL
+  s$selected_model = pcli_chr(s$state$pcli_model_arg) %||% pcli_model_id(model)
   s$t0 = reactor_now()
   s$timer = NULL
   s$state$turn_open = TRUE
   s
+}
+
+#' Keep CLI-reported identity separately from the selected model; surface reported differences
+#' @noRd
+pcli_response_model = function(s, model) {
+  model = pcli_chr(model)
+  if (is.null(model) || !nzchar(model)) return(invisible(NULL))
+  previous = s$response_model
+  s$response_model = model
+  if (!identical(previous, model) && !identical(s$selected_model, model)) {
+    shown = doc_one_line(substr(redact(model, "context"), 1L, 200L))
+    selected = doc_one_line(substr(redact(s$selected_model, "context"), 1L, 200L))
+    gptr_inform(paste0("The ", sub("^cli-", "", s$model$api), " CLI reports model ", shown,
+                       " (selected ", selected, ")."), "notice")
+  }
+  invisible(NULL)
 }
 
 #' Has the run been aborted (04 8.1 `opts$signal`)?
@@ -1346,10 +1389,12 @@ pcli_hook_forget = function(event, ctx) {
 builtin_cli = function(gptr) {
   gptr$register(gptr_provider("claude-cli", api = "cli-claude", type = "cli",
                               models = pcli_models("claude"),
+                              discover = function() pcli_discover_models("claude-cli"),
                               status = pcli_status("claude", "claude-cli", "cli-claude"),
                               aliases = "claude_code"))
   gptr$register(gptr_provider("codex", api = "cli-codex", type = "cli",
                               models = pcli_models("codex"),
+                              discover = function() pcli_discover_models("codex"),
                               status = pcli_status("codex", "codex", "cli-codex"),
                               aliases = c("codex", "codex-cli")))
   gptr$register(gptr_adapter("cli-claude", transport = "process_jsonl", build = pcli_claude_build,

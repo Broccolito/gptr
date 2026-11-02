@@ -68,6 +68,7 @@ test_that("a budget that is not finite counts as none: that child lives across r
              params = list(cli_budget = list(turns = Inf, cost = Inf)))
   opts = stub_opts(run = "r0000000001")
   first = pcli_claude_build(stub_model("claude"), ctx, opts)
+  expect_identical(opts$state$pcli_model_arg, "claude-sonnet-5-5")
   expect_identical(utils::tail(first$start$args, 2L), c("--model", "claude-sonnet-5-5"))
   expect_identical(opts$state$claude_flags, list(turns = NULL, cost = NULL))
   opts$state$process = stub_process()

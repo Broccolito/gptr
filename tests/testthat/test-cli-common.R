@@ -350,6 +350,14 @@ test_that("CLI invocations always get full model ids", {
   expect_identical(pcli_model_id(list(id = "default", api = "cli-claude")), "sonnet-9-9")
   # D-097: the catalog's newest GPT reaches codex only when the Codex route lists it
   expect_identical(pcli_model_id(list(id = "default", api = "cli-codex")), "gpt-6-sol")
+  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) {
+    if (identical(ref, "gpt")) return(list(id = "fresh-cli-model"))
+    if (identical(ref, "codex/fresh-cli-model")) {
+      return(list(id = "fresh-cli-model", provider = "codex"))
+    }
+    NULL
+  })
+  expect_identical(pcli_model_id(list(id = "default", api = "cli-codex")), "fresh-cli-model")
   expect_identical(pcli_model_id(list(id = "claude-opus-5-5", api = "cli-claude")),
                    "claude-opus-5-5")
   local_mocked_bindings(model_resolve = function(ref, strict = TRUE) stop("no catalog"))
