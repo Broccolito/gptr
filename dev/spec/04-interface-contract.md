@@ -1001,7 +1001,7 @@ All are `c("gptr_<name>", "gptr_listing", "data.frame")`, built by `new_listing(
 | `gptr_usage` | P06 | the §4.3 per-request columns (`detail = FALSE` aggregates by `by`: `group`, `requests`, `input`, `output`, `cache_read`, `cache_write`, `cost`); attribute `totals` (named num) |
 | `gptr_ledger` | P06 | the §4.3 ledger columns |
 | `gptr_sessions` | P06 | `id`, `file`, `created`, `updated`, `turns`, `model`, `status`, `title` (first prompt, 60 chars), `live` (lgl) |
-| `gptr_models` | P05 | `ref`, `provider`, `name`, `context`, `max_output`, `input_price`, `output_price`, `reasoning`, `aliases`, `status` |
+| `gptr_models` | P05 | `ref`, `provider`, `name`, `context`, `max_output`, `input_price`, `output_price`, `reasoning`, `aliases`, `status`, `availability`, `checked_at` |
 | `gptr_providers` | P05 | `id`, `type`, `api`, `credential` (`"NAME #fp"` or `NA`), `source`, `status`, `default_model`, `egress` (`ack`/`needed`), `version` (CLIs); optional `login` when `check_login = TRUE` |
 | `gptr_mcp_servers` | P18 | `name`, `source` (`gptr:user`, `gptr:project`, `claude-code:user`, ...), `transport`, `era`, `status`, `tools`, `exposure`, `tokens`, `trusted` (the spec's: annotations trusted by the user file, §11.7; project trust is status `untrusted`) |
 | `gptr_skills` | P17 | `name`, `description`, `source`, `path`, `tokens`, `visible` |
@@ -1379,9 +1379,22 @@ gptr_models(query = NULL, provider = NULL, refresh = FALSE)
 
 `query`: a regular expression or alias (`"sonnet"`) matched against ref, name and aliases; `provider`: a provider
 id filter. Returns a `gptr_models` data frame from the merged catalog (snapshot < cache < overrides < user config <
-live discovery of local servers). `refresh = TRUE` fetches the models.dev data with ETag into
-`R_user_dir("gptr", "cache")` (interactive or explicit only; the one network call of this function). Offline
-resolution takes under 0.1 s (P05 acceptance). Conditions: `invalid_argument`, `network` (refresh only).
+provider discovery). The default listing and model resolution remain offline. With `provider = NULL`,
+`refresh = TRUE` fetches models.dev with ETag into `R_user_dir("gptr", "cache")`. With a provider it
+contacts that provider's native model-list API or `discover()` callback after egress and replay checks,
+using the configured credential. Native API discovery is bounded to four pages, four seconds total,
+one second per request and 4096 records. Except for native Ollama evidence preparation, selected
+providers with listing support are also inventoried before real use;
+successes and failures are cached for five minutes in this R process, bound to endpoint, registry
+lifecycle and credential fingerprint for native API requests. Explicit refresh bypasses the cache.
+Failed discovery retains previous models. A successful empty listing removes only that provider's
+discovery layer; reviewed, configured and registered entries remain. Sparse new ids gain no guessed
+tools, token limits or prices. `availability` is `unknown`, `advertised`, `unlisted`, or the latter two
+with ` (stale)` after expiry, failure or endpoint change; `checked_at` is the last successful listing's
+UTC time (`NA` before any). Advertisement does not establish inference capability, entitlement or
+billing access. Native Ollama evidence and preflight requirements remain unchanged.
+Conditions: `invalid_argument`, `egress`, `not_recorded`; native Ollama and global catalog refresh
+can signal `network`. Other failed provider listings are advisory and reported in the listing footer.
 
 ```r
 gptr_models("sonnet")
@@ -2601,13 +2614,14 @@ reactor_pump(until = function() done, slice_ms = 100L)
 | `provider_get(id)` | `provider-registry.R` | `<spec:provider>` or `NULL` | P05, P08, P13, P20 |
 | `adapter_get(api)` | `provider-registry.R` | `<spec:adapter>` or `gptr_error_not_available` | P06, P13, P20 |
 | `provider_credential(provider)` | `provider-registry.R` | a handle bound to the provider's configured origin, resolved in the order explicit > vault > credential store > keyring > environment table (§8 of `03`); `NULL` for providers without auth; `gptr_error_no_key` otherwise | P05, P08, P13 |
-| `provider_ready(model, provider, safety = NULL, prepare = FALSE)` | `provider-registry.R` | a disabled provider is `gptr_error_not_available`, then `provider_preflight()`; `prepare = TRUE` goes through `model_prepare()` for an Ollama route; the gateway's check before a call changes anything (D-251) | P05, P08 |
+| `provider_ready(model, provider, safety = NULL, prepare = FALSE)` | `provider-registry.R` | a disabled provider is `gptr_error_not_available`, then `provider_preflight()`; `prepare = TRUE` inventories the globally registered provider after consent using `catalog_inventory()`, or goes through `model_prepare()` for native Ollama evidence; scoped provider records do not populate the global catalog | P05, P08 |
+| `catalog_inventory(provider, safety = NULL, refresh = FALSE)` | `catalog-models.R` | provider listing after egress/replay checks; five-minute process cache for success/failure, explicit refresh bypasses it; API credential fingerprints bind cached results, ordinary offline metadata reads never unlock keyring; failed advisory discovery preserves the prior catalog (§6.2) | P05, P08, P13, P20 |
 | `provider_stream(model, context, opts, emit, done, run = NULL)` | `provider-registry.R` | starts one model request on the reactor through the model's adapter (§8.1); returns the transfer/task id; calls `emit(ev)` for every INFRA-02 event and `done(msg)` exactly once with the final assistant message; never throws after it returns (INFRA-02) | P06, P07 (compaction), P13 (emulation) |
 | `builtin_providers(gptr)` | `provider-registry.R` | registers the provider records of §8.1-8.2 of `03` as data; P05 also declares `builtin:fake` (IC-08) | P02 load |
 | `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` | `provider-usage.R` | §4.3 records; cost from the dated price tier in force on `when`; TTL-split cache writes (1 h at 2x input, 5 min at 1.25x) | P06, P12, P13, P20 |
 | `usage_log_append(row)`, `usage_log()` | `provider-usage.R` | the process System 1 accounting log (append-only) | P13, P06 |
 | `catalog_get()` | `catalog-models.R` | the merged catalog (§11.10) | P05, P07 |
-| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions (only the named provider's references after a known `provider/`; a models.dev route with no catalog model yet adds that `gptr_models(refresh = TRUE)` downloads them, D-250); local providers accept unknown ids | P06, P08, P13, P17, P19 |
+| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | pure offline model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions and an explicit `gptr_models(provider = "id", refresh = TRUE)` hint for registered providers; local providers accept unknown ids | P06, P08, P13, P17, P19 |
 | `model_prepare(ref, safety = NULL)` | `catalog-models.R` | explicit selected-model preparation: discovers missing/stale Ollama evidence, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P06, P08, P13 |
 | `provider_preflight(model, provider, safety = NULL)` | `catalog-models.R` | pure no-I/O check before payload/state/image serialization and credential lookup; private discovery evidence binds endpoint/path/model/server/lifecycle; missing protected safety means local-only TRUE (IC-74; `07-local-ollama.md` section 2.1) | P05, P08, P13 |
 | `catalog_aliases()` | `catalog-models.R` | chr of alias names (for `identifier_known()`) | P08 |
@@ -3592,7 +3606,7 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 
 | # | Kind | Resolve / order | Fields (type) | Contract and failure rule | Defined by |
 |---|---|---|---|---|---|
-| 1 | `provider` | first | `id` (= name, `^[a-z0-9][a-z0-9-]*$`), `api` chr(1), `base_url` chr(1)\|NULL, `auth` (chr of environment-variable names, or `function()` returning a handle or `NULL`, or `NULL` for none), `models` list of model records\|NULL (a record's `prices` is a data frame or a list of price records, checked and normalised to the §4.9 df by the `prices.table` service, D-250), `compat` named list, `type` (`chat`, `classifier`, `cli`), `headers` named list of non-secret strings, `discover` `function()` -> df\|NULL, `status` `function()` -> named list\|NULL (reads cached data only unless `check = TRUE`), `aliases` chr, `local` lgl(1) (loopback server: unknown model ids allowed, no egress acknowledgement), `offline` lgl(1) (no remote model is called: exempt from `replay_guard()`; the fake provider and the mock-server and fake-CLI test providers, IC-45), `rate` `list(requests_per_s, tokens_per_s)`\|NULL (static limits feeding the token bucket, IC-64) | data; `auth` is evaluated per request (INFRA-22); `discover` runs only on request | P02 |
+| 1 | `provider` | first | `id` (= name, `^[a-z0-9][a-z0-9-]*$`), `api` chr(1), `base_url` chr(1)\|NULL, `auth` (chr of environment-variable names, or `function()` returning a handle or `NULL`, or `NULL` for none), `models` list of model records\|NULL (a record's `prices` is a data frame or a list of price records, checked and normalised to the §4.9 df by the `prices.table` service, D-250), `compat` named list, `type` (`chat`, `classifier`, `cli`), `headers` named list of non-secret strings, `discover` `function()` -> df with `id`\|list of sparse model records\|NULL, `status` `function()` -> named list\|NULL (reads cached data only unless `check = TRUE`), `aliases` chr, `local` lgl(1) (loopback server: unknown model ids allowed, no egress acknowledgement), `offline` lgl(1) (no remote model is called: exempt from `replay_guard()`; the fake provider and the mock-server and fake-CLI test providers, IC-45), `rate` `list(requests_per_s, tokens_per_s)`\|NULL (static limits feeding the token bucket, IC-64) | data; `auth` is evaluated per request (INFRA-22); `discover` runs on explicit refresh or before real provider use after consent, cached for five minutes; NULL is unsupported, an empty result succeeds, and errors retain prior models | P02 |
 | 2 | `adapter` | first (name = `api`) | `api`, `transport`, `build`, `parse`, `stream`, `classify`, `capabilities` (§8.1) | never throws after `start` (§8.1); a thrown error becomes `stop_reason = "error"` | P02 |
 | 3 | `model` | first (name = `provider/id`) | the §4.9 record fields (`prices` as for `provider`) | data | P02 |
 | 4 | `router` | first | `route` `function(request, ctx)` -> chr(1) model ref or `list(model, thinking = NULL, state = NULL)`; `description`; `timeout` num(1) (default 2 s) | usable as `model = <name>`; called by P06 before every request and at compaction (IC-69); `request` = `list(prompt, messages (projected, read-only), state, previous, reason = "turn" \| "compaction" \| "direct", session)`; a timeout, an error or a non-registered result falls back to the default model with a diagnostic and a `route` event; System 1 through `ctx$decide()`; each switch appends `model_change` and a `gptr.router` state entry | P02 |
