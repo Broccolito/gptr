@@ -238,9 +238,13 @@ test_that("workers guard and request credentials for the resolved provider", {
       invisible(TRUE)
     },
     replay_guard = function(...) invisible(TRUE),
+    model_default = function(role) {
+      expect_identical(role, "system1")
+      "typesafe/jev-latest"
+    },
     worker_key_provider = function(ref) {
-      seen$key = ref
-      "anthropic"
+      seen$keys = c(seen$keys, ref)
+      sub("/.*$", "", ref)
     },
     run_start = function(...) list(),
     subagent_handle = function(session, run) list(session = session, run = run))
@@ -250,8 +254,10 @@ test_that("workers guard and request credentials for the resolved provider", {
   handle = backend_worker_start(spec, NULL)
   canonical = model_resolve("sonnet")$ref
   expect_identical(seen$guard, "anthropic")
-  expect_identical(seen$key, canonical)
-  expect_identical(session_live(handle$session)$adapter$worker_spec$model, canonical)
+  expect_identical(seen$keys, c(canonical, "typesafe/jev-latest"))
+  w = session_live(handle$session)$adapter$worker_spec
+  expect_identical(w$model, canonical)
+  expect_identical(w$key_provider, c("anthropic", "typesafe"))
 })
 
 test_that("workers freeze the effective System 1 role and its bounded policy", {
@@ -597,17 +603,25 @@ test_that("a worker composes native typed decisions with provenance and one prox
 
 test_that("real workers use the configured authenticated System 1 without unrelated keys", {
   local_worker_lib()
+  withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr")
   srv = local_mock_server("systemone")
   local_gw()
   local_team_fake(worker_script(function(request) {
     if (nzchar(Sys.getenv("WORKER_UNRELATED_KEY"))) stop("unrelated credential reached worker")
-    if (length(request$last_results)) return("authenticated decisions complete")
+    if (length(request$last_results)) {
+      result = request$last_results[[1L]]
+      if (isTRUE(result$is_error)) {
+        return(list(error = paste(unlist(result$content), collapse = "\n"), status = 400L))
+      }
+      return("authenticated decisions complete")
+    }
     question = encodeString(paste("Synthetic worker pass?", request$last_user), quote = "\"")
     list(tool = "r", input = list(code = paste0(
-      "snapshot = lapply(c('system1', 's1_max_active', 's1_rounds', ",
+      "worker_error = tryCatch({snapshot = lapply(c('system1', 's1_max_active', 's1_rounds', ",
       "'s1_state_max', 's1_max_elements'), function(n) getOption(paste0('gptr.', n))); ",
       "answers = peter(", question, ", c('alpha', 'beta'), ",
-      "model = getOption('gptr.system1'))")))
+      "model = getOption('gptr.system1'), replay = 'live'); NULL}, ",
+      "error = function(e) list(class = class(e), reason = conditionMessage(e)))")))
   }))
   judge = srv$provider
   judge$local = FALSE
@@ -630,8 +644,10 @@ test_that("real workers use the configured authenticated System 1 without unrela
     }
     home = new.env()
     team = peter(paste("Judge synthetic inputs", source), agents = list(screen = agent(
-      model = "fake/fake-1", backend = "worker", export = c("snapshot", "answers"))),
+      model = "fake/fake-1", backend = "worker",
+      export = c("snapshot", "answers", "worker_error"))),
       envir = home)
+    expect_null(home$worker_error, info = paste(unlist(home$worker_error), collapse = "\n"))
     expect_identical(team$screen$text, "authenticated decisions complete")
     expect_identical(home$snapshot, list("mock/mock-s1", 1L, 2L, 123L, 7L))
     expect_s3_class(home$answers, "gptr_decision")
@@ -652,13 +668,21 @@ test_that("real workers use the configured authenticated System 1 without unrela
 
 test_that("an unused worker System 1 role needs no consent and an actual refusal sends nothing", {
   local_worker_lib()
+  withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr")
   srv = local_mock_server("systemone")
   local_gw()
   local_team_fake(worker_script(function(request) {
-    if (length(request$last_results)) return("refusal checked")
+    if (length(request$last_results)) {
+      result = request$last_results[[1L]]
+      if (isTRUE(result$is_error)) {
+        return(list(error = paste(unlist(result$content), collapse = "\n"), status = 400L))
+      }
+      return("refusal checked")
+    }
     list(tool = "r", input = list(code = paste0(
       "refusal = tryCatch(peter('Refused synthetic pass?', 'alpha', ",
-      "model = getOption('gptr.system1')), error = function(e) class(e))")))
+      "model = getOption('gptr.system1'), replay = 'live'), ",
+      "error = function(e) list(class = class(e), reason = conditionMessage(e)))")))
   }))
   judge = srv$provider
   judge$local = FALSE
@@ -672,7 +696,7 @@ test_that("an unused worker System 1 role needs no consent and an actual refusal
   team = peter("Check refused judgment", agents = list(screen = agent(
     model = "fake/fake-1", backend = "worker", export = "refusal")), envir = home)
   expect_identical(team$screen$text, "refusal checked")
-  expect_true("gptr_error_egress" %in% home$refusal)
+  expect_true("gptr_error_egress" %in% home$refusal$class, info = home$refusal$reason)
   expect_identical(nrow(srv$log()), 0L)
 })
 
