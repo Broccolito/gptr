@@ -168,6 +168,14 @@ An artifact integration fixture now retries the existing deferred-settlement res
 five seconds and still requires the process and every recovery record to be gone; its real
 app relaunch/cleanup case passed all 12 assertions without changing product cleanup policy.
 
+A later connection shard exposed a console fixture that required an edit summary without an
+elapsed-time suffix, although calls taking at least one second correctly include one. A real
+edit with an injected 1.1 s checkpoint delay reproduced the assertion failure. The fixture now
+accepts only the exact summary plus an optional, well-formed elapsed suffix, while retaining
+its line-position, single-diff and edited-content assertions. The forced slow case passes all
+five assertions; console UI/rendering and controlled dispatch-duration suites pass 1,047
+assertions without failures, warnings or skips. Product rendering and clocks are unchanged.
+
 CRAN lists 1.0.0 as published on 2026-11-01. Preparing 1.0.1 removes the version-reuse warning;
 incoming checks can still report an update-recency NOTE for seven days. Record that external
 release-policy result explicitly rather than suppressing incoming checks or claiming a clean
