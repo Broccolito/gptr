@@ -314,7 +314,10 @@ optional_os_skips = list(
       "wire log resolves symlinks before enforcing its path boundary",
       "wire default and fallback paths reject escaping symlinks"),
     "test-subagent-worker.R" = "a worker exits within 10 s when its parent is killed (IC-60)",
-    "test-cli-common.R" = "an install location without the execute bit is skipped, as on PATH")),
+    "test-cli-common.R" = "an install location without the execute bit is skipped, as on PATH",
+    "test-cli-codex.R" = c(
+      "the hook command in the argv runs through the shell, logs its start, denies a tool",
+      "on Windows the hook command runs through PowerShell, logs its start, denies a tool"))),
   unix = list(
     "test-mcp-client.R" = "a .cmd MCP command runs through cmd.exe /d /c call on Windows",
     "test-bridge-lang.R" =
@@ -323,7 +326,9 @@ optional_os_skips = list(
       "Windows wire log resolves junctions and refuses dangling ones",
       "Windows wire log refuses escaping file links, dangling or not"),
     "test-utils-paths.R" =
-      "Windows junctions and file links keep control and secret paths guarded"))
+      "Windows junctions and file links keep control and secret paths guarded",
+    "test-cli-codex.R" =
+      "on Windows the hook command runs through PowerShell, logs its start, denies a tool"))
 
 optional_allowed_skip = function(file, name, windows) {
   optional_platform_guard(file, name, windows) ||
