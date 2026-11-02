@@ -1,9 +1,9 @@
 {
   "preset": {
-    "minimal": 1262,
-    "standard_core": 2335,
-    "standard_all": 2813,
-    "standard_interactive": 2956
+    "minimal": 1304,
+    "standard_core": 2422,
+    "standard_all": 2900,
+    "standard_interactive": 3043
   },
   "estimate": {
     "minimal": 1641,
