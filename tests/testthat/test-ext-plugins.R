@@ -714,7 +714,7 @@ test_that("a Claude bundle with no usable components is failed with an actionabl
 test_that("a plugin R factory can intentionally register no components", {
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "empty-factory"}')
-  write_file(file.path(d, "extensions", "empty.R"), 'function(gptr) invisible(NULL)')
+  write_file(file.path(d, "extensions", "empty.R"), "function(gptr) invisible(NULL)")
   withr::defer(plugin_forget(d))
   withr::defer(ext_unload("plugin:empty-factory"))
   expect_true(plugin_enable(d, 3L))
@@ -1109,6 +1109,40 @@ test_that("gptr_plugins lists settings plugins and candidates, and a plugin enab
                    list(kind = "directory", enabled = FALSE, state = "disabled"))
   expect_identical(row("claude-listed"),
                    list(kind = "claude-plugin", enabled = FALSE, state = "disabled"))
+})
+
+test_that("configured marketplace paths explain their omission before plugin activation", {
+  root = local_gw()
+  marketplace = '{"name": "catalog", "plugins": [{"name": "tools", "source": "./tools"}]}'
+  for (dir in c("downloads/posit-skills", ".gptr/plugins/passive-marketplace")) {
+    write_file(file.path(root, dir, ".claude-plugin", "marketplace.json"), marketplace)
+  }
+  write_file(file.path(root, "downloads", "feature-dev", ".claude-plugin", "plugin.json"),
+             '{"name": "feature-dev"}')
+  write_file(file.path(root, "downloads", "feature-dev", "extensions", "never.R"),
+             'function(gptr) stop("plugin code ran during listing")')
+  gptr_config(plugins = c("./downloads/posit-skills", "./downloads/feature-dev"),
+              .scope = "session")
+  gptr_reload()
+  before = nrow(gptr_registry(diagnostics = TRUE))
+  pl = gptr_plugins()
+  row = pl[pl$name == "feature-dev", , drop = FALSE]
+  expect_identical(row$state, "lazy")
+  expect_true(row$enabled)
+  expect_false(any(pl$name %in% c("posit-skills", "passive-marketplace")))
+  diag = gptr_registry(diagnostics = TRUE)
+  expect_identical(nrow(diag), before + 1L)
+  expect_identical(tail(diag$source, 1L), "user")
+  msg = paste(tail(diag$message, 1L), collapse = "")
+  expect_match(msg, "downloads/posit-skills", fixed = TRUE)
+  expect_match(msg, "Choose an individual plugin directory", fixed = TRUE)
+  out = paste(utils::capture.output(print(pl)), collapse = "\n")
+  expect_match(out, "gptr_registry(diagnostics = TRUE)", fixed = TRUE)
+  expect_identical(attr(gptr_plugins(), "footer"), attr(pl, "footer"))
+  expect_identical(nrow(gptr_registry(diagnostics = TRUE)), nrow(diag))
+  gptr_config(plugins = "./downloads/feature-dev", .scope = "session")
+  expect_null(attr(gptr_plugins(), "footer"))
+  expect_identical(nrow(gptr_registry(diagnostics = TRUE)), nrow(diag))
 })
 
 test_that("an installed toy plugin package is discovered, lazy and activated on use", {

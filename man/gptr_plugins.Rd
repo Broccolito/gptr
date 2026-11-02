@@ -32,6 +32,8 @@ supported declarative resources or R extension code fails activation; details, i
 skipped components, are available from \code{gptr_registry(diagnostics = TRUE)}. An R factory may
 intentionally register no resources. Listing an unactivated plugin does not verify its
 compatibility, credentials or external programs.
+Invalid entries in the \code{plugins} setting are skipped with a listing footer and a registry
+diagnostic, even before activation.
 }
 \examples{
 gptr_plugins(installed = TRUE)

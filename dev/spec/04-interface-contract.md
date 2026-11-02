@@ -4153,6 +4153,8 @@ fails with a plugin diagnostic when no supported declarative resources or R exte
 found. A valid R factory may intentionally register nothing. Passive plugin listing does not
 verify compatibility, credentials or required external programs; skipped components are recorded
 in `gptr_registry(diagnostics = TRUE)`.
+Invalid explicitly configured targets are skipped by `gptr_plugins()` with a listing footer and
+a registry diagnostic, even before activation.
 
 ### 11.13 Frontmatter of skills, agents and templates
 
