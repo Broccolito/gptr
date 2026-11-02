@@ -255,6 +255,19 @@ test_that("references resolve: exact, alias, family, normalised, owner, thinking
   expect_equal(jev$api, "typesafe-system-one")
 })
 
+test_that("discovered CLI ids cannot redirect declared model aliases", {
+  local_catalog()
+  aliases = c("sonnet", "opus", "haiku")
+  before = vapply(aliases, function(alias) model_resolve(alias)$ref, "")
+  full_sonnet = model_resolve("sonnet")$id
+  catalog_discovered_set("claude-cli", lapply(c(aliases, "default"), function(id) {
+    list(provider = "claude-cli", id = id)
+  }))
+  expect_identical(vapply(aliases, function(alias) model_resolve(alias)$ref, ""), before)
+  expect_identical(model_resolve("claude-cli/sonnet")$ref, "claude-cli/sonnet")
+  expect_identical(pcli_model_id(model_resolve("claude-cli/default")), full_sonnet)
+})
+
 test_that("a model record has every contract field (04 section 4.9)", {
   local_catalog()
   r = model_resolve("sonnet")
@@ -304,6 +317,8 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
 
 test_that("an alias with no model in the catalog is unknown, not a fuzzy match", {
   local_catalog(catalog_snapshot(generated = "2026-10-22")$models)
+  catalog_discovered_set("claude-cli", list(list(provider = "claude-cli", id = "gemini")))
+  expect_identical(model_resolve("claude-cli/gemini")$ref, "claude-cli/gemini")
   for (ref in c("gemini", "gemini:high")) {
     expect_error(model_resolve(ref), "alias 'gemini' .*gptr_models\\(refresh = TRUE\\)",
                  class = "gptr_error_unknown_model")

@@ -695,9 +695,9 @@ model_alias_target = function(name, targets) {
   unname(targets[match(catalog_norm_id(name), catalog_norm_id(names(targets)))])
 }
 
-#' Resolve a reference without its thinking suffix (report 09 match_pattern()): an exact
-#' provider/id, then an id, an alias, a registered provider named alone (its first declared
-#' model, IC-19), then the fuzzy step
+#' Resolve a reference without its thinking suffix: explicit provider-qualified matching,
+#' a declared alias, an unqualified id, a registered provider named alone (its first declared
+#' model, IC-19), then the fuzzy step. An unavailable alias never matches an unrelated id.
 #' @noRd
 model_match = function(pat, ctg) {
   idx = ctg$index
@@ -728,17 +728,20 @@ model_match = function(pat, ctg) {
       return(list(entry = NULL, how = "unknown id for known provider", provider = pv, id = rest))
     }
   }
-  every = rep(TRUE, nrow(idx))
-  r = model_match_id(pat, ctg, every)
-  if (!is.null(r)) return(r)
   e = model_alias_entry(alias, ctg)
   if (!is.null(e)) return(list(entry = e, how = "alias"))
+  declared_alias = catalog_norm_id(pat) %in% catalog_norm_id(names(targets))
+  every = rep(TRUE, nrow(idx))
+  if (!declared_alias) {
+    r = model_match_id(pat, ctg, every)
+    if (!is.null(r)) return(r)
+  }
   pv = model_provider_id(pat, ctg)
   models = if (!is.na(pv)) provider_get(pv)$models
   e = if (length(models)) model_alias_entry(paste0(pv, "/", models[[1L]]$id), ctg)
   if (!is.null(e)) return(list(entry = e, how = "provider"))
   # an alias with no model is not guessed ("gemini" with no Gemini Pro is no Gemini Flash)
-  if (catalog_norm_id(pat) %in% catalog_norm_id(names(targets))) {
+  if (declared_alias) {
     return(list(entry = NULL, how = "alias without a model", alias = pat))
   }
   r = model_match_fuzzy(pat, ctg, every)
