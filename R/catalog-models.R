@@ -1183,7 +1183,10 @@ catalog_discovered_set = function(pid, entries, evidence = list(), replace = TRU
 catalog_discover = function(p, safety = NULL, credential = NULL) {
   if (catalog_ollama_provider(p)) return(catalog_ollama_discover(p, safety))
   pid = p[["id"]] %||% p[["name"]]
-  rows = if (is.function(p[["discover"]])) p[["discover"]]() else provider_models(p, credential)
+  discover = p[["discover"]]
+  rows = if (is.function(discover) && !isTRUE(attr(discover, "gptr_native_models"))) {
+    discover()
+  } else provider_models(p, credential)
   if (is.null(rows)) return(invisible(NULL))
   if (is.data.frame(rows)) {
     rows = lapply(seq_len(nrow(rows)), function(i) as.list(rows[i, , drop = FALSE]))
@@ -1216,26 +1219,38 @@ catalog_discover = function(p, safety = NULL, credential = NULL) {
   invisible(unique(ids))
 }
 
-#' Inventory after consent, once per endpoint/lifecycle/credential per five minutes. Failed
+#' Inventory identity without credential lookup; header names are HTTP case-insensitive
+#' @noRd
+catalog_inventory_route = function(p) {
+  if (is.null(p)) return(NULL)
+  endpoint = provider_base_url(p)
+  headers = adp_merge_headers(list(), p[["headers"]] %||% list())
+  names(headers) = tolower(names(headers))
+  headers = headers[order(names(headers), method = "radix")]
+  list(endpoint = if (!is.null(endpoint)) hash_sha256(endpoint),
+       headers = hash_sha256(json_encode(headers)), api = p[["api"]],
+       lifecycle = catalog_lifecycle(p[["id"]] %||% p[["name"]]))
+}
+
+#' Inventory after consent, once per endpoint/headers/lifecycle/credential per five minutes. Failed
 #' attempts are cached too, and never remove the last successful discovery or offline catalog.
 #' Only credential fingerprints enter the cache; ordinary catalog reads do not look up keys.
 #' @noRd
-catalog_inventory = function(p, safety = NULL, refresh = FALSE) {
+catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
   if (is.null(p) || check_running() || isTRUE(p[["offline"]]) || isFALSE(p[["enabled"]])) {
     return(invisible(NULL))
   }
   native = catalog_ollama_provider(p)
-  callback = is.function(p[["discover"]])
+  callback = is.function(p[["discover"]]) &&
+    !isTRUE(attr(p[["discover"]], "gptr_native_models"))
   if (!native && !callback && !provider_models_supported(p)) return(invisible(NULL))
   pid = p[["id"]] %||% p[["name"]]
   if (native) catalog_ollama_endpoint(p, safety)
   egress_check(pid, p, safety = safety %||% egress_safety(), context = "none")
-  replay_guard(p, what = "model listing")
+  replay_guard(p, what = "model listing", mode = replay_mode(replay))
   credential = tryCatch(if (!native && !callback) provider_credential(p) else NULL,
                         error = function(e) e)
-  endpoint = provider_base_url(p)
-  route = list(endpoint = if (!is.null(endpoint)) hash_sha256(endpoint),
-                api = p[["api"]], lifecycle = catalog_lifecycle(pid))
+  route = catalog_inventory_route(p)
   key = c(route, list(credential = if (inherits(credential, "error")) class(credential)[[1L]] else {
     credential[c("name", "fp")]
   }))
@@ -1244,15 +1259,21 @@ catalog_inventory = function(p, safety = NULL, refresh = FALSE) {
   if (!refresh && identical(old[["key"]], key) && now - old[["attempted"]] < 300) {
     return(invisible(old[["ids"]]))
   }
+  record = old %||% list()
+  record$key = key
+  record$route = route
+  record$attempted = now
+  # The reactor may prepare another request while this listing is pending.
+  if (!native) {
+    st = the$catalog %||% list()
+    st$inventory[[pid]] = record
+    the$catalog = st
+  }
   # Native Ollama failures remain actionable preflight errors; other listings are advisory.
   found = if (native) catalog_discover(p, safety) else tryCatch({
     if (inherits(credential, "error")) stop(credential)
     catalog_discover(p, safety, credential)
   }, error = function(e) e)
-  record = old %||% list()
-  record$key = key
-  record$route = route
-  record$attempted = now
   if (is.null(found) || inherits(found, "error")) {
     status = if (inherits(found, "error")) found[["status"]]
     record$error = if (inherits(found, "gptr_error_no_key")) "missing credentials" else {
@@ -1736,7 +1757,7 @@ provider_preflight = function(model, provider, safety = NULL) {
 #' advertised routes once per cache interval after consent; failure preserves catalog facts.
 #' Offline replay must not call this (P08's replay guard runs first).
 #' @noRd
-model_prepare = function(ref, safety = NULL) {
+model_prepare = function(ref, safety = NULL, replay = NULL) {
   catalog_local_only(safety)
   rec = model_resolve(ref)
   p = provider_get(rec[["provider"]])
@@ -1748,7 +1769,7 @@ model_prepare = function(ref, safety = NULL) {
       rec = model_resolve(ref)
     }
   } else {
-    catalog_inventory(p, safety)
+    catalog_inventory(p, safety, replay = replay)
     rec = model_resolve(ref)
   }
   provider_preflight(rec, p, safety)
@@ -1797,7 +1818,8 @@ catalog_grepl = function(pattern, x) {
 #' @return A `gptr_models` data frame with columns `ref`, `provider`, `name`, `context`,
 #'   `max_output`, `input_price`, `output_price` (USD per million tokens, selected for today's
 #'   date from the available catalog; `0` for verified local inference, `NA` when unknown),
-#'   `reasoning`, `aliases`, `status`, `availability` (`unknown`, `advertised`, `unlisted`, or
+#'   `reasoning` (`NA` when unknown), `aliases`, `status`, `availability` (`unknown`,
+#'   `advertised`, `unlisted`, or
 #'   the latter two with ` (stale)`) and `checked_at` (UTC time of the last successful provider
 #'   listing, `NA` when none). Unlisted models remain in the catalog. Catalog prices can be
 #'   stale and are not an account quote.
@@ -1848,12 +1870,9 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   inventory = the$catalog[["inventory"]] %||% list()
   state = lapply(unique(rows$provider), function(pid) {
     entry = inventory[[pid]]
-    endpoint = provider_base_url(provider_get(pid))
     entry$stale = !is.null(entry$error) || is.null(entry$checked) ||
-      reactor_now() - entry$checked >= 300 || !identical(entry$route,
-        list(endpoint = if (!is.null(endpoint)) hash_sha256(endpoint),
-             api = provider_get(pid)[["api"]],
-             lifecycle = catalog_lifecycle(pid)))
+      reactor_now() - entry$checked >= 300 ||
+      !identical(entry$route, catalog_inventory_route(provider_get(pid)))
     entry
   })
   names(state) = unique(rows$provider)
@@ -1868,8 +1887,9 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   df = data.frame(ref = rows$ref, provider = rows$provider, name = rows$name,
                   context = context, max_output = num(function(e) catalog_num(e[["max_output"]])),
                   input_price = rate("input"), output_price = rate("output"),
-                  reasoning = vapply(entries, function(e) isTRUE(e[["reasoning"]]), NA,
-                                     USE.NAMES = FALSE),
+                  reasoning = vapply(entries, function(e) {
+                    if (is.null(e[["reasoning"]])) NA else isTRUE(e[["reasoning"]])
+                  }, NA, USE.NAMES = FALSE),
                   aliases = rows$aliases, status = rows$status, availability = availability,
                   checked_at = checked_at, stringsAsFactors = FALSE)
   rownames(df) = NULL

@@ -645,7 +645,9 @@ s1_preflight = function(model, provider, safety = NULL) {
 
 #' Explicit preparation of a selected model (IC-74, contract 7.5); never used under replay
 #' @noRd
-s1_prepare = function(ref, safety = NULL) model_prepare(ref, safety = safety)
+s1_prepare = function(ref, safety = NULL, replay = NULL) {
+  model_prepare(ref, safety = safety, replay = replay)
+}
 
 #' The configured System 1 reference, or NULL when none is usable (contract 7.5, IC-74)
 #' @noRd

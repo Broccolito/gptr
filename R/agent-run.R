@@ -486,7 +486,8 @@ run_model_ready = function(run, ref) {
                 context = context_mode(call$args$opts))
   replay_guard(pr %||% rec, mode = replay_mode(call$args$replay))
   if (!is.null(registry_model_spec(ref, sid))) return(rec)
-  provider_ready(rec, pr, safety = stream_safety(NULL, run), prepare = TRUE)
+  provider_ready(rec, pr, safety = stream_safety(NULL, run), prepare = TRUE,
+                   replay = call$args$replay)
 }
 
 #' Resolve a model reference for a session: P05's catalog, else a provider spec registered for

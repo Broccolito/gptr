@@ -873,7 +873,7 @@ gateway_guards = function(call, s, safety, m = NULL, ready = TRUE) {
   if (!ready) return(invisible(TRUE))
   rec = run_model_resolve(ref, d$id)
   stream_chat_model(rec)
-  provider_ready(rec, pr, safety, prepare = TRUE)
+  provider_ready(rec, pr, safety, prepare = TRUE, replay = call$args$replay)
   provider_credential(pr, register = FALSE)
   invisible(TRUE)
 }

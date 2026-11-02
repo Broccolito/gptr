@@ -68,3 +68,22 @@ Live availability, CLI picker outputs and actual Peter interaction remain root's
 acceptance responsibility. The public listing adds two columns; existing columns and the
 `gptr_models()` signature are unchanged. No dependency, option, credential-storage format,
 usage-table field or model-resolution network behavior was added.
+
+## Review follow-up
+
+The final review pass preserves the effective per-call replay override through gateway,
+in-run and decision-model preparation; ordinary explicit refresh still obeys process replay.
+Hosted by-reference decision requests now inventory after their existing guards. Endpoint and
+canonical effective-header hashes bind both cache reuse and offline freshness. Built-in
+OpenAI-compatible callbacks reuse the native credential path, so entering or rotating an optional
+vLLM key invalidates a prior failed attempt. Advisory attempts are recorded before listing I/O,
+so reactor reentry reuses the pending attempt without a separate inflight framework. Missing
+reasoning metadata is displayed as `NA`; conservative model capability defaults are unchanged.
+
+Offline regressions were added before the fixes. The final focused run passed
+`provider-model-discovery` (105 assertions), `arch-layers`, `catalog-models` and `s1-route` with
+no failures or warnings. The replay regression covers both gateway and in-run preparation plus
+the continuing refusal of ordinary explicit refresh in replay mode. The matching model-list Rd
+was regenerated and checked. Named architecture edges describe the actual consent guards and
+the CLI footer's read-only session path lookup. The sole R slot was then released to root for
+integrated installation and live Peter acceptance.

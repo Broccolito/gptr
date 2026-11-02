@@ -187,13 +187,13 @@ arch_contract_edges = function() {
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp",
                     "mcp", "console", "console", "console", "console", "console", "subagent",
-                    rep("gptr", length(gptr_child)), "mcp", "mcp", rep("catalog", 3L)),
+                    rep("gptr", length(gptr_child)), "mcp", "mcp", rep("catalog", 4L), "console"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
                "tool_execute_frame", "checkpoint_before", "checkpoint_after", "perm_denial_text",
                "perm_refused", "r_call_new", "model_canonical", "pcli_default_model",
                "session_unqueue", "compact_threshold", "prompt_model", "route_refuse_s1_args",
                gptr_child, "trust_holds", "trust_carry", "egress_check", "egress_safety",
-               "replay_guard")
+               "replay_guard", "replay_mode", "entries_path")
   )
 }
 

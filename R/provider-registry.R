@@ -100,14 +100,14 @@ provider_optional_auth = function(id, vars) {
 #' @noRd
 provider_discoverer = function(id) {
   force(id)
-  function() {
+  structure(function() {
     if (check_running()) return(NULL)
     p = provider_get(id)
     if (is.null(p)) return(NULL)
     rows = provider_models(p)
     if (is.null(rows)) return(NULL)
     data.frame(id = vapply(rows, function(m) m[["id"]], ""), stringsAsFactors = FALSE)
-  }
+  }, gptr_native_models = TRUE)
 }
 
 #' Whether the provider uses a supported native model-list API (not an inference request)
@@ -1284,15 +1284,17 @@ stream_conversational = function(model, adapter) {
 #' A disabled provider is refused, then the request preflight runs (IC-74); `prepare = TRUE`
 #' inventories a registered provider after consent, or prepares native Ollama evidence.
 #' @noRd
-provider_ready = function(model, provider, safety = NULL, prepare = FALSE) {
+provider_ready = function(model, provider, safety = NULL, prepare = FALSE, replay = NULL) {
   if (isFALSE(provider[["enabled"]])) {
     pid = provider[["id"]] %||% provider[["name"]]
     gptr_abort(paste0("Provider ", pid, " is disabled in the settings (providers.", pid,
                       ".enabled)."), "not_available", member = pid, provided_by = "settings")
   }
-  if (prepare && catalog_ollama_route(model, provider)) return(model_prepare(model$ref, safety))
+  if (prepare && catalog_ollama_route(model, provider)) {
+    return(model_prepare(model$ref, safety, replay))
+  }
   if (prepare && identical(provider, provider_get(model[["provider"]]))) {
-    catalog_inventory(provider, safety)
+    catalog_inventory(provider, safety, replay = replay)
     refreshed = model_resolve(model[["ref"]], strict = FALSE)
     if (!is.null(refreshed)) {
       if (!is.null(model$thinking)) {

@@ -29,7 +29,8 @@ downloads a model.}
 A \code{gptr_models} data frame with columns \code{ref}, \code{provider}, \code{name}, \code{context},
 \code{max_output}, \code{input_price}, \code{output_price} (USD per million tokens, selected for today's
 date from the available catalog; \code{0} for verified local inference, \code{NA} when unknown),
-\code{reasoning}, \code{aliases}, \code{status}, \code{availability} (\code{unknown}, \code{advertised}, \code{unlisted}, or
+\code{reasoning} (\code{NA} when unknown), \code{aliases}, \code{status}, \code{availability} (\code{unknown},
+\code{advertised}, \code{unlisted}, or
 the latter two with \code{ (stale)}) and \code{checked_at} (UTC time of the last successful provider
 listing, \code{NA} when none). Unlisted models remain in the catalog. Catalog prices can be
 stale and are not an account quote.

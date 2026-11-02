@@ -1385,11 +1385,11 @@ contacts that provider's native model-list API or `discover()` callback after eg
 using the configured credential. Native API discovery is bounded to four pages, four seconds total,
 one second per request and 4096 records. Except for native Ollama evidence preparation, selected
 providers with listing support are also inventoried before real use;
-successes and failures are cached for five minutes in this R process, bound to endpoint, registry
-lifecycle and credential fingerprint for native API requests. Explicit refresh bypasses the cache.
+successes and failures are cached for five minutes in this R process, bound to endpoint, effective
+provider headers, registry lifecycle and credential fingerprint for native API requests. Explicit refresh bypasses the cache.
 Failed discovery retains previous models. A successful empty listing removes only that provider's
 discovery layer; reviewed, configured and registered entries remain. Sparse new ids gain no guessed
-tools, token limits or prices. `availability` is `unknown`, `advertised`, `unlisted`, or the latter two
+tools, token limits or prices. Absent reasoning metadata is displayed as `NA`. `availability` is `unknown`, `advertised`, `unlisted`, or the latter two
 with ` (stale)` after expiry, failure or endpoint change; `checked_at` is the last successful listing's
 UTC time (`NA` before any). Advertisement does not establish inference capability, entitlement or
 billing access. Native Ollama evidence and preflight requirements remain unchanged.
@@ -2614,15 +2614,15 @@ reactor_pump(until = function() done, slice_ms = 100L)
 | `provider_get(id)` | `provider-registry.R` | `<spec:provider>` or `NULL` | P05, P08, P13, P20 |
 | `adapter_get(api)` | `provider-registry.R` | `<spec:adapter>` or `gptr_error_not_available` | P06, P13, P20 |
 | `provider_credential(provider)` | `provider-registry.R` | a handle bound to the provider's configured origin, resolved in the order explicit > vault > credential store > keyring > environment table (§8 of `03`); `NULL` for providers without auth; `gptr_error_no_key` otherwise | P05, P08, P13 |
-| `provider_ready(model, provider, safety = NULL, prepare = FALSE)` | `provider-registry.R` | a disabled provider is `gptr_error_not_available`, then `provider_preflight()`; `prepare = TRUE` inventories the globally registered provider after consent using `catalog_inventory()`, or goes through `model_prepare()` for native Ollama evidence; scoped provider records do not populate the global catalog | P05, P08 |
-| `catalog_inventory(provider, safety = NULL, refresh = FALSE)` | `catalog-models.R` | provider listing after egress/replay checks; five-minute process cache for success/failure, explicit refresh bypasses it; API credential fingerprints bind cached results, ordinary offline metadata reads never unlock keyring; failed advisory discovery preserves the prior catalog (§6.2) | P05, P08, P13, P20 |
+| `provider_ready(model, provider, safety = NULL, prepare = FALSE, replay = NULL)` | `provider-registry.R` | a disabled provider is `gptr_error_not_available`, then `provider_preflight()`; `prepare = TRUE` inventories the globally registered provider after consent using `catalog_inventory()`, or goes through `model_prepare()` for native Ollama evidence; scoped provider records do not populate the global catalog | P05, P08 |
+| `catalog_inventory(provider, safety = NULL, refresh = FALSE, replay = NULL)` | `catalog-models.R` | provider listing after egress/replay checks under the caller's effective `replay` override; five-minute process cache for success/failure, explicit refresh bypasses it; endpoint/header hashes and native API credential fingerprints bind cached results; an attempt is recorded before advisory I/O so reentrant preparation reuses it, ordinary offline metadata reads never unlock keyring; failed advisory discovery preserves the prior catalog (§6.2) | P05, P08, P13, P20 |
 | `provider_stream(model, context, opts, emit, done, run = NULL)` | `provider-registry.R` | starts one model request on the reactor through the model's adapter (§8.1); returns the transfer/task id; calls `emit(ev)` for every INFRA-02 event and `done(msg)` exactly once with the final assistant message; never throws after it returns (INFRA-02) | P06, P07 (compaction), P13 (emulation) |
 | `builtin_providers(gptr)` | `provider-registry.R` | registers the provider records of §8.1-8.2 of `03` as data; P05 also declares `builtin:fake` (IC-08) | P02 load |
 | `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` | `provider-usage.R` | §4.3 records; cost from the dated price tier in force on `when`; TTL-split cache writes (1 h at 2x input, 5 min at 1.25x) | P06, P12, P13, P20 |
 | `usage_log_append(row)`, `usage_log()` | `provider-usage.R` | the process System 1 accounting log (append-only) | P13, P06 |
 | `catalog_get()` | `catalog-models.R` | the merged catalog (§11.10) | P05, P07 |
 | `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | pure offline model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions and an explicit `gptr_models(provider = "id", refresh = TRUE)` hint for registered providers; local providers accept unknown ids | P06, P08, P13, P17, P19 |
-| `model_prepare(ref, safety = NULL)` | `catalog-models.R` | explicit selected-model preparation: discovers missing/stale Ollama evidence, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P06, P08, P13 |
+| `model_prepare(ref, safety = NULL, replay = NULL)` | `catalog-models.R` | selected-model preparation: discovers missing/stale Ollama evidence, or inventories another supported provider under effective `replay`, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P06, P08, P13 |
 | `provider_preflight(model, provider, safety = NULL)` | `catalog-models.R` | pure no-I/O check before payload/state/image serialization and credential lookup; private discovery evidence binds endpoint/path/model/server/lifecycle; missing protected safety means local-only TRUE (IC-74; `07-local-ollama.md` section 2.1) | P05, P08, P13 |
 | `catalog_aliases()` | `catalog-models.R` | chr of alias names (for `identifier_known()`) | P08 |
 | `model_default(role = c("chat", "small", "system1"))` | `catalog-models.R` | `chr(1)` ref from settings, else the first available route (§8.4 of `03`), else `NULL` | P08, P07, P13 |

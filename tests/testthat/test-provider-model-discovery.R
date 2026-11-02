@@ -152,6 +152,7 @@ test_that("provider refresh merges advertised IDs while retaining catalog capabi
   found = gptr_models(provider = "openai", refresh = TRUE)
   expect_true(all(found$availability == "advertised"))
   expect_true(all(!is.na(found$checked_at)))
+  expect_true(is.na(found$reasoning[found$ref == "openai/new-id"]))
   known = model_resolve("openai/known")
   expect_equal(known$context, 8192)
   expect_true(known$tool_call)
@@ -233,6 +234,112 @@ test_that("custom discover callbacks support sparse records and successful empty
   catalog_discover(p)
   expect_null(model_resolve("openai/callback-id", strict = FALSE))
   expect_identical(model_resolve("openai/known")$id, "known")
+})
+
+test_that("before-use inventory preserves an explicit replay override without opening refresh", {
+  local_gw()
+  local_inventory_catalog()
+  withr::local_options(gptr.replay = "replay")
+  n = 0L
+  local_mocked_bindings(egress_check = function(...) TRUE,
+    provider_credential = function(...) NULL,
+    catalog_http_request = function(...) {
+      n <<- n + 1L
+      inventory_response(list(data = list(list(id = "known"))))
+    })
+  p = provider_get("openai")
+  m = model_resolve("openai/known")
+  expect_error(provider_ready(m, p, prepare = TRUE), class = "gptr_error_not_recorded")
+  expect_identical(provider_ready(m, p, prepare = TRUE, replay = "auto")$id, "known")
+  expect_identical(model_prepare(m$ref, replay = "auto")$id, "known")
+  call = list(args = list(replay = "auto", opts = list(context = "none")))
+  s = session_new(m$ref, "auto", home = new.env())
+  expect_invisible(gateway_guards(call, s, NULL))
+  run = new.env(parent = emptyenv())
+  run$shell = s
+  run$opts = list(call = call, safety = list())
+  expect_identical(run_model_ready(run, m$ref)$id, "known")
+  expect_equal(n, 1L)
+  expect_error(gptr_models(provider = "openai", refresh = TRUE),
+               class = "gptr_error_not_recorded")
+  expect_equal(n, 1L)
+})
+
+test_that("tenant header edits invalidate reuse and offline freshness without looking up keys", {
+  local_inventory_catalog()
+  withr::local_options(gptr.replay = "auto")
+  n = 0L
+  local_mocked_bindings(egress_check = function(...) TRUE,
+    provider_credential = function(...) NULL,
+    catalog_http_request = function(...) {
+      n <<- n + 1L
+      inventory_response(list(data = list(list(id = "known"))))
+    })
+  gptr_models(provider = "openai", refresh = TRUE)
+  local_settings(providers = list(openai = list(headers = list(`OpenAI-Project` = "tenant-b"))))
+  local({
+    local_mocked_bindings(provider_credential = function(...) stop("offline listing read key"))
+    expect_identical(gptr_models(provider = "openai")$availability, "advertised (stale)")
+  })
+  p = provider_get("openai")
+  provider_ready(model_resolve("openai/known"), p, prepare = TRUE, replay = "auto")
+  expect_equal(n, 2L)
+  expect_identical(gptr_models(provider = "openai")$availability, "advertised")
+})
+
+test_that("built-in compatible callbacks retry when their optional credential changes", {
+  local_inventory_catalog()
+  key = NULL
+  n = 0L
+  local_mocked_bindings(egress_check = function(...) TRUE,
+    provider_credential = function(...) key,
+    catalog_http_request = function(url, headers, ...) {
+      n <<- n + 1L
+      if (is.null(key)) return(inventory_response(list(error = "unauthorized"), 401L))
+      expect_identical(headers$authorization, list("Bearer ", key))
+      inventory_response(list(data = list(list(id = "local-id"))))
+    })
+  p = provider_get("vllm")
+  m = model_resolve("vllm/local-id")
+  provider_ready(m, p, prepare = TRUE, replay = "auto")
+  key = structure(list(id = "next-key", fp = "new-fp"), class = "gptr_secret")
+  provider_ready(m, p, prepare = TRUE, replay = "auto")
+  expect_equal(n, 2L)
+  expect_identical(gptr_models(provider = "vllm")$availability, "advertised")
+})
+
+test_that("reentrant preparation reuses an advisory inventory attempt already in progress", {
+  local_inventory_catalog()
+  p = provider_get("openai")
+  n = 0L
+  local_mocked_bindings(egress_check = function(...) TRUE,
+    provider_credential = function(...) NULL,
+    catalog_http_request = function(...) {
+      n <<- n + 1L
+      if (n == 1L) catalog_inventory(p, replay = "auto")
+      inventory_response(list(data = list(list(id = "known"))))
+    })
+  catalog_inventory(p, replay = "auto")
+  expect_equal(n, 1L)
+  expect_identical(gptr_models(provider = "openai")$availability, "advertised")
+})
+
+test_that("hosted decision requests inventory only after their effective replay guard", {
+  local_inventory_catalog()
+  withr::local_options(gptr.replay = "replay")
+  n = 0L
+  local_mocked_bindings(egress_check = function(...) TRUE,
+    provider_credential = function(...) NULL,
+    catalog_http_request = function(...) {
+      n <<- n + 1L
+      inventory_response(list(models = list(list(name = "jev-latest"))))
+    })
+  target = s1_target("typesafe/jev-latest")
+  expect_error(s1_guards(target, "replay"), class = "gptr_error_not_recorded")
+  expect_equal(n, 0L)
+  s1_guards(target, "auto")
+  s1_guards(target, "auto")
+  expect_equal(n, 1L)
 })
 
 test_that("credential presence detects session handles without unlocking persistent storage", {
