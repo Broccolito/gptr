@@ -528,7 +528,10 @@ test_that(oracle_title(store_recs, "S13"), {
 test_that(oracle_title(store_recs, "S14"), {
   s = stored_run()
   x = store_read(s$file)
-  last = x$entries[[length(x$entries)]]$message
+  messages = Filter(function(e) {
+    identical(e$type, "message") && identical(e$message$role, "assistant")
+  }, x$entries)
+  last = messages[[length(messages)]]$message
   expect_identical(msg_text(last), "All done \u2713")
   expect_identical(Encoding(msg_text(last)), "UTF-8")
 })
@@ -710,6 +713,8 @@ test_that("SIGKILL mid-stream: resume parses, keeps the last complete message, n
   file = wait_ready(p)
   skip_if(is.null(file), "the child did not start streaming")
   p$kill()
+  p$wait(5000L)
+  expect_false(p$is_alive())
   r = gptr_resume(file, envir = new.env())
   ids = vapply(session_data(r)$entries, function(e) e$id, "")
   expect_false(any(duplicated(ids)))
@@ -736,6 +741,8 @@ test_that("SIGKILL mid-append, resume, three appends: all present and the tree c
   skip_if(is.null(file), "the child did not start appending")
   Sys.sleep(0.2)
   p$kill()
+  p$wait(5000L)
+  expect_false(p$is_alive())
   r = gptr_resume(file, envir = new.env())
   for (i in 1:3) session_append(r, entry_custom("test.after", list(i = i)))
   lines = readLines(file, encoding = "UTF-8", warn = FALSE)

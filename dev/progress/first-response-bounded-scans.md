@@ -1,6 +1,6 @@
 # First-response delay and bounded file checkpoints
 
-Date: 2026-11-02. Implementation and focused offline checks are complete. Remote CI and
+Date: 2026-11-02. Implementation and expanded local checks are complete. Remote CI and
 CRAN incoming validation must certify the final PR head; no result is asserted here yet.
 
 ## Reproduction
@@ -33,6 +33,25 @@ provider text arrived at 26.758 s, compared with 199.794 s in the original run. 
 the completed answer. This follow-up did not trace display arrival, so 26.758 s is not an
 exact visible-response measurement. This is one run; model latency and machine load vary,
 so it demonstrates the bounded checkpoint improvement rather than a guaranteed response time.
+
+Further follow-ups used the same typed interactive prompt at the original gptr checkout.
+The RStudio and VS Code runs used the initial feature build; the notebook and generic
+terminal runs used the updated warning implementation. The worker policy was unchanged.
+
+| Interface and route | Baseline to provider | Submit/consent to provider | First raw answer text |
+| --- | ---: | ---: | ---: |
+| RStudio, Claude Sonnet 5.5 | 2.152 s | 3.061 s after consent | 26.758 s after consent |
+| VS Code terminal, Codex/default | 2.171 s | 3.352 s after consent | 8.896 s after consent |
+| Jupyter notebook, Claude Sonnet 5.5 | 2.180 s | 3.221 s after submit | 23.575 s after submit |
+| Generic terminal R, Codex/default | 2.125 s | 3.497 s after submit | 10.020 s after submit |
+| Same terminal session switched to Claude Sonnet 5.5 | no new baseline | 2.887 s after submit | 6.021 s after submit |
+
+The generic terminal was hosted in RStudio's Terminal panel and used `R --vanilla`;
+Peter detected `terminal`, not `rstudio`. This covers the generic terminal frontend but does
+not claim access to the separately blocked standalone Terminal application. Jupyter's first
+rendered answer text was traced at 31.550 s after submit. All runs visibly completed their
+analysis; generation/rendering differences are not a checkpoint-time guarantee. Local stage-only
+CSVs are named `/tmp/gptr-bounded-{rstudio,vscode,jupyter,terminal,model-switch}.csv`.
 
 ## Mechanism and safety contract
 
@@ -86,16 +105,40 @@ A returned-result cap or cooperative cancellation does not by itself bound trave
 
 ## Validation
 
+The expanded local regression run passed 1,701 assertions with zero failures or warnings
+(only one actual-Windows-only case was skipped on macOS). It included checkpoint files,
+partial inventories, scanner/integration/lifecycle, rewind, copy checkpoints, session store,
+path policy, portable Windows link policy, console UI, architecture and options. A revised
+real-pruned-entry fixture was then checked separately. Helper-loaded lint is clean.
+
+All 14 supplemental serial real-worker cases passed. Synthetic folder shapes included
+empty/tiny, 5,000 flat files, 100 directories with 25 files each, 60 levels of depth, mixed
+protected/startup/oversize/link files and three 20–50 ms cancellations followed by recovery.
+Every accepted backup was restored and byte-compared. Default-deadline large cases returned
+partial inventories in 2.103–2.136 s, bounded to 256 captures; deterministic longer-budget
+cases stopped at the 2,000 inspected-entry limit. No pending child remained after cleanup.
+The manual matrix CSV and script are retained in the ignored local investigation directory.
+
 Focused checkpoint-file, partial-inventory, real-worker, architecture and option suites pass.
 The rewind and copy-safety suites passed during the preceding regression run; its one
 obsolete parent-only hash-observer assertion was replaced with real child inventory checks
 and the checkpoint-file suite was rerun. Helper-loaded lint of the changed scanner,
 tracker, bootstrap and new tests passes. An independent review found no remaining issue.
 
-The real worker tests cover entry/capture limits, cancellation with committed results,
+The real worker tests cover entry/capture/aggregate byte limits, cancellation with committed results,
 single-worker cleanup admission, protected files, FIFOs, links, case-only renames and
 baseline-versus-follow-up size caps. Bookkeeping tests cover unknown paths, verified
-absence, partial interval reporting and refusal of late CLI pre-images.
+absence, partial interval reporting and refusal of late CLI pre-images. New real integration
+cases exercise actual Peter fake-provider tool calls, public undo/redo of an initially
+unvisited target, native changes and deletions, same-size/same-mtime content changes,
+partial-to-complete inventories and a directory replaced by an outside symlink. Lifecycle
+cases verify custom startup exclusions and process/marker/launch-directory cleanup after
+interruption. They exposed and now guard public partial-undo warning propagation.
+
+CI source-mode jobs now force-install their checkout before running worker-bearing tests;
+otherwise cached older installed gptr workers can differ from the source-loaded parent.
+The entry-limit fixture uses real pruned entries so it tests counting without racing the
+separate deadline on slow Windows I/O.
 
 Require full CI on the final PR head and the exact-tarball
 workflow with the final source SHA. Retain its archive digest, incoming/manual check logs and

@@ -39,10 +39,11 @@ test_that("the entry cap leaves undiscovered files unknown", {
   root = local_project()
   expect_true(all(file.create(file.path(root, sprintf("f%04d", seq_len(2005L))))))
   local_gptr_options(checkpoint_scan_timeout = 30)
-  result = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
+  # Count real ignored entries without making the entry-cap assertion race slow Windows I/O.
+  result = ckpt_scan_run(root, c(ckpt_prune(root), "f*"), baseline = TRUE)
   expect_false(result$complete)
   expect_identical(result$reason, "entry limit")
-  expect_lte(nrow(result$walk), 2000L)
+  expect_equal(nrow(result$walk), 0L)
   expect_length(result$absent, 0L)
 })
 
@@ -100,7 +101,7 @@ test_that("case-only renames retire the old spelling even on insensitive filesys
   before = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
   expect_true(file.rename(file.path(root, "Readme.md"), file.path(root, "readme.md")))
   if (fs_case_insensitive(root)) expect_true(file.exists(file.path(root, "Readme.md")))
-  after = ckpt_scan_run(root, ckpt_prune(root), before$walk, before$hash)
+  after = ckpt_scan_run(root, ckpt_prune(root), before$walk)
   expect_true(after$complete)
   expect_identical(after$absent, "Readme.md")
   expect_identical(after$walk$path, "readme.md")

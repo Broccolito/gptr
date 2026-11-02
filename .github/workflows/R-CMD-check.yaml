@@ -152,6 +152,10 @@ jobs:
           PKG_SYSREQS: 'false'
         with:
           extra-packages: any::devtools
+      - &install-source-workers
+        name: Install current source for R workers
+        timeout-minutes: 5
+        run: R CMD INSTALL --no-docs --no-multiarch .
       - name: Prove the connection gate detects a leak
         if: matrix.shard == 1
         timeout-minutes: 5
@@ -346,6 +350,7 @@ jobs:
         with:
           dependencies: '"hard"'
           extra-packages: any::testthat any::pkgload
+      - *install-source-workers
       - name: Copy-safety suites
         timeout-minutes: 16
         run: |
@@ -369,6 +374,7 @@ jobs:
           PKG_SYSREQS: 'false'
         with:
           extra-packages: any::rtiktoken any::pkgload
+      - *install-source-workers
       - name: Token ratchet
         timeout-minutes: 10
         run: Rscript --vanilla dev/bench/tokens/run.R --check

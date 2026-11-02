@@ -265,7 +265,7 @@ ckpt_files_observe = function(tr, s) {
   fits = nrow(w) <= 2000L
   # Keep automatic state bounded across turns as well as within an individual scan.
   priority = w$path %in% c(names(s$hash), names(tr$hash))
-  w = w[head(order(!priority), 2000L), , drop = FALSE]
+  w = w[utils::head(order(!priority), 2000L), , drop = FALSE]
   drop = c(s$absent, s$not_files, setdiff(s$walk$path, names(s$hash)))
   tr$hash = tr$hash[!names(tr$hash) %in% drop]
   tr$mode = tr$mode[!names(tr$mode) %in% drop]
@@ -273,7 +273,7 @@ ckpt_files_observe = function(tr, s) {
   tr$mode[names(s$mode)] = s$mode
   tr$hash = tr$hash[names(tr$hash) %in% w$path]
   tr$mode = tr$mode[names(tr$mode) %in% w$path]
-  tr$absent = head(setdiff(unique(c(s$absent, tr$absent)), c(w$path, s$not_files)), 2000L)
+  tr$absent = utils::head(setdiff(unique(c(s$absent, tr$absent)), c(w$path, s$not_files)), 2000L)
   tr$stat = w
   tr$complete = isTRUE(s$complete) && fits
   tr$coverage = tr$complete && !isTRUE(s$capture_capped)
@@ -634,7 +634,7 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
   out = ckpt_items()
   if (identical(fragment$coverage, "partial")) {
     out = ckpt_item(out, "file coverage", FALSE,
-                    "automatic scan incomplete; unobserved file changes may remain")
+                    "not restored (automatic scan incomplete; unobserved file changes may remain)")
   }
   rows = fragment$files
   for (r in rows[order(!vapply(rows, function(x) identical(x$status, gone), NA))]) {

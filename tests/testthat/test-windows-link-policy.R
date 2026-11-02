@@ -72,7 +72,14 @@ test_that("Windows checkpoint walks list directory links without descending into
   writeLines("id\n1", file.path(target, "x.csv"))
   writeLines("unexpected alias child", file.path(alias, "unexpected.txt"))
   local_win_alias(alias, target)
-  value = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)$walk
+  # This portable unit test injects Windows canonicalisation in this process. Native links
+  # through the real subprocess boundary are covered by test-windows-security.R.
+  records = withr::local_tempdir()
+  ckpt_scan_main(list(root = root, prune = ckpt_prune(root), baseline = TRUE,
+    deadline = as.numeric(Sys.time()) + 15, startup = character(),
+    file_max = 1e6, total_max = 1e8, capture_max = 5e7, store = ckpt_store_root(root)), records)
+  observed = lapply(list.files(records, pattern = "^[0-9]{5}[.]rds$", full.names = TRUE), readRDS)
+  value = do.call(rbind, Filter(Negate(is.null), lapply(observed, `[[`, "row")))
   expect_true("data-link" %in% value$path)
   expect_true(value$link[value$path == "data-link"])
   expect_false("data-link/unexpected.txt" %in% value$path)

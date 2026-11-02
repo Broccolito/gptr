@@ -171,7 +171,7 @@ test_that("CLI metadata matches cannot prove uncaptured original contents", {
   ck = ckpt_ck_new("s0000000210")
   tr = ckpt_files_tr(ck)
   ckpt_files_sync(tr)
-  writeLines("new", "known.R")
+  writeBin(charToRaw("new\n"), "known.R")
   Sys.setFileTime("known.R", old_time)
   expect_identical(as.numeric(file.mtime("known.R")), tr$stat$mtime)
   expect_identical(file.size("known.R"), tr$stat$size)
