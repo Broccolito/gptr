@@ -977,7 +977,9 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL,
       paste("selected", selected)
     } else if (identical(model, response_model)) {
       paste("reported", reported)
-    } else paste0("selected ", selected, "; reported ", reported)
+    } else {
+      paste0("selected ", selected, "; reported ", reported)
+    }
   }
   tokens = format_count(unlist(usage[intersect(cols, names(usage))]))
   cost = function(x) if (sum(x, na.rm = TRUE) > 0) format_cost(x)

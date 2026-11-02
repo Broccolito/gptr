@@ -1482,11 +1482,13 @@ test_that("native footers use only the last request's report and ignore CLI argu
     request_id = usage$request_id[[1L]])))
   session_append(s, entry_message(msg_assistant("unrelated answer", api = "fake", provider = "fake",
     model = "model-alias", response_model = "stale-report", request_id = "other-request")))
-  footer = function(usage) utils::capture.output({
-    console_on_agent_start(hook_event("agent_start", s), ctx)
-    invisible(console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = usage,
-                                              turns = 1L), ctx))
-  })
+  footer = function(usage) {
+    utils::capture.output({
+      console_on_agent_start(hook_event("agent_start", s), ctx)
+      invisible(console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = usage,
+                                                turns = 1L), ctx))
+    })
+  }
   out = footer(usage)
   expect_match(paste(out, collapse = " "), "selected model-alias; reported dated-model-id",
                fixed = TRUE)

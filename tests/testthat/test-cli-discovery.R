@@ -5,7 +5,9 @@ test_that("Codex discovery reads its CLI catalog without starting a turn", {
   local_mocked_bindings(pcli_find = function(cli) structure("codex", cli = cli),
     pcli_run = function(cmd, args, timeout = 30) {
       calls[[length(calls) + 1L]] <<- args
-      output = if ("--help" %in% args) "Render the raw model catalog as JSON" else {
+      output = if ("--help" %in% args) {
+        "Render the raw model catalog as JSON"
+      } else {
         json_encode(list(models = list(list(slug = "fresh-model", display_name = "Fresh model",
           visibility = "list", input_modalities = list("text", "image"),
           supported_reasoning_levels = list(list(effort = "high"))),
@@ -66,14 +68,20 @@ test_that("Claude catalog sends one initialize frame and always retires its chil
   process$poll_io = function(timeout) NULL
   process$read_error_lines = function() "unretained account diagnostics"
   process$is_alive = function() TRUE
-  process$read_output_lines = function() json_encode(list(type = "control_response",
-    response = list(subtype = "success", request_id = "gptr_models",
-                    response = list(models = list(), account = list(secret = "discard")))))
+  process$read_output_lines = function() {
+    json_encode(list(type = "control_response",
+      response = list(subtype = "success", request_id = "gptr_models",
+                      response = list(models = list(), account = list(secret = "discard")))))
+  }
   local_mocked_bindings(pcli_find = function(cli) structure("claude", cli = cli),
     child_env = function(profile, set) character(),
     proc_spawn = function(...) process,
-    kill_all = function(p, grace) { log$killed = TRUE },
-    proc_release = function(p) { log$released = TRUE })
+    kill_all = function(p, grace) {
+      log$killed = TRUE
+    },
+    proc_release = function(p) {
+      log$released = TRUE
+    })
   expect_identical(pcli_claude_catalog(character()), list(models = list()))
   expect_length(log$sent, 1L)
   frame = json_decode(log$sent[[1L]])
