@@ -79,6 +79,7 @@ jobs:
         with:
           extra-packages: any::pkgload any::testthat any::repr any::reticulate any::chromote any::lintr
           needs: check
+          install-quarto: false
       - uses: ./.github/actions/optional-dependencies
       - name: Test the pinned no-follow observer operations
         timeout-minutes: 1
