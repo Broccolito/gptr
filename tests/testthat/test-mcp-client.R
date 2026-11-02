@@ -620,6 +620,7 @@ test_that("an access token bound to an https origin on the default port is sent"
   secret_register(value, oauth_access_name("mcp:web"), source = "oauth",
                   origin = "https://mcp.example.com")
   conn = list2env(list(name = "web", auth_key = "mcp:web", headers = list(),
+                       url = "https://mcp.example.com/mcp",
                        origin = url_origin("https://mcp.example.com/mcp")))
   auth = mcp_http_auth(conn)
   expect_identical(auth[[1L]], "Bearer ")

@@ -716,7 +716,7 @@ test_that("a terminal reads a secret with its echo off, then restores it (cheat-
   log = character()
   local_mocked_bindings(tty_modes = function(modes = "-g") {
     log <<- c(log, paste(modes, collapse = " "))
-    if (identical(modes, "-g")) "SAVED"
+    if (identical(modes, "-g")) "SAVED" else character()
   })
   # gptr_readline() itself, reading from `typed()` and logging the read among the modes
   real = gptr_readline

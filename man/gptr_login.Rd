@@ -5,7 +5,12 @@
 \alias{gptr_logout}
 \title{Sign in to a model provider or an MCP server}
 \usage{
-gptr_login(provider, method = c("auto", "oauth", "key"))
+gptr_login(
+  provider,
+  method = c("auto", "oauth", "key"),
+  scope = c("user", "session", "keyring"),
+  slot = NULL
+)
 
 gptr_logout(provider)
 }
@@ -13,9 +18,19 @@ gptr_logout(provider)
 \item{provider}{A provider id such as \code{"openrouter"}, or \code{"mcp:<server>"} for an MCP server.}
 
 \item{method}{\code{"auto"} (default), \code{"oauth"} (the browser flow only) or \code{"key"} (key entry).}
+
+\item{scope}{\code{"user"} (default) to remember, \code{"session"} for this R process only, or
+\code{"keyring"} to remember through a native OS credential backend.}
+
+\item{slot}{For a stdio MCP server, the name of a declared secret environment entry such as
+\code{"SERVICE_API_TOKEN"}. The credential is passed only to that server's child environment,
+bound to its reviewed configuration and resolved executable. Leave \code{NULL} for providers
+and HTTP MCP servers.}
 }
 \value{
-\code{gptr_login()} returns \code{TRUE} invisibly; \code{gptr_logout()} removes the stored
+\code{gptr_login()} returns \code{TRUE} invisibly on success, or \code{FALSE} invisibly with a
+\code{status} attribute of \code{"skipped"} or \code{"cancelled"}; no credential value is returned.
+\code{gptr_logout()} removes the stored
 credential and forgets the access token held in memory, and returns \code{TRUE} invisibly when
 it removed something, else \code{FALSE}.
 }
@@ -24,12 +39,19 @@ Stores a credential for a model provider (for example \code{"openrouter"}) or fo
 (\code{"mcp:<server>"}). With \code{method = "auto"}, providers and MCP servers that support OAuth
 get the authorization-code flow with PKCE (S256): a page on 127.0.0.1 receives the redirect
 when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
-on. Everything else gets masked key entry. Credentials go to the credential store
-(\code{auth.json}, readable only by you: mode 0600 on Unix, and on Windows the access control list
-of your user profile, so keep \code{tools::R_user_dir("gptr", "config")} inside it; or a keyring
-reference); access tokens stay in memory.
-A tool call never opens a browser: when an MCP server needs a sign-in, the call fails with
-an error naming this function.
+on. Key entry requires a UI with hidden input; it never falls back to visible typing.
+The host prompt shows the destination and storage before entry. Leave it blank to skip,
+or dismiss or interrupt it to cancel. Secret answers are not returned to the model.
+\code{scope = "session"} keeps credentials in this R process until logout or exit; it does not
+export an environment variable or create a credential file. For assisted setup, use this scope.
+The default \code{scope = "user"} remembers credentials in \code{auth.json} (mode 0600 on Unix; on
+Windows, protected by your user profile's access control list), or its existing keyring
+reference. \code{scope = "keyring"} explicitly uses the native OS credential backend through the
+optional 'keyring' package, and writes only a reference to \code{auth.json}. File and environment
+keyring backends are refused for this scope. Hidden input is not encryption.
+Provider credentials are bound to the configured endpoint; MCP credentials are bound to the
+reviewed server. Changed destinations require login again. An MCP tool that needs sign-in
+fails with an error naming this function; it never opens a browser by itself.
 }
 \examples{
 if (interactive()) {

@@ -386,9 +386,9 @@ ui_console_read = function(prompt, secret = FALSE, accept = NULL) {
     band_read(p, gptr_readline)
   }
   repeat {
-    drained = ui_drain(prompt, accept)
+    drained = if (secret) FALSE else ui_drain(prompt, accept)
     if (rlang::is_string(drained)) return(drained)
-    ui_draft_kept()
+    if (!secret) ui_draft_kept()
     if (secret && is.null(hide) && once_first("visible", "secret")) {
       console_write(ui_hint(paste("This console shows the key as you type; gptr_env() loads keys",
                                   "from a file instead.")))
@@ -517,8 +517,15 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
   console_before_message(kind = "prompt", tools = TRUE)
   on.exit(console_asked(), add = TRUE)
   if (isTRUE(secret) && ui_rstudio()) {
-    ans = tryCatch(rstudioapi::askForPassword(prompt), error = function(e) NULL)
+    ans = tryCatch(rstudioapi::askForPassword(prompt), error = function(e) {
+      gptr_abort("Hidden credential dialog failed.", "not_available",
+                 member = "hidden credential input", provided_by = "rstudio")
+    })
     return(if (rlang::is_string(ans)) as_utf8(ans) else NA_character_)
+  }
+  if (isTRUE(secret) && is.null(tty_secret())) {
+    gptr_abort("This console cannot provide hidden credential input.", "not_available",
+               member = "hidden credential input", provided_by = "console")
   }
   pad = console_pad()
   sym = console_style()
@@ -616,13 +623,20 @@ ui_change_asked = function(request) {
 #' @noRd
 ui_questions_via = function(select, input, qs) {
   answers = list()
+  skipped = character()
+  result = function(cancelled) list(answers = answers, skipped = skipped, cancelled = cancelled)
   for (q in qs) {
     labels = as.character(unlist(q$options))
     type = q$type %||% (if (length(labels)) "single" else "text")
     title = as.character(q$question %||% q$id)
     if (identical(type, "text")) {
-      a = input(title, default = as.character(q$default %||% ""))
-      if (!rlang::is_string(a)) return(list(answers = answers, cancelled = TRUE))
+      a = input(paste0(title, "\n/skip skips this question; /cancel dismisses the questions."),
+                default = as.character(q$default %||% ""))
+      if (!rlang::is_string(a) || identical(a, "/cancel")) return(result(TRUE))
+      if (identical(a, "/skip")) {
+        skipped = c(skipped, q$id)
+        next
+      }
       answers[[q$id]] = a
       next
     }
@@ -634,10 +648,10 @@ ui_questions_via = function(select, input, qs) {
     } else if (length(idx) && !anyNA(idx)) {
       answers[[q$id]] = labels[idx]
     } else {
-      return(list(answers = answers, cancelled = TRUE))
+      return(result(TRUE))
     }
   }
-  list(answers = answers, cancelled = FALSE)
+  result(FALSE)
 }
 
 #' The `console` UI: readline() through gptr_readline() (IRkernel answers it too, IC-43); a
@@ -649,6 +663,7 @@ ui_console_spec = function(read = ui_console_read, name = "console") {
   input = function(...) ui_console_input(..., read = read)
   gptr_spec("ui", name,
             has_ui = function() isTRUE(gptr_can_prompt()),
+            has_secret_input = function() ui_rstudio() || !is.null(tty_secret()),
             select = select,
             input = input,
             questions = function(qs) ui_questions_via(select, input, qs),
@@ -677,10 +692,11 @@ ui_scripted_state = function(answers = list()) {
   st$add = function(method, prompt, answer) {
     st$log[nrow(st$log) + 1L, ] = list(method, paste(prompt, collapse = " "), answer)
   }
-  st$take = function(method, prompt) {
+  st$take = function(method, prompt, secret = FALSE) {
     a = if (length(st$queue)) st$queue[[1L]]
     st$queue = st$queue[-1L]
-    st$add(method, prompt, if (is.list(a)) json_encode(a) else paste(a, collapse = ","))
+    shown = if (secret) "[hidden]" else if (is.list(a)) json_encode(a) else paste(a, collapse = ",")
+    st$add(method, prompt, shown)
     a
   }
   st
@@ -699,9 +715,10 @@ ui_scripted_spec = function(st, name = "scripted") {
   }
   gptr_spec("ui", name,
             has_ui = function() TRUE,
+            has_secret_input = function() TRUE,
             select = select,
             input = function(prompt, default = "", secret = FALSE) {
-              a = st$take("input", prompt)
+              a = st$take("input", prompt, secret = secret)
               if (rlang::is_string(a)) a else NA_character_
             },
             questions = function(qs) {
@@ -754,11 +771,18 @@ ui_rstudio_spec = function() {
       rstudioapi::askForPassword(ui_escape(prompt))
     } else {
       rstudioapi::showPrompt("gptr", ui_escape(prompt), default = default)
-    }, error = function(e) NULL)
+    }, error = function(e) {
+      if (isTRUE(secret)) {
+        gptr_abort("Hidden credential dialog failed.", "not_available",
+                   member = "hidden credential input", provided_by = "rstudio")
+      }
+      NULL
+    })
     if (rlang::is_string(ans)) as_utf8(ans) else NA_character_
   }
   gptr_spec("ui", "rstudio",
             has_ui = function() isTRUE(gptr_can_prompt()) && ui_rstudio(),
+            has_secret_input = ui_rstudio,
             select = select,
             input = input,
             questions = function(qs) ui_questions_via(select, input, qs),
