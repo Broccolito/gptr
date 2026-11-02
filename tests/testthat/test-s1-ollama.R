@@ -821,6 +821,7 @@ test_that("missing or old servers and unsupported models or inputs fail before a
 test_that("local-only refuses cloud markers and remote endpoints; only a run record relaxes it", {
   local_gw()
   s1_fresh()
+  local_gptr_options(replay = "auto")
   settings_write("user", list(egress = list(ollama = "ack")))
   models = ollama_models()
   models[["clef-flash:cloud"]] = list(

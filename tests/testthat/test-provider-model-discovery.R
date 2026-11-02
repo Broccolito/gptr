@@ -16,7 +16,18 @@ inventory_response = function(body, status = 200L) {
   list(status = status, headers = list(), body = charToRaw(json_encode(body)))
 }
 
+test_that("R CMD check suppresses provider inventory before credentials or network", {
+  local_mocked_bindings(check_running = function() TRUE,
+    provider_credential = function(...) stop("must not resolve credentials"),
+    catalog_http_request = function(...) stop("must not contact provider"),
+    egress_check = function(...) stop("must not begin setup"))
+  p = provider_get("openai")
+  expect_null(provider_models(p))
+  expect_null(catalog_inventory(p, refresh = TRUE))
+})
+
 test_that("native provider inventories use bound headers and sparse metadata", {
+  local_mocked_bindings(check_running = function() FALSE)
   key = structure(list(id = "inventory-key", name = "TEST_KEY", fp = "abcdef"),
                   class = "gptr_secret")
   local_mocked_bindings(provider_credential = function(provider, register = TRUE) key)
@@ -35,6 +46,7 @@ test_that("native provider inventories use bound headers and sparse metadata", {
 })
 
 test_that("Anthropic and Google inventory pages use their native auth and explicit limits", {
+  local_mocked_bindings(check_running = function() FALSE)
   key = structure(list(id = "inventory-key", name = "TEST_KEY", fp = "abcdef"),
                   class = "gptr_secret")
   seen = character()
@@ -77,6 +89,7 @@ test_that("Anthropic and Google inventory pages use their native auth and explic
 })
 
 test_that("decision API inventory does not invent context, vision, prices or new model names", {
+  local_mocked_bindings(check_running = function() FALSE)
   p = provider_get("typesafe")
   local_mocked_bindings(provider_credential = function(...) NULL,
     catalog_http_request = function(url, ...) {
@@ -95,6 +108,7 @@ test_that("decision API inventory does not invent context, vision, prices or new
 })
 
 test_that("compatible APIs contribute only explicitly advertised chat capabilities", {
+  local_mocked_bindings(check_running = function() FALSE)
   local_mocked_bindings(provider_credential = function(...) NULL,
     catalog_http_request = function(...) inventory_response(list(data = list(
       list(id = "mistral-fixture", max_context_length = 32000,
@@ -118,6 +132,7 @@ test_that("compatible APIs contribute only explicitly advertised chat capabiliti
 })
 
 test_that("inventory pages, malformed responses and HTTP failures are bounded and sanitized", {
+  local_mocked_bindings(check_running = function() FALSE)
   local_mocked_bindings(provider_credential = function(...) NULL)
   n = 0L
   local_mocked_bindings(catalog_http_request = function(...) {
