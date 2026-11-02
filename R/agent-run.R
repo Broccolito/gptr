@@ -677,8 +677,9 @@ run_identity = function(run, target, messages) {
   }
   body = paste0("Current request in gptr/Peter (R): ", route, " via ", quote(target$api), ".",
     if (cli) paste0(" CLI model argument: ", quote(pcli_model_id(target)), "."),
-    " Last matching response_model: ", if (is.null(reported)) "not reported" else quote(reported),
-    ". Configuration does not verify backend identity. ",
+    " Prior completed response_model: ", if (is.null(reported)) "not reported" else quote(reported),
+    ". Current response metadata may arrive after generation; ",
+    "console footers show it when supplied. Configuration does not verify backend identity. ",
     "Use gptr::gptr_models()/gptr::gptr_providers() for R-session routes; ",
     "CLI helper/delegate choices are separate.")
   block_context("gptr_runtime", body)

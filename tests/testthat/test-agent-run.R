@@ -666,7 +666,11 @@ test_that("runtime identity changes append once and preserve the actual request 
   expect_identical(note$role, "operator")
   expect_identical(note$content[[1L]]$kind, "gptr_runtime")
   expect_match(note$content[[1L]]$text, target$ref, fixed = TRUE)
-  expect_match(note$content[[1L]]$text, "not reported", fixed = TRUE)
+  expect_match(note$content[[1L]]$text, "Prior completed response_model: not reported",
+               fixed = TRUE)
+  expect_match(note$content[[1L]]$text,
+               "Current response metadata may arrive after generation", fixed = TRUE)
+  expect_match(note$content[[1L]]$text, "console footers show it when supplied", fixed = TRUE)
   expect_match(note$content[[1L]]$text, "gptr::gptr_models()", fixed = TRUE)
   before = session_data(s)$entries
   expect_identical(run_build(run, target)$context$messages, req$context$messages)
