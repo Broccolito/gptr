@@ -491,7 +491,7 @@ specs (§10.2); the kind name is the spec name.
 | `user` | `content` list of `text`/`image`/`context` blocks; `source` chr(1) in `prompt`, `pipe`, `steer`, `follow_up`, `repl`, `parent`, `replay`, `extension`, `agent`, `imported`; `timestamp` num(1) ms | `{"role":"user","content":[…],"timestamp":…,"gptr":{"source":…}}` |
 | `assistant` | `content` list of `text`/`thinking`/`tool_call`/`opaque` blocks; `api`, `provider`, `model` chr(1); `response_id`, `response_model` chr(1)\|NULL; `usage` (§4.3); `stop_reason` chr(1) in `stop`, `length`, `tool_use`, `aborted`, `error`, `refusal`, `pause`; `error_message` chr(1)\|NULL; `raw_stop_reason` chr(1)\|NULL; `thinking_level` chr(1)\|NULL; `route` chr(1) in `api`, `plan-cli`, `system-one`, `emulated`; `request_id` chr(1)\|NULL; `timestamp` | Pi: `{"role":"assistant","content":[…],"api","provider","model","responseId","responseModel","usage":{…},"stopReason","errorMessage","rawStopReason","thinkingLevel","timestamp","gptr":{"route","requestId"}}`; `stopReason` `tool_use` is written `toolUse`, other values verbatim |
 | `tool_result` | `tool_call_id`, `tool_name` chr(1); `content` list of `text`/`image` blocks; `is_error` lgl(1); `details` named list\|NULL (never sent to a model); `usage` (§4.3)\|NULL (sub-agent tools); `timestamp` | `{"role":"toolResult","toolCallId","toolName","content":[…],"details":{…},"isError":false,"usage":…,"timestamp"}` |
-| `operator` | `kind` chr(1) in `steer_relay`, `mode`, `model`, `section_patch`, `tool_change`, `plan`, `workspace`, `reminder` (project-file updates travel as user-role `project_instructions_update` context blocks, IC-52); `content` list of `text` blocks; `tool_add` list of tool declarations `list(name, description, input_schema)`\|NULL (JSON-able; never specs); `origin_text` chr(1)\|NULL (the user's words for `steer_relay`); `timestamp` | stored as a Pi `custom_message` entry (§4.6) with `customType = "gptr.operator"` |
+| `operator` | `kind` chr(1) in `steer_relay`, `mode`, `model`, `section_patch`, `tool_change`, `plan`, `workspace`, `reminder` (project-file updates travel as user-role `project_instructions_update` context blocks, IC-52); `content` list of `text`/`context` blocks; `tool_add` list of tool declarations `list(name, description, input_schema)`\|NULL (JSON-able; never specs); `origin_text` chr(1)\|NULL (the user's words for `steer_relay`); `timestamp` | stored as a Pi `custom_message` entry (§4.6) with `customType = "gptr.operator"`; its canonical message time is the entry's timestamp |
 
 Operator messages carry harness facts and steering relays; adapters render them as a mid-conversation system
 message (Anthropic models with that capability), a developer message (OpenAI Responses) or user text (others)
@@ -640,7 +640,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 | `type` | Fields | In model context |
 |---|---|---|
 | `message` | `message` (§4.2 JSON; roles `user`, `assistant`, `toolResult`) | yes (after projection) |
-| `custom_message` | `customType` = `"gptr.operator"`, `content` (text blocks), `display` lgl, `details` = `{kind, toolAdd, originText}` | yes (as operator message) |
+| `custom_message` | `customType` = `"gptr.operator"`, `content` (text blocks, with context metadata under `gptr` as in §4.1), `display` lgl, `details` = `{kind, toolAdd, originText}` | yes (as operator message) |
 | `model_change` | `provider`, `modelId`, `gptr` = `{ref, thinking, reason}` | no |
 | `thinking_level_change` | `thinkingLevel` | no |
 | `compaction` | `summary` (chr), `firstKeptEntryId` (id\|null), `tokensBefore` (num), `details`, `usage`, `gptr` = `{blocks: [context blocks of the new first message], state: {...}, n: int}` | yes: its `gptr.blocks` replace everything before `firstKeptEntryId` |
@@ -3087,11 +3087,14 @@ subagent_backend(gptr_agent(model = "codex"), model_resolve("codex"))     # "cli
 CLI catalogs describe selectable choices and may be cached or bundled; they do not verify
 account entitlement. Missing capabilities and limits remain unknown. Claude selection aliases
 come from `value`; `resolvedModel` is catalog resolution, not observed inference identity.
-`response_model` holds only a report made by that request's CLI output (Claude init/message
-metadata or a Codex reroute notice). The selected `model` remains separate; a reported
-difference produces a notice. Codex exec normally reports no model identity.
+`response_model` holds only a nonempty scalar model name from that request's native response
+metadata or CLI output (Claude init/message metadata or a Codex reroute notice). The selected
+`model` remains separate; a CLI reported difference produces a notice. Codex exec normally
+reports no model identity.
 CLI console footers label the selected model when no identity was reported, and distinguish
-selection from a reported difference using metadata matched to the last request id.
+selection from a reported difference using metadata matched to the last request id. Native
+footers show both names when the response reports a model different from the selected name;
+matching names retain the compact footer.
 
 Before a request, a changed small `gptr_runtime` operator context block is appended describing the
 current requested/resolved route, transport, CLI model argument where applicable, and the

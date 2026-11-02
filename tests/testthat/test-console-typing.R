@@ -252,7 +252,7 @@ test_that("on a CLI route the queue line says the steer is sent after the CLI's 
   expect_true(paste0(queue_line("steer", "use base R"), console_style()$sep,
                      "after the CLI's answer") %in% res$out)
   roles = vapply(res$s$messages, function(m) m$role, "")
-  expect_identical(roles, c("user", "assistant", "operator", "assistant"))
+  expect_identical(roles, c("user", "operator", "assistant", "operator", "operator", "assistant"))
 })
 
 test_that("a T console's steer on a CLI route still says it waits for the CLI's answer (review)", {
@@ -288,7 +288,7 @@ test_that("a CLI route's steer taken back says so under its printed line (Task 3
             paste0(queue_line("steer", "use dplyr"), cli))
   at = match(lines, rows)
   expect_false(anyNA(at) || is.unsorted(at))
-  ops = Filter(function(m) identical(m$role, "operator"), res$s$messages)
+  ops = Filter(function(m) identical(m$kind, "steer_relay"), res$s$messages)
   expect_identical(vapply(ops, msg_text, ""), relay("use dplyr"))
 })
 
@@ -302,7 +302,7 @@ test_that("type_ahead = 'follow_up' sends the line as the next prompt, its own r
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   roles = vapply(reqs[[2L]]$messages, function(m) m$role, "")
-  expect_identical(roles, c("user", "assistant", "user"))
+  expect_identical(roles, c("user", "operator", "assistant", "user"))
   # the source of a second prompt typed at `peter> `, which pipes the session on
   msg = last_message(reqs[[2L]])
   expect_identical(msg$source, "pipe")
@@ -366,7 +366,7 @@ test_that("the pause menu's [f] in the REPL is the next prompt; a /, ! draft nev
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   roles = vapply(reqs[[2L]]$messages, function(m) m$role, "")
-  expect_identical(roles, c("user", "assistant", "user"))
+  expect_identical(roles, c("user", "operator", "assistant", "user"))
   expect_identical(msg_text(last_message(reqs[[2L]])), "then plot it")
   expect_match(json_encode(last_message(reqs[[2L]])), "> zz = 5", fixed = TRUE)
   expect_identical(e$zz, 5)
@@ -391,7 +391,7 @@ test_that("a steer a run at max_turns did not take is the next prompt, run 2's u
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   roles = vapply(reqs[[2L]]$messages, function(m) m$role, "")
-  expect_identical(roles, c("user", "assistant", "tool_result", "user"))
+  expect_identical(roles, c("user", "operator", "assistant", "tool_result", "user"))
   expect_identical(msg_text(last_message(reqs[[2L]])), "use base R")
   expect_true("peter[auto]> use base R" %in% res$out)
   expect_length(session_data(res$s)$queue$steer, 0L)
@@ -1465,7 +1465,7 @@ test_that("a terminal: the draft shows on the live row as text streams; Enter st
   expect_true(pty$wait("1 queued"))
   # delivered at the boundary after the tool's result, as the agent's next request reads it
   expect_true(pty$wait(paste0(person, " steer me\r\n")))
-  expect_true(pty$wait("REQ user,assistant,tool_result,operator END"))
+  expect_true(pty$wait("REQ user,operator,assistant,tool_result,operator END"))
   expect_true(pty$wait("peter[auto]> "))
   pty$send("TWO\r")
   expect_true(pty$wait("END"))
@@ -1491,7 +1491,7 @@ test_that("a terminal: a paste during a run is one draft; Enter sends it as one 
     "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
     "fake = gptr_fake_provider(function(req) {",
     "  if (req$n == 1L) return(list(text = 'first', delay = 4))",
-    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  ops = Filter(function(m) identical(m$kind, 'steer_relay'), req$messages)",
     "  text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
     "  paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']')",
     "})",
@@ -1527,7 +1527,7 @@ test_that("a terminal: a paste during an r call is one draft; no marker shows (F
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
     "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
     "fake = gptr_fake_provider(function(req) {",
-    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  ops = Filter(function(m) identical(m$kind, 'steer_relay'), req$messages)",
     "  if (length(ops)) {",
     "    text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
     "    return(paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']'))",
@@ -1576,7 +1576,7 @@ test_that("a terminal: after r code reads through readline a paste is one draft 
     "  x",
     "}",
     "fake = gptr_fake_provider(function(req) {",
-    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  ops = Filter(function(m) identical(m$kind, 'steer_relay'), req$messages)",
     "  if (length(ops)) {",
     "    text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
     "    return(paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']'))",
@@ -1641,7 +1641,7 @@ test_that("a terminal: during a sub-agent the row ticks and steers; its r call w
   pty$send("\r")
   expect_true(pty$wait(queue_line("steer", "s11", utf8)))
   expect_true(pty$wait("#1 done"))
-  expect_true(pty$wait("REQ user,assistant,tool_result,operator END"))
+  expect_true(pty$wait("REQ user,operator,assistant,tool_result,operator END"))
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
@@ -1703,7 +1703,9 @@ test_that("a terminal: a draft survives Ctrl-C and the pause menu (P28 G, D-243)
     "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
     "long = paste(c('BEGIN', sprintf('w%02dabc', 1:80), 'END'), collapse = ' ')",
     "fake = gptr_fake_provider(function(req) {",
-    "  m = req$messages[[length(req$messages)]]",
+    "  messages = Filter(function(m) !identical(m$content[[1L]]$kind, 'gptr_runtime'),",
+    "                    req$messages)",
+    "  m = messages[[length(messages)]]",
     "  if (identical(m$role, 'user')) return(list(text = long, chunk = 8L, gap = 0.05))",
     "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
     "})",
@@ -1742,7 +1744,9 @@ test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering rev
     "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
     "long = paste(c('BEGIN', sprintf('w%02dabc', 1:80), 'END'), collapse = ' ')",
     "fake = gptr_fake_provider(function(req) {",
-    "  m = req$messages[[length(req$messages)]]",
+    "  messages = Filter(function(m) !identical(m$content[[1L]]$kind, 'gptr_runtime'),",
+    "                    req$messages)",
+    "  m = messages[[length(messages)]]",
     "  if (identical(m$role, 'user')) return(list(text = long, chunk = 8L, gap = 0.05))",
     "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
     "})",
@@ -1908,7 +1912,9 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
     "             C = list(tool = 'r', input = list(code = 'zz = 2')),",
     "             H = list(tool = 'ask', input = list(questions = q)))",
     "fake = gptr_fake_provider(function(req) {",
-    "  m = req$messages[[length(req$messages)]]",
+    "  messages = Filter(function(m) !identical(m$content[[1L]]$kind, 'gptr_runtime'),",
+    "                    req$messages)",
+    "  m = messages[[length(messages)]]",
     "  call = if (identical(m$role, 'user')) calls[[req$last_user]]",
     "  if (!is.null(call)) return(c(list(text = long, chunk = 8L, gap = 0.05), call))",
     "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
@@ -2046,7 +2052,9 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
     "        gptr.history = FALSE)",
     "fake = gptr_fake_provider(function(req) {",
-    "  m = req$messages[[length(req$messages)]]",
+    "  messages = Filter(function(m) !identical(m$content[[1L]]$kind, 'gptr_runtime'),",
+    "                    req$messages)",
+    "  m = messages[[length(messages)]]",
     "  if (!identical(m$role, 'user')) {",
     "    return(paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END'))",
     "  }",
@@ -2101,7 +2109,9 @@ test_that("a terminal: a line arriving just as a question is drawn steers the ru
     "trace('ui_permission_lines', exit = quote({cat('DRAWN\\n'); Sys.sleep(1)}), print = FALSE,",
     "      where = asNamespace('gptr'))",
     "fake = gptr_fake_provider(function(req) {",
-    "  m = req$messages[[length(req$messages)]]",
+    "  messages = Filter(function(m) !identical(m$content[[1L]]$kind, 'gptr_runtime'),",
+    "                    req$messages)",
+    "  m = messages[[length(messages)]]",
     "  if (identical(m$role, 'user')) return(list(tool = 'r', input = list(code = 'zz = 1')))",
     "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
     "})",
@@ -2166,7 +2176,9 @@ test_that("a macOS terminal: a block pasted at a question comes back as one prom
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
     "        gptr.history = TRUE)",
     "fake = gptr_fake_provider(function(req) {",
-    "  m = req$messages[[length(req$messages)]]",
+    "  messages = Filter(function(m) !identical(m$content[[1L]]$kind, 'gptr_runtime'),",
+    "                    req$messages)",
+    "  m = messages[[length(messages)]]",
     "  if (identical(req$last_user, 'P') && identical(m$role, 'user')) {",
     "    return(list(tool = 'r', input = list(code = 'zz = 1')))",
     "  }",

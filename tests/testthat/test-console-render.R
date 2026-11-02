@@ -1434,6 +1434,15 @@ test_that("the CLI status line distinguishes selection from reported identity", 
                "selected selected-model", fixed = TRUE)
 })
 
+test_that("native status lines show distinct reported models and keep matching names compact", {
+  testthat::local_reproducible_output(width = 120, crayon = FALSE, unicode = FALSE)
+  usage = fake_usage("model-alias")
+  expect_match(status_line("idle", usage = usage, response_model = "dated-model-id"),
+               "selected model-alias; reported dated-model-id", fixed = TRUE)
+  expect_identical(status_line("idle", usage = usage, response_model = "model-alias"),
+                   status_line("idle", usage = usage))
+})
+
 test_that("the CLI footer uses only metadata for its last usage request", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 160, crayon = FALSE, unicode = FALSE)
@@ -1456,6 +1465,35 @@ test_that("the CLI footer uses only metadata for its last usage request", {
   })
   expect_match(paste(out, collapse = " "), "selected chosen; reported observed", fixed = TRUE)
   expect_false(any(grepl("unrelated", out, fixed = TRUE)))
+})
+
+test_that("native footers use only the last request's report and ignore CLI argument state", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 160, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  usage = fake_usage("model-alias")
+  adapter = session_live(s)$adapter
+  adapter$pcli_request_id = usage$request_id[[1L]]
+  adapter$pcli_model_arg = "cli-only"
+  session_append(s, entry_message(msg_assistant("answer", api = "fake", provider = "fake",
+    model = "model-alias", response_model = "dated-model-id",
+    request_id = usage$request_id[[1L]])))
+  session_append(s, entry_message(msg_assistant("unrelated answer", api = "fake", provider = "fake",
+    model = "model-alias", response_model = "stale-report", request_id = "other-request")))
+  footer = function(usage) utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    invisible(console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = usage,
+                                              turns = 1L), ctx))
+  })
+  out = footer(usage)
+  expect_match(paste(out, collapse = " "), "selected model-alias; reported dated-model-id",
+               fixed = TRUE)
+  expect_false(any(grepl("cli-only|stale-report", out)))
+  usage$request_id = "new-request"
+  out = footer(usage)
+  expect_false(any(grepl("reported|dated-model-id|stale-report|cli-only", out)))
 })
 
 test_that("a reason's line breaks fold into one space; other controls stay escaped (sessions-7)", {

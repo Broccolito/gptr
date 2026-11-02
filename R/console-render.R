@@ -951,7 +951,7 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
 #' (console_context_left()); the status and reason when it did not end idle, the reason's line
 #' breaks one space (curl's errors take two lines). A term whose value is unknown (IC-74) is left
 #' out, as is a cost that is not above 0 (a free or local model)
-#' CLI terms label the model selected, or reported when matching request metadata is supplied.
+#' CLI terms label selection/reporting; native terms show both when reported identity differs.
 #' @noRd
 console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL,
                                response_model = NULL) {
@@ -967,11 +967,12 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL,
     model = tryCatch(console_cli_default(paste0(usage$provider[[n]], "/default")),
                      error = function(e) NULL) %||% model
   }
-  if (n && identical(usage$route[[n]], "plan-cli") && rlang::is_string(model)) {
+  reported = if (rlang::is_string(response_model) && nzchar(response_model)) {
+    console_escape(substr(redact(response_model, "context"), 1L, 200L), FALSE)
+  }
+  if (n && rlang::is_string(model) && (identical(usage$route[[n]], "plan-cli") ||
+      (!is.null(reported) && !identical(model, response_model)))) {
     selected = console_escape(substr(redact(model, "context"), 1L, 200L), FALSE)
-    reported = if (rlang::is_string(response_model) && nzchar(response_model)) {
-      console_escape(substr(redact(response_model, "context"), 1L, 200L), FALSE)
-    }
     model = if (is.null(reported)) {
       paste("selected", selected)
     } else if (identical(model, response_model)) {
@@ -1303,10 +1304,11 @@ console_on_agent_end = function(event, ctx) {
   reported = NULL
   n = NROW(event$usage)
   usage = event$usage
-  if (n && identical(event$usage$route[[n]], "plan-cli")) {
+  if (n) {
     id = event$usage$request_id[[n]]
     state = session_live(rec$session)$adapter
-    if (identical(state$pcli_request_id, id) && rlang::is_string(state$pcli_model_arg)) {
+    if (identical(event$usage$route[[n]], "plan-cli") &&
+        identical(state$pcli_request_id, id) && rlang::is_string(state$pcli_model_arg)) {
       usage$model[[n]] = state$pcli_model_arg
     }
     for (e in rev(entries_path(d))) {

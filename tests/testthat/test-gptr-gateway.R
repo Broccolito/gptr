@@ -1516,7 +1516,7 @@ test_that("a call refused before its run changes neither the session nor gptr_la
   expect_identical((s |> peter("second"))$text, "two")
   expect_identical(seen$n, 0L)
   sent = fake_requests(fake)[[2L]]$messages
-  expect_identical(vapply(sent, function(m) m$role, ""), c("user", "assistant", "user"))
+  expect_identical(vapply(sent, function(m) m$role, ""), c("user", "operator", "assistant", "user"))
   expect_false(any(grepl("UNSENT", vapply(sent, msg_text, ""), fixed = TRUE)))
   # a spec the refused call replaced comes back
   script = gptr_fake_provider(list("hi", "corp answer"), name = "corp")

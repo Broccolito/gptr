@@ -173,6 +173,38 @@ test_that("scripts see the request, requests are logged and the last reply repea
   expect_identical(texts, c("first", "last", "last"))
 })
 
+test_that("runtime identity updates do not hide the last tool results or reuse old ones", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  make_plan = fake_plan
+  local_mocked_bindings(fake_plan = function(reply, request, model, context, engine) {
+    plan = make_plan(reply, request, model, context, engine)
+    if (request$n == 1L) {
+      for (i in seq_along(plan$steps)) {
+        for (j in seq_along(plan$steps[[i]]$events)) {
+          if (identical(plan$steps[[i]]$events[[j]]$type, "done")) {
+            plan$steps[[i]]$events[[j]]$message$response_model = "reported-fake"
+          }
+        }
+      }
+    }
+    plan
+  })
+  fake = local_fake_provider(list(fake_tool("r", code = "6 * 7"), "done", "next answer"))
+  s = peter("start", model = fake, mode = "auto", envir = new.env())
+  tool_turn = fake_requests(fake)[[2L]]
+  expect_identical(tail(tool_turn$messages, 1L)[[1L]]$content[[1L]]$kind, "gptr_runtime")
+  expect_length(tool_turn$last_results, 1L)
+  expect_identical(tool_turn$last_results,
+                   Filter(function(m) identical(m$role, "tool_result"), tool_turn$messages))
+  s |> peter("new user turn")
+  user_turn = fake_requests(fake)[[3L]]
+  expect_identical(tail(user_turn$messages, 1L)[[1L]]$content[[1L]]$kind, "gptr_runtime")
+  expect_identical(user_turn$last_user, "new user turn")
+  expect_length(user_turn$last_results, 0L)
+})
+
 test_that("json, overflow, missing scripts and failing script functions end cleanly", {
   skip_on_cran()
   events = play_fake(gptr_fake_provider(list(list(json = list(n = 3L)))))

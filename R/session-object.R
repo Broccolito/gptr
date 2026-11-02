@@ -198,6 +198,9 @@ entry_prepare = function(d, entry) {
   }
   e["parent_id"] = list(d$leaf)
   e$timestamp = iso_time()
+  if (identical(e$type, "custom_message") && identical(e$message$role, "operator")) {
+    e$message$timestamp = iso_ms(e$timestamp)
+  }
   if (identical(e$type, "message") && identical(e$message$role, "user") && is.null(e$gptr$turn)) {
     # added to the entry's other gptr fields, never replacing them
     e$gptr$turn = d$turns

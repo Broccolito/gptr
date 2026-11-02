@@ -197,7 +197,7 @@ entry_to_json = function(e) {
 #' @noRd
 operator_to_json = function(m) {
   list(customType = "gptr.operator",
-       content = lapply(m$content, function(b) list(type = "text", text = b$text)),
+       content = lapply(m$content, block_to_json),
        display = FALSE,
        details = compact(list(kind = m$kind, toolAdd = m$tool_add, originText = m$origin_text)))
 }
@@ -345,9 +345,10 @@ entry_from_json = function(x) {
 #' An operator message from a `gptr.operator` custom_message entry
 #' @noRd
 operator_from_json = function(x) {
-  text = paste(vapply(x$content %||% list(), function(b) b$text %||% "", ""), collapse = "\n")
-  msg_operator(x$details$kind %||% "reminder", text, tool_add = x$details$toolAdd,
-               origin_text = x$details$originText, timestamp = iso_ms(x$timestamp))
+  msg = msg_operator(x$details$kind %||% "reminder", "", tool_add = x$details$toolAdd,
+                     origin_text = x$details$originText, timestamp = iso_ms(x$timestamp))
+  msg$content = lapply(x$content %||% list(), block_from_json)
+  msg
 }
 
 #' The `gptr` object of a compaction entry with its context blocks in R shape

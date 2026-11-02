@@ -1341,7 +1341,8 @@ test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded tur
   expect_identical(r$text, "first answer")
   expect_identical(session_data(r)$history_source, "store")
   expect_identical(session_data(r)$doc$path, "analysis.R")
-  expect_identical(roles(r), c("user", "assistant"))
+  expect_identical(roles(r), c("user", "operator", "assistant"))
+  expect_identical(r$messages[[2L]]$content[[1L]]$kind, "gptr_runtime")
   expect_true("gptr.replay" %in% replay_types(r))
 })
 
@@ -1373,10 +1374,11 @@ test_that("each piped block moves a rebuilt session to its turn until a live run
   expect_identical(list(r$turns, r$text), list(1L, "first answer"))
   session_replay_apply(r, "b2b2c3", h(2))
   expect_identical(list(r$turns, r$text), list(2L, "second answer"))
-  expect_identical(roles(r), rep(c("user", "assistant"), 2L))
+  expect_identical(roles(r), c("user", "operator", "assistant", "user", "assistant"))
   run_text(r, "live prompt")
   session_replay_apply(r, "b3b2c3", h(3))
-  expect_identical(msg_text(r$messages[[5L]]), "live prompt")
+  prompts = Filter(function(m) identical(m$role, "user"), r$messages)
+  expect_identical(msg_text(prompts[[3L]]), "live prompt")
   expect_identical(r$turns, 4L)
 })
 
