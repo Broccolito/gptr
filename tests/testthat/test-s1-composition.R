@@ -43,7 +43,7 @@ test_that("nested decisions record provenance and charge the child and its ances
   expect_identical(gptr_usage(child, by = "route")$requests[
     gptr_usage(child, by = "route")$group == "system-one"], 2L)
   global = gptr_usage(by = "model")
-  expect_identical(global$requests[global$group == "nestedjudge/nestedjudge-s1"], 2L)
+  expect_identical(global$requests[which(global$group == "nestedjudge/nestedjudge-s1")], 2L)
   decisions = Filter(function(e) identical(e$custom_type, "gptr.decision"),
                      session_data(child)$entries)
   expect_length(decisions, 2L)
@@ -97,7 +97,7 @@ test_that("a System 2 child composes a thousand durable typed leaves without mor
   expect_identical(sum(session_data(team)$usage$route == "system-one"), 1000L)
   expect_identical(gptr_usage(list(team, child)), gptr_usage(team))
   global = gptr_usage(by = "model")
-  expect_identical(global$requests[global$group == "largejudge/largejudge-s1"], 1000L)
+  expect_identical(global$requests[which(global$group == "largejudge/largejudge-s1")], 1000L)
   entries = store_read(child$file)$entries
   charges = Filter(function(e) identical(e$custom_type, "gptr.s1_usage"), entries)
   expect_length(charges, 1000L)
@@ -205,7 +205,7 @@ test_that("retry attempts and failed replies retain measured or unknown owned us
   expect_true(all(is.na(rows$cost)))
   expect_identical(gptr_usage(s)$requests, 5L)
   global = gptr_usage(by = "model")
-  expect_identical(global$requests[global$group == "retryjudge/retryjudge-s1"], 5L)
+  expect_identical(global$requests[which(global$group == "retryjudge/retryjudge-s1")], 5L)
   own = rebuild_usage(store_read(s$file)$entries, session_data(s))
   expect_identical(own$request_id, rows$request_id)
   expect_identical(own$input, rows$input)

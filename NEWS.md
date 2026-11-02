@@ -95,7 +95,8 @@ generated code can inspect and modify objects already in memory.
   can select another API provider, Claude Code or Codex.
 * System 1 decision batches inside an agent record their provenance and charge session and
   ancestor budgets. Completed attempts survive resume, retry usage is retained, and completed
-  answers remain cached when a batch stops. Lightweight children receive decision guidance.
+  answers remain cached when a batch stops. Lightweight children receive decision guidance;
+  workers retain the configured decision model and its limits.
 * Skills, prompt templates, agent files, extensions and plugins in R packages, all on one
   versioned extension API (`gptr_register()`, `gptr_spec()` and the spec constructors).
 * `gptr_tailor()` makes a harness: a function you call exactly like `peter()` that carries

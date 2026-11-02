@@ -21,5 +21,14 @@
   session resume, actual thousand-item decision batches, real R worker execution, fake native
   Claude Code/Codex MCP delegation in both directions, aliases and scoped providers. Changed
   production/test files lint clean.
+- Workers also retain the canonical System 1 role and its four limits. Only the selected chat
+  and decision providers' credentials are forwarded, through the environment; unrelated keys
+  and serialized secrets stay out. Case-insensitive credential-name conflicts are refused.
+  Real workers passed authenticated mock requests with environment and vault-only keys; an
+  unacknowledged decision provider sent no HTTP requests. The affected source suites passed
+  1,099 assertions, then 802 after the collision regression (one expected Windows-runtime skip,
+  no failures or warnings). Live Jev passed 47 assertions, including the separate-worker path;
+  native Claude Code/Codex delegation passed 36. The optional local Ollama smoke found legacy
+  Clef Flash weights that its server rejects before inference; no models were downloaded.
 - The console work is reviewed separately in PR #99. Final combined installed-package,
   token-efficiency, native live, release-file, CRAN-mode and hosted checks are recorded in the PR.

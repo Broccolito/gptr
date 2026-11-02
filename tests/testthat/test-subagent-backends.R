@@ -254,6 +254,34 @@ test_that("workers guard and request credentials for the resolved provider", {
   expect_identical(session_live(handle$session)$adapter$worker_spec$model, canonical)
 })
 
+test_that("workers freeze the effective System 1 role and its bounded policy", {
+  local_gw()
+  local_fake_provider(list("unused"))
+  local_fake_provider(list(0.9), name = "snapshotjudge", type = "classifier")
+  local_gptr_options(system1 = "typesafe/jev-latest", s1_max_active = 1L, s1_rounds = 2L,
+                     s1_state_max = 123L, s1_max_elements = 7L)
+  gptr_config(system1 = "snapshotjudge", .scope = "session")
+  local_mocked_bindings(run_start = function(...) list(),
+    subagent_handle = function(session, run) list(session = session, run = run))
+  parent = local_parent()
+  build = function() {
+    spec = subagent_spec_complete(list(agent = test_agent("worker"), prompt = "x",
+                                       parent = parent, backend = "worker"), NULL)
+    spec$home = new.env()
+    h = backend_worker_start(spec, NULL)
+    session_live(h$session)$adapter$worker_spec
+  }
+  w = build()
+  expect_identical(w$settings$system1, "snapshotjudge/snapshotjudge-s1")
+  expect_identical(w$settings$s1, list(s1_max_active = 1L, s1_rounds = 2L,
+                                      s1_state_max = 123L, s1_max_elements = 7L))
+  expect_length(w$key_provider, 0L)
+  gptr_config(system1 = "emulate:sonnet", .scope = "session")
+  w = build()
+  expect_identical(w$settings$system1, paste0("emulate:", model_resolve("sonnet")$ref))
+  expect_identical(w$key_provider, "anthropic")
+})
+
 # The text of the tool results of a session
 tool_texts = function(s) {
   out = character()
@@ -565,6 +593,87 @@ test_that("a worker composes native typed decisions with provenance and one prox
   expect_identical(nrow(usage_log()), before)
   expect_length(child$children, 0L)
   expect_false(any(gptr_jobs()$kind == "worker"))
+})
+
+test_that("real workers use the configured authenticated System 1 without unrelated keys", {
+  local_worker_lib()
+  srv = local_mock_server("systemone")
+  local_gw()
+  local_team_fake(worker_script(function(request) {
+    if (nzchar(Sys.getenv("WORKER_UNRELATED_KEY"))) stop("unrelated credential reached worker")
+    if (length(request$last_results)) return("authenticated decisions complete")
+    question = encodeString(paste("Synthetic worker pass?", request$last_user), quote = "\"")
+    list(tool = "r", input = list(code = paste0(
+      "snapshot = lapply(c('system1', 's1_max_active', 's1_rounds', ",
+      "'s1_state_max', 's1_max_elements'), function(n) getOption(paste0('gptr.', n))); ",
+      "answers = peter(", question, ", c('alpha', 'beta'), ",
+      "model = getOption('gptr.system1'))")))
+  }))
+  judge = srv$provider
+  judge$local = FALSE
+  judge$offline = FALSE
+  judge$auth = "WORKER_S1_KEY"
+  off = gptr_register(judge)
+  withr::defer(off())
+  key = paste0("FAKE-worker-", "system1-credential-12345")
+  unrelated = paste0("FAKE-worker-", "unrelated-credential-12345")
+  withr::local_envvar(WORKER_UNRELATED_KEY = unrelated, WORKER_S1_KEY = key)
+  local_gptr_options(replay = "live", unsafe_no_permissions = TRUE,
+                     system1 = "typesafe/jev-latest", s1_max_active = 1L, s1_rounds = 2L,
+                     s1_state_max = 123L, s1_max_elements = 7L)
+  gptr_config(system1 = "mock", .scope = "session")
+  gptr_config(egress = list(mock = "ack"), .scope = "user")
+  for (source in c("environment", "vault")) {
+    if (identical(source, "vault")) {
+      secret_register(key, "WORKER_S1_KEY", source = "test")
+      Sys.unsetenv("WORKER_S1_KEY")
+    }
+    home = new.env()
+    team = peter(paste("Judge synthetic inputs", source), agents = list(screen = agent(
+      model = "fake/fake-1", backend = "worker", export = c("snapshot", "answers"))),
+      envir = home)
+    expect_identical(team$screen$text, "authenticated decisions complete")
+    expect_identical(home$snapshot, list("mock/mock-s1", 1L, 2L, 123L, 7L))
+    expect_s3_class(home$answers, "gptr_decision")
+    expect_identical(attr(home$answers, "meta")$provider, "mock")
+    expect_identical(attr(home$answers, "meta")$execution, "native")
+    expect_false(any(attr(home$answers, "meta")$cached))
+    w = session_live(team$screen)$adapter$worker_spec
+    bytes = serialize(w, NULL)
+    expect_length(grepRaw(key, bytes, fixed = TRUE), 0L)
+    expect_length(grepRaw(unrelated, bytes, fixed = TRUE), 0L)
+  }
+  log = srv$log()
+  expect_identical(nrow(log), 4L)
+  expect_true(all(grepl("authorization: [redacted]", tolower(log$headers), fixed = TRUE)))
+  expect_false(any(grepl(key, log$body, fixed = TRUE)))
+  expect_false(any(gptr_jobs()$kind == "worker"))
+})
+
+test_that("an unused worker System 1 role needs no consent and an actual refusal sends nothing", {
+  local_worker_lib()
+  srv = local_mock_server("systemone")
+  local_gw()
+  local_team_fake(worker_script(function(request) {
+    if (length(request$last_results)) return("refusal checked")
+    list(tool = "r", input = list(code = paste0(
+      "refusal = tryCatch(peter('Refused synthetic pass?', 'alpha', ",
+      "model = getOption('gptr.system1')), error = function(e) class(e))")))
+  }))
+  judge = srv$provider
+  judge$local = FALSE
+  judge$offline = FALSE
+  judge$auth = "WORKER_S1_KEY"
+  off = gptr_register(judge)
+  withr::defer(off())
+  withr::local_envvar(WORKER_S1_KEY = "FAKE-worker-refused-key-12345")
+  local_gptr_options(replay = "live", unsafe_no_permissions = TRUE, system1 = "mock/mock-s1")
+  home = new.env()
+  team = peter("Check refused judgment", agents = list(screen = agent(
+    model = "fake/fake-1", backend = "worker", export = "refusal")), envir = home)
+  expect_identical(team$screen$text, "refusal checked")
+  expect_true("gptr_error_egress" %in% home$refusal)
+  expect_identical(nrow(srv$log()), 0L)
 })
 
 test_that("INFRA-16: two inline agents and two workers interleave on one reactor", {

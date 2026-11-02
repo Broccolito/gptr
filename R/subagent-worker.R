@@ -278,8 +278,8 @@ worker_watch_tick = function(io, run) {
 #' Answers come from the parent through the `worker` UI (so a human is assumed present); nothing
 #' is rendered; replay mode and project root are the parent's. The agent's system text and the
 #' isolation policy arrive with the proxy session's rank-0 records in `spec$registry`. The
-#' parent's secrets that the shipped objects hold are registered inactive, so they are redacted
-#' and the child resolves no credential it did not get in its environment (D-295).
+#' parent's secrets that the shipped objects hold are registered inactive for redaction (D-295).
+#' Only its chat and configured System 1 providers' keys are forwarded in its environment.
 #' @param spec_path The spec file (save_rds()).
 #' @param result_path Where the status and the exports are saved.
 #' @return The final status, invisibly.
@@ -287,8 +287,10 @@ worker_watch_tick = function(io, run) {
 worker_main = function(spec_path, result_path) {
   spec = readRDS(spec_path, refhook = worker_refhook)
   st = spec$settings
-  old = options(gptr.interactive = TRUE, gptr.ui = "worker", gptr.quiet = TRUE,
-                gptr.verbose = 0L, gptr.replay = st$replay, gptr.project_root = st$project_root)
+  old = options(c(list(gptr.interactive = TRUE, gptr.ui = "worker", gptr.quiet = TRUE,
+                       gptr.verbose = 0L, gptr.replay = st$replay,
+                       gptr.project_root = st$project_root, gptr.system1 = st$system1),
+                  if (length(st$s1)) stats::setNames(st$s1, paste0("gptr.", names(st$s1)))))
   on.exit(options(old), add = TRUE)
   secret_register_batch("parent", function() {
     for (x in spec$secrets) secret_register(x$value, x$name, source = "parent", active = FALSE)
@@ -440,6 +442,13 @@ backend_worker_start = function(spec, ctx) {
   subagent_guards(child, spec$opts, spec$info$ref)
   worker_ship_objects(spec$objects, spec$home)
   opts = subagent_run_opts(spec, child)
+  system1 = model_default("system1")
+  if (!is.null(system1)) {
+    emulated = startsWith(system1, "emulate:")
+    ref = subagent_model_info(sub("^emulate:", "", system1), session_data(spec$parent)$id)$ref
+    system1 = paste0(if (emulated) "emulate:" else "", ref)
+  }
+  s1_options = c("s1_max_active", "s1_rounds", "s1_state_max", "s1_max_elements")
   state = session_live(child)$adapter
   state$worker_home = session_home(child)
   state$worker_spec = list(
@@ -447,10 +456,15 @@ backend_worker_start = function(spec, ctx) {
     agent = spec$agent, name = spec$name, object_names = c(spec$objects, spec$bind),
     export = spec$export, preset = spec$preset, rng_state = opts$rng_state,
     settings = list(replay = replay_mode(), project_root = project_root(), opts = spec$opts,
-                    budget = spec$budget, max_turns = spec$agent$max_turns %||% spec$max_turns),
+                    budget = spec$budget, max_turns = spec$agent$max_turns %||% spec$max_turns,
+                    system1 = system1, s1 = stats::setNames(lapply(s1_options, gptr_opt),
+                                                          s1_options)),
     env_profile = "worker",
     registry = worker_registry(c(session_data(spec$parent)$id, session_data(child)$id)),
-    key_provider = worker_key_provider(spec$info$ref), parent = proc_self())
+    key_provider = unique(c(worker_key_provider(spec$info$ref),
+                            if (!is.null(system1)) {
+                              worker_key_provider(sub("^emulate:", "", system1))
+                            })), parent = proc_self())
   run = run_start(child, msg_user(spec$prompt, source = "parent"), opts)
   subagent_handle(child, run)
 }
@@ -615,7 +629,7 @@ worker_spawn = function(st) {
   marker = proc_marker_new()
   set = c(GPTR_WORKER = "1", GPTR_SUBAGENT_DEPTH = as.character(w$depth),
           GPTR_PROJECT_ROOT = w$settings$project_root)
-  # The provider's key stays only in the child environment. The installed entry point is
+  # The designated chat and System 1 keys stay only in the child environment. The entry point is
   # selected by the launcher, so no worker function or source environment is serialised.
   st$p = proc_rscript("worker", args = list(spec_path, st$result_path), dir = st$dir,
                        stdin = "|", env = child_env("worker", set = set,

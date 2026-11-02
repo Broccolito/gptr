@@ -150,7 +150,8 @@ System 1 returns decisions rather than chat sessions, so leave out `agents =` an
 Its own scheduler preserves order, deduplicates and caches inputs, and bounds active requests
 at eight by default; `gptr.s1_max_active` set to one runs them sequentially. Split batches above
 `gptr.s1_max_elements` (10,000 by default). The configured decision guidance is available to
-lightweight child agents too. Nested decisions are recorded in the owning session, charge its
+lightweight child agents too. Workers inherit the configured decision model and its limits.
+Nested decisions are recorded in the owning session, charge its
 budgets and ancestors once, and retain completed answers in the cache if the batch stops.
 
 ## Independent calls with gptr_parallel()

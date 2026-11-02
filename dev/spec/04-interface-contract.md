@@ -4149,6 +4149,16 @@ invocation (CLI invocations always receive full ids). Merge order: snapshot < ca
 Spec file (written with `save_rds()`): `list(prompt, model, mode, depth, agent = <spec:agent>, objects = named
 list (values shipped by name), export = chr, preset, rng_state, settings = list, env_profile = "worker", registry =
 list(specs, plugins, filters))` (IC-69; the worker re-registers `registry` before running). The
+`settings` snapshot includes the canonical effective `system1` reference (retaining an explicit
+`emulate:` prefix) and `s1 = list(s1_max_active, s1_rounds, s1_state_max, s1_max_elements)`.
+P19 calls P05's pure `model_default("system1")` as a named contract edge, then P06's existing
+canonical-reference helper. `key_provider` names only the registered remote chat and configured
+System 1 providers, deduplicated; `child_env(..., provider = chr)` accepts these IDs, retaining
+scalar compatibility. Equal keys with the same case-insensitive environment name are deduplicated;
+different values for that name from distinct providers are refused without echoing either value.
+Their credentials travel only in the process environment, never in the
+spec or arguments. This local transfer does not request egress consent for an unused role;
+the actual System 1 dispatch keeps its ordinary consent and replay checks before network I/O. The
 child runs `worker_main(spec_path, result_path)`; stdout carries one JSON object per line (the `jsonl` frontend:
 events with Pi names plus `{"type":"ask","id","questions"}`, `{"type":"permission_request","id","request"}`,
 `{"type":"result","status","text","usage","turns"}`); stdin carries `{"type":"answer","id","answers"}`,
@@ -5350,7 +5360,9 @@ calls and suggests `GPTR_REPLAY=replay`.
   makes an explicit `backend = "worker"` fail with `gptr_error_invalid_argument` naming it, and
   `auto` stays inline. The spec also carries, as `secrets`, the registered redacting secrets whose
   values occur in the shipped objects (`secrets_held()`), which `worker_main()` registers inactive
-  before its session starts, so the worker redacts them and no other key travels (D-295). P19
+  before its session starts, so the worker redacts them. No additional key travels in the spec
+  (D-295); only the designated chat and configured System 1 providers' credentials are forwarded
+  separately in the child environment (§11.11), never arbitrary registered provider keys. P19
   acceptance: a plugin `r` member and a `gptr_fake_provider()` spec work inside a worker.
 - **Token extension points**: `gptr_check(x, error = FALSE, tokens = FALSE)`; `tokens = TRUE` reports a plugin's
   declaration cost and the printed-result cost of each member on its examples. Truncation policies and catalog

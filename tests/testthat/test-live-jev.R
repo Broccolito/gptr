@@ -1,6 +1,6 @@
 # Live System 1 test against api.typesafe.ai (plan P13; opt-in with GPTR_LIVE_TESTS=true). The key
 # is read only through gptr_env() from the maintainer's key file (conventions section 1; override
-# the path with GPTR_JEV_KEY_FILE) and is never printed. About twelve requests of about 300 input
+# the path with GPTR_JEV_KEY_FILE) and is never printed. About fourteen requests of about 300 input
 # tokens at $0.042 per million: well below a cent.
 
 test_that("live: Jev answers decisions, choices and scores through peter()", {
@@ -89,6 +89,39 @@ test_that("live: Jev answers decisions, choices and scores through peter()", {
   expect_true(all(attr(repeated, "meta")$cached))
   expect_identical(session_data(owner)$usage, rows)
   expect_length(fake_requests(chat), 0L)
+
+  local_worker_lib()
+  local_gptr_options(system1 = "jev", s1_max_active = 1L)
+  script = function(request) {
+    if (length(request$last_results)) return("judged in worker")
+    list(tool = "r", input = list(code = paste0(
+      "worker_role = getOption('gptr.system1'); ",
+      "worker_cap = getOption('gptr.s1_max_active'); ",
+      "worker_answers = peter('Does this input explicitly describe transportation?', ",
+      "c('The train arrived at the station.', 'An apple was on the table.'), ",
+      "model = worker_role)")))
+  }
+  environment(script) = baseenv()
+  worker_chat = local_fake_provider(script, name = "live-jev-worker")
+  home = new.env()
+  team = peter("Judge the synthetic inputs", envir = home, mode = "auto",
+                agents = list(screen = agent(model = worker_chat$models[[1L]]$ref,
+                  backend = "worker", export = c("worker_role", "worker_cap", "worker_answers"))))
+  expect_identical(team$screen$status, "idle")
+  expect_identical(team$screen$text, "judged in worker")
+  expect_identical(model_resolve(home$worker_role)$ref, model_resolve("jev")$ref)
+  expect_identical(home$worker_cap, 1L)
+  expect_s3_class(home$worker_answers, "gptr_decision")
+  expect_length(home$worker_answers, 2L)
+  expect_false(anyNA(home$worker_answers))
+  worker_meta = attr(home$worker_answers, "meta")
+  expect_identical(worker_meta$provider, "typesafe")
+  expect_identical(worker_meta$execution, "native")
+  expect_length(worker_meta$request_ids, 2L)
+  expect_false(any(worker_meta$cached))
+  expect_identical(nrow(session_data(team$screen)$usage), 1L)
+  expect_identical(gptr_usage(list(team, team$screen)), gptr_usage(team))
+  expect_false(any(gptr_jobs()$kind == "worker"))
 
   key = Sys.getenv("TYPESAFE_API_KEY")
   shown = paste(c(utils::capture.output(print(d)), json_encode(attr(d, "meta"))), collapse = "\n")

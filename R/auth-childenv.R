@@ -195,7 +195,8 @@ child_env_provider_key = function(provider) {
 child_env = function(profile, pass = character(), set = character(), provider = NULL) {
   check_string(profile, "profile")
   check_strings(pass, "pass")
-  check_string(provider, "provider", null = TRUE)
+  check_strings(provider, "provider", null = TRUE)
+  for (pid in provider) check_string(pid, "provider")
   child_env_names(pass, "pass")
   child_env_values(set)
   spec = child_env_profile(profile)
@@ -235,9 +236,18 @@ child_env = function(profile, pass = character(), set = character(), provider = 
   out = env[take]
   out = child_env_put(out, as.list(spec[["set"]] %||% character()))
   out = child_env_put(out, as.list(set))
-  if (!is.null(provider)) {
-    out = child_env_put(out, as.list(child_env_values(child_env_provider_key(provider))))
+  keys = structure(character(), names = character())
+  for (pid in unique(provider)) {
+    values = child_env_values(child_env_provider_key(pid))
+    at = match(toupper(names(values)), toupper(names(keys)))
+    shared = !is.na(at)
+    if (any(values[shared] != keys[at[shared]])) {
+      gptr_abort("Provider credentials conflict for the same environment name.", "invalid_argument",
+                 arg = "provider", expected = "unambiguous provider credentials")
+    }
+    keys = child_env_put(keys, as.list(values))
   }
+  out = child_env_put(out, as.list(keys))
   # IC-60 overrides the plan snippet: every profile neutralises both user startup files,
   # including explicit `set`. Only R_ENVIRON has the documented explicit-pass exception.
   out = out[!startsWith(out, "()") &

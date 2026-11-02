@@ -222,6 +222,8 @@ call directly; L0 and L3 files reach trust only through the `trust.get` service.
 P19's `subagent_model_info()` also calls P06's pure `model_canonical()` as a declared contract
 edge: aliases and provider-family references must identify the backend and pool before a child
 starts. It does not call P05's resolver directly or prepare a model before egress consent.
+P19's worker also calls P05's pure `model_default("system1")` as a named contract edge to
+snapshot the parent's effective System 1 role, canonicalized through the same P06 helper.
 P13's typed decision leaves use P06's `budget_check()`, `usage_add_durable()` and
 `usage_row_store()` as named edges to charge and persist completed attempts in their owning
 session and ancestors, and `session_by_id()` to recover an ID-backed context's owner; they
@@ -1396,7 +1398,8 @@ without `capabilities("profmem")`.
   rejects `NA`; callr gets `child_env_callr()` with `NA` unsets) and with `R_ENVIRON_USER` and `R_PROFILE_USER`
   pointing at empty files and `R_ENVIRON` dropped in **every** profile, because any Rscript child otherwise re-reads
   keys from `~/.Renviron` [G6 fact-check; IC-60]: `mcp` (strict allowlist plus the spec's env); `worker` (allowlist
-  plus only its provider's key, `user_profile = FALSE`, never keys through callr `args`); `cli-claude` and
+  plus only its chat and configured System 1 providers' keys, deduplicated, never keys through
+  process arguments or the worker spec); `cli-claude` and
   `cli-codex` (G6 §3.7 verbatim [IC-65]: inherit minus secret-like names, registered values and the enclosing-agent
   variables `CLAUDECODE`, `CLAUDE_CODE_*` (except the kept OAuth token, config dir and Git Bash path),
   `CLAUDE_AGENT_SDK_*`, `CLAUDE_PID`, `CODEX_MANAGED_*`, `CODEX_SANDBOX*`, and minus the billing-switch variables
@@ -2025,6 +2028,12 @@ and events. Model resolution is pure; the existing egress/replay guards run befo
 or any child process starts. Either CLI may delegate to the other by selecting its reference; a
 Claude Code Opus session can choose `claude-cli/sonnet` for a Sonnet child. No model argument means
 the parent's model, without an automatic downgrade or provider switch.
+
+Workers snapshot the parent's effective System 1 role and its `s1_max_active`, `s1_rounds`,
+`s1_state_max` and `s1_max_elements` options. Only credentials of the designated chat and
+System 1 providers are forwarded, through the worker environment; unrelated providers' keys
+are omitted. Local credential forwarding requires no separate egress acknowledgment. Each
+actual System 1 dispatch retains its ordinary consent and replay guards before network I/O.
 
 Workers and fan-out children return no scratch objects [D-189]: a worker writes its home as a reference that the
 parent reads back as the proxy's overlay, and a fan-out child that succeeds keeps only its values held by name, so
