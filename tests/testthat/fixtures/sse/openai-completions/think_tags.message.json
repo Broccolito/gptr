@@ -2,6 +2,7 @@
   "stop_reason": "stop",
   "raw_stop_reason": "stop",
   "response_id": "chatcmpl-1",
+  "response_model": "deepseek-r1",
   "content": [
     {
       "type": "thinking",

@@ -355,8 +355,8 @@ completions_normaliser = function(model, opts) {
     }
     rid = adp_chr(ch[["id"]])
     if (is.null(st$response_id) && nzchar(rid)) st$response_id = rid
-    rmodel = adp_chr(ch[["model"]])
-    if (nzchar(rmodel) && !identical(rmodel, model$id)) st$response_model = rmodel
+    rmodel = ch[["model"]]
+    if (rlang::is_string(rmodel) && nzchar(rmodel)) st$response_model = rmodel
     choices = ch[["choices"]]
     choice = if (is.list(choices) && length(choices)) choices[[1L]] else NULL
     adp_openai_usage(st, ch[["usage"]] %||% if (is.list(choice)) choice[["usage"]],

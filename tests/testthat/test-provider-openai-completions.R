@@ -185,7 +185,7 @@ test_that("an Ollama chat stream keeps reasoning, tool calls, usage and the outp
   expect_identical(c(m$content[[2L]]$id, m$content[[2L]]$name), c("call_k3x9", "sum_numbers"))
   expect_equal(m$content[[2L]]$arguments, list(a = 7, b = 5))
   expect_identical(c(m$stop_reason, m$raw_stop_reason), c("tool_use", "tool_calls"))
-  expect_null(m$response_model)
+  expect_identical(m$response_model, q)
   expect_identical(c(m$usage$input, m$usage$output, m$usage$cache_read, m$usage$total),
                    c(120, 30, 0, 150))
   # the reasoning used up the output budget: a length stop with the thinking kept, no text
