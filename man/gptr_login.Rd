@@ -41,8 +41,9 @@ get the authorization-code flow with PKCE (S256): a page on 127.0.0.1 receives t
 when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
 on. A login inside a tool also uses hidden paste entry because loopback callbacks cannot run
 recursively. Key entry requires a UI with hidden input; it never falls back to visible typing.
-The host prompt shows the destination and storage before entry. Leave it blank to skip,
-or dismiss or interrupt it to cancel. Secret answers are not returned to the model.
+The host prompt shows the destination and storage before entry. For key entry, leave it blank
+to skip, or dismiss or interrupt it to cancel. The initial OAuth review offers Skip and Cancel.
+Secret answers are not returned to the model.
 \code{scope = "session"} keeps credentials in this R process until logout or exit; it does not
 export an environment variable or create a credential file. For assisted setup, use this scope.
 The default \code{scope = "user"} remembers credentials in \code{auth.json} (mode 0600 on Unix; on

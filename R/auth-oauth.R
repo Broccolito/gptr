@@ -703,8 +703,9 @@ oauth_login_store = function(key, rec, scope) {
 #' when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
 #' on. A login inside a tool also uses hidden paste entry because loopback callbacks cannot run
 #' recursively. Key entry requires a UI with hidden input; it never falls back to visible typing.
-#' The host prompt shows the destination and storage before entry. Leave it blank to skip,
-#' or dismiss or interrupt it to cancel. Secret answers are not returned to the model.
+#' The host prompt shows the destination and storage before entry. For key entry, leave it blank
+#' to skip, or dismiss or interrupt it to cancel. The initial OAuth review offers Skip and Cancel.
+#' Secret answers are not returned to the model.
 #' `scope = "session"` keeps credentials in this R process until logout or exit; it does not
 #' export an environment variable or create a credential file. For assisted setup, use this scope.
 #' The default `scope = "user"` remembers credentials in `auth.json` (mode 0600 on Unix; on
