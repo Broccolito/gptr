@@ -797,7 +797,9 @@ mcp_check_kv = function(x, arg) {
 #'   `"direct"` (declared as tools), `"deferred"` (found through `peter$search()`) or
 #'   `"hidden"`.
 #' @param timeout Seconds per request; progress notifications from the server extend it.
-#' @param scope `"user"` (default) or `"project"`.
+#' @param scope `"user"` (default) or `"project"`. Project scope requires a `.gptr/`
+#'   workspace created with [gptr_init()]. Trust the project before using its servers
+#'   (see [gptr_trust()]); `gptr_mcp_add()` neither initializes a workspace nor grants trust.
 #' @return `gptr_mcp_add()` returns the server spec invisibly; `gptr_mcp_remove()` returns
 #'   `TRUE` invisibly when a server was removed, else `FALSE`.
 #' @examples

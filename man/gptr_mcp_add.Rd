@@ -36,7 +36,9 @@ headers of an HTTP server. Write secrets as \verb{$\{VAR\}} placeholders.}
 
 \item{timeout}{Seconds per request; progress notifications from the server extend it.}
 
-\item{scope}{\code{"user"} (default) or \code{"project"}.}
+\item{scope}{\code{"user"} (default) or \code{"project"}. Project scope requires a \code{.gptr/}
+workspace created with \code{\link[=gptr_init]{gptr_init()}}. Trust the project before using its servers
+(see \code{\link[=gptr_trust]{gptr_trust()}}); \code{gptr_mcp_add()} neither initializes a workspace nor grants trust.}
 }
 \value{
 \code{gptr_mcp_add()} returns the server spec invisibly; \code{gptr_mcp_remove()} returns
