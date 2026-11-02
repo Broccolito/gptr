@@ -493,12 +493,15 @@ run_model_ready = function(run, ref) {
 }
 
 #' Resolve a model reference for a session: P05's catalog, else a provider spec registered for
-#' this session only (04 section 6.1), narrowed to the named model; an id may hold a colon (an
-#' Ollama tag, IC-74), so `:<suffix>` is a thinking level only when it is one
+#' this session only (04 section 6.1), named alone for its first model or narrowed to a model;
+#' an id may hold a colon (an Ollama tag, IC-74), so `:<suffix>` is a thinking level only when
+#' it is one
 #' @noRd
 run_model_resolve = function(ref, sid) {
   rec = model_resolve(ref, strict = FALSE)
   if (!is.null(rec)) return(rec)
+  pr = registry_get("provider", ref, session = sid)
+  if (inherits(pr, "gptr_provider") && length(pr$models)) return(model_resolve(pr))
   if (grepl("/", ref, fixed = TRUE)) {
     pr = tryCatch(registry_get("provider", sub("/.*$", "", ref), session = sid),
                   error = function(e) NULL)
@@ -1968,9 +1971,17 @@ ctx_state_restorable = function(prior) {
 #' Pure resolution (IC-74) that refuses what session_set_model() refuses (D-017); the level
 #' travels as a `:<level>` suffix, except for a router, which chooses its own.
 #' @noRd
-kernel_model_ref = function(ref, thinking = NULL, session = NULL) {
-  m = model_canonical(ref, strict = TRUE, session = session)
+kernel_model_ref = function(ref, thinking = NULL, session = NULL, strict = TRUE) {
+  provider = inherits(ref, "gptr_provider")
+  m = if (provider) {
+    model_resolve(ref, strict = strict)
+  } else if (rlang::is_string(ref) && startsWith(ref, "emulate:")) {
+    list(ref = ref, type = "classifier")
+  } else {
+    model_canonical(ref, strict = strict, session = session)
+  }
   stream_chat_model(m)
+  if (provider) ref = m$ref
   if (is.null(thinking) || startsWith(m$ref, "router:")) return(ref)
   paste0(m$ref, ":", thinking)
 }

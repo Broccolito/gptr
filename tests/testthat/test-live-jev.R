@@ -1,6 +1,6 @@
 # Live System 1 test against api.typesafe.ai (plan P13; opt-in with GPTR_LIVE_TESTS=true). The key
 # is read only through gptr_env() from the maintainer's key file (conventions section 1; override
-# the path with GPTR_JEV_KEY_FILE) and is never printed. About ten requests of about 300 input
+# the path with GPTR_JEV_KEY_FILE) and is never printed. About twelve requests of about 300 input
 # tokens at $0.042 per million: well below a cent.
 
 test_that("live: Jev answers decisions, choices and scores through peter()", {
@@ -58,6 +58,37 @@ test_that("live: Jev answers decisions, choices and scores through peter()", {
 
   again = peter("Does this text describe a dog?", texts, model = jev)
   expect_true(all(attr(again, "meta")$cached))
+
+  chat = local_fake_provider(list("unused"), name = "owned-live-jev")
+  owner = peter("Queued synthetic owner", model = chat, .run = FALSE, envir = new.env())
+  synthetic = c(first = "The apple was placed on a table.",
+                 second = "A train arrived at the station.")
+  question = "Does the synthetic input explicitly mention a fruit?"
+  owned = owner |> peter(question, synthetic, model = jev)
+  expect_s3_class(owned, "gptr_decision")
+  expect_identical(names(owned), names(synthetic))
+  expect_length(owned, length(synthetic))
+  expect_false(anyNA(owned))
+  rows = session_data(owner)$usage
+  expect_gte(nrow(rows), length(synthetic))
+  expect_identical(anyDuplicated(rows$request_id), 0L)
+  expect_identical(rows$session, rep(owner$id, nrow(rows)))
+  expect_true(all(rows$route == "system-one" & rows$provider == "typesafe"))
+  expect_true(all(rows$model == model_resolve("jev")$id))
+  expect_identical(gptr_usage(owner, by = "route")$requests, nrow(rows))
+  expect_length(attr(owned, "meta")$request_ids, length(synthetic))
+  expect_true(all(attr(owned, "meta")$request_ids %in% rows$request_id))
+  decisions = Filter(function(e) identical(e$custom_type, "gptr.decision"),
+                     session_data(owner)$entries)
+  expect_length(decisions, 1L)
+  expect_identical(decisions[[1L]]$data[c("question", "type", "model", "n", "cached")],
+                   list(question = question, type = "noul", model = attr(owned, "meta")$model,
+                        n = 2L, cached = 0L))
+  repeated = owner |> peter(question, synthetic, model = jev)
+  expect_identical(as.logical(repeated), as.logical(owned))
+  expect_true(all(attr(repeated, "meta")$cached))
+  expect_identical(session_data(owner)$usage, rows)
+  expect_length(fake_requests(chat), 0L)
 
   key = Sys.getenv("TYPESAFE_API_KEY")
   shown = paste(c(utils::capture.output(print(d)), json_encode(attr(d, "meta"))), collapse = "\n")

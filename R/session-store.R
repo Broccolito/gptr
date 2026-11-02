@@ -555,8 +555,8 @@ rebuild_usage = function(entries, d) {
     if (identical(e$type, "custom") && identical(e$custom_type, "gptr.usage")) {
       row = usage_ancestor_restore(e$data, d)
     } else if (identical(e$type, "custom") &&
-               identical(e$custom_type, "gptr.compaction_usage")) {
-      check_list(e$data, "compaction usage data", named = TRUE)
+               isTRUE(e$custom_type %in% c("gptr.compaction_usage", "gptr.s1_usage"))) {
+      check_list(e$data, "usage data", named = TRUE)
       row = usage_row_restore(e$data[["row"]])
       usage_own_check(row, d)
     } else if (identical(e$type, "message") && identical(e$message$role, "assistant")) {
