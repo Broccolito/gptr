@@ -20,7 +20,7 @@ proc_rscript_bootstrap = function() {
   c("local({",
     "  payload = readRDS(commandArgs(trailingOnly = TRUE)[[1L]])",
     "  .libPaths(payload$libpaths, include.site = FALSE)",
-    "  if (payload$entry %in% c('worker', 'child')) {",
+    "  if (payload$entry %in% c('worker', 'child') || identical(payload$entry, 'ckpt_scan')) {",
     "    ns = loadNamespace('gptr', lib.loc = payload$library)",
     "    fun = get(paste0(payload$entry, '_main'), envir = ns, inherits = FALSE)",
     "  } else if (identical(payload$entry, 'artifact')) {",
@@ -32,14 +32,14 @@ proc_rscript_bootstrap = function() {
 
 #' Start one fixed R entry point in an owned directory; caller retains files until settlement
 #'
-#' Workers and coaching children (`child`) load the installed namespace before reading their
-#' spec. Artifacts use a self-contained base-environment function and never load gptr. Provider
+#' Workers, coaching children (`child`) and checkpoint scanners load the installed namespace.
+#' Artifacts use a self-contained base-environment function and never load gptr. Provider
 #' credentials exist only in the process environment: the bootstrap contains paths, arguments and
 #' library paths.
 #' @noRd
 proc_rscript = function(entry, args, dir, env, stdin = NULL, stdout = "|", stderr = "|",
                          wd = NULL, .marker = NULL, .on_spawn = NULL, .fun = NULL) {
-  entry = check_choice(entry, c("worker", "child", "artifact"), "entry")
+  entry = check_choice(entry, c("worker", "child", "artifact", "ckpt_scan"), "entry")
   check_string(dir, "dir")
   if (!is.list(args)) arg_abort(args, "args", "a list")
   script = file.path(dir, "bootstrap.R")

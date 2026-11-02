@@ -235,6 +235,14 @@ registered checkpointers, with conflicts and unsupported changes reported. It do
 arbitrary external services or uncaptured side effects. Check the report and restored data.
 Assigning a session to another name keeps the same object; use `gptr_fork()` for a branch.
 
+Automatic file scans have a two-second wait limit, including worker startup. They inspect at
+most 2,000 entries and back up at most 256 files within the configured byte limits. Peter reports
+partial coverage rather than waiting for a large directory to finish. It backs up predicted
+write targets separately before its own tools run, but native CLI edits to unvisited files have
+no automatic backup. An incomplete inventory never makes an existing file look newly created
+or makes an unvisited file look deleted. Ask Peter to use `ls`, `find` or `read` for more detail
+about a folder; it does not need to load every filename before answering.
+
 For a top-level team (`agents =`) or fan-out (`parallel =`) call in a designated history
 document, the code of each child that exports objects or returns a value with `gptr_return()` is
 recorded under that statement. Replay reconstructs the children and reruns that code, so the

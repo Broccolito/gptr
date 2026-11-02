@@ -69,7 +69,10 @@ Protected files and files that configure R or gptr (\code{.env}, \code{.Renviron
 \code{renv.lock}, keys under \verb{.ssh/}; see \link{gptr_security}) are never copied to the checkpoint store,
 so a turn's edit or deletion of one is not undone. Directories are not tracked: an empty
 directory a turn created stays. Files outside the project and \code{tempdir()} are restored only
-after you confirm each path. After a full restore the model is told nothing (the next
+after you confirm each path. Automatic file scans are bounded by time, entry and capture
+limits (see \link{gptr_options}); incomplete coverage is reported. Predicted write targets are
+backed up separately before gptr's tools, but native CLI edits to unvisited files have no
+automatic backup. After a full restore the model is told nothing (the next
 request's prefix is byte-identical to the earlier request at the target); after a partial one
 the next prompt carries a short \verb{<rewind>} block listing what was not restored. Model code may
 rewind another session only when you approve that call.

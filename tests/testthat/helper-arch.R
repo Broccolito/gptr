@@ -113,6 +113,7 @@ arch_layer_table = function() {
     "doc-knitr.R", "L5", "P15",
     "ckpt-objects.R", "L4", "P16",
     "ckpt-files.R", "L4", "P16",
+    "ckpt-scan.R", "L4", "P16",
     "ckpt-rewind.R", "L4", "P16",
     "skill-discover.R", "L4", "P17",
     "skill-templates.R", "L4", "P17",
