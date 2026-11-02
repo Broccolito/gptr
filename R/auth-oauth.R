@@ -9,9 +9,10 @@
 # httr2 is never used (conventions section 8); every transfer runs on P04's reactor, whose
 # handles set followlocation = 0L (IC-64). Layer L0: the MCP layer reaches gptr_login("mcp:")
 # through the callback it registers with oauth_hooks_set() at load (architecture 2.2).
-# Credentials: refresh tokens and API keys live in P03's credential store (auth.json, 0600);
-# access tokens live only in the vault (secret "auth:<key>:access", bound to the resource's
-# origin) with their expiry in the store record (contract 11.8).
+# Credentials: user scope uses P03's auth.json (0600) or its existing keyring references;
+# explicit keyring scope uses the native OS backend. Session scope keeps metadata and vault
+# handles in this R process. Access tokens live only in the vault (secret "auth:<key>:access",
+# bound to the resource's origin), with their expiry in credential metadata (contract 11.8).
 
 # ---- URLs, headers, forms (pure) -----------------------------------------------------------
 
@@ -446,8 +447,10 @@ oauth_forget_access = function(key) {
 # ---- the authorization-code flow ---------------------------------------------------------------
 
 #' Load-time callbacks of the layers above (architecture 2.2: L0 talks upward only through
-#' callbacks), like P10's namespace providers: `target(name)` resolves gptr_login("mcp:<name>")
-#' to list(url, oauth). No credentials and no run state live here.
+#' callbacks), like P10's namespace providers: `target(name, slot = NULL, resolve_only = FALSE)`
+#' resolves MCP login metadata: name, binding and HTTP url/oauth or stdio resource/description,
+#' with lifecycle callbacks. `provider_target(id)` resolves the configured provider endpoint.
+#' Credential entry stays in the host UI; no credential values or run state live here.
 #' @noRd
 oauth_hooks = new.env(parent = emptyenv())
 
