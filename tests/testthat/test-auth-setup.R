@@ -263,7 +263,9 @@ test_that("nested and served-tool OAuth redirects use hidden paste without a lis
   ui = local_scripted_ui(rep(list(redirect), 3L))
   reactor = reactor_get()
   old_tool_depth = reactor$tool_depth
-  withr::defer({ reactor$tool_depth = old_tool_depth })
+  withr::defer({
+    reactor$tool_depth = old_tool_depth
+  })
   depth = 0L
   local_mocked_bindings(reactor_depth = function() depth,
                         oauth_loopback_ok = function() stop("must not start a nested listener"))
