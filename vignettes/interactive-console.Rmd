@@ -87,6 +87,13 @@ Piping uses the session's kept workspace. To explore independently, use
 reference objects do not. `/clear` resets the conversation while retaining workspace objects,
 model and mode.
 
+To let an external MCP client use this workspace, enter `/mcp serve`. Peter starts or reuses
+the server and returns to R's top-level prompt, where idle callbacks can run. A new server uses
+the chat's workspace and mode; an existing server keeps its original settings. Leave R at its
+prompt while the client works, then resume this chat with `gptr_last() |> peter()`.
+This handoff avoids the blocking nested reader in R.app. See [MCP](mcp.html) for client
+configuration and the limits of synchronous tool waits.
+
 ## Enter prompts, objects and your own R
 
 Ask in ordinary language. `@x` attaches a visible R object by name, and `@analysis.R` adds the
@@ -197,7 +204,7 @@ commands available in the current session, including any supplied by plugins or 
 | `/doc [path]` | Show the recording document or bind one; binding authorizes writes to it. |
 | `/skills` | List discoverable skills. |
 | `/skill:<name> [request]` | Preload a skill and send the request; without a request, ask the agent to use that skill. |
-| `/mcp` | List MCP servers. |
+| `/mcp [serve]` | List MCP servers, or start/reuse the server and return to R's prompt. |
 | `/permissions` | Show the permission rules. |
 | `/permissions allow|ask|deny|remove <rule>` | Change a rule for this R process, for example `/permissions allow r(fn:saveRDS)`. |
 | `/retry` | Undo the last turn and send its recovered prompt again, with the `!` notes it was sent with when it is the latest message sent; may make a model request. |

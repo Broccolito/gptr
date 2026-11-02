@@ -266,7 +266,7 @@ proc_echo = function(path, shown, redactor, final = FALSE) {
 #'
 #' stdout and stderr go to temp files (deleted on exit), stdin is the null device unless
 #' `input` is given (chr or raw, through a temp file: large inputs never go on the command
-#' line, whose Windows limit is 32,767 characters), a `p$wait(200)` loop enforces `timeout` and
+#' line, whose Windows limit is 32,767 characters), a reactor wait enforces `timeout` and
 #' `proc_output_cap`, and `on.exit()` kills the whole tree on error or interrupt. Never
 #' processx's run().
 #' @return `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1),
@@ -289,7 +289,7 @@ proc_run = function(command, args = character(), input = NULL, timeout = 120, en
   shown = 0
   echo_redactor = if (echo) redact_stream("stream") else NULL
   repeat {
-    p$wait(200L)
+    reactor_pump(until = function() !p$is_alive(), slice_ms = 200L, timeout = 0.2)
     if (echo) shown = proc_echo(out_f, shown, echo_redactor)
     if (any(file.size(c(out_f, err_f)) > proc_output_cap, na.rm = TRUE)) {
       kill_all(p, grace = 0)

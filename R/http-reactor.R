@@ -12,7 +12,7 @@
 # Re-entrancy (IC-57): the reactor counts its pump depth. A nested pump (a sub-agent, System 1
 # or MCP call made inside an `r` evaluation) runs FIFO tools only of the runs named in its
 # `allow_runs` (default: none whenever another pump is on the stack), and later::run_now(0)
-# runs only at depth 1.
+# runs only at depth 1. Served tools also hold tool_depth, including at R's idle prompt.
 
 #' The process reactor, created on first use
 #' @return the `gptr_reactor` environment
@@ -32,6 +32,7 @@ reactor_get = function() {
   r$fifo = list()
   r$runs = new.env(parent = emptyenv())
   r$depth = 0L
+  r$tool_depth = 0L
   r$limits = new.env(parent = emptyenv())
   class(r) = "gptr_reactor"
   assign("reactor", r, envir = the)
@@ -175,9 +176,9 @@ later_run_now = function() {
 #' @param until zero-argument function; the pump returns `TRUE` as soon as it returns TRUE.
 #' @param slice_ms upper bound of one wait, in milliseconds.
 #' @param allow_runs run ids whose FIFO tools may run in this pump; `NULL` means all. When not
-#'   given it is `NULL` only when no pump is on the stack, else `character()`: every tool runs
-#'   inside a pump, so a nested pump started while any tool executes (`run_current()` of 04)
-#'   or from any other reactor callback runs no FIFO tool unless it names the runs (IC-57).
+#'   given it is `NULL` only outside pumps and served tools, else `character()`: a nested pump
+#'   started while a tool executes or from any other reactor callback runs no FIFO tool unless
+#'   it names the runs (IC-57), including a served tool entered at R's idle prompt.
 #' @param timeout seconds; the pump returns `FALSE` when they have passed.
 #' @return invisible(lgl(1))
 #' @noRd
@@ -188,7 +189,7 @@ reactor_pump = function(until = function() FALSE, slice_ms = 100L, allow_runs = 
   check_number(timeout, "timeout", min = 0)
   r = reactor_get()
   if (missing(allow_runs)) {
-    allow_runs = if (r$depth == 0L) NULL else character()
+    allow_runs = if (r$depth == 0L && r$tool_depth == 0L) NULL else character()
   } else {
     check_strings(allow_runs, "allow_runs", null = TRUE)
   }
@@ -210,7 +211,7 @@ reactor_step = function(r, allow_runs, slice_ms, t_end) {
   reactor_io(r, allow_runs, slice_ms, t_end)
   reactor_fire_timers(r)
   reactor_run_tasks(r)
-  if (r$depth == 1L) later_run_now()
+  if (r$depth == 1L && r$tool_depth == 0L) later_run_now()
   reactor_run_fifo(r, allow_runs)
   invisible(NULL)
 }

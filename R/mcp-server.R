@@ -221,6 +221,7 @@ mcp_serve_call = function(target, name, args, id, schema) {
 #' as the agent loop runs it (tool_run(): its record's source, the result check), a reported one
 #' (`st`, which marks the start of its execution) in the run's tool frame (tool_execute_frame()).
 #' A reported call runs between the checkpointers' before and after, as dispatch_steps() runs one.
+#' Its child waits cannot reenter later callbacks or sibling tools, even when entered at idle.
 #' @noRd
 mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   s = target$session
@@ -282,6 +283,11 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     tokens = checkpoint_before(run, call, ctx)
     st$t0 = reactor_now()
   }
+  reactor = reactor_get()
+  reactor$tool_depth = reactor$tool_depth + 1L
+  on.exit({
+    reactor$tool_depth = reactor$tool_depth - 1L
+  }, add = TRUE)
   res = if (identical(name, "r")) {
     call$approved_level = as.integer((d$risk %||% call$risk)$level %||% 2L)
     mcp_serve_r(call, env, run, s, ctx)
@@ -647,12 +653,17 @@ mcp_handle_new = function(st, tok, stop) {
 #' agents such as Codex, Claude Code, Claude Desktop or Cursor. It listens only on 127.0.0.1,
 #' requires a 192-bit bearer token, rejects foreign browser origins, and runs every call through
 #' your permission settings; R code evaluates in `envir`, where its objects persist. The calls
-#' belong to a dedicated gptr session whose permission mode is the one in effect when the server
-#' starts (stop and start the server to change it); like any new session, it becomes
-#' [gptr_last()]. Requests are answered while R waits at the console or inside a gptr call; one
-#' that needs your approval is refused with a note on how to allow it, because gptr never asks
-#' from a background callback. The token appears only in the snippets of `$config` (printed
-#' redacted; `as.character()` gives the text to paste; `$config$codex` holds the `codex` options
+#' belong to a dedicated gptr session whose permission mode is the configured default when the
+#' server starts, independently of a chat's explicit mode; like any new session, it becomes
+#' [gptr_last()]. A running server keeps its original workspace and mode until stopped.
+#' Requests are answered at R's top-level idle prompt or during an outermost reactor wait.
+#' A nested console `readline()` (including Peter's prompt in R.app), ordinary blocking R code,
+#' or a nested tool wait can pause serving. In Peter, `/mcp serve` starts or reuses the server
+#' and returns to R's prompt; a new server uses that chat's workspace and mode. Resume the chat
+#' with `gptr_last() |> peter()`. Calls that need approval are refused with a note on how to allow
+#' them, because gptr never asks from a background callback. The token appears only in the
+#' snippets of `$config` (printed redacted; `as.character()` gives the text to paste;
+#' `$config$codex` holds the `codex` options
 #' in `$args` and the environment to start Codex with in `$env`). One server runs per R process.
 #' Needs 'httpuv', 'later' and 'openssl'; gptr's own codex route does not use this server.
 #'
