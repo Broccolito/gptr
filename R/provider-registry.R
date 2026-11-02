@@ -142,13 +142,17 @@ provider_models = function(p, credential = provider_credential(p)) {
     auth = "api-key"
   }
   if (!is.null(credential)) {
-    headers[[auth]] = if (identical(auth, "authorization")) list("Bearer ", credential) else {
+    headers[[auth]] = if (identical(auth, "authorization")) {
+      list("Bearer ", credential)
+    } else {
       credential
     }
   }
   headers = adp_merge_headers(headers, p[["headers"]] %||% list(),
                               auth = c("authorization", "x-api-key", "x-goog-api-key", "api-key"))
-  path = if (identical(api, "anthropic-messages")) "/v1/models?limit=1000" else {
+  path = if (identical(api, "anthropic-messages")) {
+    "/v1/models?limit=1000"
+  } else {
     if (identical(api, "google-generative-ai")) "/models?pageSize=1000" else "/models"
   }
   positive = function(x) {
@@ -236,7 +240,9 @@ provider_models = function(p, credential = provider_credential(p)) {
       last = body[["last_id"]]
       if (!rlang::is_string(last) || !nzchar(last)) fail("returned an incomplete model page")
       last
-    } else if (identical(api, "google-generative-ai")) body[["nextPageToken"]]
+    } else if (identical(api, "google-generative-ai")) {
+      body[["nextPageToken"]]
+    }
     if (is.null(cursor) || identical(cursor, "")) return(result)
     if (!rlang::is_string(cursor) || cursor %in% seen || page == 4L) {
       fail("returned an incomplete or repeated model page")

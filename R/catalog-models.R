@@ -1186,7 +1186,9 @@ catalog_discover = function(p, safety = NULL, credential = NULL) {
   discover = p[["discover"]]
   rows = if (is.function(discover) && !isTRUE(attr(discover, "gptr_native_models"))) {
     discover()
-  } else provider_models(p, credential)
+  } else {
+    provider_models(p, credential)
+  }
   if (is.null(rows)) return(invisible(NULL))
   if (is.data.frame(rows)) {
     rows = lapply(seq_len(nrow(rows)), function(i) as.list(rows[i, , drop = FALSE]))
@@ -1251,7 +1253,9 @@ catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
   credential = tryCatch(if (!native && !callback) provider_credential(p) else NULL,
                         error = function(e) e)
   route = catalog_inventory_route(p)
-  key = c(route, list(credential = if (inherits(credential, "error")) class(credential)[[1L]] else {
+  key = c(route, list(credential = if (inherits(credential, "error")) {
+    class(credential)[[1L]]
+  } else {
     credential[c("name", "fp")]
   }))
   old = the$catalog[["inventory"]][[pid]]
@@ -1276,8 +1280,12 @@ catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
   }, error = function(e) e)
   if (is.null(found) || inherits(found, "error")) {
     status = if (inherits(found, "error")) found[["status"]]
-    record$error = if (inherits(found, "gptr_error_no_key")) "missing credentials" else {
-      if (is.numeric(status) && length(status) == 1L && !is.na(status)) paste("HTTP", status) else {
+    record$error = if (inherits(found, "gptr_error_no_key")) {
+      "missing credentials"
+    } else {
+      if (is.numeric(status) && length(status) == 1L && !is.na(status)) {
+        paste("HTTP", status)
+      } else {
         "listing unavailable"
       }
     }

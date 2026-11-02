@@ -2,9 +2,11 @@
 
 local_inventory_catalog = function(.env = parent.frame()) {
   local_mocked_bindings(
-    catalog_read_base = function() list(generated = "2026-11-02", source = "inventory fixture",
-      models = list(list(provider = "openai", id = "known", name = "Known", context = 8192,
-                         tool_call = TRUE, prices = list(list(input = 1, output = 2))))),
+    catalog_read_base = function() {
+      list(generated = "2026-11-02", source = "inventory fixture",
+        models = list(list(provider = "openai", id = "known", name = "Known", context = 8192,
+                           tool_call = TRUE, prices = list(list(input = 1, output = 2)))))
+    },
     check_running = function() FALSE,
     .env = .env
   )
@@ -110,15 +112,17 @@ test_that("decision API inventory does not invent context, vision, prices or new
 test_that("compatible APIs contribute only explicitly advertised chat capabilities", {
   local_mocked_bindings(check_running = function() FALSE)
   local_mocked_bindings(provider_credential = function(...) NULL,
-    catalog_http_request = function(...) inventory_response(list(data = list(
-      list(id = "mistral-fixture", max_context_length = 32000,
-           capabilities = list(completion_chat = TRUE, function_calling = TRUE, vision = TRUE)),
-      list(id = "router-fixture", context_length = 64000,
-           top_provider = list(max_completion_tokens = 8192),
-           architecture = list(input_modalities = list("text", "image"),
-                               output_modalities = list("text")),
-           supported_parameters = list("tools", "reasoning")),
-      list(id = "embedding-fixture", capabilities = list(completion_chat = FALSE))))))
+    catalog_http_request = function(...) {
+      inventory_response(list(data = list(
+        list(id = "mistral-fixture", max_context_length = 32000,
+             capabilities = list(completion_chat = TRUE, function_calling = TRUE, vision = TRUE)),
+        list(id = "router-fixture", context_length = 64000,
+             top_provider = list(max_completion_tokens = 8192),
+             architecture = list(input_modalities = list("text", "image"),
+                                 output_modalities = list("text")),
+             supported_parameters = list("tools", "reasoning")),
+        list(id = "embedding-fixture", capabilities = list(completion_chat = FALSE)))))
+    })
   rows = provider_models(provider_get("mistral"))
   expect_length(rows, 2L)
   expect_true(rows[[1]]$tool_call)
@@ -160,8 +164,9 @@ test_that("provider refresh merges advertised IDs while retaining catalog capabi
   local_inventory_catalog()
   local_mocked_bindings(egress_check = function(...) TRUE, replay_guard = function(...) TRUE,
     provider_credential = function(...) NULL,
-    catalog_http_request = function(...) inventory_response(list(data = list(
-      list(id = "known"), list(id = "new-id")))))
+    catalog_http_request = function(...) {
+      inventory_response(list(data = list(list(id = "known"), list(id = "new-id"))))
+    })
   old = gptr_models(provider = "openai")
   expect_true(all(old$availability == "unknown"))
   found = gptr_models(provider = "openai", refresh = TRUE)
@@ -238,8 +243,9 @@ test_that("custom discover callbacks support sparse records and successful empty
   local_inventory_catalog()
   p = provider_get("openai")
   p$auth = NULL
-  p$discover = function() list(list(id = "callback-id", context = 12000,
-                                  tool_call = TRUE, locality = "local"))
+  p$discover = function() {
+    list(list(id = "callback-id", context = 12000, tool_call = TRUE, locality = "local"))
+  }
   catalog_discover(p)
   m = model_resolve("openai/callback-id")
   expect_equal(m$context, 12000)
