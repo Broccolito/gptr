@@ -168,7 +168,7 @@ test_that("Windows checkpoint walks label links and forbid restoring through the
   before = wsec_bytes(source)
   link = file.path(project, "data-link")
   wsec_link(data, link)
-  walked = ckpt_walk(project)
+  walked = ckpt_scan_run(project, ckpt_prune(project), baseline = TRUE)$walk
   expect_true("data-link" %in% walked$path)
   expect_true(walked$link[walked$path == "data-link"])
   expect_false("data-link/x.csv" %in% walked$path)
@@ -244,7 +244,7 @@ test_that(
   expect_identical(path_key(link), path_key(outside))
   expect_false(path_inside(link, project))
   expect_true(path_is_link(link))
-  walked = ckpt_walk(project)
+  walked = ckpt_scan_run(project, ckpt_prune(project), baseline = TRUE)$walk
   expect_true("data-junction" %in% walked$path)
   expect_true(walked$link[walked$path == "data-junction"])
   expect_false(any(startsWith(walked$path, "data-junction/")))

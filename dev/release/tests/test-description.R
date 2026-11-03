@@ -13,7 +13,7 @@ test_that("description_problems() checks the two fields P25 owns and guards the 
   expect_identical(description_problems(dcf_of(Version = "0.99.0.9000"), "vignettes"),
                    character())
   expect_match(description_problems(dcf_of(Version = "0.99.0.9000"), "release"),
-               "Version must be 1.0.0")
+               "Version must be a stable x.y.z release")
   expect_match(description_problems(dcf_of(VignetteBuilder = NULL), "vignettes"),
                "VignetteBuilder must be knitr, rmarkdown")
   expect_match(description_problems(dcf_of(VignetteBuilder = "knitr"), "vignettes"),
@@ -21,4 +21,14 @@ test_that("description_problems() checks the two fields P25 owns and guards the 
   expect_match(description_problems(dcf_of(Suggests = "testthat, ellmer, knitr, rmarkdown")),
                "ellmer must not be a dependency")
   expect_match(description_problems(dcf_of(Title = "Something Else")), "Title differs")
+})
+
+test_that("release DESCRIPTION accepts patch releases and refuses development versions", {
+  for (version in c("1.0.1", "1.1.0", "2.0.0", "0.7.1")) {
+    expect_identical(description_problems(dcf_of(Version = version), "release"), character())
+  }
+  for (version in c("", NA_character_, "1.0", "1.0.1.9000", "1.0.1-dev", "01.0.1")) {
+    expect_match(description_problems(dcf_of(Version = version), "release"),
+                 "Version must be a stable x.y.z release")
+  }
 })

@@ -185,19 +185,6 @@ ckpt_is_link = function(path) {
   path_is_link(fs_path(path))
 }
 
-#' The files of a project through P10's walker (contract 7.10): hidden and git-ignored files
-#' included (an ignored data file the agent overwrote must be restorable), symbolic links and files
-#' that cannot be read listed, never followed or read
-#' @param prune What the walk prunes (`ckpt_prune()`; a tracker keeps its own).
-#' @return df(path (relative), size, mtime (numeric), link).
-#' @noRd
-ckpt_walk = function(root, prune = ckpt_prune(root)) {
-  w = walk_files(root, "any", gitignore = FALSE, hidden = TRUE, prune = prune)
-  w = w[w$type != "dir", , drop = FALSE]
-  data.frame(path = w$path, size = pmax(w$size, 0, na.rm = TRUE),
-             mtime = pmax(as.numeric(w$mtime), 0, na.rm = TRUE), link = w$type == "link")
-}
-
 #' The session's file tracker, made on first use at project_root(): `prune`, what its walks prune;
 #' `stat`, the last walk, taken at `walk_time`; `walk_secs`, how long the last scan's walk took;
 #' `hash` and `mode`, the content hash and mode bits of each captured relative path; `explicit`
@@ -268,45 +255,78 @@ ckpt_capturable = function(full, root = project_root()) {
     !path_class(f, root) %in% c("protected", "control")
 }
 
-#' The baseline at the first mutating call: walk, then capture files within
-#' gptr.checkpoint_track_file_max each and gptr.checkpoint_track_total in all, small source-like
-#' files first, none protected or control
+#' Apply one bounded scan's observations without discarding unvisited paths
 #' @noRd
-ckpt_files_baseline = function(tr) {
-  tr$walk_time = as.numeric(Sys.time())
-  w = ckpt_walk(tr$root, tr$prune)
+ckpt_files_observe = function(tr, s) {
+  w = s$walk
+  gone = c(w$path, s$absent, s$not_files)
+  retained = tr$stat[!tr$stat$path %in% gone, , drop = FALSE]
+  w = rbind(w, retained)
+  fits = nrow(w) <= 2000L
+  # Keep automatic state bounded across turns as well as within an individual scan.
+  priority = w$path %in% c(names(s$hash), names(tr$hash))
+  w = w[utils::head(order(!priority), 2000L), , drop = FALSE]
+  drop = c(s$absent, s$not_files, setdiff(s$walk$path, names(s$hash)))
+  tr$hash = tr$hash[!names(tr$hash) %in% drop]
+  tr$mode = tr$mode[!names(tr$mode) %in% drop]
+  tr$hash[names(s$hash)] = s$hash
+  tr$mode[names(s$mode)] = s$mode
+  tr$hash = tr$hash[names(tr$hash) %in% w$path]
+  tr$mode = tr$mode[names(tr$mode) %in% w$path]
+  tr$absent = utils::head(setdiff(unique(c(s$absent, tr$absent)), c(w$path, s$not_files)), 2000L)
   tr$stat = w
-  w = w[!w$link & w$size <= gptr_opt("checkpoint_track_file_max") &
-          file.access(fs_path(file.path(tr$root, w$path)), 4L) == 0L, , drop = FALSE]
-  full = fs_path(file.path(tr$root, w$path))
-  w = w[ckpt_regular(full) & !path_class(full, tr$root) %in% c("protected", "control"), ,
-        drop = FALSE]
-  w = w[order(!grepl(ckpt_source_re, w$path), w$size), , drop = FALSE]
-  ckpt_ingest(tr, w$path[cumsum(w$size) <= gptr_opt("checkpoint_track_total")])
+  tr$complete = isTRUE(s$complete) && fits
+  tr$coverage = tr$complete && !isTRUE(s$capture_capped)
+  tr$last_coverage = s$coverage %||% tr$coverage
+  tr$walk_secs = s$walk_seconds %||% s$seconds
+  tr$walk_time = s$time
+  if (!isTRUE(s$complete)) tr$per_turn = TRUE
+  if (!isTRUE(s$complete) || isTRUE(s$capture_capped)) {
+    gptr_inform(paste0("Automatic file checkpoint coverage is incomplete (", s$reason,
+                       "). Unvisited native CLI edits have no automatic undo backup; Peter ",
+                       "backs up predicted targets before its own tools. Use ls/find/read ",
+                       "to inspect more files as needed."),
+                "notice", .once = paste0("ckpt-coverage:", tr$root))
+  }
 }
 
-#' Walk (its duration noted in `tr$walk_secs`) and compare with the last walk; a readable tracked
-#' file of unchanged size and mtime is hashed when its mtime lies within 2 s of that walk (git's
-#' racy-clean rule)
-#' @return `list(walk, time, created, modified, deleted)`.
+#' The first automatic baseline: bounded enumeration and capture in a supervised R child
+#' @noRd
+ckpt_files_baseline = function(tr) {
+  tr$stat = ckpt_empty_walk()
+  tr$hash = character()
+  tr$mode = integer()
+  tr$absent = character()
+  s = ckpt_scan_run(tr$root, tr$prune, old = tr$stat, baseline = TRUE)
+  s$time = as.numeric(Sys.time())
+  ckpt_files_observe(tr, s)
+}
+
+#' Compare completed observations; missing observations are never evidence of deletion.
+#' A newly discovered file is only known to be created when the previous inventory was complete.
+#' @return `list(walk, time, created, modified, deleted, ...)`.
 #' @noRd
 ckpt_files_scan = function(tr) {
-  time = as.numeric(Sys.time())
-  t0 = proc.time()[["elapsed"]]
-  w = ckpt_walk(tr$root, tr$prune)
-  tr$walk_secs = proc.time()[["elapsed"]] - t0
+  s = ckpt_scan_run(tr$root, tr$prune, old = tr$stat)
+  # Missing captures can hide same-metadata changes; retain known pre-images for observed edits.
+  s$coverage = isTRUE(tr$coverage) && isTRUE(s$complete) && !isTRUE(s$capture_capped)
+  s$time = as.numeric(Sys.time())
   old = tr$stat
+  w = s$walk
   both = intersect(w$path, old$path)
   o = old[match(both, old$path), , drop = FALSE]
   n = w[match(both, w$path), , drop = FALSE]
   changed = o$size != n$size | o$mtime != n$mtime | o$link != n$link
-  racy = !changed & !n$link & n$mtime >= tr$walk_time - 2 & both %in% names(tr$hash)
-  regular = ckpt_regular(file.path(tr$root, both[racy]))
-  changed[racy] = !regular
-  racy[racy] = regular & file.access(fs_path(file.path(tr$root, both[racy])), 4L) == 0L
-  racy[racy] = hash_file(fs_path(file.path(tr$root, both[racy]))) != tr$hash[both[racy]]
-  list(walk = w, time = time, created = setdiff(w$path, old$path), modified = both[changed | racy],
-       deleted = setdiff(old$path, w$path))
+  captured = both %in% intersect(names(s$hash), names(tr$hash))
+  changed[captured] = changed[captured] |
+    s$hash[both[captured]] != tr$hash[both[captured]]
+  unsafe = both %in% names(s$uncaptured)[s$uncaptured %in%
+    c("not a regular file", "symbolic link")]
+  fresh = setdiff(w$path, old$path)
+  s$created = if (isTRUE(tr$complete)) fresh else intersect(fresh, tr$absent)
+  s$modified = unique(c(both[changed | unsafe], intersect(old$path, s$not_files)))
+  s$deleted = intersect(old$path, s$absent)
+  s
 }
 
 #' A files fragment row (JSON-able: hashes "" when absent, numbers -1 when unknown)
@@ -332,12 +352,12 @@ ckpt_files_step = function(tr) {
     link = isTRUE(w$link[j])
     pre = if (status[i] != "created" && p %in% names(tr$hash)) tr$hash[[p]] else ""
     mode = if (p %in% names(tr$mode)) tr$mode[[p]] else -1L
-    tr$hash = tr$hash[names(tr$hash) != p]
-    keep = status[i] != "deleted" && ckpt_capturable(file.path(tr$root, p), tr$root)
-    post = if (keep) ckpt_ingest(tr, p) else ""
+    post = if (p %in% names(s$hash)) s$hash[[p]] else ""
+    nonregular = p %in% s$not_files ||
+      p %in% names(s$uncaptured)[s$uncaptured == "not a regular file"]
     reason = if (link) {
       "symbolic link"
-    } else if (status[i] != "deleted" && !keep && !ckpt_regular(file.path(tr$root, p))) {
+    } else if (nonregular) {
       "not a regular file"
     } else if (status[i] != "created" && !nzchar(pre)) {
       "no pre-image: over the size cap, protected or outside the baseline"
@@ -347,8 +367,7 @@ ckpt_files_step = function(tr) {
     rows[[i]] = ckpt_file_row(p, FALSE, status[i], pre, post, mode, w$size[j], w$mtime[j],
                               !nzchar(reason), reason)
   }
-  tr$stat = w
-  tr$walk_time = s$time
+  ckpt_files_observe(tr, s)
   rows
 }
 
@@ -404,12 +423,11 @@ ckpt_stat_refresh = function(tr, rel) {
 }
 
 #' Files checkpointer, before a mutating call: the baseline, or (`sync`) a scan that absorbs edits
-#' made outside gptr (once per turn in per-turn mode); then the predicted paths are captured, in the
-#' tracker when the walk covers them, else (and in per-turn mode) as explicit paths. In per-turn
-#' mode a walked path that changed since the turn's scan is left to the turn scan ("?"), whose
-#' pre-image is the content at the start of the turn. A call served to a CLI route does not
+#' made outside gptr (once per turn in per-turn mode); predicted paths get explicit pre-images.
+#' In per-turn mode a known path that changed since the turn's scan is left to that scan ("?"),
+#' whose pre-image is the content at the start of the turn. A call served to a CLI route does not
 #' `sync`: the edits its child made since the turn's start are recorded, never absorbed (IC-65),
-#' and an untracked path is captured only while it is as the last walk saw it.
+#' and existing targets require a matching prior content hash, never metadata alone.
 #' @return A token.
 #' @noRd
 ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
@@ -422,18 +440,26 @@ ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
   paths = ckpt_call_paths(call)
   for (p in paths) {
     rel = ckpt_walked(tr, p)
-    if (!is.na(rel) && !isTRUE(tr$per_turn)) {
-      if (!rel %in% names(tr$hash) && ckpt_capturable(p, tr$root) &&
-            ckpt_as_scanned(tr, rel, "")) {
-        ckpt_ingest(tr, rel)
+    state = ckpt_explicit_state(p, tr$root)
+    # A direct target missed by a partial inventory can be backed up immediately before
+    # our own call. A CLI may already have changed it natively, so sync=FALSE is stricter.
+    known = !is.na(rel) && (isTRUE(tr$complete) || rel %in% c(tr$stat$path, tr$absent))
+    explicit = p %in% names(tr$explicit) && identical(state, tr$explicit[[p]]) && state != "?"
+    exact = if (!sync) {
+      if (is.na(rel)) explicit else if (!nzchar(state)) {
+        known && !rel %in% tr$stat$path
+      } else {
+        (rel %in% names(tr$hash) && identical(state, tr$hash[[rel]])) || explicit
       }
     } else {
-      state = ckpt_explicit_state(p, tr$root)
-      tr$explicit[p] = if (is.na(rel) || ckpt_as_scanned(tr, rel, state)) state else "?"
-      tr$explicit_mode[p] = ckpt_modes(p)
+      is.na(rel) || !known || ckpt_as_scanned(tr, rel, state)
     }
+    tr$explicit[p] = if (exact) state else "?"
+    tr$explicit_mode[p] = ckpt_modes(p)
   }
-  list(frag = ckpt_frag_id(), turn = turn, paths = paths)
+  exact = length(paths) > 0L && all(tr$explicit[paths] != "?")
+  list(frag = ckpt_frag_id(), turn = turn, paths = paths, exact = exact,
+       coverage = isTRUE(tr$coverage))
 }
 
 #' Rows for the explicit paths of a call that changed: relative when the walk covers them (per-turn
@@ -477,9 +503,12 @@ ckpt_files_explicit = function(tr, paths) {
 #' @noRd
 ckpt_files_after = function(ck, call, token) {
   tr = ckpt_files_tr(ck)
-  rows = list()
+  rows = ckpt_files_explicit(tr, token$paths)
+  coverage = isTRUE(token$coverage)
+  scanned = !isTRUE(tr$per_turn)
   if (!isTRUE(tr$per_turn)) {
-    rows = ckpt_files_step(tr)
+    rows = c(rows, ckpt_files_step(tr))
+    coverage = coverage && isTRUE(tr$last_coverage)
     if (tr$walk_secs > gptr_opt("checkpoint_scan_budget")) {
       tr$per_turn = TRUE
       gptr_inform(paste0("Checkpoint scans of ", tr$root, " take longer than ",
@@ -487,9 +516,10 @@ ckpt_files_after = function(ck, call, token) {
                          "paths it can predict."), "notice", .once = paste0("ckpt-scan:", tr$root))
     }
   }
-  rows = c(rows, ckpt_files_explicit(tr, token$paths))
-  if (!length(rows)) return(NULL)
-  list(id = token$frag, turn = token$turn, root = tr$root, files = rows)
+  if (!scanned && call$name %in% c("write", "edit") && isTRUE(token$exact)) coverage = TRUE
+  if (!length(rows) && coverage) return(NULL)
+  list(id = token$frag, turn = token$turn, root = tr$root, files = rows,
+       coverage = if (coverage) "complete" else "partial")
 }
 
 #' One scan recorded as its own fragment: at the end of a turn in per-turn mode, and (`force`) after
@@ -500,8 +530,9 @@ ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
   tr = ckpt_files_tr(ck)
   if (is.null(tr$stat) || !(isTRUE(tr$per_turn) || force)) return(NULL)
   rows = ckpt_files_step(tr)
-  if (!length(rows)) return(NULL)
-  list(id = ckpt_frag_id(), turn = as.integer(turn), root = tr$root, files = rows)
+  if (!length(rows) && isTRUE(tr$last_coverage)) return(NULL)
+  list(id = ckpt_frag_id(), turn = as.integer(turn), root = tr$root, files = rows,
+       coverage = if (isTRUE(tr$last_coverage)) "complete" else "partial")
 }
 
 #' gptr's own write of `full` (a document; P15's doc_own_write()): `write()` runs, and each
@@ -601,6 +632,10 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
   gone = if (redo) "deleted" else "created"
   old = !redo && isTRUE(fragment$turn <= turn_now - gptr_opt("checkpoint_turns"))
   out = ckpt_items()
+  if (identical(fragment$coverage, "partial")) {
+    out = ckpt_item(out, "file coverage", FALSE,
+                    "not restored (automatic scan incomplete; unobserved file changes may remain)")
+  }
   rows = fragment$files
   for (r in rows[order(!vapply(rows, function(x) identical(x$status, gone), NA))]) {
     full = if (isTRUE(r$abs)) r$path else file.path(fragment$root, r$path)
@@ -670,7 +705,8 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
 #' One line per file of a fragment
 #' @noRd
 ckpt_files_describe = function(fragment) {
-  vapply(fragment$files, function(r) {
+  c(if (identical(fragment$coverage, "partial")) "file coverage: automatic scan incomplete",
+    vapply(fragment$files, function(r) {
     paste0("file ", r$path, ": ", r$status, if (!isTRUE(r$restorable)) " (not restorable)")
-  }, "")
+  }, ""))
 }

@@ -1,3 +1,16 @@
+# gptr 1.0.1
+
+## Bug fixes
+
+* Automatic file checkpoints no longer inventory and copy a whole working directory before
+  the first CLI response. A supervised scan waits at most two seconds, inspects at most 2,000
+  entries and captures at most 256 files within the existing byte limits. Partial coverage is
+  reported; predicted write targets are still backed up separately before Peter's own tools.
+  Unvisited native CLI edits cannot be undone automatically. Folder discovery remains available
+  on demand through `ls`, `find` and `read`.
+* Interrupting an MCP request while its initial message is being sent now sends cancellation,
+  including when progress arrives before the send completes.
+
 # gptr 1.0.0
 
 gptr 1.0.0 is a complete rewrite: it runs language model agents in an existing R session, where

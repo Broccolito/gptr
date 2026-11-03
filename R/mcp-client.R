@@ -666,6 +666,11 @@ mcp_request = function(conn, method, params = NULL, timeout = NULL, modern = NUL
   st = new.env(parent = emptyenv())
   st$deadline = reactor_now() + timeout
   st$hard = reactor_now() + 10 * timeout
+  # Sending stdio can pump progress before mcp_await() starts. Own cancellation before
+  # either phase; a resumed interrupt does not unwind this request (G3).
+  st$reason = "user interrupt"
+  st$settled = FALSE
+  on.exit(if (!st$settled) mcp_cancel(conn, id, st, st$reason), add = TRUE)
   # a named closure, then assign(): lintr's object_usage_linter checks a function literal passed
   # to assign() on its own, without this function's arguments
   on_tick = function(p) {
@@ -728,11 +733,6 @@ mcp_await = function(conn, key, st, id, method, timeout) {
     exists(key, envir = conn$pending, inherits = FALSE) || length(conn$requests) > 0L ||
       !isTRUE(conn$alive) || isTRUE(st$failed) || reactor_now() > min(st$deadline, st$hard)
   }
-  # any unwind cancels, after the pump has unwound; an interrupt the pause menu resumes does not
-  # unwind (G3)
-  reason = "user interrupt"
-  settled = FALSE
-  on.exit(if (!settled) mcp_cancel(conn, id, st, reason), add = TRUE)
   repeat {
     left = min(st$deadline, st$hard) - reactor_now()
     reactor_pump(until = done, slice_ms = 50L, timeout = max(0.05, left))
@@ -744,20 +744,20 @@ mcp_await = function(conn, key, st, id, method, timeout) {
     if (exists(key, envir = conn$pending, inherits = FALSE)) {
       r = get(key, envir = conn$pending, inherits = FALSE)
       rm(list = key, envir = conn$pending)
-      settled = TRUE
+      st$settled = TRUE
       return(r)
     }
     if (isTRUE(st$failed)) {
-      settled = TRUE
+      st$settled = TRUE
       return(st$failure)
     }
     if (!isTRUE(conn$alive)) {
-      settled = TRUE
+      st$settled = TRUE
       return(list(error = list(code = NA_integer_, message = "the server process exited"),
                   exited = TRUE))
     }
     if (reactor_now() > min(st$deadline, st$hard)) {
-      reason = "timeout"
+      st$reason = "timeout"
       gptr_abort(paste0("MCP server ", conn$name, " did not answer ", method, " within ",
                         format(timeout), " s."), "timeout", seconds = timeout,
                  what = paste("MCP", method))

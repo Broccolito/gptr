@@ -413,6 +413,7 @@ declares, if any.
 | `doc-knitr.R` | L5 | `knit_print` methods, stale-chunk label hooks | - | P15 |
 | `ckpt-objects.R` | L4 | copy-safe object pre-images, capture policy, settle, spill [G7]; the exported `gptr_preimage()` S3 generic | - | P16 |
 | `ckpt-files.R` | L4 | content-addressed file store, baseline and walk, 3-way restore | - | P16 |
+| `ckpt-scan.R` | L4 | bounded filesystem scan and capture in a supervised R child | - | P16 |
 | `ckpt-rewind.R` | L4 | checkpoint records, `gptr_rewind()`, `gptr_checkpoints()`, `/undo`, `/redo`, `/rewind` | checkpoints | P16 |
 | `skill-discover.R` | L4 | skill discovery, lenient frontmatter (yaml), compact budgeted catalog, activation, `gptr_skills()` | skills | P17 |
 | `skill-templates.R` | L4 | prompt templates, `/name args` expansion | prompts | P17 |
@@ -2068,16 +2069,26 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   released with `rm()`; list and S4 pre-images are defused before dropping (R6). After the call, settle: an
   address change means modified; release the rest. At turn end spill the largest held images or drop the
   oldest (defuse + `rm()`), and drop images older than `gptr.undo_turns` (20).
-- **Files.** A content-addressed store (XXH128 via rlang, gzip level 1, deduplicated), a baseline of
-  small source-like files (1 MB each, 100 MB total) at the first mutating call, a pruned walk after
-  each mutating call (per-turn scanning when a walk exceeds 250 ms), pre-capture of predicted
-  literal paths; covers `edit`, `write`, files written by model R code and child processes, but
-  never a `protected` or `control` path (`.env`, `.Renviron`, keys), whose rewind row reads "no
-  pre-image" [D-298]; the store is anchored to the tracker's project root, not the working
-  directory. Restores are 3-way (user edits after the turn are kept); never through symlinks or hard
-  links; never into `.git` or `R_user_dir()`; only inside the project root and `tempdir()` unless
-  the user confirms each outside path [IC-52]. Blob garbage collection keeps every blob that any
-  session file of the project references and skips while another live process holds a session lock,
+- **Files.** A content-addressed store (XXH128 via rlang, gzip level 1, deduplicated). Automatic
+  baseline and subsequent scans run in an owned R worker, with a worker wait deadline of
+  `gptr.checkpoint_scan_timeout` (2 s by default), including startup; bounded result collection
+  follows. Limits are 2,000 inspected entries and 256 captured files plus the existing per-file
+  and total byte caps. The
+  same policy applies before and after tools and at CLI, turn and agent boundaries; there is no
+  unlimited catch-up scan. Partial inventories retain unvisited observations and never infer
+  creation or deletion from an unobserved path. Automatic file undo covers only changes with
+  sufficient observations and valid pre-images; coverage limitations are reported. Predicted
+  literal targets of gptr-controlled calls are captured immediately before mutation, independently
+  of automatic coverage. A CLI-served call without synchronization cannot treat content first
+  seen after the child started as a turn-start pre-image. Arbitrary native CLI/shell writes
+  outside coverage are not guaranteed undo. Project discovery remains scoped and on demand through
+  `ls`, `find` and `read`, rather than requiring a complete startup inventory. Never capture a
+  `protected` or `control` path (`.env`, `.Renviron`, keys), whose rewind row reads "no pre-image"
+  [D-298]; the store is anchored to the tracker's project root, not the working directory.
+  Restores are 3-way (user edits after the turn are kept); never through symlinks or hard links;
+  never into `.git` or `R_user_dir()`; only inside the project root and `tempdir()` unless the user
+  confirms each outside path [IC-52]. Blob garbage collection keeps every blob that any session
+  file of the project references and skips while another live process holds a session lock,
   however old its heartbeat [IC-71, D-298].
 - **Rewind.** `gptr_rewind(s, turn = -1L, ...)` undoes checkpoint records from the leaf to the lowest common
   ancestor (newest first), redoes those down to the target, appends `gptr.rewind` parented at the target (the

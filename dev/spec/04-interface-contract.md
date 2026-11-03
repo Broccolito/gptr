@@ -390,6 +390,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `gptr.undo_turns` | `int(1)` | `20L` | P16 | G7 §3.7 |
 | `gptr.checkpoint` | `chr(1)` | `"on"` | P16 | `"on"`, `"files"`, `"off"` |
 | `gptr.checkpoint_disk_bytes`, `gptr.checkpoint_days`, `gptr.checkpoint_turns`, `gptr.checkpoint_track_file_max`, `gptr.checkpoint_track_total`, `gptr.checkpoint_capture_max`, `gptr.checkpoint_scan_budget`, `gptr.checkpoint_rng`, `gptr.checkpoint_close_devices` | as G7 §3.7 | `2e9`, `30`, `100`, `1e6`, `1e8`, `5e7`, `0.25`, `TRUE`, `FALSE` | P16 | G7 §3.7 |
+| `gptr.checkpoint_scan_timeout` | `num(1)` | `2` | P16 | worker wait deadline in seconds for an automatic file scan, including startup; bounded result collection follows; partial coverage and fixed entry/file limits are described in §7.16 |
 | `gptr.redact_min_chars` | `int(1)` | `8L` | P03 | shortest value-redacted secret |
 | `gptr.redact_patterns` | `lgl(1)` | `TRUE` | P03 | pattern layer (values are always redacted) |
 | `gptr.stream_hold_max` | `int(1)` | `4096L` | P03 | streaming hold-back cap (characters) |
@@ -2988,6 +2989,25 @@ doc_upsert(site, doc_block_lines(s, 1L, site, 1L))
 | `ckpt_store_put(path)` / `ckpt_store_get(hash, dest)` | `ckpt-files.R` | content-addressed blobs `<root>/checkpoints/blobs/<2hex>/<xxh128>[.gz]` | P16, P23 (artifact records) |
 
 The `checkpointer` contract used by the dispatcher (P06) is §10.2.
+
+Automatic file scans use a supervised R worker with a worker wait deadline of
+`gptr.checkpoint_scan_timeout` (default 2 s), including startup; bounded result collection
+follows. Limits are 2,000 inspected entries and 256 captured files, plus the existing per-file
+and total byte limits. Apply this policy to initial baselines, tool scans and CLI/turn/agent
+boundary scans. There is no unlimited catch-up
+scan. Completed observations distinguish known contents, verified absence and unknown paths;
+unvisited old observations remain available. A partial inventory is never evidence that an
+unseen file was created or deleted. Discovered changes without valid pre-images are not
+restorable, and coverage notices explain that other changes may not be listed or undoable.
+
+Predicted targets of gptr-controlled writes are backed up immediately before the call,
+independently of automatic coverage, with the existing protected/control/link/type and byte
+checks. CLI-served calls using `sync = FALSE` require a matching prior content hash for an
+existing file, or verified prior absence for a creation. Size and modification time alone
+cannot prove original contents; a late copy cannot become an original for an earlier native CLI edit.
+Preserve guarded restores and R-object checkpointing. Arbitrary native CLI/shell writes outside
+coverage have no complete-undo guarantee. File discovery stays scoped and on demand through
+`ls`, `find` and `read`; provider startup requires no full-folder inventory.
 
 Example calls:
 

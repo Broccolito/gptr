@@ -488,7 +488,7 @@ test_that("the walk prunes .git and .gptr and lists links unfollowed; restores a
                                     ".hg/dirstate" = "v1", ".svn/wc.db" = "v1",
                                     "data/x.csv" = "id"))
   file.symlink(file.path(proj, "data"), file.path(proj, "data_link"))
-  w = ckpt_walk(proj)
+  w = ckpt_scan_run(proj, ckpt_prune(proj), baseline = TRUE)$walk
   expect_setequal(w$path, c("R/a.R", "data/x.csv", "data_link"))
   expect_true(w$link[w$path == "data_link"])
   tr = list(root = proj, prune = ckpt_prune(proj))
@@ -602,7 +602,7 @@ test_that("files over the capture cap and symbolic links are not restorable", {
   expect_true(nzchar(Sys.readlink(file.path(proj, "link.md"))))
 })
 
-test_that("without a sync, an unhashed file changed since the last walk has no pre-image (#24)", {
+test_that("CLI calls cannot promote an unhashed file's metadata to an original pre-image", {
   local_gptr_options(checkpoint_track_file_max = 10)
   proj = local_project(files = list("edited.csv" = strrep("o", 20), "kept.csv" = strrep("o", 20)))
   ck = ckpt_ck_new("s0000000034")
@@ -616,11 +616,11 @@ test_that("without a sync, an unhashed file changed since the last walk has no p
   rows = stats::setNames(frag$files, vapply(frag$files, function(r) r$path, ""))
   expect_false(rows[["edited.csv"]]$restorable)
   expect_match(rows[["edited.csv"]]$reason, "no pre-image")
-  expect_true(rows[["kept.csv"]]$restorable)
+  expect_false(rows[["kept.csv"]]$restorable)
   u = ckpt_files_undo(ck, frag)
   expect_identical(u$ok[u$item == "file edited.csv"], FALSE)
   expect_identical(readLines(file.path(proj, "edited.csv")), "served")
-  expect_identical(readLines(file.path(proj, "kept.csv")), strrep("o", 20))
+  expect_identical(readLines(file.path(proj, "kept.csv")), "served")
 })
 
 test_that("undo restores mode bits; old rows, later edits and missing copies are not written", {
@@ -637,8 +637,11 @@ test_that("undo restores mode bits; old rows, later edits and missing copies are
   writeLines("a longer new file", file.path(proj, "new.txt"))
   file.remove(file.path(proj, "run.sh"))
   frag = ckpt_files_after(ck, call, tok)
-  expect_match(ckpt_files_undo(ck, frag, turn_now = 101L)$action, "older than", all = TRUE)
-  expect_true(all(ckpt_files_undo(ck, frag)$ok))
+  old = ckpt_files_undo(ck, frag, turn_now = 101L)
+  expect_match(old$action[old$item != "file coverage"], "older than", all = TRUE)
+  restored = ckpt_files_undo(ck, frag)
+  expect_false(restored$ok[restored$item == "file coverage"])
+  expect_true(all(restored$ok[restored$item != "file coverage"]))
   expect_identical(format(file.mode(file.path(proj, c("run.sh", "a.R")))), c("750", "700"))
   writeLines("a = 3", file.path(proj, "a.R"))
   r = ckpt_files_undo(ck, frag, redo = TRUE)
@@ -748,7 +751,8 @@ test_that("restores never write into .git or gptr's user directories; control pa
 })
 
 test_that("slow walks switch the session to one scan per turn plus predicted paths", {
-  local_gptr_options(checkpoint_scan_budget = -1, checkpoint_capture_max = 20)
+  local_gptr_options(checkpoint_scan_budget = -1, checkpoint_capture_max = 20,
+                     checkpoint_scan_timeout = 15)
   proj = local_project(files = list("R/a.R" = "a = 1"))
   ck = ckpt_ck_new("s0000000027")
   call = list(id = "c1", name = "r", input = list(code = "writeLines('a = 2', 'R/a.R')"))
@@ -772,7 +776,9 @@ test_that("slow walks switch the session to one scan per turn plus predicted pat
   writeLines(strrep("y", 100), file.path(proj, "R", "a.R"))
   frag3 = ckpt_files_after(ck, call3, tok3)
   expect_identical(frag3$files[[1L]]$status, "modified")
-  expect_null(ckpt_files_turn_scan(ck, 2L))
+  coverage = ckpt_files_turn_scan(ck, 2L)
+  expect_length(coverage$files, 0L)
+  expect_identical(coverage$coverage, "partial")
   expect_true(ckpt_files_undo(ck, frag3)$ok)
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 2")
   # a predicted path that unpredicted code changed earlier in the turn is left to the turn scan
@@ -822,10 +828,11 @@ test_that("only the walk counts against gptr.checkpoint_scan_budget, not root lo
 test_that("a walk slower than gptr.checkpoint_scan_budget switches to per-turn scans once", {
   local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
   proj = local_project(files = list("a.R" = "a = 1"))
-  walk = ckpt_walk
-  local_mocked_bindings(ckpt_walk = function(...) {
-    Sys.sleep(0.3)
-    walk(...)
+  scan = ckpt_scan_run
+  local_mocked_bindings(ckpt_scan_run = function(...) {
+    result = scan(...)
+    result$walk_seconds = 0.3
+    result
   })
   ck = ckpt_ck_new("s0000000096")
   call = list(id = "c1", name = "r", input = list(code = "writeLines('a = 2', 'a.R')"))
@@ -854,7 +861,10 @@ test_that("files that cannot be read are listed, never captured and stop nothing
   Sys.chmod(file.path(proj, "key.pem"), "0000", use_umask = FALSE)
   frag = ckpt_files_after(ck, call, tok)
   expect_identical(paths_status(frag), c(key.pem = "created", `R/a.R` = "modified"))
-  expect_true(all(ckpt_files_undo(ck, frag)$ok))
+  expect_identical(frag$coverage, "partial")
+  report = ckpt_files_undo(ck, frag)
+  expect_false(report$ok[report$item == "file coverage"])
+  expect_true(all(report$ok[report$item != "file coverage"]))
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
   expect_false(file.exists(file.path(proj, "key.pem")))
   expect_identical(readLines(file.path(proj, "secret.txt")), "s")
@@ -971,21 +981,11 @@ test_that("checkpoint baseline excludes owned FIFOs before hashing", {
   fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
   withr::defer(close(fifo))
   expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
-  original = hash_file
-  hashed = character()
-  local_mocked_bindings(hash_file = function(path) {
-    if (any(path == pipe)) {
-      stop(structure(list(message = "FIFO hash refused", call = NULL),
-        class = c("ckpt_fifo_hash_refused", "error", "condition")))
-    }
-    hashed <<- c(hashed, path)
-    original(path)
-  })
   ck = ckpt_ck_new("s0000000090")
   tr = ckpt_files_tr(ck)
   ckpt_files_sync(tr)
   expect_setequal(names(tr$hash), c("source.R", "empty.txt"))
-  expect_setequal(basename(hashed), c("source.R", "empty.txt"))
+  expect_true(tr$complete)
   expect_true("supervisor_stdin" %in% tr$stat$path)
   expect_false(ckpt_capturable(pipe))
   expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
@@ -1038,7 +1038,11 @@ test_that("checkpoint racy scans reject a tracked regular file replaced by a FIF
   withr::defer(close(fifo))
   expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
   original = hash_file
-  local_mocked_bindings(ckpt_walk = function(root, prune) observed, hash_file = function(path) {
+  local_mocked_bindings(ckpt_scan_run = function(...) {
+    list(walk = observed, hash = character(), mode = integer(), absent = character(),
+         not_files = character(), uncaptured = c(empty.txt = "not a regular file"),
+         complete = TRUE, capture_capped = FALSE, reason = "", seconds = 0, walk_seconds = 0)
+  }, hash_file = function(path) {
     if (any(path == pipe)) {
       stop(structure(list(message = "FIFO hash refused", call = NULL),
         class = c("ckpt_fifo_hash_refused", "error", "condition")))

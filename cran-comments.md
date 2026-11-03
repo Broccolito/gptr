@@ -1,6 +1,10 @@
 ## Submission
 
-This is a major update (0.7.0 -> 1.0.0) and a complete rewrite by the same maintainer. gptr now
+This is a patch update (1.0.0 -> 1.0.1). It fixes a long delay before the first agent response
+by bounding automatic file checkpoint scans across folder sizes and layouts. Incomplete undo
+coverage is reported; predicted targets are backed up separately before gptr's own write tools.
+
+The preceding major update (0.7.0 -> 1.0.0) was a complete rewrite by the same maintainer. gptr now
 runs language model agents in an existing R session, where generated code can inspect and modify
 objects already in memory. It uses hosted providers or, optionally, local models served by
 'Ollama'. The previous functions `get_response()` and `dataframe_to_text()` are removed without
@@ -74,8 +78,10 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   `HOME`, `R_USER_*_DIR` and `TMPDIR` at a temporary directory that is deleted afterwards,
   blanks secret-looking variables such as provider keys and sets replay mode. With `NOT_CRAN`
   unset that directory is under `tempdir()`, tests that start a local server (a mock provider, an
-  MCP server or a Shiny app) or gptr worker processes are skipped, and the suite needs no network.
-  To keep the check short, `tests/testthat.R` runs on CRAN a fixed list of 35 test files (the
+  MCP server or a Shiny app) or optional sub-agent workers are skipped, and the suite needs no
+  network. Small automatic checkpoint tests start supervised R children on local synthetic files;
+  the large filesystem stress tests run only in the full offline CI suite.
+  To keep the check short, `tests/testthat.R` runs on CRAN a fixed list of 39 test files (the
   permission, redaction and secret tests and files that reach all but 12 of the R files) without
   their slowest blocks; GitHub Actions runs the whole suite. Consent regressions are included in
   the CRAN test list. Live provider tests run only when `GPTR_LIVE_TESTS` is `"true"`.
@@ -99,16 +105,18 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## R CMD check results
 
-The submission comment records the results for the archive actually uploaded. The exact-tarball
-workflow requires 0 errors, 0 warnings and 0 notes on each of its five platforms; its archived
-logs identify the checked bytes. The older local R 4.4.3 diagnostic and the earlier R-hub and
-win-builder archives are separate evidence and are not presented as checks of the revised tarball.
+Final checks of the 1.0.1 submission archive are pending. The submission comment will record
+the results for the archive actually uploaded, with archived logs identifying its checked bytes.
+An incoming-check NOTE for an update within seven days of 1.0.0 is expected; this patch fixes a
+substantial startup delay. Any other NOTE, warning or error still needs review before submission.
+The older local R 4.4.3 diagnostic and the earlier R-hub and win-builder archives are separate
+evidence and are not presented as checks of the 1.0.1 tarball.
 
 ## Installed size
 
 The earlier CRAN-mode checks reported 7.6 to 8.1 Mb installed: R 5.7 to 6.1 Mb and doc 1.3 to
 1.4 Mb. The final archive's check logs give its platform-specific sizes. R is the byte-compiled
-code of 128 R files, with no data sets and no compiled code; doc holds the 15 HTML vignettes.
+code of 129 R files, with no data sets and no compiled code; doc holds the 15 HTML vignettes.
 Current R versions report the size as INFO; the older R 4.2 check reported it as a NOTE while
 keeping the package source.
 

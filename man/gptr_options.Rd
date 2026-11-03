@@ -164,6 +164,10 @@ before a change, even when the change was not predicted.
 \item \code{gptr.checkpoint_capture_max} (bytes, \code{5e7}): a larger changed file gets no stored copy.
 \item \code{gptr.checkpoint_scan_budget} (seconds, \code{0.25}): above this walk time the project is
 scanned once per turn.
+\item \code{gptr.checkpoint_scan_timeout} (seconds, \code{2}): maximum wait for an automatic file scan,
+including worker startup. Scans inspect at most 2,000 entries and back up at most 256
+files within the byte limits above. Incomplete scans are reported; unvisited files have
+no automatic undo coverage. Predicted write targets are backed up separately.
 \item \code{gptr.checkpoint_rng} (logical, \code{TRUE}): report changes of the random-number state in the
 rewind report (gptr never changes your random seed).
 \item \code{gptr.checkpoint_close_devices} (logical, \code{FALSE}): close graphics devices opened by an

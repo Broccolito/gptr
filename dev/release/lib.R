@@ -1,4 +1,4 @@
-# Release checks for gptr 1.0.0 (plan P25); development only (dev/ is build-ignored). Scripts
+# Release checks for gptr (plan P25); development only (dev/ is build-ignored). Scripts
 # source this file from the repository root; every *_problems() finder returns the problems
 # found (empty = pass). Self-tests: Rscript --vanilla -e 'testthat::test_dir("dev/release/tests")'
 
@@ -660,6 +660,8 @@ rel_dep_names = function(field) {
   trimws(sub("\\(.*$", "", strsplit(field, ",", fixed = TRUE)[[1L]]))
 }
 
+rel_version_re = "(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)"
+
 # P25 changes only Version and VignetteBuilder (IC-72); the other fields are P01's and are
 # checked so that a release never ships a drifted DESCRIPTION.
 description_problems = function(dcf, stage = c("vignettes", "release")) {
@@ -685,8 +687,10 @@ description_problems = function(dcf, stage = c("vignettes", "release")) {
              "openai", "rollama", "corteza", "aisdk", "agenticr")
   hit = intersect(c(rel_dep_names(field("Imports")), rel_dep_names(field("Suggests"))), banned)
   out = c(out, sprintf("DESCRIPTION: %s must not be a dependency (S-10, conventions 8)", hit))
-  if (identical(stage, "release") && !identical(field("Version"), "1.0.0")) {
-    out = c(out, "DESCRIPTION: Version must be 1.0.0")
+  version = field("Version")
+  if (identical(stage, "release") &&
+        (is.na(version) || !grepl(paste0("^", rel_version_re, "$"), version))) {
+    out = c(out, "DESCRIPTION: Version must be a stable x.y.z release")
   }
   out
 }
@@ -707,14 +711,20 @@ files_description = function(root, args) {
 
 news_problems = function(lines) {
   out = character()
-  if (!length(lines) || !identical(lines[1L], "# gptr 1.0.0")) {
-    out = c(out, "NEWS.md: the first line must be `# gptr 1.0.0`")
+  heading = paste0("^# gptr ", rel_version_re, "$")
+  if (!length(lines) || !grepl(heading, lines[1L])) {
+    out = c(out, "NEWS.md: the first line must be `# gptr x.y.z` for a stable release")
   }
   h1 = grep("^# ", lines)
-  bad = lines[h1][!grepl("^# gptr [0-9]+\\.[0-9]+\\.[0-9]+$", lines[h1])]
+  bad = lines[h1][!grepl(heading, lines[h1])]
   out = c(out, sprintf("NEWS.md: a level-1 heading must be `# gptr x.y.z`: %s", bad))
-  end = if (length(h1) > 1L) h1[2L] - 1L else length(lines)
-  first = lines[seq_len(end)]
+  history = which(lines == "# gptr 1.0.0")
+  if (length(history) != 1L) {
+    return(c(out, "NEWS.md: requires one historical `# gptr 1.0.0` section"))
+  }
+  next_release = h1[h1 > history]
+  end = if (length(next_release)) next_release[1L] - 1L else length(lines)
+  first = lines[history:end]
   br = which(first == "## Breaking changes")
   if (!length(br)) {
     out = c(out, "NEWS.md: 1.0.0 has no `## Breaking changes` section")
@@ -738,7 +748,12 @@ news_problems = function(lines) {
 files_news = function(root, args) {
   lines = rel_read(root, "NEWS.md")
   if (is.null(lines)) return("NEWS.md is missing")
-  c(news_problems(lines), rel_ascii_problems(file.path(root, "NEWS.md")))
+  dcf = read.dcf(file.path(root, "DESCRIPTION"))
+  version = if ("Version" %in% colnames(dcf)) unname(dcf[1L, "Version"]) else ""
+  mismatch = if (!length(lines) || !identical(lines[1L], paste("# gptr", version))) {
+    sprintf("NEWS.md: the first heading must match DESCRIPTION version %s", version)
+  } else character()
+  c(news_problems(lines), mismatch, rel_ascii_problems(file.path(root, "NEWS.md")))
 }
 
 # ---- _pkgdown.yml and the site (Task 12) -------------------------------------------------------

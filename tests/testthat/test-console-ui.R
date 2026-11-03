@@ -350,7 +350,8 @@ test_that("an allowed edit whose change the ask showed sums it up once (review o
                      ui = ui_console_spec(function(prompt, ...) "y"))
   out = utils::capture.output(peter("add a title", model = fake))
   expect_identical(sum(out == "    -plot(n)"), 1L)
-  expect_identical(out[match("  ? Allow edit?", out) + 2L], "    edited fit.R - +1")
+  expect_match(out[match("  ? Allow edit?", out) + 2L],
+               "^    edited fit[.]R - [+]1( - [1-9][0-9]*[.][0-9] s)?$")
   expect_identical(readLines(file.path(root, "fit.R")), c("n = 10", "plot(n)", "title('n')"))
   # a call that was not asked keeps its result's diff
   call = list(id = "c1", name = "edit", input = list(path = "fit.R"))
