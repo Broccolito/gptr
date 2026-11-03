@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 102" width="390" height="153">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+@media (prefers-color-scheme:dark){svg:root{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:14s linear infinite both}
+.a1{animation-name:a1}.a2{animation-name:a2}.a3{animation-name:a3}.a4{animation-name:a4}
+.a5{animation-name:a5}.a6{animation-name:a6}.a7{animation-name:a7}
+@keyframes a1{0%,2.9%{opacity:0;stroke-dashoffset:1}9.3%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a2{0%,10.7%{opacity:0;stroke-dashoffset:1}17.1%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a3{0%,18.6%{opacity:0;stroke-dashoffset:1}25%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a4{0%,26.4%{opacity:0;stroke-dashoffset:1}32.9%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a5{0%,34.3%{opacity:0;stroke-dashoffset:1}40.7%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a6{0%,42.1%{opacity:0;stroke-dashoffset:1}48.6%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a7{0%,50%{opacity:0;stroke-dashoffset:1}56.4%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="260" height="102"/>
+<rect class="s2" x="0" y="2" width="22" height="32"/>
+<text x="30" y="14">keep = peter(q, abstracts, model = "jev")</text>
+<text class="n" x="30" y="26">R code an agent runs</text>
+<text x="0" y="56">abstracts</text>
+<text x="86" y="56" text-anchor="middle">"a"</text>
+<text x="122" y="56" text-anchor="middle">"b"</text>
+<text x="158" y="56" text-anchor="middle">"c"</text>
+<text x="194" y="56" text-anchor="middle">"a"</text>
+<text x="0" y="98">keep</text>
+<rect class="s1 a1" x="83.5" y="64" width="5" height="16"/>
+<rect class="s1 a1" x="119.5" y="64" width="5" height="16"/>
+<rect class="s1 a1" x="155.5" y="64" width="5" height="16"/>
+<path class="dash a2" d="M194 64V80"/>
+<text class="n a2" x="206" y="70">duplicate,</text>
+<text class="n a2" x="206" y="80">asked once</text>
+<g class="a3"><text x="86" y="98" text-anchor="middle">TRUE</text><text x="122" y="98" text-anchor="middle">FALSE</text><text x="158" y="98" text-anchor="middle">TRUE</text></g>
+<text class="a4" x="194" y="98" text-anchor="middle">TRUE</text>
+<text class="n a5" x="212" y="98">input order</text>
+</svg>
