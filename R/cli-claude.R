@@ -12,7 +12,8 @@
 # ---- build (Task 5) ----------------------------------------------------------------------------
 
 #' Initialize an empty Claude SDK session and retain only its model catalog; no user message
-#' is sent. Keep stdin open until the response, then retire the supervised child.
+#' is sent. Keep stdin open until the response, then retire the supervised child. The wait
+#' runs the reactor, as proc_run() does, so other sessions and timers stay live.
 #' @noRd
 pcli_claude_catalog = function(args) {
   path = pcli_find("claude")
@@ -31,7 +32,7 @@ pcli_claude_catalog = function(args) {
   deadline = Sys.time() + 30
   bytes = 0
   repeat {
-    p$poll_io(50L)
+    p$poll_io(0L)
     lines = p$read_output_lines()
     p$read_error_lines()
     bytes = bytes + sum(nchar(lines, type = "bytes"))
@@ -47,6 +48,7 @@ pcli_claude_catalog = function(args) {
       return(list(models = response$response$models))
     }
     if (!p$is_alive() || Sys.time() >= deadline) pcli_catalog_error("claude")
+    reactor_pump(until = function() !p$is_alive(), slice_ms = 50L, timeout = 0.05)
   }
 }
 

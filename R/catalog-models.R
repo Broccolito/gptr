@@ -1240,15 +1240,19 @@ catalog_inventory_route = function(p) {
 #' Inventory after consent, once per endpoint/headers/lifecycle/credential per five minutes. Failed
 #' attempts are cached too, and never remove the last successful discovery or offline catalog.
 #' Only credential fingerprints enter the cache; ordinary catalog reads do not look up keys.
+#' A `discover()` callback has no time bound (the claude and codex CLIs start a process), so it
+#' runs only on explicit refresh; before use only the bounded native listings run.
 #' @noRd
 catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
   if (is.null(p) || check_running() || isTRUE(p[["offline"]]) || isFALSE(p[["enabled"]])) {
     return(invisible(NULL))
   }
   native = catalog_ollama_provider(p)
-  callback = is.function(p[["discover"]]) &&
+  callback = !native && is.function(p[["discover"]]) &&
     !isTRUE(attr(p[["discover"]], "gptr_native_models"))
-  if (!native && !callback && !provider_models_supported(p)) return(invisible(NULL))
+  if (callback && !refresh || !native && !callback && !provider_models_supported(p)) {
+    return(invisible(NULL))
+  }
   pid = p[["id"]] %||% p[["name"]]
   if (native) catalog_ollama_endpoint(p, safety)
   egress_check(pid, p, safety = safety %||% egress_safety(), context = "none")
@@ -1803,8 +1807,10 @@ catalog_grepl = function(pattern, x) {
 #' A catalog entry describes a route, not current account access. `availability` records what
 #' the last provider listing advertised, with its `checked_at` time; it does not verify inference
 #' or billing access. Failed or expired listings are marked stale and keep the previous models.
-#' Providers other than Ollama with listing support are inventoried before use after consent,
-#' at most once per five minutes in this R process; `refresh = TRUE` bypasses that cache.
+#' Providers other than Ollama with a native model-list API are inventoried before use after
+#' consent, at most once per five minutes in this R process; `refresh = TRUE` bypasses that
+#' cache. A `discover()` callback, such as the `claude` and `codex` command-line catalogs, runs
+#' only with `refresh = TRUE`.
 #' Copy a `ref` into the
 #' `model` argument of [peter()] to choose that route. Ollama routes require current installed
 #' model evidence before inference; discovery does not pull models. See

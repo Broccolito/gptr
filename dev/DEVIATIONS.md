@@ -9564,3 +9564,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   08 sections 3.3 and 3.5 (limit 8) and Part 4; `cran-comments.md`; dev/HANDOFF.md's Remaining.
 - Tests: none (no code change). Evidence: progress/fixes.md FIX-40, FIX-43, FIX-44, FIX-45 and
   FIX-48; progress/open-findings.md.
+
+## D-325 - 1.0.1 lane D CLI and callback catalogs are listed only on explicit refresh (2026-11-02)
+- Rule: a provider's `discover()` callback, which includes the `claude` and `codex` CLI catalogs,
+  runs only on `gptr_models(provider =, refresh = TRUE)`, after consent. Before use,
+  `catalog_inventory()` runs only the native model-list APIs, which are bounded to four seconds.
+  Formerly the first `claude-cli` or `codex` run every five minutes spawned the CLI to list its
+  models and waited for up to 30 s (33 s for Codex) before the request. A hang was then cached as
+  a failed listing. The before-use listing gained nothing for a CLI run, because the model is
+  resolved before the run and `codex/default` keeps the shipped list (ff0be9d5). Amends #106's
+  contract text (04 sections 6.2 `gptr_models()`, 7.20 and 10.2 `discover`).
+- Rule: `pcli_claude_catalog()` polls without blocking and waits through `reactor_pump()`, as
+  `proc_run()` does, so an explicit refresh keeps MCP replies, timers and other sessions live.
+  The 30 s limit stays.
+- Contract-visible: `?gptr_models`; `vignette("language-models")`.
+- Tests: test-cli-discovery.R ("the Claude catalog waits through the reactor and CLI catalogs run
+  only on refresh").

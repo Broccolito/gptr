@@ -96,6 +96,42 @@ test_that("Claude catalog sends one initialize frame and always retires its chil
   expect_false(grepl("account diagnostics", conditionMessage(err), fixed = TRUE))
 })
 
+test_that("the Claude catalog waits through the reactor and CLI catalogs run only on refresh", {
+  fired = FALSE
+  timer = reactor_timer(reactor_now() + 0.05, function() fired <<- TRUE)
+  withr::defer(reactor_cancel(timer))
+  reads = 0L
+  process = new.env(parent = emptyenv())
+  process$write_input = function(text) NULL
+  process$poll_io = function(timeout) NULL
+  process$read_error_lines = function() character()
+  process$is_alive = function() TRUE
+  process$read_output_lines = function() {
+    reads <<- reads + 1L
+    if (!fired && reads < 200L) return(character())
+    json_encode(list(type = "control_response", response = list(subtype = "success",
+      request_id = "gptr_models", response = list(models = list()))))
+  }
+  local_mocked_bindings(pcli_find = function(cli) structure("claude", cli = cli),
+    child_env = function(profile, set) character(), proc_spawn = function(...) process,
+    kill_all = function(p, grace) NULL, proc_release = function(p) NULL)
+  expect_identical(pcli_claude_catalog(character()), list(models = list()))
+  expect_true(fired)
+  listed = 0L
+  local_mocked_bindings(check_running = function() FALSE, egress_check = function(...) TRUE,
+    replay_guard = function(...) TRUE, pcli_discover_models = function(provider) {
+      listed <<- listed + 1L
+      list(list(id = "claude-opus-5-5"))
+    })
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  p = provider_get("claude-cli")
+  expect_null(catalog_inventory(p))
+  expect_identical(listed, 0L)
+  expect_identical(catalog_inventory(p, refresh = TRUE), "claude-opus-5-5")
+  expect_identical(listed, 1L)
+})
+
 test_that("CLI identity records each request's reports separately from the selected model", {
   withr::local_options(gptr.quiet = FALSE)
   opts = stub_opts()
