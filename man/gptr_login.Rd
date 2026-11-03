@@ -24,8 +24,9 @@ gptr_logout(provider)
 
 \item{slot}{For a stdio MCP server, the name of a declared secret environment entry such as
 \code{"SERVICE_API_TOKEN"}. The credential is passed only to that server's child environment,
-bound to its reviewed configuration and resolved executable. Leave \code{NULL} for providers
-and HTTP MCP servers.}
+bound to its reviewed configuration and resolved executable (an edit or an update of either
+asks for login again; changing R's working directory or a credential variable does not).
+Leave \code{NULL} for providers and HTTP MCP servers.}
 }
 \value{
 \code{gptr_login()} returns \code{TRUE} invisibly on success, or \code{FALSE} invisibly with a

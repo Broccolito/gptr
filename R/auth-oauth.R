@@ -749,8 +749,9 @@ oauth_login_store = function(key, rec, scope) {
 #'   `"keyring"` to remember through a native OS credential backend.
 #' @param slot For a stdio MCP server, the name of a declared secret environment entry such as
 #'   `"SERVICE_API_TOKEN"`. The credential is passed only to that server's child environment,
-#'   bound to its reviewed configuration and resolved executable. Leave `NULL` for providers
-#'   and HTTP MCP servers.
+#'   bound to its reviewed configuration and resolved executable (an edit or an update of either
+#'   asks for login again; changing R's working directory or a credential variable does not).
+#'   Leave `NULL` for providers and HTTP MCP servers.
 #' @return `gptr_login()` returns `TRUE` invisibly on success, or `FALSE` invisibly with a
 #'   `status` attribute of `"skipped"` or `"cancelled"`, and says which in a message that names
 #'   the store used; no credential value is returned or shown.

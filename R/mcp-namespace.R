@@ -467,7 +467,8 @@ mcp_login_target = function(name, slot = NULL, resolve_only = FALSE) {
                 on_login = invalidate,
                 description = paste(c(paste0("MCP server ", name), binding$command,
                                        paste(ex$args, collapse = " "),
-                                       paste0("Working directory: ", ex$cwd %||% getwd())),
+                                       paste0("Working directory: ", ex$cwd %||%
+                                                "R's working directory when the server starts")),
                                      collapse = "\n")))
   }
   if (!identical(mcp_transport(s), "http")) {

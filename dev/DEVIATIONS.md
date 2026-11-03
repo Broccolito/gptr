@@ -9577,3 +9577,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: 03 section 6.13 (worker credential forwarding).
 - Tests: test-auth-childenv.R "a session login reaches workers as its provider's key, bound to the
   endpoint".
+
+## D-316 - 1.0.1 lane B Stdio slot consent ignores R's working directory and credentials (2026-11-02)
+- Rule (review #104 correctness and design): `mcp_stdio_binding()` hashed `getwd()` for a server
+  without a configured `cwd` and the whole expanded environment, the slot's own `${VAR}` value
+  included, so a remembered slot aborted with "changed since credential entry" after `setwd()`, in
+  an R session started elsewhere, or once the slot's variable was set. The binding keeps the raw
+  configuration (`mcp_cache_key()`), the resolved command's path and contents, the expanded
+  arguments, the configured working directory and the source file, and takes the expanded
+  environment without its secret-like entries (`mcp_secret_name()`): credentials a slot may replace
+  are not a destination, while a non-secret placeholder such as a host still invalidates consent
+  when its value changes. The executable's content hash stays (the review proposed dropping it):
+  an updated launcher is a changed executable, and the error says to log in again. The login
+  prompt names "R's working directory when the server starts" when no `cwd` is configured.
+- Contract-visible: `?gptr_login` (`slot`); 04 `gptr_login()` paragraph.
+- Tests: test-auth-setup.R "a remembered stdio slot survives setwd() and credential variables, not a
+  new host".

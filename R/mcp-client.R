@@ -1065,7 +1065,10 @@ mcp_stdio_command = function(command) {
   command
 }
 
-#' Bind stdio consent to the reviewed configuration and the resolved executable's contents
+#' Bind stdio consent to the reviewed configuration and the resolved executable's contents. The
+#' expanded environment counts without its secret-like entries, credentials a slot may replace,
+#' and the working directory only when configured: neither setwd() nor a rotated credential
+#' variable changes where a slot's value goes
 #' @noRd
 mcp_stdio_binding = function(spec, ex) {
   command = mcp_stdio_command(ex$command)
@@ -1076,7 +1079,8 @@ mcp_stdio_binding = function(spec, ex) {
   }
   command = normalizePath(command, winslash = "/", mustWork = TRUE)
   identity = list(spec = mcp_cache_key(spec), command = command, binary = hash_file(command),
-                   args = ex$args, env = as.list(ex$env), cwd = ex$cwd %||% getwd(),
+                   args = ex$args, env = as.list(ex$env[!mcp_secret_name(names(ex$env))]),
+                   cwd = ex$cwd,
                    source = spec$source, path = spec$path)
   id = hash_sha256(canonical_json(identity))
   list(id = id, command = command, origin = paste0("https://", id, ".stdio.invalid"))

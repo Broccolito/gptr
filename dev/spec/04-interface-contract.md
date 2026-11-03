@@ -1346,7 +1346,9 @@ credential store (`auth.json`, 0600, or an existing keyring reference); `"keyrin
 through a native OS credential backend and saves only a reference. It refuses file/environment backend
 fallbacks. Hidden input is not encryption. Access tokens stay in memory. `slot` names a declared secret
 environment entry for a stdio MCP server; its credential is injected only in the owned child environment
-and bound to the reviewed configuration and resolved executable. Provider endpoint edits and MCP
+and bound to the reviewed configuration and resolved executable: the command's path and contents, the
+expanded arguments, the configured working directory and the expanded environment without its
+secret-like entries, never R's working directory (D-316). Provider endpoint edits and MCP
 destination/configuration edits invalidate stored authorization. Needs a human
 (`gptr_error_noninteractive`). `gptr_login()` returns `invisible(TRUE)` on success; blank input or
 `/skip` returns `invisible(FALSE)` with `status = "skipped"`, while `/cancel`, dismissal or interrupt
