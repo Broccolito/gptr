@@ -1204,6 +1204,7 @@ catalog_discover = function(p, safety = NULL, credential = NULL) {
   }
   fields = c("id", "type", "api", "context", "max_output", "reasoning", "thinking_levels",
               "input", "tool_call", "structured_output")
+  known = catalog_get()$models
   entries = lapply(rows, function(m) {
     id = if (is.list(m)) m[["id"]]
     if (!rlang::is_string(id) || !nzchar(id) || grepl("[[:cntrl:]]", id)) {
@@ -1215,7 +1216,7 @@ catalog_discover = function(p, safety = NULL, credential = NULL) {
     name = m[["name"]] %||% id
     if (!rlang::is_string(name) || grepl("[[:cntrl:]]", name)) name = id
     if (identical(name, id)) {
-      name = catalog_get()$models[[paste0(pid, "/", id)]][["name"]] %||% id
+      name = known[[paste0(pid, "/", id)]][["name"]] %||% id
     }
     c(list(provider = pid, name = name, locality = "unknown"), entry)
   })

@@ -306,6 +306,21 @@ test_that("custom discover callbacks support sparse records and successful empty
   expect_identical(model_resolve("openai/known")$id, "known")
 })
 
+test_that("discovery reads the catalog once, not once per unnamed record", {
+  local_inventory_catalog()
+  p = provider_get("openai")
+  p$discover = function() lapply(seq_len(50L), function(i) list(id = paste0("m", i)))
+  n = 0L
+  real = catalog_get
+  local_mocked_bindings(catalog_get = function() {
+    n <<- n + 1L
+    real()
+  })
+  catalog_discover(p)
+  expect_lte(n, 1L)
+  expect_identical(model_resolve("openai/m50")$name, "m50")
+})
+
 test_that("before-use inventory preserves an explicit replay override without opening refresh", {
   local_gw()
   local_inventory_catalog()
