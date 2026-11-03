@@ -9654,7 +9654,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   preflight only, so every new R process failed with "there is no current discovery evidence"
   until `gptr_models(provider = "ollama", refresh = TRUE)`, while a chat call on the same model
   worked.
-- Contract-visible: 04 section 6.1.1 (model preparation).
+- Rule (worker start): `backend_worker_start()` keeps the canonical System 1 reference when it
+  resolves and ships the setting as written when it is `gptr_error_unknown_model` (a typo, a
+  removed local model, an `emulate:` model without catalog rows), so a chat-only worker starts and
+  only a decision it asks reports the error. Was an abort of every `agent(backend = "worker")`
+  start, naming System 1, although the worker never decided (PR #105).
+- Contract-visible: 04 sections 6.1.1 (model preparation) and 11.11 (the `system1` snapshot).
 - Tests: s1-emulate "emulation through a local Ollama chat model discovers it as a chat call does
   (D-323)"; "emulation preflights the chat model before any state is serialised or sent" keeps
-  `s1_emulate()` itself discovery-free. Evidence: progress/fixes-1.0.1/lane-C.md.
+  `s1_emulate()` itself discovery-free; subagent-backends "workers freeze the effective System 1
+  role and its bounded policy". Evidence: progress/fixes-1.0.1/lane-C.md.

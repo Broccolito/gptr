@@ -4234,7 +4234,8 @@ list(specs, plugins, filters))` (IC-69; the worker re-registers `registry` befor
 `settings` snapshot includes the canonical effective `system1` reference (retaining an explicit
 `emulate:` prefix) and `s1 = list(s1_max_active, s1_rounds, s1_state_max, s1_max_elements)`.
 P19 calls P05's pure `model_default("system1")` as a named contract edge, then P06's existing
-canonical-reference helper. `key_provider` names only the registered remote chat and configured
+canonical-reference helper; a reference it cannot resolve ships as written, so only a decision the
+worker asks reports it and a chat-only worker starts (D-323). `key_provider` names only the registered remote chat and configured
 System 1 providers, deduplicated; `child_env(..., provider = chr)` accepts these IDs, retaining
 scalar compatibility. Equal keys with the same case-insensitive environment name are deduplicated;
 different values for that name from distinct providers are refused without echoing either value.

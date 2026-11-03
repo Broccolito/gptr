@@ -286,6 +286,12 @@ test_that("workers freeze the effective System 1 role and its bounded policy", {
   w = build()
   expect_identical(w$settings$system1, paste0("emulate:", model_resolve("sonnet")$ref))
   expect_identical(w$key_provider, "anthropic")
+  # an unresolvable setting a chat worker never uses ships as written and starts it (D-323)
+  for (bad in c("typesafe/jev-typo", "emulate:nosuchmodelxyz")) {
+    expect_warning(gptr_config(system1 = bad, .scope = "session"),
+                   class = "gptr_warning_unknown_model_setting")
+    expect_identical(build()$settings$system1, bad)
+  }
 })
 
 # The text of the tool results of a session

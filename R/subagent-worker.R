@@ -455,7 +455,10 @@ backend_worker_start = function(spec, ctx) {
   system1 = model_default("system1")
   if (!is.null(system1)) {
     emulated = startsWith(system1, "emulate:")
-    ref = subagent_model_info(sub("^emulate:", "", system1), session_data(spec$parent)$id)$ref
+    ref = sub("^emulate:", "", system1)
+    # an unknown reference ships as written: only a decision the worker asks reports it (D-323)
+    ref = tryCatch(subagent_model_info(ref, session_data(spec$parent)$id)$ref,
+                   gptr_error_unknown_model = function(e) ref)
     system1 = paste0(if (emulated) "emulate:" else "", ref)
   }
   s1_options = c("s1_max_active", "s1_rounds", "s1_state_max", "s1_max_elements")
