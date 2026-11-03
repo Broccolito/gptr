@@ -438,11 +438,13 @@ mcp_on_session_start = function(event, ctx) {
 #' @noRd
 mcp_login_target = function(name, slot = NULL, resolve_only = FALSE) {
   if (resolve_only) {
+    # login's rule first; a cached connection only once the configuration is gone
     conns = mcp_state()$conns
-    cached = ls(envir = conns)
-    matches = cached[cached == name | mcp_r_name(cached) == name]
-    resolved = if (name %in% cached) name else if (length(matches) == 1L) matches[[1L]] else
-      tryCatch(mcp_server_resolve(name), error = function(e) name)
+    resolved = tryCatch(mcp_server_resolve(name), error = function(e) {
+      cached = ls(envir = conns)
+      hit = cached[cached == name | mcp_r_name(cached) == name]
+      if (length(hit) == 1L) hit else name
+    })
     return(list(name = resolved, on_logout = function() {
       conn = get0(resolved, envir = conns, inherits = FALSE)
       if (!is.null(conn) && identical(conn$transport, "stdio")) mcp_close(conn)

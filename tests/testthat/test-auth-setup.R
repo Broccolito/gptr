@@ -337,6 +337,23 @@ test_that("stdio logout closes a cached child when its configuration is unavaila
   expect_identical(closed, 2L)
 })
 
+test_that("logout resolves a configured name before a cached alias", {
+  local_user_dirs()
+  conns = new.env(parent = emptyenv())
+  conns$`a-b` = new.env(parent = emptyenv())
+  conns$`a-b`$transport = "stdio"
+  local_mocked_bindings(mcp_state = function() list(conns = conns),
+                        mcp_server_resolve = function(name, session = NULL) name,
+                        mcp_close = function(conn) NULL)
+  for (key in c("mcp:a_b:env:API_TOKEN", "mcp:a-b:env:API_TOKEN")) {
+    auth_store_set(key, list(type = "env", key = paste0(key, "-canary-123456")),
+                   scope = "session")
+  }
+  expect_true(gptr_logout("mcp:a_b"))
+  expect_null(auth_store_get("mcp:a_b:env:API_TOKEN"))
+  expect_false(is.null(auth_store_get("mcp:a-b:env:API_TOKEN")))
+})
+
 test_that("session OAuth refresh stays in memory without creating a credential lock", {
   root = local_user_dirs()
   auth_store_set("mcp:demo", list(type = "oauth", refresh = "refresh-canary-123456789",
