@@ -949,7 +949,7 @@ ns_gptr_docs = function(ctx = NULL) {
     vapply(rd[fields == "\\alias"], function(x) paste(unlist(x), collapse = ""), "")
   })
   public = ns_gptr_exports()
-  names = sort(unique(c(public, unlist(aliases, use.names = FALSE))))
+  names = sort(unique(c(public, unlist(aliases, use.names = FALSE))), method = "radix")
   rows = lapply(names, function(name) {
     at = which(vapply(aliases, function(x) name %in% x, NA))
     rd = if (length(at)) pages[[at[1L]]] else list()

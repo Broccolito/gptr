@@ -15,6 +15,13 @@ test_that("gptr APIs are searched from documentation and actual function signatu
   expect_false(any(grepl("ns_gptr|member_help", peter$search("member_help", 100L)$name)))
 })
 
+test_that("the api index lists names in the same order under any collation", {
+  byte_order = ns_gptr_docs()$id
+  suppressWarnings(withr::local_collate("en_US.UTF-8"))
+  skip_if(identical(sort(c("b", "B")), c("B", "b")), "no locale collation here")
+  expect_identical(ns_gptr_docs()$id, byte_order)
+})
+
 test_that("gptr help provides a compact index and resolves qualified topics and aliases", {
   index = as.character(peter$help("gptr"))
   expect_match(paste(index, collapse = "\n"), "gptr_mcp_add", fixed = TRUE)
