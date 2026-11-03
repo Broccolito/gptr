@@ -100,7 +100,9 @@ generated code can inspect and modify objects already in memory.
 * Checkpoints: `gptr_rewind()`, `gptr_checkpoints()` and `/undo` restore objects, files and the
   conversation.
 * Sub-agents, teams and fan-outs (`agents =`, `parallel =`, `gptr_parallel()`), across
-  providers.
+  providers. The console shows completed, active and queued counts, named rosters when the
+  group changes with their models, and child tool progress. Direct team and fan-out calls print
+  their reports.
 * Skills, prompt templates, agent files, extensions and plugins in R packages, all on one
   versioned extension API (`gptr_register()`, `gptr_spec()` and the spec constructors).
 * `gptr_tailor()` makes a harness: a function you call exactly like `peter()` that carries

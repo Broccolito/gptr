@@ -2252,13 +2252,22 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   prints it but shown as result rows, at column 4, escaped, dim and cut to the console width, per top-level
   expression or before a notice, a warning as `Warning: <text>` and an R message when they come (`eval_echo()`;
   the result keeps all of it) [D-245]; prompts first clear the live row, also while a tool
-  executes, and every other write clears and redraws it, at the sink it was drawn at (a capture in the agent's code is left alone). Children never render;
-  a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
+  executes, and every other write clears and redraws it, at the sink it was drawn at (a capture in the agent's code is left alone). Children do not stream their conversations;
+  a foreground root (including a background session brought forward by `gptr_wait()`) shows one
+  line per sub-agent start and end at verbosity 1+ unless quiet
   (`  ▌ sub-agent a (kid/kid-1) started`, `  ▌ sub-agent a done (1/2) · 2 turns · 12 s` or
   `failed (1/2): <first line of the reason>`, after the agent's blue block [D-245], cut to the console width; `(k/N)` for a team, fan-out or
   `gptr_parallel()` group; a nested `peter()` by its quoted prompt and its number among the parent run's
   children, `'Summarise ...' #2`, D-224). Model code that wraps such calls in `capture.output()` or `sink()`
-  still captures prompts and lines (D-188). A run's status line, dim and wrapped as a notice, names the model of
+  still captures prompts and lines (D-188). Scheduled groups show completed/total, active and queued counts,
+  with named rosters and model targets on membership changes (eight names per list, then an explicit remainder).
+  Queued children show their requested model; active children use the resolved target when reported by their
+  backend. Built-in CLI defaults name the full model id passed to the CLI, as `/model` does. At verbosity
+  2+ child tool names and retries show progress; their conversations remain in their sessions. The single live
+  row shows group counts and active phases, also for direct groups, without changing the parent's composer.
+  Workers report `working`, since their intermediate events are not forwarded. Direct teams and fan-outs
+  return visibly for normal R printing; nested calls at verbosity 2+ remain invisible.
+  A run's status line, dim and wrapped as a notice, names the model of
   its last request, counts its own requests, adds what its sub-agents cost (D-206) and ends with the context the
   last request left before compaction starts (`done · claude-sonnet-5-5 · 2 requests · 156.7k tokens · $0.2125
   · sub-agents $0.8500 · 82% context left`, none on a CLI route); a term whose value is unknown, and a cost not

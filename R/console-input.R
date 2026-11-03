@@ -661,14 +661,24 @@ console_live_state = function(rec) {
     !is.null(rec$frozen)
   }
   s = rec$session
-  rd = if (isTRUE(the$tty$keys)) console_repl_prompt()$reader
+  direct = !is.null(rec$child) && is.null(rec$child$run$outer)
+  rd = if (!direct && isTRUE(the$tty$keys)) console_repl_prompt()$reader
   label = if (length(kids)) kids[[1L]]$child$label
-  list(what = if (length(kids)) paste("sub-agent", label) else rec$what,
-       short = if (length(kids)) paste("sub-agent", sub("^.* (#[0-9]+)$", "\\1", label)),
-       secs = as.numeric(Sys.time()) - rec$t0, queued = console_queued(s),
+  group_run = rec$child$run %||% if (length(kids)) kids[[1L]]$child$run
+  group = console_group_state(group_run$group)
+  what = if (!is.null(group)) {
+    paste0(group$text, console_style()$sep,
+           paste(paste(names(group$active), group$active), collapse = ", "))
+  } else {
+    if (length(kids)) paste("sub-agent", label) else rec$what
+  }
+  short = if (!is.null(group)) group$short else
+    if (length(kids)) paste("sub-agent", sub("^.* (#[0-9]+)$", "\\1", label))
+  list(what = what, short = short,
+       secs = as.numeric(Sys.time()) - rec$t0, queued = if (direct) 0L else console_queued(s),
        question = isTRUE(rec$question), frozen = isTRUE(frozen),
        key = console_interrupt_key(), pause = console_menu_available(),
-       steer = console_menu_available() && front_end() == "positron",
+       steer = !direct && console_menu_available() && front_end() == "positron",
        typed = front_end() == "rstudio",
        draft = if (!is.null(rd)) rd$compose$draft %||% "", candidates = rd$compose$candidates,
        newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))
@@ -678,7 +688,8 @@ console_live_state = function(rec) {
 #' @noRd
 console_kids = function() {
   kids = Filter(function(r) !is.null(r$child), as.list(console_state()$active))
-  kids[order(vapply(kids, function(r) r$child$label, ""))]
+  kids[order(vapply(kids, function(r) r$child$run$depth %||% 1L, 1L),
+             vapply(kids, function(r) r$child$label, ""))]
 }
 
 #' The person's messages waiting for session `s`: its queued items from user sources, the items
@@ -698,8 +709,10 @@ console_queued = function(s) {
 #' R.app, whose console gives everything after a carriage return the input's colour
 #' @noRd
 console_live_start = function(rec) {
-  rec$what = "thinking"
-  rec$frozen = NULL
+  if (is.null(rec$child)) {
+    rec$what = "thinking"
+    rec$frozen = NULL
+  }
   row = the$live_row
   if (!identical(row$rec, rec)) {
     if (!cli::is_dynamic_tty() || console_class() == "P" || platform_gui() == "AQUA") {

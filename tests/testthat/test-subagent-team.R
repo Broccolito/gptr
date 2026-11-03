@@ -52,6 +52,34 @@ test_that("the scheduler runs at most max_total children and reports each once",
   expect_identical(log$started, 1:5)
 })
 
+test_that("a scheduled group keeps labels and models aligned with active and queued runs", {
+  skip_on_cran()
+  items = stub_items(3L, after = 0.01, log = stub_log())
+  labels = c("stats", "code", "biology")
+  models = c("first/model", "second/model", "third/model")
+  for (i in seq_along(items)) {
+    items[[i]]$label = labels[[i]]
+    items[[i]]$model = models[[i]]
+  }
+  seen = list()
+  handles = subagent_schedule(items, 1L, function(i, h) {
+    g = h$run$group
+    seen[[i]] <<- list(labels = g$labels, models = g$models,
+                      started = which(!vapply(g$runs, is.null, NA)),
+                      queued = which(vapply(g$runs, is.null, NA)),
+                      done = sum(vapply(g$runs, function(r) isTRUE(r$settled), NA)))
+  })
+  expect_identical(seen, lapply(1:3, function(i) {
+    list(labels = labels, models = models, started = seq_len(i),
+         queued = setdiff(1:3, seq_len(i)), done = i)
+  }))
+  expect_identical(handles[[1L]]$run$group$runs, lapply(handles, function(h) h$run))
+  expect_identical(subagent_schedule(stub_items(1L, after = 0.01, log = stub_log()),
+                                    1L)[[1L]]$run$group$labels, "#1")
+  expect_identical(subagent_schedule(stub_items(1L, after = 0.01, log = stub_log()),
+                                    1L)[[1L]]$run$group$models, "")
+})
+
 test_that("pools keep their own limits: workers 2 under R CMD check, inline unaffected", {
   skip_on_cran()
   withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr")
@@ -830,6 +858,64 @@ test_that("a foreground fan-out, team or gptr_parallel shows a line per sub-agen
   expect_false(any(grepl("sub-agent", run_all(), fixed = TRUE)))
   local_gptr_options(verbose = 1L, quiet = TRUE)
   expect_false(any(grepl("sub-agent", run_all(), fixed = TRUE)))
+})
+
+test_that("top-level team and fan-out reports remain visible when child answers do not stream", {
+  local_team_fake(list("child report"))
+  local_gptr_options(verbose = 2L)
+  team = withVisible(peter("Review it", agents = list(stats = agent(model = "fake/fake-1"))))
+  fan = withVisible(peter("Review each", list(first = 1), parallel = 1))
+  parallel = withVisible(gptr_parallel(stats = peter("Review it", envir = new.env())))
+  expect_true(team$visible)
+  expect_true(fan$visible)
+  expect_true(parallel$visible)
+  expect_match(format(team$value), "child report", fixed = TRUE)
+  expect_match(format(fan$value), "child report", fixed = TRUE)
+  expect_match(format(parallel$value), "child report", fixed = TRUE)
+})
+
+test_that("nested team and fan-out calls do not print their reports into the parent result", {
+  local_team_fake(function(request) {
+    if (identical(request$last_user, "child")) return("child report")
+    if (length(request$last_results)) return("parent done")
+    fake_tool("r", code = paste0(
+      "team = withVisible(peter('child', agents = list(stats = agent(model = 'fake/fake-1'))))\n",
+      "fan = withVisible(peter('child', list(first = 1), parallel = 1))\n",
+      "parallel = withVisible(gptr_parallel(stats = peter('child', envir = new.env())))\n",
+      "gptr_parallel(stats = peter('child', envir = new.env()))\n",
+      "visibility = c(team$visible, fan$visible, parallel$visible)\nvisibility"))
+  })
+  local_gptr_options(verbose = 2L)
+  e = new.env()
+  parent = peter("delegate", envir = e)
+  expect_identical(e$visibility, c(FALSE, FALSE, FALSE))
+  results = Filter(function(m) identical(m$role, "tool_result"), parent$messages)
+  expect_length(results, 1L)
+  expect_false(grepl("child report", msg_text(results[[1L]]), fixed = TRUE))
+})
+
+test_that("scheduled public routes expose every role or input label to their console group", {
+  local_team_fake(list("done"))
+  labels = list()
+  models = list()
+  id = hook_add("before_request", function(event, ctx) {
+    run = session_live(ctx$session)$run
+    if (!is.null(run$group)) {
+      labels[[length(labels) + 1L]] <<- run$group$labels
+      models[[length(models) + 1L]] <<- run$group$models
+    }
+    NULL
+  })
+  withr::defer(hook_remove(id))
+  peter("Review", agents = list(stats = agent(model = "fake/fake-1"),
+                                 code = agent(model = "fake/fake-1")),
+        .opts = list(max_active = 1L))
+  peter("Review", list(first = 1, second = 2), parallel = 1L)
+  gptr_parallel(planner = peter("Plan", envir = new.env()),
+                review = peter("Review", envir = new.env()), max_active = 1L)
+  expect_identical(labels, rep(list(c("stats", "code"), c("first", "second"),
+                                   c("planner", "review")), each = 2L))
+  expect_identical(models, rep(list(rep("fake/fake-1", 2L)), 6L))
 })
 
 test_that("model-issued teams above gptr.subagents.max_tasks fail in the tool result", {

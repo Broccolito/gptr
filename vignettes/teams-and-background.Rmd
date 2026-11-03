@@ -105,6 +105,19 @@ the agent's own R code makes without `envir =` reads your objects and keeps the 
 in `res$envir`. R code that wraps such calls in `capture.output()` or `sink()` also captures
 their prompts.
 
+Teams and fan-outs also show completed, active and queued counts. A short roster names the
+active and queued children whenever the group changes; each list shows up to eight names and
+an explicit count of any others. Names include their model: queued children show the requested
+target, and active children show the resolved target when their backend reports it.
+At normal interactive verbosity, child tool names and retries
+show progress without streaming child conversations. On supported terminals the single live
+row keeps the group counts and active phases beside your input; a direct group gets a live row
+too. Workers say `working`, since their internal tool stream is not forwarded.
+
+A direct team or fan-out call displays its reports when R prints the returned session. If you
+assign the result, use `print(result)` to show them, or inspect `result$children`. Calls made
+by the main agent keep their reports out of its terminal output for the main agent to use.
+
 ## Independent calls with gptr_parallel()
 
 
