@@ -2164,6 +2164,30 @@ test_that("a terminal: an answer typed as a question shows answers it, T and D (
   }
 })
 
+test_that("TERM=dumb: the answer shows after its prompt under the question (P30 review)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE)",
+    "fake = gptr_fake_provider(function(req) {",
+    "  if (req$n == 1L) return(list(tool = 'r', input = list(code = 'zz = 1')))",
+    "  'REQ END'",
+    "})",
+    "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
+  ), term = "dumb")
+  expect_true(pty$wait("peter> ", timeout = 120))
+  pty$send("go\r")
+  expect_true(pty$wait("Allow r?"))
+  # once readline reads: macOS libedit redraws its prompt for each key in TERM=dumb
+  Sys.sleep(2)
+  pty$send("y\r")
+  expect_true(pty$wait("REQ END"))
+  expect_true(paste0(sub("^\n", "", pty_asked()), "y") %in% term_rows(pty$raw))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+})
+
 test_that("a macOS terminal: a block pasted at a question comes back as one prompt", {
   skip_on_cran()
   skip_if_not(is_macos(), "paste joining reads a macOS terminal")

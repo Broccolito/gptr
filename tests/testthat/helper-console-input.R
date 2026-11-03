@@ -56,7 +56,8 @@ written = function(f) {
   rawToChar(rawConnectionValue(con))
 }
 
-# The rows a terminal shows for `bytes`: \r, \n and \033[K act, other escapes are dropped
+# The rows a terminal shows for `bytes`: \r, \n, \b, \033[K and \033[<n>C act, other escapes are
+# dropped
 term_rows = function(bytes) {
   keys = regmatches(bytes, gregexpr("\033\\[[0-9;]*[A-Za-z]|[\r\n]|[^\r\n\033]", bytes,
                                     perl = TRUE))[[1L]]
@@ -70,8 +71,13 @@ term_rows = function(bytes) {
     }
     if (k %in% c("\r", "\n")) {
       col = 1L
+    } else if (k == "\b") {
+      col = max(1L, col - 1L)
     } else if (k == "\033[K") {
       row = row[seq_len(col - 1L)]
+    } else if (grepl("^\033\\[[0-9]*C$", k)) {
+      col = col + max(1L, as.integer(gsub("\\D", "", k)), na.rm = TRUE)
+      row[seq_len(col - 1L)] = ifelse(is.na(row[seq_len(col - 1L)]), " ", row[seq_len(col - 1L)])
     } else if (!startsWith(k, "\033")) {
       row[[col]] = k
       col = col + 1L
