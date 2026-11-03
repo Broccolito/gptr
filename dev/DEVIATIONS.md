@@ -9565,7 +9565,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: none (no code change). Evidence: progress/fixes.md FIX-40, FIX-43, FIX-44, FIX-45 and
   FIX-48; progress/open-findings.md.
 
-## D-320 - Fixes 1.0.1 lane C System 1 guidance and inputs (2026-11-02)
+## D-320 - Fixes 1.0.1 lane C Agent guidance and System 1 inputs (2026-11-02)
 - Rule (alias): `{s1}` is written as an R string in every branch (`model = "jev"`, `"clef"`,
   `"ollama/clef-flash"`), and every agent-read hint and help example quotes it. Was the bare `jev`
   (quoted only with `/` or `:`), which agents read as an R object and looked for (`get("jev")`,
@@ -9580,14 +9580,22 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   "The input is in `...`." sentence and so the cache key: `x = reviews; peter(q, x)` sent every
   request again and could flip answers (0.46 to 0.54). Existing System 1 cache entries of unnamed
   inputs miss once; the Jev and Ollama fixtures name their input (`text =`).
-- Contract-visible: 03 sections 4.1.5, 7.3 (`{s1}`) and 10.3 NS-4, 04 sections 7.8 (`context`)
-  and 9.3; `?peter` `...` and `choices`, `?gptr_prob`, vignette system-one.
+- Rule (decision notes): the `documents` section says a note is "recorded as a "## Decision:"
+  comment", as the r tool's schema does (was "written as "## Decision: ..."", which models read as
+  the note's own format), and `doc_turn_r()` drops a leading `#* decision:` (any case) from the
+  note before it adds the marker, so a block holds one "## Decision: " (was "## Decision: ##
+  Decision: ..." in Rmd, notebook and Quarto blocks). The o200k static prefixes of standard_all
+  and standard_interactive grow by one token (2966 to 2967, 3109 to 3110; within the 2% gate, no
+  `--update`).
+- Contract-visible: 03 sections 4.1.5, 7.3 (`{s1}`, `documents`) and 10.3 NS-4, 04 sections 7.8
+  (`context`) and 9.3; `?peter` `...` and `choices`, `?gptr_prob`, vignette system-one.
 - Tests: prompt-sections "{s1} is replaced by the configured System 1 alias, quoted as an R
   string"; northstar's frozen prompt; gptr-gateway "System 1 arguments are refused on a
   conversational route (D-250)"; s1-client "a System 1 request does not depend on how its input
   is spelled (D-320)", "NS-4: if (peter(..., model = judge)) works ..."; s1-route "s1_inputs()
   reads symbols by name ...", "large values are described instead of sent ..."; gptr-capture
-  "gateway_context_items() builds the context items ...". Evidence:
+  "gateway_context_items() builds the context items ..."; doc-blocks "a note that already
+  starts with the Decision marker is not marked twice"; doc-formats' documents text. Evidence:
   progress/fixes-1.0.1/lane-C.md.
 
 ## D-322 - Fixes 1.0.1 lane C Gateway refusals of System 1 and agent arguments (2026-11-02)

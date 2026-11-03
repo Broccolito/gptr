@@ -2559,7 +2559,7 @@ The r tool runs code in the environment peter() was called from. Objects you cre
 <documents>
 Code from successful r calls is written into the user's document (named in <environment>) in a block below the peter() call that asked for it, so the document re-runs from top to bottom. Therefore:
 - Make recorded code the clean final version: named objects, no exploratory prints. Pass record = false for throwaway checks (head(), summaries, tests).
-- Record key modelling decisions with note (one line, written as "## Decision: ..."); key printed outputs are added as #> comments automatically.
+- Record key modelling decisions with note (one line, recorded as a "## Decision:" comment); key printed outputs are added as #> comments automatically.
 - To change code you wrote earlier, edit that block in the document instead of appending a second version.
 - In the document, prompts are quoted strings in peter("..."), and System 1 decisions are peter(..., model = {s1}) inside if, for or while. Add such calls only when the user asks for an agent step in the script.
 </documents>
