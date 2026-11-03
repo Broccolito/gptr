@@ -179,6 +179,7 @@ test_that("on a CLI route the files the child changes during a turn are checkpoi
   skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  local_native_step()
   local_fake_provider(function(request) {
     writeLines("a = 2", file.path(proj, "R", "a.R"))
     "Codex edited R/a.R"
@@ -556,6 +557,7 @@ test_that("a CLI child's file edit is undone by gptr_rewind() (IC-65)", {
   skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  local_native_step()
   local_fake_provider(function(request) {
     writeLines("a = 2", file.path(proj, "R", "a.R"))
     "Codex edited R/a.R"
@@ -570,6 +572,7 @@ test_that("a CLI child's file edit in an aborted turn is undone too (IC-65)", {
   skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  local_native_step()
   st = new.env()
   local_fake_provider(function(request) {
     if (is.null(st$s)) return("ok")
@@ -628,6 +631,7 @@ test_that("a turn's file scan never records gptr's own block writes (per-turn mo
   expect_bound_rewind()
   local_gptr_options(checkpoint_scan_budget = Inf)
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  local_native_step()
   expect_bound_rewind()
 })
 
@@ -728,6 +732,53 @@ test_that("/undo asks first when the preview finds items it cannot restore", {
   expect_identical(ckpt_cmd_undo("", ctx), "Undo cancelled.")
   expect_identical(s$turns, 2L)
   expect_identical(ui$remaining(), 0L)
+})
+
+test_that("/undo's question lists what it restores after what it cannot (D-354)", {
+  skip_on_cran()
+  proj = local_project()
+  local_fake_provider(list(fake_tool("r", code = "x = 2; writeLines('b', 'b.txt')"), "done"))
+  e = new.env()
+  s = peter("change x", model = "fake/fake-1", mode = "auto", envir = e)
+  e$x = 99
+  seen = new.env()
+  ui = list(select = function(title, choices, default = NULL, details = NULL) {
+    seen$details = details
+    1L
+  })
+  ctx = list(session = s, has_ui = function() TRUE, ui = function() ui)
+  out = ckpt_cmd_undo("", ctx)
+  expect_identical(seen$details,
+                   c("object x: conflict: changed after the checkpoint (kept current)",
+                     "file b.txt: would be removed"))
+  expect_true("file b.txt: removed" %in% out)
+  expect_false(file.exists(file.path(proj, "b.txt")))
+})
+
+test_that("/undo's question shows ten items: unrestorable, left as is, then restored (D-354)", {
+  skip_on_cran()
+  proj = local_project()
+  withr::local_preserve_seed()
+  withr::local_options(undo_question_test = NULL)
+  code = paste("x = 2; options(undo_question_test = 1); stats::runif(1)",
+               "for (i in 1:12) writeLines('b', sprintf('f%02d.txt', i))", sep = "; ")
+  local_fake_provider(list(fake_tool("r", code = code), "done"))
+  e = new.env()
+  s = peter("change x", model = "fake/fake-1", mode = "auto", envir = e)
+  e$x = 99
+  seen = new.env()
+  ui = list(select = function(title, choices, default = NULL, details = NULL) {
+    seen$details = details
+    1L
+  })
+  ckpt_cmd_undo("", list(session = s, has_ui = function() TRUE, ui = function() ui))
+  expect_length(seen$details, 11L)
+  expect_match(seen$details[[1L]], "^object x: conflict")
+  expect_match(seen$details[[2L]], "^RNG state: .*left as is")
+  expect_match(seen$details[[3L]], "undo_question_test: would be restored", fixed = TRUE)
+  expect_identical(seen$details[4:10], sprintf("file f%02d.txt: would be removed", 1:7))
+  expect_identical(seen$details[[11L]], "(+ 6 more)")
+  expect_null(getOption("undo_question_test"))
 })
 
 test_that("/undo lists each item once, by its outcome after the whole undo (#37)", {

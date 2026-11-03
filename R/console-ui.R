@@ -671,8 +671,9 @@ ui_questions_via = function(select, input, qs) {
     if (identical(type, "text")) {
       a = input(paste0(title, "\n/skip skips this question; /cancel dismisses the questions."),
                 default = as.character(q$default %||% ""))
-      if (!rlang::is_string(a) || identical(a, "/cancel")) return(result(TRUE))
-      if (identical(a, "/skip")) {
+      cmd = if (rlang::is_string(a)) tolower(trimws(a))
+      if (!rlang::is_string(a) || identical(cmd, "/cancel")) return(result(TRUE))
+      if (identical(cmd, "/skip")) {
         skipped = c(skipped, q$id)
         next
       }

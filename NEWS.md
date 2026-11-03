@@ -69,12 +69,13 @@ gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version insta
 * Rejected or unsent System 1 requests cost a known zero, a worker's decisions are charged at the
   System 1 model's price, and `peter()` warns when an agent option such as `backend =` is passed as
   context.
-* `/skip` and `/cancel` typed at a hidden credential prompt skip or cancel instead of being stored,
-  `gptr_login()` reports what it stored and where, and a session login reaches worker sub-agents
-  and coaching runs.
+* `/skip` and `/cancel` (in any case) typed at a hidden credential prompt skip or cancel instead of
+  being stored, `gptr_login()` reports what it stored and where, and a session login reaches worker
+  sub-agents and coaching runs.
 * Client snippets of `gptr_mcp_serve()`, `$config` and Codex `$env` no longer show the bearer token
   in Jupyter or knitr output, or in `format()` and `str()`. An explicit `mode =` on a resumed chat
-  applies when the console opens, so `/mcp serve` uses it.
+  applies when the console opens, so `/mcp serve` uses it; in plan mode the server answers
+  read-only R calls and refuses writes.
 * Notebooks run unattended (`jupyter nbconvert --execute`, papermill) no longer wait for an answer
   to a gptr question; console recordings into `.Rmd` and `.qmd` load gptr and keep `!` lines, so
   the documents knit; the notebook bound with `gptr_doc()` is the one recorded.

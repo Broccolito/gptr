@@ -116,6 +116,11 @@ perm_policy_mode = function(call, ctx) {
     if (identical(call$name, "r") && lvl <= 1L) {
       return(perm_decision("allow", "plan mode: runs in a scratch environment", call))
     }
+    if (identical(call$risk$categories, "read")) {
+      return(perm_decision("deny", paste0("plan mode does not run this read: describe what ",
+                                          "you need from it in your plan instead of reading ",
+                                          "it"), call))
+    }
     return(perm_decision("deny", paste0("plan mode is read-only: describe this change in your ",
                                         "plan instead of performing it"), call))
   }

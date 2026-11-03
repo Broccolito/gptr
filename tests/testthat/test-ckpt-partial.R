@@ -114,7 +114,7 @@ test_that("a complete later inventory does not repair earlier partial undo cover
   next_scan = partial_scan(c("a.R", "unseen.R"),
                           c(a.R = ckpt_store_put("a.R"),
                             unseen.R = ckpt_store_put("unseen.R")), complete = TRUE)
-  frag = ckpt_files_turn_scan(ck, 1L)
+  frag = ckpt_files_turn_scan(ck, 1L, force = TRUE)
   expect_identical(frag$coverage, "partial")
   expect_identical(frag$files[[1L]]$path, "a.R")
   expect_true(tr$complete)
@@ -146,7 +146,7 @@ test_that("coverage-only fragments tell undo that unobserved changes remain", {
   ck = ckpt_ck_new("s0000000207")
   ckpt_files_sync(ckpt_files_tr(ck))
   writeLines("unobserved edit", "unseen.R")
-  frag = ckpt_files_turn_scan(ck, 1L)
+  frag = ckpt_files_turn_scan(ck, 1L, force = TRUE)
   expect_length(frag$files, 0L)
   expect_identical(frag$coverage, "partial")
   items = ckpt_files_undo(ck, frag)

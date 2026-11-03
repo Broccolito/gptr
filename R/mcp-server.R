@@ -150,8 +150,9 @@ mcp_serve_envir = function(target, run, mode) {
 }
 
 #' Gate a served call when no pump runs (an idle console): the policies alone decide; whatever
-#' needs approval is denied with how to allow it and, with `notice`, a console notice, never
-#' prompted from a callback (IC-57)
+#' needs approval is denied with what a person can do about it and, with `notice`, a console
+#' notice, never prompted from a callback (IC-57). An allow rule never pre-approves a call a
+#' policy leaves to a person (`ask_human`, level 4 included), so it is not offered for one (D-352).
 #' @noRd
 mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   if (isTRUE(gptr_opt("unsafe_no_permissions"))) {
@@ -159,21 +160,28 @@ mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   }
   pols = registry_all("policy", session = sid)
   ask = if (!"mode" %in% names(pols)) list(reason = "no permission mode policy is active")
+  person = FALSE
   for (p in pols) {
     d = ext_policy_decide(p, call, ctx)
     if (identical(d$decision, "deny")) return(d)
     if (!is.null(d) && !identical(d$decision, "allow")) ask = ask %||% d
+    person = person || identical(d$decision, "ask_human")
   }
   if (is.null(ask)) return(list(decision = "allow", reason = ""))
+  rule = "gptr_permissions(allow = ...)"
   if (notice) {
     message_row(gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your ",
-                                   "approval; it was refused. Allow it with gptr_permissions(",
-                                   "allow = ...) or run it yourself."), "notice"),
+                                   "approval; it was refused. ",
+                                   if (person) "Run it yourself if you want it." else
+                                     paste0("Allow it with ", rule, " or run it yourself.")),
+                            "notice"),
                 row = reactor_depth() == 0L)
   }
   list(decision = "deny",
        reason = paste0(if (nzchar(ask$reason)) ask$reason else "this needs approval",
-                       "; nobody can approve it while gptr serves requests in the background"))
+                       "; nobody can approve it while gptr serves requests in the background"),
+       how = paste0("Ask the user to run it at the R prompt",
+                    if (!person) paste0(" or to allow it with ", rule), "."))
 }
 
 #' The gate of a served call (IC-57): perm_check() with the session's run only while a pump runs
@@ -264,7 +272,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     spec$risk(input, ctx)
   }
   call = list(id = paste0("mcp_", id), name = name, input = input, tool = spec, nested = FALSE,
-              risk = risk)
+              risk = risk, envir = env)
   if (!is.null(run)) call = tool_call_hook(run, call, risk)
   if (!is.null(call$blocked)) {
     if (!is.null(st)) st$refused = call$refused
@@ -273,8 +281,6 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
     if (!is.null(st)) st$refused = perm_refused(d) %||% "not allowed"
-    d$how = paste0("To allow it, run it yourself at the R prompt or add a rule with ",
-                   "gptr_permissions(allow = ...).")
     return(gptr_tool_result(paste(perm_denial_text(d), "Nothing in this call ran."),
                             is_error = TRUE))
   }
@@ -316,7 +322,7 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
   gptr_r_call = r_call_new(ctx)
   if (!mcp_pumped(run)) {
     sid = if (!is.null(session)) session_data(session)$id
-    gptr_r_call$gate = function(name, input) mcp_nested_gate(name, input, ctx, sid, call$risk)
+    gptr_r_call$gate = function(name, input) mcp_nested_gate(name, input, ctx, sid, call)
   }
   if (!is.null(run)) {
     outer = run$tool_call
@@ -358,15 +364,17 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
 #' run in its `wd`, as the member's own risk reads it, or a script's path), as the static gate
 #' reads one, with the registered secrets its `env` hands the child for the rules, and then, when
 #' that hand-over meets the secret guard, the member itself (its own risk), which no rule for `r`
-#' code covers; any other with its tool's risk of its input. A secret the served call's analysis
-#' (`outer`) guards was that call's question, as in dispatch_nested(). Signals the denial.
+#' code covers; any other with its tool's risk of its input. The literal is gated in the served
+#' call's environment (`outer$envir`), as the plan policy reads it. A secret the served call's
+#' analysis (`outer$risk`) guards was that call's question, as in dispatch_nested(). Signals the
+#' denial.
 #' @noRd
 mcp_nested_gate = function(name, input, ctx, sid = NULL, outer = NULL) {
   spec = registry_get("tool", name, session = sid)
   call = list(name = name, input = input, tool = spec, nested = TRUE,
               risk = if (is.function(spec$risk)) spec$risk(input, ctx))
-  if (isTRUE(call$risk$secret_guard) && isTRUE(outer$secret_guard) &&
-      all(call$risk$secrets %in% outer$secrets)) {
+  if (isTRUE(call$risk$secret_guard) && isTRUE(outer$risk$secret_guard) &&
+      all(call$risk$secrets %in% outer$risk$secrets)) {
     call$risk$secret_guard = FALSE
   }
   calls = list(call)
@@ -374,7 +382,7 @@ mcp_nested_gate = function(name, input, ctx, sid = NULL, outer = NULL) {
     code = nested_literal(name, input)
     risk = ext_service_get("risk.classify")(code, envir = NULL, root = project_root(), kind = "r")
     risk$secrets = unique(c(risk$secrets, call$risk$secrets))
-    calls = c(list(list(name = "r", input = list(code = code), risk = risk)),
+    calls = c(list(list(name = "r", input = list(code = code), risk = risk, envir = outer$envir)),
               if (isTRUE(call$risk$secret_guard)) calls)
   }
   for (x in calls) {
@@ -663,8 +671,10 @@ mcp_handle_new = function(st, tok, stop) {
 #' interactive R console instead.
 #' In Peter, `/mcp serve` starts or reuses the server and returns to R's prompt; a new server
 #' uses that chat's workspace and mode. Resume the chat with `gptr_last() |> peter()`. Calls that
-#' need approval are refused with a note on how to allow them, because gptr never asks from a
-#' background callback. The token appears only in the snippets of `$config`, which show it
+#' need approval are refused with a note on what a person can do, because gptr never asks from a
+#' background callback. In plan mode, `r` calls that only read run in a scratch environment above
+#' the workspace (what they create is not kept) and every call that changes something is
+#' refused. The token appears only in the snippets of `$config`, which show it
 #' redacted, in notebooks and documents too (`as.character()` gives the text to paste;
 #' `$config$codex` holds the `codex` options in `$args` and the environment to start Codex with
 #' in `$env`). One server runs per R process. Needs 'httpuv', 'later' and 'openssl'; gptr's own

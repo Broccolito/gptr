@@ -2128,7 +2128,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   tracker's, so a path it did not reach has no pre-image or proven absence from before it
   [D-311]. Automatic file undo covers only changes with sufficient observations and valid
   pre-images; coverage is partial only where a scan stopped early, and R code that can write no
-  file and turns without a file-capable call get no file record [D-312]. Predicted
+  file and turns without a file-capable call or, on a CLI route in auto or yolo, a step outside R
+  get no file record [D-312, D-353]. Predicted
   literal targets of gptr-controlled calls are captured immediately before mutation, independently
   of automatic coverage. On every route a scanned target gets a pre-image only while it is as
   the last scan saw it (content hash, or size and mtime for a file without a backup), so a

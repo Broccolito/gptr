@@ -3085,13 +3085,15 @@ restorable, and coverage notices explain that other changes may not be listed or
 The coverage notice (and the per-turn scan notice) is for the person, once per project root and
 process: a console line through `gptr_message_write()`, never a message condition, so it enters
 no tool result (IC-77, D-188); none is shown while knitting or in a Jupyter kernel, where it
-would fill the rendered output (D-314).
+would fill the rendered output (D-314). It names the project folder, not its absolute path, and
+says in plain words why the scan stopped (D-354).
 A fragment's coverage is `"partial"` only when a scan of its interval stopped early (time,
 entries, an interrupt, an unreadable directory or path); a capture limit leaves it complete and
 its uncaptured changes are rows without a pre-image. The files checkpointer skips R code whose
 classified effects are only reads and object writes, and a per-turn scan follows only a turn
-that synced the tracker (a file-capable call), so R-only and text-only turns carry no coverage
-item (D-312).
+that could write files: a file-capable call or, on a CLI route in `auto` or `yolo`, a step
+outside R (an informational tool event; below `auto` Codex's sandbox is read-only, §8.5). So
+R-only and text-only turns carry no coverage item on every route (D-312, D-353).
 
 Predicted targets of gptr-controlled writes are backed up immediately before the call,
 independently of automatic coverage, with the existing protected/control/link/type and byte
@@ -5390,8 +5392,9 @@ document are exact.
   `workspace-write`, never `danger-full-access`, so Codex's own shell writes only in the workspace and the
   temporary directories, where it changes and deletes files without gptr's gate (IC-78). Before a
   `workspace-write` exec gptr hashes the `control` files (IC-54) and refuses to load changed ones until the user
-  confirms; the files checkpointer runs its bounded scan after each exec (7.16), so `/undo` covers the Codex
-  edits that scan observes. On native Windows the
+  confirms; the files checkpointer runs its bounded scan after a `workspace-write` exec in which Codex ran a step
+  outside R, or after any exec in which a served call could write files (7.16, D-353), so `/undo` covers the
+  Codex edits that scan observes. On native Windows the
   sandbox is probed and the route falls back to `read-only` with a warning when it is not ready [08 line 2796].
   The one-time notice says Codex runs its own shell inside its sandbox; that shell runs in every mode outside
   gptr's gate, rules and secret guard, and in plan, manual and edits its read-only sandbox still lets it read any

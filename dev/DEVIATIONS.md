@@ -10591,3 +10591,148 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   give a classed character ..."; s1-composition "decision launch notices identify real cache
   misses ..."; doc-replay "without .gptr/, gptr_cache() counts and clears the System 1 answers in
   memory". Evidence: progress/fixes-1.0.1/lane-C.md.
+
+## D-350 - Fixes 1.0.1 round 2 lane X /skip and /cancel match in any case (2026-11-03)
+- Rule (amends 04 `gptr_login()` and the assisted-setup questions): the answers `/skip` and
+  `/cancel` are commands in any case and between blanks, at the hidden credential prompt
+  (`oauth_ask()`) and at a text question (`ui_questions_via()`); any other answer, `/cancel now`
+  included, is an answer. Formerly only the lowercase literal was a command at the hidden prompt
+  (`/SKIP`, `/Skip` and `/CANCEL` were stored as the API key and reported stored), and a text
+  question took a padded `" /skip "` as its answer.
+- Contract-visible: `?gptr_login` (the commands are unchanged; only the matching is wider).
+- Tests: test-auth-setup.R "/skip and /cancel at the hidden prompt skip and cancel instead of
+  storing a key" and "ordinary text questions can be submitted, skipped and cancelled". Evidence:
+  progress/fixes-1.0.1/round2-X.md.
+
+## D-351 - Fixes 1.0.1 round 2 lane X Plan-mode /mcp serve serves read-only r calls (2026-11-03)
+- Rule (amends IC-15 and IC-57 for an idle console): `mcp_serve_exec()` puts the
+  environment it evaluates in on the call it gates (`call$envir`), and the `plan` policy checks
+  `call$envir` before `ctx$envir` for the scratch overlay. A served `r` call of a plan-mode session
+  with no run therefore runs in the fresh overlay `mcp_serve_envir()` builds above the session's
+  home when every call of its code is known read-only (IC-54) and nothing existing changes; the
+  overlay is dropped with the call, so nothing it creates is kept. A write, an edit, a changed
+  existing object (`<<-`, `d$x =`) and any call off the allowlist are refused as before. Formerly
+  the policy read `ctx$envir`, which at an idle console is the home itself, so the overlay never
+  counted and every served `r` call, `value + 1` included, was refused with "plan mode needs a
+  scratch environment for r".
+- Rule (nested calls): `mcp_serve_r()` hands the served call, not only its risk, to
+  `mcp_nested_gate()`, which gives the literal `r` call of a nested `peter$sh`, `bg` or `script`
+  the same `envir`; a read-only nested `peter$sh('ls')` therefore runs in a plan-mode served call
+  as it does in an in-run plan turn, and a writing one is refused by the plan allowlist. Formerly
+  that literal had no environment, so it fell back to the home and the call was refused with the
+  same false "plan mode needs a scratch environment for r".
+- Contract-visible: `?gptr_mcp_serve` says what plan mode serves.
+- Tests: test-mcp-server.R "a fork's served calls evaluate in its overlay; a plan-mode parent
+  stays in plan" (`nrow(d)` runs and leaves nothing in the home; `saveRDS()`, `d$x =`, `<<-` and
+  `assign()` into the global environment are refused and change nothing) and "a plan-mode served r
+  call runs a nested read-only sh call; a writing one is refused". Evidence:
+  progress/fixes-1.0.1/round2-X.md.
+
+## D-352 - Fixes 1.0.1 round 2 lane X Refusals say what a person can do (2026-11-03)
+- Rule (amends IC-57, the served-denial sentence): `mcp_gate_idle()` alone sets the advice of a
+  served call that needs approval: "Ask the user to run it at the R prompt or to allow it with
+  gptr_permissions(allow = ...)." and, when any policy leaves the call to a person (`ask_human`:
+  level 4, control, the secret guard), "Ask the user to run it at the R prompt."; its console
+  notice offers the rule on the same condition. A refusal by
+  a policy (plan mode, a deny rule, code off the plan allowlist) keeps the default "Explain what
+  you need or choose another approach.", and the answer of a person who declined keeps its own
+  text. Formerly `mcp_serve_exec()` appended "To allow it, run it yourself at the R prompt or add
+  a rule with gptr_permissions(allow = ...)." to every denial, which no client can do and which
+  was false for plan mode and level 4.
+- Rule (plan wording): a call that only reads (`categories` is `read`: the `read` tool beyond the
+  project or on a protected file, an `r` call that reads from a network) that plan mode denies
+  says "plan mode does not run this read: describe what you need from it in your plan instead of
+  reading it". It claims no boundary: the `r` tool's level-1 reads beyond the project run, and a
+  call with another category (a secret, a write, a command) keeps the general wording. Formerly
+  it said "plan mode is read-only: describe this change in your plan instead of performing it",
+  which describes a change that is not one; writes and edits keep that wording.
+- Contract-visible: IC-57; `?gptr_mcp_serve` ("a note on what a person can do").
+- Tests: test-mcp-server.R "a served refusal offers what a person can do, never an allow rule
+  that cannot work"; test-perm-gate.R "plan mode says it does not run a read, never that the
+  read is a change (D-352)". Evidence: progress/fixes-1.0.1/round2-X.md.
+
+## D-353 - Fixes 1.0.1 round 2 lane Y A CLI turn's files are scanned only when it could write files (2026-11-03)
+- Rule (amends D-312's "CLI routes scan every turn"): on claude-cli and codex the turn-end and
+  agent-end scans run only after a turn that could write files: a file-capable served call (the
+  files checkpointer's before()) or a step outside R, which the Codex adapter reports as an
+  informational `tool_execution_start` event (contract 8.5; a native shell command, file edit,
+  web search or another server's MCP call) in `auto` or `yolo`: below them Codex runs in its
+  read-only sandbox (8.5's mapping), so its own steps cannot write files and a turn of shell
+  reads in the default `manual` mode is not scanned. The tracker's `dirty` flag (was `synced`)
+  records either; a sync clears it, so the CLI's agent_start sync no longer counts as a reason to
+  scan.
+  The claude child runs with `--tools ""`, so only served calls mark its turns. API routes are
+  unchanged: their per-turn scan follows a file-capable call, as before. D-310, D-311 and D-313
+  are unchanged (the CLI agent_start sync, its replacing observations, served-call pre-images).
+- Why: every CLI turn was scanned, and in a project of more than 2,000 entries each scan stopped
+  early, so a turn that only answered in text or only ran R on objects got a "file coverage"
+  item: `/undo` asked "Undo anyway?", the rewind was partial and the next request carried a
+  `<rewind>` block, against D-312, `?gptr_rewind` and NEWS 1.0.1 (live retest rt-ckpt, captures
+  d1-d5; the azure control and an empty folder rewound fully).
+- Trade-off: a native edit is seen only through Codex's own item events, and below `auto` the
+  read-only sandbox is trusted to prevent one, as the permission gate already does (IC-78); a CLI
+  that edited files without reporting a step would go unrecorded, as for any unscanned path. A
+  read-only step in `auto` or `yolo` (a shell read, a web search) is still scanned after. The
+  aborted-run case of 8f019d5c is kept, as the informational start precedes the edit.
+- Contract-visible: 04 sections 7.16 and 8.5 (the Codex sandbox mapping); 03 section 6.16 Files.
+- Tests: ckpt-scan-integration "R-only and text-only turns rewind fully in capped and partially
+  scanned projects" (now on API and CLI routes, and the next request has no `<rewind>`), "a CLI
+  turn with a step outside R keeps the coverage item of a partial scan"; cli-codex "a Codex
+  turn's files are scanned only after a step that can write files (D-353)" (the fake Codex CLI's
+  text and codex_shell cases in manual and auto); the IC-65 native-edit tests of ckpt-rewind
+  announce their edit with `local_native_step()` (helper-fake.R). Evidence:
+  progress/fixes-1.0.1/round2-Y.md.
+
+## D-354 - Fixes 1.0.1 round 2 lane Y Checkpoint messages name what changes, in plain words (2026-11-03)
+- Rule (`/undo`): when the preview finds items it cannot restore, the "Undo anyway?" question
+  lists the items of the plan, those it cannot restore first, then those it leaves as is or asks
+  about (restore `NA`: the RNG state, the locale, a file outside the project), then what it would
+  restore or remove; at most 10, then "(+ <n> more)". A file the undo deletes previews as "would
+  be removed" (was "would be restored", as objects already read). Was only the items it could
+  not restore, so after Peter's approved edit and new file on claude-cli in a large project the
+  question showed the "file coverage" row alone.
+- Rule (coverage notice, amends D-314's wording): "File undo covers only part of the project
+  folder "<name>": the automatic scan stopped early because <reason>, so changes to files it did
+  not reach cannot be undone. Files Peter's tools name are backed up before they change." The
+  per-turn scan notice names the folder the same way; the name is quoted (`encodeString()`), so
+  a name with spaces reads as one. The scan's `reason` is plain words: "the
+  folder has more than 2,000 entries", "it ran out of time (gptr.checkpoint_scan_timeout)", "it
+  was interrupted", "a folder could not be read", "a path could not be read", "a file name is not
+  valid UTF-8", "an error stopped it" (was "entry limit", "time limit", "interrupted",
+  "unreadable directory", "unavailable path", "invalid file name", "scan error"). Was the
+  absolute root, which a console narrower than the path wrapped mid-word, and internal reasons.
+- Contract-visible: the `reason` of a `gptr_rewind(preview = TRUE)` file row (04 section 6.5);
+  04 section 7.16 (the notice); the question and the notices are console wording.
+- Tests: ckpt-rewind "/undo's question lists what it restores after what it cannot (D-354)",
+  "/undo's question shows ten items: unrestorable, left as is, then restored (D-354)";
+  ckpt-files "the coverage notice is a console line for the person, once per root", "a scan
+  slower than gptr.checkpoint_scan_budget switches to per-turn scans once"; ckpt-scan "the entry
+  cap leaves undiscovered files unknown", the time-limit and interrupt cases. Evidence:
+  progress/fixes-1.0.1/round2-Y.md.
+
+## D-355 - Fixes 1.0.1 round 2 lane Y Listings keep provider, availability and checked_at whole and first (2026-11-03)
+- Rule (`listing_print_lines()`): `provider`, `availability` and `checked_at` join the columns
+  placed first and never shortened (name, ref, id, rule, source, visible, trusted, status,
+  branch; dates are also never shortened, 7f53fdfb), so at 80 columns they stay in the two column
+  groups and numbers such as prices move to "# Other columns:" instead. Free text still gives
+  way first, widest first, and never-shortened columns other than identifiers stay capped at 24.
+  The never-shortened set is now one list: the placed-first names plus date, created, updated.
+- Why: at 120 columns `gptr_models()` cut "advertised (stale)" to "advertised (..." and
+  "versa-bedrock" to "versa-be...", and at 80 columns it listed availability and checked_at only
+  as "# Other columns", hiding the freshness the 1.0.1 listings promise (live retest rt-disc,
+  captures 07, 26, 29).
+- Rejected: never shortening every column whose values fit in 24 columns (the first round 2
+  fix). It kept short free text such as `gptr_providers()`'s `api` whole at the expense of
+  `default_model` and `credential` ("google/gemini-3.8-flash" became "google/gemini-3..." at 80
+  columns), and a source or status over 24 characters lost its 24-column floor.
+- Rule (footer): the `gptr_models()` footer reads "catalog <date> (<source>), <n> models; refresh
+  = TRUE updates it; advertised does not verify access" plus any failed listing, so it is one line
+  at 120 columns and two at 80 (`print.gptr_listing()` wraps footers at word boundaries, 41e4c1b0).
+  Was 229 characters with a failure, three lines at 80 that split `gptr_models(refresh = TRUE)`.
+  `?gptr_models` and the language-models vignette keep the full caveat (inference and billing).
+- Contract-visible: none (display copy; the returned data frames are unchanged).
+- Tests: listing-print "model listings keep provider, availability and checked_at whole and shown
+  (D-355)" (flaky, codex and versa-bedrock shapes at 80 and 120 columns), "at 80 columns free text
+  gives way before a long source and model refs (D-355)"; provider-model-discovery
+  "the models footer is one line at 120 columns and two at 80 (D-355)". Evidence:
+  progress/fixes-1.0.1/round2-Y.md.

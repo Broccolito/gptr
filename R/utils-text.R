@@ -333,14 +333,15 @@ print.gptr_listing = function(x, ...) {
 }
 
 #' A width-bounded display copy: provenance/state first, at most two column groups, no row loss;
-#' identifier, state and date columns are never shortened, so free text gives way first
+#' identifier, provenance, state and date columns are never shortened, so free text gives way first
 #' @noRd
 listing_print_lines = function(x, width = cli::console_width()) {
   if (!ncol(x)) return(character())
   width = max(10L, as.integer(width))
   row_width = nchar(as.character(nrow(x))) + 1L
   budget = width - row_width
-  priority = c("name", "ref", "id", "rule", "source", "visible", "trusted", "status", "branch")
+  priority = c("name", "ref", "id", "rule", "source", "visible", "trusted", "status", "branch",
+               "provider", "availability", "checked_at")
   first = which(names(x) %in% priority)
   first = first[order(match(names(x)[first], priority))]
   idx = c(first, setdiff(seq_along(x), first))
@@ -361,9 +362,8 @@ listing_print_lines = function(x, width = cli::console_width()) {
     min(budget, caps[[j]], max(nchar(c(headers[[j]], values[[j]]), type = "width")))
   }, 0)
   minimum = pmax(nchar(headers, type = "width"), pmin(wanted, 8L))
-  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status", "branch",
-                                        "date", "created", "updated")
-  minimum[state] = wanted[state]
+  whole = names(x) %in% c(priority, "date", "created", "updated")
+  minimum[whole] = wanted[whole]
   groups = list()
   group = integer()
   used = 0

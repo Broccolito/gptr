@@ -136,14 +136,14 @@ than assuming every object is a fully resident data frame.
 
 ``` r
 session$id
-#> [1] "s641bf499c6"
+#> [1] "s3f8039b1d7"
 session$model
 #> [1] "fake/fake-1"
 session$turns
 #> [1] 1
 gptr_usage(session)
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 s641bf499c6  2         3435   20      0           0            0
+#> 1 s3f8039b1d7  2         3435   20      0           0            0
 #>
 #> # 1 row
 #> 2 requests, 3.4k tokens in, $0.0000
@@ -173,7 +173,7 @@ session$history
 #> 4 1     tool_result  + fit <lm length 12>      r      5
 #> 5 1     assistant    The regression is ready.         1726
 #> # 5 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.5k tokens . $0.0000 . s641bf499c6
+#> idle . fake/fake-1 . 1 turn . 3.5k tokens . $0.0000 . s3f8039b1d7
 as.data.frame(session$history)
 #>   turn        role
 #> 1    1        user
