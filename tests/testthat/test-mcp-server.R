@@ -401,10 +401,34 @@ test_that("a fork's served calls evaluate in its overlay; a plan-mode parent sta
     res = mcp_dispatch_local(r_call(code), id)$result
     expect_true(res$isError, label = code)
     expect_match(res$content[[1L]]$text, "plan mode", fixed = TRUE)
+    # no allow rule loosens plan mode, so none is offered
+    expect_false(grepl("gptr_permissions", res$content[[1L]]$text, fixed = TRUE))
   }
   expect_false(file.exists("d.rds"))
   expect_false(exists("zz", envir = globalenv(), inherits = FALSE))
   expect_identical(p$envir$d, mtcars)
+})
+
+test_that("a served refusal offers what a person can do, never an allow rule that cannot work", {
+  local_gptr_options(quiet = FALSE)
+  y = local_served_session("manual")
+  text = function(code) {
+    mcp_dispatch_local(r_call(code), y$session)$result$content[[1L]]$text
+  }
+  out = utils::capture.output({
+    asked = text("a = 2")
+    critical = text("unlink('/gptr-none-x')")
+  })
+  expect_match(asked, paste("Ask the user to run it at the R prompt or to allow it with",
+                            "gptr_permissions(allow = ...). Nothing in this call ran."),
+               fixed = TRUE)
+  expect_match(critical, "a critical action (level 4); nobody can approve it", fixed = TRUE)
+  expect_match(critical, "Ask the user to run it at the R prompt. Nothing in this call ran.",
+               fixed = TRUE)
+  expect_false(grepl("gptr_permissions", critical, fixed = TRUE))
+  # the person's notice offers the rule only for the call it can allow
+  notices = gsub("\\s+", " ", paste(out, collapse = " "))
+  expect_identical(lengths(regmatches(notices, gregexpr("Allow it with", notices))), 1L)
 })
 
 test_that("a served call asks a person only while a pump runs (IC-57)", {

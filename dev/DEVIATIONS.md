@@ -10351,3 +10351,24 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   stays in plan" (`nrow(d)` runs and leaves nothing in the home; `saveRDS()`, `d$x =`, `<<-` and
   `assign()` into the global environment are refused and change nothing). Evidence:
   progress/fixes-1.0.1/round2-X.md.
+
+## D-352 - Fixes 1.0.1 round 2 lane X Refusals say what a person can do (2026-11-03)
+- Rule (amends IC-57, the served-denial sentence): `mcp_gate_idle()` alone sets the advice of a
+  served call that needs approval: "Ask the user to run it at the R prompt or to allow it with
+  gptr_permissions(allow = ...)." and, when any policy leaves the call to a person (`ask_human`:
+  level 4, control, the secret guard), "Ask the user to run it at the R prompt."; its console
+  notice offers the rule on the same condition. A refusal by
+  a policy (plan mode, a deny rule, code off the plan allowlist) keeps the default "Explain what
+  you need or choose another approach.", and the answer of a person who declined keeps its own
+  text. Formerly `mcp_serve_exec()` appended "To allow it, run it yourself at the R prompt or add
+  a rule with gptr_permissions(allow = ...)." to every denial, which no client can do and which
+  was false for plan mode and level 4.
+- Rule (plan wording): a call that only reads (`categories` is `read`, such as `read` of a file
+  outside the project) that plan mode denies says "plan mode reads inside the project only:
+  describe what you need from outside it in your plan instead of reading it". Formerly it said
+  "plan mode is read-only: describe this change in your plan instead of performing it", which
+  describes a change that is not one; writes and edits keep the old wording.
+- Contract-visible: IC-57; `?gptr_mcp_serve` ("a note on what a person can do").
+- Tests: test-mcp-server.R "a served refusal offers what a person can do, never an allow rule
+  that cannot work"; test-perm-gate.R "plan mode says a read outside the project is no change
+  (D-352)". Evidence: progress/fixes-1.0.1/round2-X.md.

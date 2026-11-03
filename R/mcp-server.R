@@ -150,8 +150,9 @@ mcp_serve_envir = function(target, run, mode) {
 }
 
 #' Gate a served call when no pump runs (an idle console): the policies alone decide; whatever
-#' needs approval is denied with how to allow it and, with `notice`, a console notice, never
-#' prompted from a callback (IC-57)
+#' needs approval is denied with what a person can do about it and, with `notice`, a console
+#' notice, never prompted from a callback (IC-57). An allow rule never pre-approves a call a
+#' policy leaves to a person (`ask_human`, level 4 included), so it is not offered for one (D-352).
 #' @noRd
 mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   if (isTRUE(gptr_opt("unsafe_no_permissions"))) {
@@ -159,21 +160,28 @@ mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   }
   pols = registry_all("policy", session = sid)
   ask = if (!"mode" %in% names(pols)) list(reason = "no permission mode policy is active")
+  person = FALSE
   for (p in pols) {
     d = ext_policy_decide(p, call, ctx)
     if (identical(d$decision, "deny")) return(d)
     if (!is.null(d) && !identical(d$decision, "allow")) ask = ask %||% d
+    person = person || identical(d$decision, "ask_human")
   }
   if (is.null(ask)) return(list(decision = "allow", reason = ""))
+  rule = "gptr_permissions(allow = ...)"
   if (notice) {
     message_row(gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your ",
-                                   "approval; it was refused. Allow it with gptr_permissions(",
-                                   "allow = ...) or run it yourself."), "notice"),
+                                   "approval; it was refused. ",
+                                   if (person) "Run it yourself if you want it." else
+                                     paste0("Allow it with ", rule, " or run it yourself.")),
+                            "notice"),
                 row = reactor_depth() == 0L)
   }
   list(decision = "deny",
        reason = paste0(if (nzchar(ask$reason)) ask$reason else "this needs approval",
-                       "; nobody can approve it while gptr serves requests in the background"))
+                       "; nobody can approve it while gptr serves requests in the background"),
+       how = paste0("Ask the user to run it at the R prompt",
+                    if (!person) paste0(" or to allow it with ", rule), "."))
 }
 
 #' The gate of a served call (IC-57): perm_check() with the session's run only while a pump runs
@@ -273,8 +281,6 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
     if (!is.null(st)) st$refused = perm_refused(d) %||% "not allowed"
-    d$how = paste0("To allow it, run it yourself at the R prompt or add a rule with ",
-                   "gptr_permissions(allow = ...).")
     return(gptr_tool_result(paste(perm_denial_text(d), "Nothing in this call ran."),
                             is_error = TRUE))
   }
@@ -663,7 +669,7 @@ mcp_handle_new = function(st, tok, stop) {
 #' interactive R console instead.
 #' In Peter, `/mcp serve` starts or reuses the server and returns to R's prompt; a new server
 #' uses that chat's workspace and mode. Resume the chat with `gptr_last() |> peter()`. Calls that
-#' need approval are refused with a note on how to allow them, because gptr never asks from a
+#' need approval are refused with a note on what a person can do, because gptr never asks from a
 #' background callback. In plan mode, `r` calls that only read run in a scratch environment above
 #' the workspace (what they create is not kept) and every call that changes something is
 #' refused. The token appears only in the snippets of `$config`, which show it
