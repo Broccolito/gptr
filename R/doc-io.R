@@ -1399,7 +1399,9 @@ doc_ide_upsert = function(fmt, site, up) {
 #' write consent, the `document_write` event (kind "transcript") and doc_rewrite(). An `.R`
 #' transcript takes raw lines (contract 11.5); an R Markdown or Quarto one takes them as one R
 #' chunk, as they are R code and comments (D-342); a notebook would no longer be JSON, so it is
-#' refused (FALSE). The lines are redacted with the persist profile before the event (IC-74).
+#' refused (FALSE), and so is an R Markdown or Quarto one whose last chunk is unterminated, which
+#' would read the new chunk as its body (a notice says so). The lines are redacted with the persist
+#' profile before the event (IC-74).
 #' @noRd
 doc_transcript_append = function(path, lines, session = NULL) {
   fmt = doc_format_of(path)
@@ -1416,6 +1418,12 @@ doc_transcript_append = function(path, lines, session = NULL) {
   lines = ev$lines %||% lines
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   invisible(isTRUE(doc_rewrite(path, function(doc) {
+    ch = if (!identical(fmt, "r")) doc_rmd_chunks(doc$lines)
+    if (NROW(ch) && !ch$closed[nrow(ch)]) {
+      gptr_inform(paste0("gptr did not record into ", doc_rel(path), ": its last chunk is not ",
+                         "terminated."), "notice", .once = paste0("doc_failed:", path_key(path)))
+      return(list(value = FALSE))
+    }
     first = if (!length(doc$lines)) doc_transcript_preamble(path)
     list(lines = c(first, doc$lines, as.character(lines)), value = TRUE)
   })))

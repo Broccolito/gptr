@@ -4849,7 +4849,8 @@ its gateway calls `gptr_console`, and `doc_locate()` runs no finder for them).
 Every transcript file opens with the replay note and `library(gptr)` (`doc_transcript_preamble()`), whatever its
 first block, a direct R line or a command too; an `.Rmd` or `.qmd` console target opens with a chunk loading gptr
 and gets each direct R line, slash command and rewind note as an R chunk of those lines, without `#>` output, which
-knitr prints (no `#~` switching after an undo there; D-342); while a session runs in the background (the pause menu's [b]),
+knitr prints (no `#~` switching after an undo there; after an unterminated last chunk nothing is appended and a
+`notice` says so, as a block is not; D-342); while a session runs in the background (the pause menu's [b]),
 whose block is written when its run ends, the console's direct R and command lines for it wait in its live handle
 and follow that block, in the order typed (`doc_console_append()`, P28 Task 76, visual round 3: a record opened
 with `x = 1` had no `library(gptr)`, and `!gptr_last()$status` and `# /exit` came before the `peter("go bg")` they

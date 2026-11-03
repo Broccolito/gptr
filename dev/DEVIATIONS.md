@@ -9602,7 +9602,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   turn wrote a bare `s_<id> = peter(...)` chunk and every other console line was dropped, so the
   document did not render (`could not find function "peter"`) and a turn using a `!` object
   failed. The `#~` switching of direct R lines after an undo stays `.R`-only (a line using an
-  undone object then fails on render, as it would at the console).
+  undone object then fails on render, as it would at the console). A document whose last chunk
+  is unterminated takes no such chunk (knitr would read it as that chunk's body): a notice says
+  so once, as for a block there.
 - Contract-visible: 04 section 15.3 (the transcript paragraph of IC-49); vignette
   ("script-as-history").
 - Tests: test-doc-replay.R "an R Markdown transcript loads gptr and keeps direct R lines as chunks

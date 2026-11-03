@@ -1331,6 +1331,14 @@ test_that("transcript lines are appended raw to an .R transcript, as a chunk to 
   expect_true(doc_transcript_append(qmd, "# /model opus"))
   expect_identical(readLines(qmd), c(doc_transcript_preamble(qmd), "", "```{r}", "# /model opus",
                                      "```"))
+  # after an unterminated chunk, a new chunk would be read as its body: nothing is written
+  local_gptr_options(quiet = FALSE)
+  open = file.path(proj, "open.Rmd")
+  writeLines(c("# Notes", "", "```{r}", "x = 1"), open)
+  expect_message(expect_false(doc_transcript_append(open, "# /model opus")),
+                 "did not record into open.Rmd: its last chunk is not terminated",
+                 class = "gptr_message_notice")
+  expect_identical(readLines(open), c("# Notes", "", "```{r}", "x = 1"))
   t = file.path(proj, ".gptr", "transcripts", "session.R")
   expect_true(doc_transcript_append(t, "# /model opus"))
   expect_identical(readLines(t), c(doc_transcript_preamble(t), "# /model opus"))
