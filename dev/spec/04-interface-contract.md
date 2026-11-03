@@ -2322,7 +2322,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `ui.get` | P11 | `ctx$ui()`, `ctx$has_ui()`, `perm_check()` (P06) | `function(session = NULL) <spec:ui>` |
 | `risk.classify` | P11 | `r` tool (P10), bridges (P22), `ctx$risk()` | `function(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python")) <gptr_risk>` |
 | `plan.pending` | P11 | `plan` context block (P07) | `function(envir_address, consume = TRUE) chr(1) or NULL` |
-| `s1.decide` | P13 | `ctx$decide()` | `function(question, x, ...) <gptr_s1>` |
+| `s1.decide` | P13 | `ctx$decide()` | `function(question, x, ...) <gptr_s1>`; a service that also declares `.session` (the builtin) gets the ctx's session, or its id, as the owner of provenance and usage; any other gets none in its dots (D-320) |
 | `doc.site` | P15 | `r` tool record flag (P10), `documents` section (P07), `/doc` and `/status` (P14) | `function(session) list(path, format) or NULL`; outside a run where a person can answer, without a document or binding, the transcript the project remembers (cheat-sheet review R10) |
 | `doc.edit` | P15 | `edit` tool (P10) | `function(path, edits, session) <gptr_tool_result> or NULL` (NULL: not a bound document) |
 | `doc.s1_block` | P15 | top-level System 1 calls (P13) | `function(call, summary) invisible(NULL)` (writes the one-line block) |

@@ -9592,16 +9592,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `levels`, so agents asked to rate or score used `choices` and hand-coded 1..3. The static
   prefixes grow by 17 o200k tokens (standard_all 2967 to 2984, standard_interactive 3110 to 3127;
   within the 2% gate of 2966 and 3109, no `--update`); the section stays within its 150 budget.
+- Rule (ctx$decide): `ctx$decide()` passes `.session` (the ctx's session or its id) only to an
+  `s1.decide` service whose formals declare it, as the builtin `s1_decide()` does; a replacement
+  with the documented `function(question, x, ...)` gets the call alone. Was `.session` for every
+  service (PR #105): a replacement forwarding `...` to `peter()` sent the session as a second
+  input, its last answer included, and `function(question, x, choices = NULL)` failed with
+  "unused argument".
 - Contract-visible: 03 sections 4.1.5, 7.3 (`{s1}`, `documents`, `system1`) and 10.3 NS-4, 04
-  sections 7.8 (`context`) and 9.3; `?peter` `...` and `choices`, `?gptr_prob`, vignette
-  system-one.
+  sections 7.0 (`s1.decide`), 7.8 (`context`) and 9.3; `?peter` `...` and `choices`,
+  `?gptr_prob`, vignette system-one.
 - Tests: prompt-sections "{s1} is replaced by the configured System 1 alias, quoted as an R
   string"; northstar's frozen prompt; gptr-gateway "System 1 arguments are refused on a
   conversational route (D-250)"; s1-client "a System 1 request does not depend on how its input
   is spelled (D-320)", "NS-4: if (peter(..., model = judge)) works ..."; s1-route "s1_inputs()
   reads symbols by name ...", "large values are described instead of sent ..."; gptr-capture
   "gateway_context_items() builds the context items ..."; doc-blocks "a note that already
-  starts with the Decision marker is not marked twice"; doc-formats' documents text. Evidence:
+  starts with the Decision marker is not marked twice"; doc-formats' documents text; ext-api
+  "ctx$decide() gives .session only to an s1.decide service that declares it". Evidence:
   progress/fixes-1.0.1/lane-C.md.
 
 ## D-322 - Fixes 1.0.1 lane C Gateway refusals of System 1 and agent arguments (2026-11-02)
