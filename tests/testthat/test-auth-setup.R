@@ -257,6 +257,21 @@ test_that("a remembered stdio slot survives setwd() and credential variables, no
                      expect_error(slot(), "changed", class = "gptr_error_untrusted"))
 })
 
+test_that("a malformed credential store does not stop stdio servers; session slots still work", {
+  local_user_dirs()
+  dir.create(dirname(auth_store_path(create = TRUE)), showWarnings = FALSE)
+  writeLines("[1, 2]", auth_store_path())
+  plain = list(name = "plain", command = rscript_path(), env = list(MODE = "x"))
+  expect_identical(mcp_stdio_credentials(plain, mcp_expand_spec(plain)), list(MODE = "x"))
+  spec = list(name = "demo", command = rscript_path(),
+              env = list(DEMO_API_TOKEN = "${DEMO_API_TOKEN}"))
+  local_mocked_bindings(mcp_server_get = function(name, session = NULL) spec)
+  local_scripted_ui(list(paste0("malformed-store-canary-", strrep("m", 16))))
+  gptr_login("mcp:demo", method = "key", scope = "session", slot = "DEMO_API_TOKEN")
+  env = mcp_stdio_credentials(spec, mcp_expand_spec(spec))
+  expect_s3_class(env$DEMO_API_TOKEN, "gptr_secret")
+})
+
 test_that("HTTP MCP path and authentication configuration edits invalidate login", {
   local_user_dirs()
   spec = list(name = "demo", url = "https://mcp.example/mcp", headers = list())

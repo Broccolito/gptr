@@ -1086,12 +1086,14 @@ mcp_stdio_binding = function(spec, ex) {
   list(id = id, command = command, origin = paste0("https://", id, ".stdio.invalid"))
 }
 
-#' Insert reviewed credential handles only into this server's owned child environment
+#' Insert reviewed credential handles only into this server's owned child environment; an
+#' unreadable credential store leaves the session's credentials, like provider_credential()
 #' @noRd
 mcp_stdio_credentials = function(spec, ex) {
   env = as.list(ex$env %||% character())
   prefix = paste0("mcp:", spec$name, ":env:")
-  keys = auth_store_keys()
+  keys = tryCatch(auth_store_keys(),
+                  gptr_error = function(e) as.character(names(secrets_state()$auth)))
   keys = keys[startsWith(keys, prefix)]
   if (!length(keys)) return(env)
   binding = mcp_stdio_binding(spec, ex)
