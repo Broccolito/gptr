@@ -2001,6 +2001,14 @@ test_that("a receipt is the person's rows: wrapped under the text, a CLI steer s
   expect_identical(substr(rows, 1L, 6L), c("next> ", rep("      ", length(rows) - 1L)))
   expect_identical(paste(substring(rows, 7L), collapse = " "), long)
   expect_true(all(nchar(rows, type = "width") <= 39L))
+  # a word wider than the row, as unspaced CJK text is, breaks at the row's width, under the text
+  cjk = paste0("请把中位数残差也报告出来，",
+               "并且解释一下为什么")
+  wide = paste(cjk, strrep("s", 40L), "很长")
+  rows = utils::capture.output(console_receipt(s, wide, "steer"))
+  expect_identical(substr(rows, 1L, 7L), c("steer> ", rep(strrep(" ", 7L), length(rows) - 1L)))
+  expect_true(all(nchar(rows, type = "width") <= 39L))
+  expect_identical(paste(substring(rows, 8L), collapse = ""), gsub(" ", "", wide))
   # on a CLI route a steer waits for the CLI's answer: said dim after the text, or under it where
   # its last row is full
   local_cli_run(s)
