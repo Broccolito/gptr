@@ -57,19 +57,25 @@ test_that("real partial checkpoints preserve targeted writes and report native c
   expect_false(coverage_report$ok)
   expect_match(coverage_report$action, "unobserved file changes may remain", fixed = TRUE)
 
-  # The CLI may have written an unknown file before serving a gptr tool request.
+  # The CLI may have written an unknown file before serving a gptr tool request: undo reverts
+  # the served edit of a file no scan observed and removes the file a served write created.
   writeLines("native unknown change", unknown)
-  call = list(id = "native-late-target", name = "write",
-              input = list(path = unknown_rel, content = "served write"))
-  token = ckpt_files_before(ck, call, turn = 1L, sync = FALSE)
-  expect_false(token$exact)
-  writeLines("served write", unknown)
   unknown_after = scan_integration_bytes(unknown)
-  late = ckpt_files_after(ck, call, token)
-  expect_length(late$files, 0L)
-  expect_identical(late$coverage, "partial")
-  expect_false(ckpt_files_undo(ck, late)$ok)
+  created_rel = "zz-target/deep/analysis.ipynb"
+  served = list(c(unknown_rel, "served write"), c(created_rel, "{}"))
+  late = lapply(served, function(x) {
+    call = list(id = x[[1L]], name = "write", input = list(path = x[[1L]], content = x[[2L]]))
+    token = ckpt_files_before(ck, call, turn = 1L, sync = FALSE)
+    writeLines(x[[2L]], file.path(root, x[[1L]]))
+    ckpt_files_after(ck, call, token)
+  })
+  expect_identical(late[[1L]]$files[[1L]]$status, "modified")
+  expect_identical(late[[2L]]$files[[1L]]$status, "created")
+  report = rbind(ckpt_files_undo(ck, late[[2L]]), ckpt_files_undo(ck, late[[1L]]))
+  expect_identical(report$item, paste("file", c(created_rel, unknown_rel)))
+  expect_true(all(report$ok))
   expect_identical(scan_integration_bytes(unknown), unknown_after)
+  expect_false(file.exists(file.path(root, created_rel)))
 
   known = file.path(root, "a-known.R")
   deleted = file.path(root, "b-delete.R")

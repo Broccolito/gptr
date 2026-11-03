@@ -422,10 +422,11 @@ ckpt_stat_refresh = function(tr, rel) {
 
 #' Files checkpointer, before a mutating call: the baseline, or (`sync`) a scan that absorbs edits
 #' made outside gptr (once per turn in per-turn mode); predicted paths get explicit pre-images.
-#' In per-turn mode a known path that changed since the turn's scan is left to that scan ("?"),
-#' whose pre-image is the content at the start of the turn. A call served to a CLI route does not
+#' A known path that changed since the tracker's scan is left to the recording scan ("?"), whose
+#' pre-image is the content at the start of the turn. A call served to a CLI route does not
 #' `sync`: the edits its child made since the turn's start are recorded, never absorbed (IC-65),
-#' and existing targets require a matching prior content hash, never metadata alone.
+#' and a known target must match its prior content hash, never metadata alone. A target no scan
+#' observed gets its state just before the call on every route (D-313).
 #' @return A token.
 #' @noRd
 ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
@@ -439,18 +440,17 @@ ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
   for (p in paths) {
     rel = ckpt_walked(tr, p)
     state = ckpt_explicit_state(p, tr$root)
-    # A direct target missed by a partial inventory can be backed up immediately before
-    # our own call. A CLI may already have changed it natively, so sync=FALSE is stricter.
+    # A target no scan observed is backed up immediately before our own call; a known one must
+    # still hold what the tracker saw, by content on a CLI route, whose child may have changed it.
     known = !is.na(rel) && (isTRUE(tr$complete) || rel %in% c(tr$stat$path, tr$absent))
-    explicit = p %in% names(tr$explicit) && identical(state, tr$explicit[[p]]) && state != "?"
-    exact = if (!sync) {
-      if (is.na(rel)) explicit else if (!nzchar(state)) {
-        known && !rel %in% tr$stat$path
+    exact = !known || if (!sync) {
+      if (nzchar(state)) {
+        rel %in% names(tr$hash) && identical(state, tr$hash[[rel]])
       } else {
-        (rel %in% names(tr$hash) && identical(state, tr$hash[[rel]])) || explicit
+        !rel %in% tr$stat$path
       }
     } else {
-      is.na(rel) || !known || ckpt_as_scanned(tr, rel, state)
+      ckpt_as_scanned(tr, rel, state)
     }
     tr$explicit[p] = if (exact) state else "?"
     tr$explicit_mode[p] = ckpt_modes(p)

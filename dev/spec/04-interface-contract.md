@@ -3062,9 +3062,13 @@ item (D-312).
 
 Predicted targets of gptr-controlled writes are backed up immediately before the call,
 independently of automatic coverage, with the existing protected/control/link/type and byte
-checks. CLI-served calls using `sync = FALSE` require a matching prior content hash for an
-existing file, or verified prior absence for a creation. Size and modification time alone
-cannot prove original contents; a late copy cannot become an original for an earlier native CLI edit.
+checks. For a target a scan observed, CLI-served calls using `sync = FALSE` require a matching
+prior content hash for an existing file, or verified prior absence for a creation; size and
+modification time alone cannot prove original contents, so a late copy cannot become an original
+for an earlier native CLI edit, and the turn's recording scan, which holds the turn-start
+observation, records the change instead. A target no scan observed gets its state just before
+the call as its pre-image on every route, so undo reverts Peter's own write or removes the file it
+created; an earlier native CLI edit of it in the same turn is not undone (D-313).
 Preserve guarded restores and R-object checkpointing. Arbitrary native CLI/shell writes outside
 coverage have no complete-undo guarantee. File discovery stays scoped and on demand through
 `ls`, `find` and `read`; provider startup requires no full-folder inventory.
@@ -5318,7 +5322,8 @@ document are exact.
   `workspace-write`, never `danger-full-access`, so Codex's own shell writes only in the workspace and the
   temporary directories, where it changes and deletes files without gptr's gate (IC-78). Before a
   `workspace-write` exec gptr hashes the `control` files (IC-54) and refuses to load changed ones until the user
-  confirms; the files checkpointer walks after each exec so `/undo` covers Codex's edits. On native Windows the
+  confirms; the files checkpointer runs its bounded scan after each exec (7.16), so `/undo` covers the Codex
+  edits that scan observes. On native Windows the
   sandbox is probed and the route falls back to `read-only` with a warning when it is not ready [08 line 2796].
   The one-time notice says Codex runs its own shell inside its sandbox; that shell runs in every mode outside
   gptr's gate, rules and secret guard, and in plan, manual and edits its read-only sandbox still lets it read any
@@ -5796,8 +5801,9 @@ totals line names the model and the context left.
   in the run's tool frame (`tool_execute_frame()`) when the call is reported (D-192). A reported call, `r` included,
   runs between the checkpointers' `before` and `after` (`checkpoint_before()`, `checkpoint_after()`), as a call of
   the loop does, so `/undo` restores what it changed (#24); on a CLI route the files checkpointer then records the
-  edits the child made since the turn's start rather than absorbing them, and captures an untracked file only while
-  it is as the last walk saw it (else its row has no pre-image). A served `r` call made while a run is live draws
+  edits the child made since the turn's start rather than absorbing them: a scanned target gets a pre-image only
+  while its content matches the last scan's hash (or its absence was proven), else the turn's recording scan
+  records it, and a target no scan observed gets its state just before the call (7.16, D-313). A served `r` call made while a run is live draws
   its plots as the loop's `r` tool does (`plots = "auto"`: on the person's device when one is open or a human is
   present), so a CLI route's plots reach the screen (#42); without a run they stay offscreen (`"capture"`). A
   long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a refreeze

@@ -1,4 +1,9 @@
 # Partial inventories must never turn a missing observation into proof of absence.
+paths_of = function(frag) {
+  stats::setNames(vapply(frag$files, function(r) r$status, ""),
+                  vapply(frag$files, function(r) r$path, ""))
+}
+
 partial_scan = function(paths = character(), hashes = character(), absent = character(),
                          complete = FALSE, not_files = character()) {
   info = path_info(fs_path(file.path(project_root(), paths)))
@@ -58,7 +63,7 @@ test_that("predicted writes outside an incomplete inventory still have exact pre
   expect_identical(readLines("unseen.R"), "original")
 })
 
-test_that("CLI late targets are not mistaken for start-of-turn preimages", {
+test_that("a CLI-served write to a target no scan observed is undone to its prior state", {
   local_project(files = list("unseen.R" = "original"))
   local_mocked_bindings(ckpt_scan_run = function(...) partial_scan())
   ck = ckpt_ck_new("s0000000204")
@@ -66,11 +71,14 @@ test_that("CLI late targets are not mistaken for start-of-turn preimages", {
   writeLines("native CLI edit", "unseen.R")
   call = list(id = "c", name = "write", input = list(path = "unseen.R", content = "new"))
   tok = ckpt_files_before(ck, call, sync = FALSE)
-  expect_false(tok$exact)
+  expect_true(tok$exact)
   writeLines("new", "unseen.R")
   frag = ckpt_files_after(ck, call, tok)
-  expect_length(frag$files, 0L)
-  expect_identical(frag$coverage, "partial")
+  expect_identical(paths_of(frag), c(unseen.R = "modified"))
+  expect_true(frag$files[[1L]]$restorable)
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
+  # Peter's write is undone; the CLI's earlier native edit stays, as no scan saw the original
+  expect_identical(readLines("unseen.R"), "native CLI edit")
 })
 
 test_that("complete and partial inventories preserve proven creations and absence", {
@@ -149,7 +157,7 @@ test_that("coverage-only fragments tell undo that unobserved changes remain", {
   expect_identical(readLines("unseen.R"), "unobserved edit")
 })
 
-test_that("a CLI deletion of an unknown target is not proof of original absence", {
+test_that("a CLI-served write that creates an unobserved target is removed by undo", {
   local_project(files = list("unseen.R" = "original"))
   local_mocked_bindings(ckpt_scan_run = function(...) partial_scan())
   ck = ckpt_ck_new("s0000000208")
@@ -157,14 +165,14 @@ test_that("a CLI deletion of an unknown target is not proof of original absence"
   unlink("unseen.R")
   call = list(id = "c", name = "write", input = list(path = "unseen.R", content = "new"))
   tok = ckpt_files_before(ck, call, sync = FALSE)
-  expect_false(tok$exact)
   writeLines("new", "unseen.R")
   frag = ckpt_files_after(ck, call, tok)
-  expect_length(frag$files, 0L)
-  expect_identical(frag$coverage, "partial")
+  expect_identical(paths_of(frag), c(unseen.R = "created"))
+  expect_identical(ckpt_files_undo(ck, frag)$action, "removed")
+  expect_false(file.exists("unseen.R"))
 })
 
-test_that("CLI targets outside the inventory cannot acquire late originals", {
+test_that("a CLI-served write outside the project is undone to its state before the call", {
   local_project()
   target = withr::local_tempfile(fileext = ".R")
   writeLines("original", target)
@@ -174,11 +182,11 @@ test_that("CLI targets outside the inventory cannot acquire late originals", {
   writeLines("native CLI edit", target)
   call = list(id = "c", name = "write", input = list(path = target, content = "new"))
   tok = ckpt_files_before(ck, call, sync = FALSE)
-  expect_false(tok$exact)
   writeLines("new", target)
   frag = ckpt_files_after(ck, call, tok)
-  expect_length(frag$files, 0L)
-  expect_identical(frag$coverage, "partial")
+  expect_true(frag$files[[1L]]$abs)
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
+  expect_identical(readLines(target), "native CLI edit")
 })
 
 test_that("CLI metadata matches cannot prove uncaptured original contents", {
