@@ -456,6 +456,7 @@ pcli_codex_build = function(model, context, opts) {
   state = pcli_state(opts)
   pcli_codex_settle(state)
   state$pcli_request_id = context[["request_id"]]
+  state$pcli_model_arg = pcli_model_id(model)
   pcli_track(opts[["session"]], state)
   path = pcli_find("codex")
   probe = pcli_probe(path)
@@ -476,7 +477,6 @@ pcli_codex_build = function(model, context, opts) {
   }
   resume = if (isTRUE(probe$resume) && is.null(role)) state$codex_thread else NULL
   wd = path_norm(getwd())
-  state$pcli_model_arg = pcli_model_id(model)
   args = pcli_codex_args(state$pcli_model_arg, wd, sandbox, state$codex_relay, resume = resume,
                          role = role, schema = schema)
   state$cli_api = "cli-codex"

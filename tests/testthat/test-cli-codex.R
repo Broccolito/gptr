@@ -106,6 +106,17 @@ test_that("build() starts one exec per turn with a fresh private relay mailbox",
   pcli_untrack("s0123456789")
 })
 
+test_that("build() records a request's model argument with its id, before it can fail", {
+  opts = stub_opts()
+  opts$state$pcli_model_arg = "gpt-6-sol"
+  local_mocked_bindings(pcli_track = function(...) invisible(NULL),
+    pcli_find = function(cli) gptr_abort("no codex here", "cli_missing"))
+  expect_error(pcli_codex_build(stub_model("codex", "gpt-6-luna"), list(request_id = "q2"), opts),
+               class = "gptr_error_cli_missing")
+  expect_identical(opts$state$pcli_request_id, "q2")
+  expect_identical(opts$state$pcli_model_arg, "gpt-6-luna")
+})
+
 # Write one request into a relay mailbox as the relay does, pump until the session answers;
 # returns the answer's text, or NULL when none came within `timeout` seconds
 relay_ask = function(dir, msg, allow_runs = NULL, timeout = 5) {
