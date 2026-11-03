@@ -28,6 +28,10 @@ test_that("gptr help provides a compact index and resolves qualified topics and 
   expect_match(paste(index, collapse = "\n"), "peter$search", fixed = TRUE)
   expect_identical(as.character(peter$help("gptr::gptr_mcp_add")),
                    as.character(peter$help("gptr_mcp_add", package = "gptr")))
+  expect_identical(as.character(peter$help("gptr_mcp_add")),
+                   as.character(peter$help("gptr::gptr_mcp_add")))
+  expect_error(peter$help("gptr::gptr_mcp_add", package = "stats"),
+               class = "gptr_error_invalid_argument")
   alias = as.character(peter$help("gptr::gptr_mcp_remove"))
   expect_match(alias[1L], "gptr::gptr_mcp_remove", fixed = TRUE)
   expect_match(paste(alias, collapse = "\n"), "scope", fixed = TRUE)
