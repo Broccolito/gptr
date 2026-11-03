@@ -299,6 +299,10 @@ doc_export_lines = function(lines, format, path, target) {
     }
     live = setdiff(live, set)
   }
+  # a console transcript's replay note names the transcript and is false of a Peter script
+  if (identical(utils::head(lines, 2L), doc_transcript_preamble(path)[1:2])) {
+    edits[[length(edits) + 1L]] = list(start = 1L, end = 2L, lines = character())
+  }
   if (length(edits)) {
     order = order(vapply(edits, function(e) e$start, 0L), decreasing = TRUE)
     for (i in order) lines = doc_splice(lines, edits[[i]]$start, edits[[i]]$end, edits[[i]]$lines)

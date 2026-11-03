@@ -123,6 +123,11 @@ test_that("a console transcript exports like a script, its later turns piping th
   gptr_export(f, peter, format = "peter")
   expect_true(all(c(calls, "# x = 2", "# y = x * 3") %in% readLines(peter)))
   expect_length(fake_requests(x$fake), 4L)
+  # the transcript's replay note is about the transcript: neither export keeps it
+  for (out in c(plain, peter)) {
+    expect_false(any(grepl("re-asks the model|without calling a model", readLines(out))))
+    expect_true("library(gptr)" %in% readLines(out))
+  }
 })
 
 test_that("console statements naming model and mode export in both formats (D-265)", {
