@@ -134,7 +134,7 @@ gptr's `auth.json` (mode 0600 on Unix), `"session"` keeps it in this R process o
 file or environment variable, and `"keyring"` uses the operating system's credential store
 through the optional keyring package. Leave a key blank or type `/skip` to skip; `/cancel` or
 an interrupt cancels. Peter can run the same call while it helps you set up a provider or an MCP
-server: `gptr_login(..., scope = "session")` needs your approval (except in yolo mode), you type
+server: `gptr_login(..., scope = "session")` needs your approval (except in `yolo` mode), you type
 the value at the hidden prompt, and the value never reaches the model. Hidden input is not
 encryption; `gptr_logout()` removes a stored credential.
 
@@ -294,7 +294,7 @@ other = gptr_fake_provider(list("An association does not establish causation."),
 session = peter("Describe how mpg relates to wt.", mtcars, model = fake)
 session |> peter("Add a caveat.", model = other)
 #> An association does not establish causation.
-#> idle . other/other-1 . 2 turns . 3.5k tokens . $0.0000 . s0580d5c382
+#> idle . other/other-1 . 2 turns . 3.5k tokens . $0.0000 . s4be77e5848
 ```
 
 ## Put calls in functions and scripts

@@ -255,9 +255,9 @@ CRAN install, open it in R with
 
 ## Why Peter?
 
-gptr reads as a grammar of Peter: g for grammar, as in ggplot2's grammar
-of graphics, and ptr for Peter, your agent in R. The name honors two
-Peters. Peter Naur edited the ALGOL 60 report, which defined the
+gptr reads as a grammar for Peter: g for grammar, as in ggplot2's
+grammar of graphics, and ptr for Peter, your agent in R. The name honors
+two Peters. Peter Naur edited the ALGOL 60 report, which defined the
 language's syntax in a readable grammar notation now called Backus-Naur
 Form; in that spirit, gptr records sessions as runnable documents. Peter
 Cathcart Wason studied human reasoning, and his dual-process account

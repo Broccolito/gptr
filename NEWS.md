@@ -69,6 +69,8 @@ gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version insta
 * Help pages for callbacks, custom backends, inferred tool schemas, images, approvals and side
   effects now match the implementation; project-scoped MCP servers need an initialized
   workspace (`gptr_init()`).
+* `citation("gptr")` and the site's citation page cite the CRAN release with its DOI,
+  10.32614/CRAN.package.gptr.
 * `model = "codex"` uses the shipped Codex default again: a model the Codex CLI advertises but a
   ChatGPT login refuses is no longer picked as the default. Codex errors show their message, not
   raw JSON.
