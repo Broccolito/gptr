@@ -1906,19 +1906,21 @@ test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering rev
   expect_true(pty$wait("BEGIN"))
   # Ctrl-C, s and Enter in one read, as under load: the s answers the menu, echoed at its chevron
   # under the question; [s] reads the text at its receipt's word, so the line read is the receipt
+  # (its row as shown: in the C locale GNU readline clears the row's end after a prompt with a
+  # hidden part)
   pty$send("\003s\r")
   expect_true(pty$wait("? Paused"))
   expect_true(pty$wait(paste0("  ", person, " s\r\n")))
   expect_true(endsWith(pty$pending(), "steer> "))
   pty$send("use the median\r")
-  expect_true(pty$wait(paste0(receipt_line("steer", "use the median"), "\r\n")))
+  expect_true(pty$wait("use the median\r\n"))
   expect_true(pty$wait("END"))
   expect_true(pty$wait("use the median END"))
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("not a key"), 0L)
-  expect_identical(pty$seen(receipt_line("steer", "use the median")), 1L)
+  expect_identical(sum(term_rows(pty$all) == receipt_line("steer", "use the median")), 1L)
 })
 
 test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (visual round 2)", {
