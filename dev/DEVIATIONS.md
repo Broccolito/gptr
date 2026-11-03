@@ -9785,8 +9785,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   screen for 10 s with codex, then `thinking 0s`). Before the run starts, through the checks before
   it (gateway_guards()'s model preparation, where a CLI's model listing runs, and its questions,
   which clear it), it is the row of the prompt's own record (`sent`, console_send()): `thinking
-  <secs>` and the keys of a T console's composer, which reads them once the run starts, elsewhere
-  `<key> stop`, as no pause menu is offered before the run. At agent_start the run's record takes
+  <secs>` and the keys of a T console's composer, which reads them once the run starts, with the
+  draft a question before the run kept (D-306), elsewhere `<key> stop`, as no pause menu is offered
+  before the run. At agent_start the run's record takes
   it over, its clock from the same Enter (`rs$started`), before its model is prepared
   (checkpoints). The CLI model listing stays where it is (the catalog area, PR #106); the row shows
   while it runs (follow-up review: the first version drew it only from agent_start, after the

@@ -476,13 +476,18 @@ test_that("a prompt's live row shows from Enter, before its run starts; a refusa
   expect_match(out, "▌ thinking 0s · ctrl-c stop", fixed = TRUE)
   expect_null(the$live_row)
   expect_identical(trimws(utils::tail(term_rows(out), 1L)), "")
-  # a T console's composer reads the keys once the run starts: they steer and pause it then
+  # a T console's composer reads the keys once the run starts: they steer and pause it then; a
+  # draft a question before the run kept shows (D-306)
   tty = the$tty
   the$tty = list(keys = TRUE)
   withr::defer(assign("tty", tty, envir = the))
+  rd = new.env()
+  local_mocked_bindings(console_repl_prompt = function() list(reader = rd))
   sent = list2env(list(sent = TRUE, t0 = as.numeric(Sys.time()) - 3, what = "thinking"))
-  expect_identical(c(console_live_row(console_live_state(sent), 80L)),
-                   "▌ thinking 3s   enter steer · tab follow-up · ctrl-c pause")
+  row = function() c(console_live_row(console_live_state(sent), 80L))
+  expect_identical(row(), "▌ thinking 3s   enter steer · tab follow-up · ctrl-c pause")
+  rd$compose = list(draft = "draft words")
+  expect_identical(row(), "▌ thinking 3s   › draft words")
 })
 
 test_that("a launch clears a sub-agent group's row, which no foreground record owns (#99 review)", {

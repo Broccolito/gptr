@@ -647,13 +647,15 @@ console_live = function() {
 #' waiting (console_newest()), the completion candidates its last key listed and the kind Enter
 #' sends. A prompt's record before its run starts (`rec$sent`, console_send()): its word, its
 #' seconds and the keys, a T console's composer's, which it reads once the run starts, so they steer
-#' and pause it then; elsewhere the interrupt key stops the call
+#' and pause it then, with the draft a question before the run kept (D-306); elsewhere the interrupt
+#' key stops the call
 #' @noRd
 console_live_state = function(rec) {
   if (isTRUE(rec$sent)) {
-    keys = isTRUE(the$tty$keys)
+    rd = if (isTRUE(the$tty$keys)) console_repl_prompt()$reader
     return(list(what = rec$what, secs = as.numeric(Sys.time()) - rec$t0,
-                key = console_interrupt_key(), pause = keys, draft = if (keys) "",
+                key = console_interrupt_key(), pause = !is.null(rd),
+                draft = if (!is.null(rd)) rd$compose$draft %||% "",
                 enter = setting_get("type_ahead")))
   }
   kids = console_kids()
