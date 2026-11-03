@@ -27,6 +27,21 @@ written first, seen failing, then made to pass (the three refactors keep their t
 | `15beac43` | `gptr_cache("info")` shows `memory` as the `s1` path of answers held without `.gptr/` (D-324). | live polish item 3 (low). | doc-replay "without .gptr/, gptr_cache() counts and clears the System 1 answers in memory". |
 | `13de05b9` | The layering test refused three new calls of `6e207a59` and `4c6bbf6b`. The Ollama route check goes through the L1 wrapper `s1_ollama_route()`; the worker proxy keeps its session in its adapter state (`worker_session`), and its call of P13's `s1_charge_row()` is a declared `subagent` contract edge in `helper-arch.R` and 04 section 11.11. | found by the full suite (arch-layers). | arch-layers "internal calls respect the layer table and the kernel SDK (IC-33)". |
 
+## Follow-up: replay of 1.0.0 answers
+
+The verifier found that the first pass understated the cost of `9a7df81c`: D-320 said entries of
+unnamed inputs "miss once", but a miss in replay mode is `gptr_error_not_recorded` for any provider
+that is not offline (`replay_guard()`). Probe (`base-src` = a copy of `04dca16a`, a loopback
+in-process classifier `nearby/nearby-s1`, one `.gptr/` workspace): `peter(q, reviews)` recorded by
+the base with `replay = "auto"`; with this branch, `replay = "replay"` gives `gptr_error_not_recorded`
+for `peter(q, reviews)`, a hit for `peter(q, reviews = reviews)`, and a hit for `peter(q, reviews)`
+after one `replay = "auto"` run; a described value (`matrix(1:100000, 100)`) recorded unnamed stays
+a miss even when named, since its description no longer starts with the name. D-320 and the NEWS
+suggestion now say this. Wording only: the behaviour is pinned by s1-route "egress and the call's
+replay mode guard requests, not cache hits" and s1-client "a System 1 request does not depend on
+how its input is spelled (D-320)" (a named input keeps its name as the state key); a fallback to
+1.0.0 keys was not added (a permanent special case for a one-time migration).
+
 ## Token baselines
 
 `Rscript --vanilla dev/bench/tokens/run.R --check` passes after every prompt change; no `--update`
@@ -104,8 +119,10 @@ Suggested 1.0.1 bullets:
 > System 1 guidance and examples write the model as a string, `model = "jev"`, so agents no longer
 > look for an object named `jev`; the guidance also says that `levels =` returns an ordinal score.
 > A decision model reads an unnamed input as `input` and a named one (`text = x`) under its name, so
-> renaming or subsetting a variable reuses cached answers; existing cache entries of unnamed inputs
-> miss once.
+> renaming or subsetting a variable reuses cached answers. Answers recorded by 1.0.0 for an unnamed
+> input no longer match: replaying them (`GPTR_REPLAY=replay`, R CMD check) fails with
+> `gptr_error_not_recorded` until the call runs once with `replay = "auto"`, or, for a value sent
+> whole, until the input is named after its old variable (`peter(q, reviews = reviews)`).
 
 > System 1 accounting: rejected or unsent decision requests cost a known zero, as chat requests do;
 > a worker's decisions are charged at the System 1 model's price, apart from its chat usage;

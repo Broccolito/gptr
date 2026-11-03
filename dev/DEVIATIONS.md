@@ -9578,8 +9578,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   the `name: ` prefix of `describe_binding()`. Context items carry `named` (contract 7.8). Was the
   expression label (`reviews`, `x`, `feedback_text`, else `input`), which entered the state, the
   "The input is in `...`." sentence and so the cache key: `x = reviews; peter(q, x)` sent every
-  request again and could flip answers (0.46 to 0.54). Existing System 1 cache entries of unnamed
-  inputs miss once; the Jev and Ollama fixtures name their input (`text =`).
+  request again and could flip answers (0.46 to 0.54). Answers that 1.0.0 recorded for an unnamed
+  input no longer match: a live call requests them again, and replay (`GPTR_REPLAY=replay`,
+  `replay = "replay"`, R CMD check) stops with `gptr_error_not_recorded` for a provider that is
+  not offline until the call runs once with `replay = "auto"`. Naming the input after its 1.0.0
+  variable (`peter(q, reviews = reviews)`) reuses the entries of values sent whole, not of described
+  ones (probe in progress/fixes-1.0.1/lane-C.md). The Jev and Ollama fixtures name their input
+  (`text =`).
 - Rule (decision notes): the `documents` section says a note is "recorded as a "## Decision:"
   comment", as the r tool's schema does (was "written as "## Decision: ..."", which models read as
   the note's own format), and `doc_turn_r()` drops a leading `#* decision:` (any case) from the
