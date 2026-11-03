@@ -514,8 +514,7 @@ oauth_page = function(status, text) {
 oauth_redirect_setup = function(port = NULL, path = "/callback", state = NULL) {
   st = new.env(parent = emptyenv())
   st$query = NULL
-  nested = reactor_depth() > 0L || isTRUE(reactor_get()$tool_depth > 0L)
-  if (nested || !oauth_loopback_ok()) {
+  if (reactor_nested() || !oauth_loopback_ok()) {
     p = if (is.null(port)) port_candidates(1L)[1L] else as.integer(port)
     uri = paste0("http://127.0.0.1:", p, path)
     return(list(redirect_uri = uri, close = function() invisible(NULL),

@@ -9643,8 +9643,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (review #103, two low reports): `reactor_nested()` (a pump on the stack or a served tool
   executing) is the one test of nesting. It decides `reactor_pump()`'s default `allow_runs`, and the
   ids that `run_wait()`, `sdk_work()` and `subagent_schedule()` pass, which keyed on pump depth or
-  `run_current()` alone. A nested `peter()` or `gptr_wait()` inside an `r` call served at R's idle
-  prompt therefore runs only its own runs' tools. `s1_pump()` keeps only the default.
+  `run_current()` alone, and whether `oauth_redirect_setup()` falls back to a paste prompt (it kept
+  an inline copy of the test). A nested `peter()` or `gptr_wait()` inside an `r` call served at
+  R's idle prompt therefore runs only its own runs' tools. `s1_pump()` keeps only the default.
 - Not done: `kill_all()`'s process-tree sweep after each child (about 150 ms at load 20) predates
   #103 and keeps orphaned grandchildren from surviving.
 - Contract-visible: 04 sections 7.4 (`proc_run()`'s `merge` and the 20 ms exit wake) and 15.5
