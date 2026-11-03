@@ -9595,3 +9595,46 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: `?gptr_login` (`slot`); 04 `gptr_login()` paragraph.
 - Tests: test-auth-setup.R "a remembered stdio slot survives setwd() and credential variables, not a
   new host".
+
+## D-317 - 1.0.1 lane B Credential entry says what happened and where it went (2026-11-02)
+- Rule (live credential test): `/skip` and `/cancel` typed at the hidden prompt skip and cancel,
+  as in the questions; they were stored as the key. Ctrl-D in a terminal reads as blank
+  (interactive `readline()` returns `""` at EOF), so it skips; `?gptr_login` says so.
+- Rule (assisted setup): every outcome of `gptr_login()` is one `gptr_message_login` notice
+  (`key`, `status`), "Stored the credential for <key> in <store>." or "Skipped/Cancelled: no
+  credential was stored for <key>.", never the value; inside the `r` tool it is a message event
+  the model reads. The invisible return value is unchanged (no `"stored"` status on `TRUE`), and
+  `options(gptr.quiet = TRUE)` silences the notice like any other.
+- Rule (storage): the review and the notice name the one store used. A remembered login reuses an
+  existing keyring item for the record's own secret field (`refresh` for OAuth, else `key`); an
+  item for another field no longer leaves the new secret in `auth.json` beside it.
+- Rule (refusals): a UI without hidden input refuses before the OAuth paste fallback opens the
+  browser, and the refusal names `gptr_env(path)` or a remembered login made once in RStudio or
+  terminal R on Unix; `scope = "keyring"` without the package names `install.packages("keyring")`.
+  The hidden answer's own vault entry (`login-input`) is redaction-only (`active = FALSE`), so only
+  the destination-bound handle resolves.
+- Rule (rstudio UI): prompts keep their line feeds (`console_escape()`), and a `select()` title goes
+  in the dialog's message, its caption `gptr`.
+- Contract-visible: `?gptr_login`; 04 `gptr_login()` paragraph and section 11.8; the language-models
+  guide.
+- Tests: test-auth-setup.R "/skip and /cancel at the hidden prompt skip and cancel instead of
+  storing a key", "login says what it stored, skipped or cancelled, never the value", "an end of
+  input at a terminal's hidden prompt reads as blank and skips", "a remembered login names the one
+  store it uses and keeps an existing keyring item", "an OAuth paste fallback without hidden input
+  refuses before the browser opens", "keyring storage without the keyring package says how to
+  install it", "model-initiated login sends only safe status to requests, messages and history";
+  test-console-ui.R "the rstudio UI keeps the line feeds of gptr's own prompts and escapes the
+  rest". Evidence: progress/fixes-1.0.1/lane-B.md.
+
+## D-318 - 1.0.1 lane B MCP credential reads and logout names (2026-11-02)
+- Rule: a stdio start reads the credential store fail-soft (the session's credentials remain), as
+  `provider_credential()` does, so a malformed `auth.json` no longer stops every stdio server. An
+  HTTP request reads its record once (`oauth_access(rec = )`); every destination check stays.
+  `mcp_http_auth()` uses only the connection's setup-time binding; a missing one fails closed.
+  Logout resolves a name with login's rule (`mcp_server_resolve()`) and uses a cached connection's
+  name only once the configuration is gone: an R-style alias of a running server no longer wins
+  over the configured name it imitates.
+- Contract-visible: none.
+- Tests: test-auth-setup.R "a malformed credential store does not stop stdio servers; session slots
+  still work", "HTTP MCP path and authentication configuration edits invalidate login", "logout
+  resolves a configured name before a cached alias".
