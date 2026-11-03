@@ -5105,7 +5105,8 @@ step list before its first action.
 - `later::run_now(0)` is called only at depth 1, so an HTTP request to `gptr_mcp_serve()` is answered only by the
   outermost pump or at R's top-level idle prompt. A nested console `readline()` and ordinary blocking R code
   can suspend serving; `/mcp serve` starts or reuses the server and leaves Peter's reader for R's prompt.
-  A new server uses the chat's workspace and mode, and the chat is retained as `gptr_last()` for
+  A new server uses the chat's workspace and effective mode, passed to it directly so a session-scope `mode`
+  setting cannot loosen it (D-335), and the chat is retained as `gptr_last()` for
   `gptr_last() |> peter()` to resume it. A running server retains its original workspace and mode.
   Child waits cooperate with the reactor, but a nested tool wait cannot serve a synchronous same-process
   MCP client by running HTTP callbacks or sibling R tools re-entrantly.

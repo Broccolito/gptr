@@ -691,11 +691,20 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   check_env(envir, "envir")
   port = check_number(port, "port", min = 1, max = 65535, int = TRUE, null = TRUE)
   check_flag(stop, "stop")
-  ext_control_guard("gptr_mcp_serve")
   if (stop) {
+    ext_control_guard("gptr_mcp_serve")
     mcp_serve_stop()
     return(invisible(NULL))
   }
+  mcp_serve_open(envir, setting_get("mode", default = "manual"), unique(tools), port)
+}
+
+#' Start the server with a dedicated session in `mode` (the configured default, or the chat's
+#' for /mcp serve, so a session-scope setting never loosens it), or return the running handle,
+#' which keeps its workspace and mode
+#' @noRd
+mcp_serve_open = function(envir, mode, tools = mcp_default_tools(), port = NULL) {
+  ext_control_guard("gptr_mcp_serve")
   if (isTRUE(the$mcp_server$stopping)) {
     gptr_abort("The MCP server is stopping; retry its stop before serving new requests.",
                "not_available", member = "mcp_serve")
@@ -703,11 +712,10 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   if (!is.null(the$mcp_server$handle)) return(the$mcp_server$handle)
   st = mcp_serve_start(port)
   st$envir = envir
-  # the dedicated session (contract 6.3, IC-58; P01's arch_contract_edges() admits this edge):
-  # the mode setting now, and a placeholder model, since it never sends a request
-  s = session_new(setting_get("model", default = "mcp/serve"),
-                  setting_get("mode", default = "manual"), home = envir, kind = "chat")
-  tok = mcp_serve_token(s, unique(tools))
+  # the dedicated session (contract 6.3, IC-58; P01's arch_contract_edges() admits this edge),
+  # with a placeholder model, since it never sends a request
+  s = session_new(setting_get("model", default = "mcp/serve"), mode, home = envir, kind = "chat")
+  tok = mcp_serve_token(s, tools)
   st$user = list(key = tok$key, session = s)
   st$handle = mcp_handle_new(st, tok, mcp_serve_stop)
   st$handle

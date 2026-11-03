@@ -187,33 +187,38 @@ mcp_serve_command = function(rs) {
   cmd_mcp("serve", ctx_new(rs$session))
 }
 
-test_that("MCP serving hands the current workspace and mode to R and retains the chat to resume", {
-  local_project()
+test_that("MCP serving hands the chat's workspace and mode to R, never a looser session mode", {
+  skip_on_cran()
+  for (package in c("httpuv", "later", "openssl")) skip_if_not_installed(package)
+  local_gw()
   local_gptr_options(mode = "auto")
+  gptr_config(mode = "yolo", .scope = "session")
+  withr::defer(gptr_mcp_serve(stop = TRUE))
   home = new.env()
   chat = peter("hello", model = gptr_fake_provider(list("ok")), envir = home, mode = "plan",
                 .run = FALSE)
-  other = peter("server", model = gptr_fake_provider(list("ok")), envir = new.env(), .run = FALSE)
   rs = repl_state(chat, new.env())
-  seen = new.env(parent = emptyenv())
-  original = ns_fun
-  local_mocked_bindings(ns_fun = function(name) {
-    if (!identical(name, "gptr_mcp_serve")) return(original(name))
-    function(envir) {
-      seen$home = envir
-      seen$mode = setting_get("mode")
-      last_set(other)
-      "server started"
-    }
-  })
   output = mcp_serve_command(rs)
   expect_true(rs$exit)
-  expect_identical(seen$home, home)
-  expect_identical(seen$mode, "plan")
-  expect_identical(getOption("gptr.mode"), "auto")
-  gc()
+  expect_identical(the$mcp_server$envir, home)
+  expect_identical(the$mcp_server$user$session$mode, "plan")
   expect_identical(gptr_last(), chat)
+  expect_match(paste(output, collapse = " "), "mode: plan;", fixed = TRUE)
   expect_match(paste(output, collapse = " "), "gptr_last() |> peter()", fixed = TRUE)
+  expect_identical(getOption("gptr.mode"), "auto")
+  # a running server keeps its workspace and mode for another chat's /mcp serve
+  other = peter("again", model = gptr_fake_provider(list("ok")), envir = new.env(),
+                mode = "yolo", .run = FALSE)
+  output = mcp_serve_command(repl_state(other, new.env()))
+  expect_identical(the$mcp_server$envir, home)
+  expect_identical(the$mcp_server$user$session$mode, "plan")
+  expect_match(paste(output, collapse = " "), "keeps its workspace and mode", fixed = TRUE)
+  # a new chat with no session yet serves in the configured default
+  gptr_mcp_serve(stop = TRUE)
+  rs = repl_state(NULL, new.env())
+  mcp_serve_command(rs)
+  expect_identical(the$mcp_server$user$session$mode, "yolo")
+  expect_null(rs$session)
 })
 
 test_that("a failed or piped serving handoff does not leave the console or read another line", {
