@@ -144,14 +144,14 @@ than assuming every object is a fully resident data frame.
 
 ``` r
 session$id
-#> [1] "s420d2a4c2e"
+#> [1] "s588b2e7c83"
 session$model
 #> [1] "fake/fake-1"
 session$turns
 #> [1] 1
 gptr_usage(session)
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 s420d2a4c2e  2         3435   20      0           0            0
+#> 1 s588b2e7c83  2         3435   20      0           0            0
 #>
 #> # 1 row
 #> 2 requests, 3.4k tokens in, $0.0000
@@ -181,20 +181,14 @@ session$history
 #> 4 1     tool_result  + fit <lm length 12>      r      5
 #> 5 1     assistant    The regression is ready.         1726
 #> # 5 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.5k tokens . $0.0000 . s420d2a4c2e
-as.data.frame(session$history)
-#>   turn        role
-#> 1    1        user
-#> 2    1    operator
-#> 3    1   assistant
-#> 4    1 tool_result
-#> 5    1   assistant
-#>                                                         preview tools tokens
-#> 1                              Fit fuel economy against weight.            8
-#> 2 <gptr_runtime>\nCurrent request in gptr/Peter (R): requested/           94
-#> 3                                                                   r   1729
-#> 4                                          + fit <lm length 12>     r      5
-#> 5                                      The regression is ready.         1726
+#> idle . fake/fake-1 . 1 turn . 3.5k tokens . $0.0000 . s588b2e7c83
+as.data.frame(session$history)[, c("turn", "role", "tools", "tokens")]
+#>   turn        role tools tokens
+#> 1    1        user            8
+#> 2    1    operator           94
+#> 3    1   assistant     r   1729
+#> 4    1 tool_result     r      5
+#> 5    1   assistant         1726
 ```
 
 Without an initialized project workspace, session files use a temporary directory.

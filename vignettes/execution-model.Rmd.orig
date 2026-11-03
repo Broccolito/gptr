@@ -146,7 +146,7 @@ unknown.
 
 ```{r history-display}
 session$history
-as.data.frame(session$history)
+as.data.frame(session$history)[, c("turn", "role", "tools", "tokens")]
 ```
 
 Without an initialized project workspace, session files use a temporary directory.
