@@ -252,13 +252,21 @@ test_that("setting mcp.exposure = \"direct\" declares the tools of a server with
                     session_data(s)$frozen$tool_names))
 })
 
-test_that("the login target of an MCP server is its expanded URL; a stdio server has none", {
+test_that("login targets bind the expanded HTTP endpoint and require slots for stdio", {
   local_mcp_home()
   local_project()
   withr::local_envvar(MCP_TEST_HOST = "mcp.example.org")
   gptr_mcp_add("remote", url = "https://${MCP_TEST_HOST}/mcp")
   gptr_mcp_add("local", command = "server")
-  expect_identical(get("target", envir = oauth_hooks)("remote"),
-                   list(url = "https://mcp.example.org/mcp", oauth = NULL))
+  target = get("target", envir = oauth_hooks)("remote")
+  expect_identical(target$name, "remote")
+  expect_identical(target$url, "https://mcp.example.org/mcp")
+  expect_null(target$oauth)
+  expect_match(target$binding, "^[0-9a-f]{64}$")
+  expect_identical(mcp_login_target("remote")$binding, target$binding)
+  withr::local_envvar(MCP_TEST_HOST = "other.example.org")
+  moved = mcp_login_target("remote")
+  expect_identical(moved$url, "https://other.example.org/mcp")
+  expect_false(identical(moved$binding, target$binding))
   expect_error(mcp_login_target("local"), "local process", class = "gptr_error_invalid_argument")
 })

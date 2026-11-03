@@ -296,7 +296,10 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
   }
   if (!is.null(hide)) {
     on.exit(tty_modes(hide), add = TRUE, after = FALSE)
-    tty_modes("-echo")
+    if (is.null(tty_modes("-echo"))) {
+      gptr_abort("The terminal could not disable echo; no credential was read.", "not_available",
+                 member = "hidden credential input", provided_by = "terminal")
+    }
   }
   start = proc.time()[["elapsed"]]
   x = as_utf8(read(prompt))

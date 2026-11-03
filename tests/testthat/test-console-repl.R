@@ -1039,6 +1039,7 @@ test_that("piped .stdin: a nested prompt and its echo reach stdout from an untee
 })
 
 test_that("the stdin UI never echoes a secret answer", {
+  local_mocked_bindings(tty_secret = function() "SAVED", ui_rstudio = function() FALSE)
   rd = stdin_reader(c("FAKE-TOKEN-123", "plain"), echo = TRUE)
   ui = ui_console_spec(rd$read, "console_stdin")
   got = NULL
@@ -1047,6 +1048,22 @@ test_that("the stdin UI never echoes a secret answer", {
   })
   expect_identical(got, c("FAKE-TOKEN-123", "plain"))
   expect_identical(out, c("? Token", ">> ", "? Name", ">> plain"))
+})
+
+test_that("the stdin UI refuses secret input without hidden capability before reading", {
+  local_mocked_bindings(tty_secret = function() NULL, ui_rstudio = function() FALSE)
+  read = FALSE
+  ui = ui_console_spec(function(...) {
+    read <<- TRUE
+    "FAKE-TOKEN-123"
+  }, "console_stdin")
+  out = utils::capture.output({
+    expect_error(ui$input("Token", secret = TRUE), "hidden",
+                 class = "gptr_error_not_available")
+  })
+  expect_false(ui$has_secret_input())
+  expect_false(read)
+  expect_false(any(grepl("FAKE-TOKEN-123", out, fixed = TRUE)))
 })
 
 test_that("a scripted .stdin console session (acceptance 2)", {

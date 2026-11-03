@@ -1,0 +1,294 @@
+test_that("session login keeps values out of files, returned values and scripted UI logs", {
+  local_user_dirs()
+  key = paste0("setup-canary-", strrep("x", 24))
+  ui = local_scripted_ui(list(key))
+  result = gptr_login("openrouter", method = "key", scope = "session")
+  expect_identical(result, TRUE)
+  expect_false(file.exists(auth_store_path()))
+  expect_false(any(grepl(key, unlist(ui$log), fixed = TRUE)))
+  expect_match(ui$log$prompt, "https://openrouter.ai", fixed = TRUE)
+  expect_match(ui$log$prompt, "this R process", fixed = TRUE)
+  rec = auth_store_get("openrouter")
+  expect_identical(secret_value(rec$key, rec$resource), key)
+  expect_error(secret_value(rec$key, "https://other.example"),
+               class = "gptr_error_untrusted")
+  expect_true(gptr_logout("openrouter"))
+  expect_null(auth_store_get("openrouter"))
+  expect_false(file.exists(auth_store_path()))
+})
+
+test_that("empty and cancelled credential entry have safe distinct results", {
+  local_user_dirs()
+  ui = local_scripted_ui(list("", NA_character_))
+  skipped = gptr_login("openrouter", method = "key", scope = "session")
+  cancelled = gptr_login("openrouter", method = "key", scope = "session")
+  expect_false(skipped)
+  expect_false(cancelled)
+  expect_identical(attr(skipped, "status"), "skipped")
+  expect_identical(attr(cancelled, "status"), "cancelled")
+  expect_null(auth_store_get("openrouter"))
+  expect_false(file.exists(auth_store_path()))
+  expect_identical(ui$log$answer, c("[hidden]", "[hidden]"))
+})
+
+test_that("login refuses unsupported hidden input and missing humans before reading", {
+  local_user_dirs()
+  ui = ui_scripted_spec(ui_scripted_state(list("never-consumed")))
+  ui$has_secret_input = function() FALSE
+  withr::local_options(gptr.ui = ui, gptr.interactive = TRUE)
+  expect_error(gptr_login("openrouter", method = "key", scope = "session"),
+               "hidden", class = "gptr_error_not_available")
+  withr::local_options(gptr.interactive = FALSE)
+  expect_error(gptr_login("openrouter", method = "key", scope = "session"),
+               class = "gptr_error_noninteractive")
+  expect_false(file.exists(auth_store_path()))
+})
+
+test_that("provider login binds the configured endpoint and refuses an endpoint edit", {
+  local_user_dirs()
+  withr::local_envvar(OPENROUTER_API_KEY = NA_character_)
+  endpoint = "https://first.example/v1?tenant=A"
+  local_mocked_bindings(provider_base_url = function(provider) endpoint)
+  local_scripted_ui(list(paste0("endpoint-canary-", strrep("a", 16))))
+  gptr_login("openrouter", method = "key", scope = "session")
+  provider = registry_get("provider", "openrouter")
+  expect_s3_class(provider_credential(provider), "gptr_secret")
+  endpoint = "https://first.example/v1?tenant=B"
+  expect_error(provider_credential(provider), class = "gptr_error_no_key")
+  endpoint = "https://first.example/other-tenant"
+  expect_error(provider_credential(provider), class = "gptr_error_no_key")
+  endpoint = "https://second.example/v1"
+  expect_error(provider_credential(provider), class = "gptr_error_no_key")
+})
+
+test_that("OS keyring login writes only its existing reference format, using fake methods", {
+  skip_if_not_installed("keyring")
+  local_user_dirs()
+  key = paste0("keyring-canary-", strrep("d", 20))
+  captured = new.env(parent = emptyenv())
+  local_mocked_bindings(auth_need_os_keyring = function() invisible(TRUE))
+  local_mocked_bindings(key_set_with_value = function(service, username, password, ...) {
+    captured$value = password
+    invisible(NULL)
+  }, key_get = function(...) captured$value, .package = "keyring")
+  ui = local_scripted_ui(list(key))
+  expect_true(gptr_login("openrouter", method = "key", scope = "keyring"))
+  expect_identical(captured$value, key)
+  rec = auth_store_read()[["openrouter"]]
+  expect_null(rec[["key"]])
+  expect_identical(rec$keyring, list(service = "gptr", username = "openrouter", field = "key"))
+  expect_false(grepl(key, paste(readLines(auth_store_path()), collapse = ""), fixed = TRUE))
+  expect_false(any(grepl(key, unlist(ui$log), fixed = TRUE)))
+  expect_match(ui$log$prompt, "native OS", fixed = TRUE)
+  expect_identical(secret_value(auth_store_get("openrouter")$key, rec$resource), key)
+})
+
+test_that("explicit OS keyring storage refuses an environment fallback before input", {
+  skip_if_not_installed("keyring")
+  local_user_dirs()
+  withr::local_options(keyring_backend = "env")
+  ui = local_scripted_ui(list("never-consumed"))
+  expect_error(gptr_login("openrouter", method = "key", scope = "keyring"),
+               "native OS", class = "gptr_error_not_available")
+  expect_identical(ui$remaining(), 1L)
+  expect_false(file.exists(auth_store_path()))
+})
+
+test_that("broken hidden input is an error and an interrupt is safe cancellation", {
+  local_user_dirs()
+  canary = paste0("ui-error-canary-", strrep("e", 20))
+  ui = ui_scripted_spec(ui_scripted_state())
+  ui$input = function(...) stop(canary)
+  withr::local_options(gptr.interactive = TRUE, gptr.ui = ui)
+  err = expect_error(gptr_login("openrouter", method = "key", scope = "session"),
+                      "input failed", class = "gptr_error_not_available")
+  expect_false(grepl(canary, conditionMessage(err), fixed = TRUE))
+  ui$input = function(...) {
+    signalCondition(structure(list(message = "cancel"), class = c("interrupt", "condition")))
+  }
+  withr::local_options(gptr.ui = ui)
+  result = gptr_login("openrouter", method = "key", scope = "session")
+  expect_identical(attr(result, "status"), "cancelled")
+  expect_false(file.exists(auth_store_path()))
+})
+
+test_that("failed terminal echo control never reads a credential", {
+  read = FALSE
+  local_mocked_bindings(tty_modes = function(...) NULL)
+  expect_error(gptr_readline(hide = "SAVED", read = function(...) {
+    read <<- TRUE
+    "never-read"
+  }), "disable echo", class = "gptr_error_not_available")
+  expect_false(read)
+})
+
+test_that("secret input does not drain or show a composer's draft", {
+  local_mocked_bindings(tty_secret = function() "SAVED",
+                        ui_drain = function(...) stop("must not drain"),
+                        ui_draft_kept = function(...) stop("must not show draft"),
+                        gptr_readline = function(...) "hidden-value")
+  expect_identical(ui_console_read("Key", secret = TRUE), "hidden-value")
+})
+
+test_that("HTTP MCP login is session-only and bound to the reviewed resource", {
+  local_user_dirs()
+  local_login_target(c(demo = "https://mcp.example/mcp"))
+  local_scripted_ui(list(paste0("http-canary-", strrep("b", 20))))
+  expect_true(gptr_login("mcp:demo", method = "key", scope = "session"))
+  expect_s3_class(oauth_access("mcp:demo", "https://mcp.example")[[2]], "gptr_secret")
+  expect_null(oauth_access("mcp:demo", "https://elsewhere.example"))
+  expect_false(file.exists(auth_store_path()))
+})
+
+test_that("stdio slots reach only the owned child environment and edits invalidate consent", {
+  local_user_dirs()
+  key = paste0("stdio-canary-", strrep("c", 20))
+  spec = list(name = "demo", command = rscript_path(), args = list("--vanilla"),
+              env = list(DEMO_API_TOKEN = "${DEMO_API_TOKEN}"))
+  conns = new.env(parent = emptyenv())
+  conns$demo = new.env(parent = emptyenv())
+  conns$demo$transport = "stdio"
+  closed = 0L
+  local_mocked_bindings(mcp_server_get = function(name, session = NULL) spec,
+                        mcp_state = function() list(conns = conns),
+                        mcp_close = function(conn) closed <<- closed + 1L)
+  ui = local_scripted_ui(list(key))
+  before = Sys.getenv("DEMO_API_TOKEN", unset = NA_character_)
+  expect_true(gptr_login("mcp:demo", method = "key", scope = "session",
+                         slot = "DEMO_API_TOKEN"))
+  ex = mcp_expand_spec(spec)
+  env = mcp_stdio_credentials(spec, ex)
+  expect_s3_class(env$DEMO_API_TOKEN, "gptr_secret")
+  expect_identical(child_env("mcp", set = env)[["DEMO_API_TOKEN"]], key)
+  expect_identical(Sys.getenv("DEMO_API_TOKEN", unset = NA_character_), before)
+  expect_false(any(grepl(key, unlist(ui$log), fixed = TRUE)))
+  expect_match(ui$log$prompt, normalizePath(rscript_path(), winslash = "/"), fixed = TRUE)
+  expect_identical(closed, 1L)
+  spec$args = list("--vanilla", "--no-environ")
+  expect_error(mcp_stdio_credentials(spec, mcp_expand_spec(spec)), "changed",
+               class = "gptr_error_untrusted")
+  expect_true(gptr_logout("mcp:demo"))
+  expect_identical(closed, 2L)
+  expect_false(file.exists(auth_store_path()))
+})
+
+test_that("HTTP MCP path and authentication configuration edits invalidate login", {
+  local_user_dirs()
+  spec = list(name = "demo", url = "https://mcp.example/mcp", headers = list())
+  local_mocked_bindings(mcp_server_get = function(name, session = NULL) spec)
+  local_scripted_ui(list(paste0("http-config-canary-", strrep("f", 20))))
+  gptr_login("mcp:demo", method = "key", scope = "session")
+  conn = new.env(parent = emptyenv())
+  conn$spec = spec
+  conn$headers = list()
+  conn$auth_key = "mcp:demo"
+  conn$origin = "https://mcp.example"
+  conn$url = spec$url
+  expect_s3_class(mcp_http_auth(conn)[[2]], "gptr_secret")
+  conn$url = "https://mcp.example/other-account"
+  expect_null(mcp_http_auth(conn))
+  conn$url = spec$url
+  conn$spec$headers = list(`X-Account` = "another")
+  expect_null(mcp_http_auth(conn))
+})
+
+test_that("stdio logout closes a cached child when its configuration is unavailable", {
+  local_user_dirs()
+  conns = new.env(parent = emptyenv())
+  conns$`removed-server` = new.env(parent = emptyenv())
+  conns$`removed-server`$transport = "stdio"
+  closed = 0L
+  local_mocked_bindings(mcp_state = function() list(conns = conns),
+                        mcp_server_get = function(...) stop("server is no longer startable"),
+                        mcp_server_resolve = function(...) stop("configuration was removed"),
+                        mcp_close = function(conn) closed <<- closed + 1L)
+  for (name in c("removed-server", "removed_server")) {
+    auth_store_set("mcp:removed-server:env:API_TOKEN",
+                    list(type = "env", key = "removed-server-canary-123456789"), scope = "session")
+    expect_true(gptr_logout(paste0("mcp:", name)))
+    expect_null(auth_store_get("mcp:removed-server:env:API_TOKEN"))
+  }
+  expect_identical(closed, 2L)
+})
+
+test_that("session OAuth refresh stays in memory without creating a credential lock", {
+  root = local_user_dirs()
+  auth_store_set("mcp:demo", list(type = "oauth", refresh = "refresh-canary-123456789",
+                                  token_endpoint = "https://auth.example/token",
+                                  resource = "https://mcp.example/mcp", expires = 0),
+                 scope = "session")
+  local_mocked_bindings(oauth_post = function(...) {
+    list(access_token = "access-canary-123456789", refresh_token = "rotated-canary-123456789")
+  })
+  header = oauth_access("mcp:demo", "https://mcp.example")
+  expect_identical(secret_value(header[[2]], "https://mcp.example"), "access-canary-123456789")
+  expect_identical(auth_store_scope("mcp:demo"), "session")
+  expect_identical(secret_value(auth_store_get("mcp:demo")$refresh, "https://auth.example"),
+                   "rotated-canary-123456789")
+  expect_false(dir.exists(file.path(root, "config")))
+})
+
+test_that("model-initiated login sends only safe status to requests, messages and history", {
+  skip_on_cran()
+  local_user_dirs()
+  local_project(trust = TRUE)
+  local_permission_rules()
+  key = paste0("model-login-canary-", strrep("g", 24))
+  ui = local_scripted_ui(list(key))
+  fake = local_fake_provider(list(
+    fake_tool("r", code = "gptr_login('openrouter', method = 'key', scope = 'session')"),
+    "Setup complete."))
+  session = peter("Set up this provider.", model = fake, mode = "yolo", envir = new.env())
+  observed = serialize(list(fake_requests(fake), session$messages, session$history, ui$log), NULL)
+  expect_length(grepRaw(charToRaw(key), observed, fixed = TRUE, all = TRUE), 0L)
+  expect_false(file.exists(auth_store_path()))
+  expect_identical(ui$log$method, "input")
+  expect_s3_class(auth_store_get("openrouter")$key, "gptr_secret")
+  expect_match(ui$log$prompt, "https://openrouter.ai", fixed = TRUE)
+})
+
+test_that("pasted OAuth errors cannot echo secret input through an error description", {
+  canary = paste0("redirect-canary-", strrep("h", 24))
+  redirect = "http://127.0.0.1:50000/callback"
+  err = expect_error(oauth_parse_redirect(paste0(redirect, "?error=", canary,
+                                                 "&error_description=", canary),
+                                          redirect, NULL, "https://auth.example"),
+                      "declined", class = "gptr_error_provider")
+  expect_length(grepRaw(charToRaw(canary), serialize(err, NULL), fixed = TRUE, all = TRUE), 0L)
+})
+
+test_that("nested and served-tool OAuth redirects use hidden paste without a listener", {
+  local_user_dirs()
+  redirect = "http://127.0.0.1:50111/callback?code=example-code"
+  ui = local_scripted_ui(rep(list(redirect), 3L))
+  reactor = reactor_get()
+  old_tool_depth = reactor$tool_depth
+  withr::defer({
+    reactor$tool_depth = old_tool_depth
+  })
+  depth = 0L
+  local_mocked_bindings(reactor_depth = function() depth,
+                        oauth_loopback_ok = function() stop("must not start a nested listener"))
+  for (state in list(c(1L, 0L), c(0L, 1L), c(1L, 1L))) {
+    depth = state[[1L]]
+    reactor$tool_depth = state[[2L]]
+    cb = oauth_redirect_setup(port = 50111L)
+    expect_identical(cb$wait(), redirect)
+    cb$close()
+  }
+  expect_identical(ui$log$answer, rep("[hidden]", 3L))
+})
+
+test_that("ordinary text questions can be submitted, skipped and cancelled", {
+  answers = c("research-project", "/skip", "/cancel")
+  i = 0L
+  res = ui_questions_via(function(...) NA_integer_, function(...) {
+    i <<- i + 1L
+    answers[[i]]
+  }, lapply(letters[1:3], function(id) list(id = id, type = "text", question = id)))
+  expect_identical(res$answers, list(a = "research-project"))
+  expect_identical(res$skipped, "b")
+  expect_true(res$cancelled)
+  expect_match(ask_text_answers(list(list(id = "b")), res$answers, res$skipped),
+                "- b: (skipped)", fixed = TRUE)
+})

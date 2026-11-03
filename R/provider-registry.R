@@ -413,9 +413,15 @@ credential_bind = function(h, origin) {
 
 #' A handle from a credential-store record (P03 returns handles for stored values)
 #' @noRd
-credential_from_store = function(rec, name, origin, register = TRUE) {
+credential_from_store = function(rec, name, origin, register = TRUE, endpoint = NULL) {
   if (is.null(rec)) return(NULL)
   if (inherits(rec, "gptr_secret")) return(rec)
+  if (rlang::is_string(rec$resource) &&
+        !identical(provider_origin(rec$resource), provider_origin(origin))) return(NULL)
+  if (!is.null(endpoint)) {
+    expected = rec$endpoint_hash %||% if (rlang::is_string(rec$resource)) hash_sha256(rec$resource)
+    if (!is.null(expected) && !identical(expected, hash_sha256(endpoint))) return(NULL)
+  }
   for (k in c("handle", "key")) {
     v = rec[[k]]
     if (inherits(v, "gptr_secret")) return(v)
@@ -427,6 +433,12 @@ credential_from_store = function(rec, name, origin, register = TRUE) {
   }
   NULL
 }
+
+#' L0 login resolves the same configured endpoint that requests use
+#' @noRd
+provider_login_target = function(id) provider_base_url(registry_get("provider", id))
+
+on_load(oauth_hooks_set(provider_target = provider_login_target))
 
 #' What credential_register() would yield, without registering or binding (the listing's view)
 #' NULL when the vault holds `name` bound to another origin; else a `gptr_credential_peek`
@@ -507,7 +519,8 @@ provider_credential = function(provider, register = TRUE) {
     if (credential_usable(h, origin)) return(credential_bind(h, origin))
   }
   rec = tryCatch(auth_store_get(id), gptr_error = function(e) NULL)
-  h = credential_from_store(rec, vars[[1]], origin, register)
+  h = credential_from_store(rec, vars[[1]], origin, register,
+                            endpoint = provider_base_url(provider))
   if (inherits(h, "gptr_credential_peek")) return(h)
   if (credential_usable(h, origin)) return(credential_bind(h, origin))
   for (v in vars) {

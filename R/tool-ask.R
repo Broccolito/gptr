@@ -56,10 +56,12 @@ ask_normalise = function(qs) {
 
 #' The result text for answers (report 18 section 3.6)
 #' @noRd
-ask_text_answers = function(qs, answers) {
+ask_text_answers = function(qs, answers, skipped = character()) {
   lines = vapply(qs, function(q) {
     a = answers[[q$id]]
-    shown = if (is.null(a)) {
+    shown = if (q$id %in% skipped) {
+      "(skipped)"
+    } else if (is.null(a)) {
       "(no answer)"
     } else if (isTRUE(attr(a, "other"))) {
       paste0("(typed) ", a)
@@ -98,10 +100,11 @@ ask_execute = function(input, ctx) {
     return(gptr_tool_result(paste(
       "The user dismissed the questions without answering. Do not guess silently: either stop",
       "and summarise what you need, or proceed with clearly stated assumptions."),
-      details = list(answers = answers, cancelled = TRUE)))
+      details = list(answers = answers, skipped = res$skipped %||% character(), cancelled = TRUE)))
   }
-  gptr_tool_result(ask_text_answers(qs, answers),
-                   details = list(answers = answers, cancelled = FALSE))
+  gptr_tool_result(ask_text_answers(qs, answers, res$skipped %||% character()),
+                   details = list(answers = answers, skipped = res$skipped %||% character(),
+                                  cancelled = FALSE))
 }
 
 #' Declared when a person can answer, and in manual mode without one (IC-68 wins over the
@@ -116,7 +119,8 @@ builtin_ask = function(gptr) {
     "ask", paste0(
       "Ask the user one to four questions and wait for the answers, when a decision changes the ",
       "result and cannot be inferred. The user may always type their own answer. Not for ",
-      "permission to run code: the harness asks for that itself."),
+      "permission to run code: the harness asks for that itself. Answers are visible to the ",
+      "model; use gptr_login(..., scope = \"session\") for credentials."),
     parameters = ask_parameters(), execute = ask_execute, exposure = "direct",
     execution = "sequential",
     risk = function(input, ctx) list(level = 0L, categories = "interactive", paths = character()),

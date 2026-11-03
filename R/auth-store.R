@@ -150,6 +150,19 @@ auth_need_keyring = function() {
   invisible(TRUE)
 }
 
+#' Explicit keyring login must not silently fall back to a file or environment backend
+#' @noRd
+auth_need_os_keyring = function() {
+  auth_need_keyring()
+  backend = tryCatch(keyring::default_backend(), error = function(e) NULL)
+  native = c("backend_macos", "backend_wincred", "backend_secret_service")
+  if (!any(vapply(native, function(class) inherits(backend, class), NA))) {
+    gptr_abort("Keyring login needs a native OS credential backend; no fallback was used.",
+               "not_available", member = "OS credential storage", provided_by = "keyring")
+  }
+  invisible(TRUE)
+}
+
 #' A stored record with its keyring reference resolved (raw values; internal use only)
 #' @noRd
 auth_record_values = function(rec) {
@@ -165,35 +178,62 @@ auth_record_values = function(rec) {
   rec
 }
 
-#' A stored credential with every secret field registered and replaced by its handle, or NULL
+#' Session credentials shadow remembered records until replaced or removed
 #' @noRd
-auth_store_get = function(key) {
-  check_string(key, "key")
-  rec = auth_store_read()[[key]]
-  if (!is.list(rec)) return(NULL)
-  rec = auth_record_values(rec)
+auth_store_scope = function(key) {
+  if (!is.null(secrets_state()$auth[[key]])) "session" else "user"
+}
+
+#' Credential names, without resolving their values
+#' @noRd
+auth_store_keys = function() unique(c(names(secrets_state()$auth), names(auth_store_read())))
+
+#' Replace secret fields with handles bound to their actual destination
+#' @noRd
+auth_record_handles = function(rec, key, source) {
   for (f in intersect(names(rec), auth_secret_fields)) {
     v = rec[[f]]
     if (rlang::is_string(v) && nzchar(v)) {
-      rec[[f]] = secret_register(v, auth_secret_name(key, f), source = "auth.json")
+      origin = if (f %in% c("refresh", "refresh_token")) rec$token_endpoint else rec$resource
+      rec[[f]] = secret_register(v, auth_secret_name(key, f), source = source, origin = origin)
     }
   }
   rec
 }
 
+#' A stored credential with every secret field registered and replaced by its handle, or NULL
+#' @noRd
+auth_store_get = function(key) {
+  check_string(key, "key")
+  session = secrets_state()$auth[[key]]
+  if (!is.null(session)) return(session)
+  rec = auth_store_read()[[key]]
+  if (!is.list(rec)) return(NULL)
+  rec = auth_record_values(rec)
+  auth_record_handles(rec, key, "auth.json")
+}
+
 #' Store a credential record; secret fields are registered, access tokens are not written, and
 #' the field a keyring reference names goes to the keyring instead of the file
 #' @noRd
-auth_store_set = function(key, record) {
+auth_store_set = function(key, record, scope = c("user", "session")) {
   check_string(key, "key")
+  scope = check_choice(scope, c("user", "session"), "scope")
   check_list(record, "record", named = TRUE)
   rec = if (!length(record)) json_obj() else record
   auth_record_check(rec)
+  st = secrets_state()
+  if (identical(scope, "session")) {
+    st$auth[[key]] = auth_record_handles(rec, key, "session login")
+    return(invisible(TRUE))
+  }
+  st$auth[[key]] = NULL
   kfield = if (is.list(rec[["keyring"]])) auth_keyring_field(rec) else NULL
   for (f in intersect(names(rec), auth_secret_fields)) {
     v = rec[[f]]
     if (!rlang::is_string(v) || !nzchar(v)) next
-    secret_register(v, auth_secret_name(key, f), source = "auth.json")
+    origin = if (f %in% c("refresh", "refresh_token")) rec$token_endpoint else rec$resource
+    secret_register(v, auth_secret_name(key, f), source = "auth.json", origin = origin)
     if (f %in% auth_memory_fields) {
       rec[[f]] = NULL
     } else if (identical(f, kfield)) {
@@ -214,8 +254,10 @@ auth_store_set = function(key, record) {
 #' @noRd
 auth_store_remove = function(key) {
   check_string(key, "key")
-  if (!file.exists(auth_store_path())) return(invisible(FALSE))
-  removed = FALSE
+  st = secrets_state()
+  removed = !is.null(st$auth[[key]])
+  st$auth[[key]] = NULL
+  if (!file.exists(auth_store_path())) return(invisible(removed))
   auth_store_update(function(all) {
     rec = all[[key]]
     if (!is.null(rec)) {

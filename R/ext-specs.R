@@ -502,6 +502,7 @@ kind_check_prompt_section = function(spec) {
 #' UI backends: absent methods get fail-closed defaults (a missing dialog is never an approval)
 #' @noRd
 kind_check_ui = function(spec) {
+  if (is.null(spec[["has_secret_input"]])) spec$has_secret_input = function() FALSE
   if (is.null(spec[["input"]])) {
     spec$input = function(prompt, default = "", secret = FALSE) NA_character_
   }
@@ -732,7 +733,7 @@ kinds_install = function(k) {
   ), kind_check_agent)
   def("ui", list(
     has_ui = req_fn(), select = req_fn(), input = fn(), questions = fn(), notify = fn(),
-    permission = fn("request")
+    permission = fn("request"), has_secret_input = fn()
   ), kind_check_ui)
   def("frontend", list(run = req_fn("session")), experimental = TRUE)
   def("setting", list(
