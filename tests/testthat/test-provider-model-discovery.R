@@ -180,13 +180,22 @@ test_that("provider refresh merges advertised IDs while retaining catalog capabi
   expect_true(is.na(added$context))
   expect_false(added$tool_call)
   expect_equal(nrow(added$prices), 0L)
-  expect_match(attr(found, "footer"), "does not verify inference", fixed = TRUE)
+  expect_match(attr(found, "footer"), "advertised does not verify access", fixed = TRUE)
   local_mocked_bindings(catalog_http_request = function(...) {
     inventory_response(list(data = list()))
   })
   empty = gptr_models(provider = "openai", refresh = TRUE)
   expect_identical(empty$ref, "openai/known")
   expect_identical(empty$availability, "unlisted")
+})
+
+test_that("the models footer is one line at 120 columns and two at 80 (D-355)", {
+  x = gptr_models()
+  for (width in c(80L, 120L)) {
+    out = withr::with_options(list(cli.width = width), utils::capture.output(print(x)))
+    count = max(grep("^# .*rows", out))
+    expect_length(out[-seq_len(count)], if (width == 80L) 2L else 1L)
+  }
 })
 
 test_that("the listing footer names failed listings of listed providers once, with the row count", {

@@ -192,8 +192,8 @@ ckpt_is_link = function(path) {
 #' `last_coverage`, the last recording scan's interval was complete at both ends; `walk_secs`, how
 #' long the last scan took; `explicit` and `explicit_mode`, the state ("" absent, "?" left to the
 #' recording scan or not capturable) and mode bits of every predicted absolute path; `per_turn`,
-#' one scan per turn (`scanned_turn`) once scans are slow or partial; `synced`, a sync since the
-#' last per-turn scan
+#' one scan per turn (`scanned_turn`) once scans are slow or partial; `dirty`, a call or a step
+#' outside R that can write files ran since the last sync or per-turn scan
 #' @noRd
 ckpt_files_tr = function(ck) {
   if (is.null(ck$files)) {
@@ -295,9 +295,11 @@ ckpt_files_observe = function(tr, s) {
   tr$walk_secs = s$seconds
   if (!isTRUE(s$complete)) {
     tr$per_turn = TRUE
-    ckpt_notice(paste0("File undo covers part of ", tr$root, ": the automatic scan stopped early (",
-                       s$reason, "), so changes to files it did not reach cannot be undone. ",
-                       "Files Peter's tools name are backed up before they change."),
+    ckpt_notice(paste0("File undo covers only part of the project folder ",
+                       encodeString(basename(tr$root), quote = "\""),
+                       ": the automatic scan stopped early because ", s$reason, ", so changes to ",
+                       "files it did not reach cannot be undone. Files Peter's tools name are ",
+                       "backed up before they change."),
                 paste0("ckpt-coverage:", tr$root))
   }
 }
@@ -382,7 +384,7 @@ ckpt_files_sync = function(tr) {
   tr$hash = character()
   tr$mode = integer()
   tr$absent = character()
-  tr$synced = TRUE
+  tr$dirty = FALSE
   ckpt_files_observe(tr, s)
   invisible(tr)
 }
@@ -446,6 +448,7 @@ ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
     ckpt_files_sync(tr)
   }
   tr$scanned_turn = turn
+  tr$dirty = TRUE
   paths = ckpt_call_paths(call)
   for (p in paths) {
     rel = ckpt_walked(tr, p)
@@ -513,9 +516,10 @@ ckpt_files_after = function(ck, call, token) {
     # an incomplete scan already switched and told the person
     if (!isTRUE(tr$per_turn) && tr$walk_secs > gptr_opt("checkpoint_scan_budget")) {
       tr$per_turn = TRUE
-      ckpt_notice(paste0("Checkpoint scans of ", tr$root, " take longer than ",
-                         "gptr.checkpoint_scan_budget; gptr now scans once per turn plus the ",
-                         "paths it can predict."), paste0("ckpt-scan:", tr$root))
+      ckpt_notice(paste0("Checkpoint scans of the project folder ",
+                         encodeString(basename(tr$root), quote = "\""),
+                         " take longer than gptr.checkpoint_scan_budget; gptr now scans once ",
+                         "per turn plus the paths it can predict."), paste0("ckpt-scan:", tr$root))
     }
   }
   if (!scanned && call$name %in% c("write", "edit") && isTRUE(token$exact)) coverage = TRUE
@@ -525,15 +529,15 @@ ckpt_files_after = function(ck, call, token) {
 }
 
 #' One scan recorded as its own fragment: at the end of a turn in per-turn mode whose calls could
-#' write files (they synced the tracker), and (`force`) after each turn of a CLI route whose child
-#' edits files itself (IC-65)
+#' write files (`dirty`), and (`force`) after a turn of a CLI route whose child may have edited
+#' files itself (IC-65)
 #' @return A fragment (its `files` may be empty when `coverage` is "partial"), or NULL when
 #'   nothing changed and coverage is complete.
 #' @noRd
 ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
   tr = ckpt_files_tr(ck)
-  if (is.null(tr$stat) || !(isTRUE(tr$per_turn) && isTRUE(tr$synced) || force)) return(NULL)
-  tr$synced = FALSE
+  if (is.null(tr$stat) || !(isTRUE(tr$per_turn) && isTRUE(tr$dirty) || force)) return(NULL)
+  tr$dirty = FALSE
   rows = ckpt_files_step(tr)
   if (!length(rows) && isTRUE(tr$last_coverage)) return(NULL)
   list(id = ckpt_frag_id(), turn = as.integer(turn), root = tr$root, files = rows,
@@ -680,7 +684,7 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
     if (dry) {
       out = ckpt_item(out, item, if (g$ask) NA else TRUE,
                       if (g$ask) paste0("needs confirmation (", g$reason, ")") else
-                        paste("would be", verb))
+                        paste("would be", if (remove) "removed" else verb))
       next
     }
     if (g$ask && !ckpt_confirm_outside(full, session)) {

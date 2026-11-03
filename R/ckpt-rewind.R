@@ -204,24 +204,35 @@ ckpt_on_tool_result = function(event, ctx) {
   }
 }
 
-#' agent_start and turn_end hooks on a CLI route (IC-65): bring the file tracker up to date
-#' before the child acts, record what it changed after each turn
+#' agent_start, tool_execution_start and turn_end hooks on a CLI route (IC-65): bring the file
+#' tracker up to date before the child acts, note a step it runs outside R (an informational
+#' event, contract 8.5) in auto or yolo, where Codex's sandbox lets it write files (below them it
+#' is read-only), and record what changed after each turn in which such a step or a served call
+#' could write files; R-only and text-only turns are not scanned (D-312, D-353)
 #' @noRd
 ckpt_on_cli = function(st, event, ctx) {
   s = ctx$session
-  if (!ckpt_cli_session(s) || !ckpt_enabled("files", ctx, list())) return(NULL)
+  step = identical(event$type, "tool_execution_start")
+  writes = isTRUE(event$informational) && ctx$mode() %in% c("auto", "yolo")
+  if (step && !writes || !ckpt_cli_session(s) || !ckpt_enabled("files", ctx, list())) {
+    return(NULL)
+  }
   ck = ckpt_ck_of(st, s)
-  if (identical(event$type, "agent_start")) {
-    ckpt_files_sync(ckpt_files_tr(ck))
+  tr = ckpt_files_tr(ck)
+  if (step) {
+    tr$dirty = TRUE
+  } else if (identical(event$type, "agent_start")) {
+    ckpt_files_sync(tr)
   } else {
-    frag = ckpt_files_turn_scan(ck, ckpt_turn(s), force = TRUE)
+    frag = ckpt_files_turn_scan(ck, ckpt_turn(s), force = isTRUE(tr$dirty))
     if (!is.null(frag)) ckpt_append_scan(s, frag)
   }
   NULL
 }
 
-#' agent_end hook: the memory budget, the per-turn scan (once walks are slow, and always on a CLI
-#' route: an aborted run has no `turn_end`) and one blob collection per session
+#' agent_end hook: the memory budget, the per-turn scan (once walks are slow, and on a CLI route
+#' after a turn that could write files: an aborted run has no `turn_end`) and one blob collection
+#' per session
 #' @noRd
 ckpt_on_agent_end = function(st, ctx) {
   s = ctx$session
@@ -230,7 +241,8 @@ ckpt_on_agent_end = function(st, ctx) {
   turn = ckpt_turn(s)
   ckpt_objects_budget(ck, turn, session_home(s))
   if (ckpt_enabled("files", ctx, list())) {
-    frag = ckpt_files_turn_scan(ck, turn, force = ckpt_cli_session(s))
+    frag = ckpt_files_turn_scan(ck, turn,
+                                force = ckpt_cli_session(s) && isTRUE(ckpt_files_tr(ck)$dirty))
     if (!is.null(frag)) ckpt_append_scan(s, frag)
   }
   if (is.null(ck$gc_done)) {
@@ -283,7 +295,7 @@ builtin_checkpoints = function(gptr) {
   st$sessions = st$sessions %||% new.env(parent = emptyenv())
   for (nm in c("objects", "files", "state")) gptr$register(ckpt_spec(st, nm))
   gptr$on("tool_result", ckpt_on_tool_result)
-  for (ev in c("agent_start", "turn_end")) {
+  for (ev in c("agent_start", "tool_execution_start", "turn_end")) {
     gptr$on(ev, function(event, ctx) ckpt_on_cli(st, event, ctx))
   }
   gptr$on("agent_end", function(event, ctx) ckpt_on_agent_end(st, ctx))
@@ -818,17 +830,19 @@ ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all", verb = "Rewou
   c(paste0(verb, " (", lr$restore, end), lr$report, if (length(text)) c("Undone prompt:", text))
 }
 
-#' /undo: rewind the last turn; asks first when the preview finds items it cannot restore
+#' /undo: rewind the last turn; when the preview finds items it cannot restore, asks first,
+#' listing at most 10 items: those, then those it leaves as is, then what it would restore
 #' @noRd
 ckpt_cmd_undo = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no session to undo.")
   plan = tryCatch(gptr_rewind(s, preview = TRUE), gptr_error = conditionMessage)
   if (is.character(plan)) return(plan)
-  bad = plan[plan$restore %in% FALSE, , drop = FALSE]
-  if (nrow(bad) && ctx$has_ui()) {
+  if (any(plan$restore %in% FALSE) && ctx$has_ui()) {
+    rows = paste0(plan$item, ": ", plan$reason)[order(match(plan$restore, c(FALSE, NA, TRUE)))]
+    if (length(rows) > 10L) rows = c(rows[1:10], paste0("(+ ", length(rows) - 10L, " more)"))
     ans = ctx$ui()$select("Some items cannot be restored. Undo anyway?", c("Undo", "Cancel"),
-                          default = 2L, details = paste0(bad$item, ": ", bad$reason))
+                          default = 2L, details = rows)
     if (!isTRUE(ans == 1L)) return("Undo cancelled.")
   }
   ckpt_cmd_run(s)
