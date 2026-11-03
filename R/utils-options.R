@@ -267,12 +267,16 @@ tty_unreply = function(x) {
 #' own copy of readline() as `read` (console_reader()). The seconds it waited go to
 #' `the$readline_secs` (readline_answer()); readline() keeps only 255 bytes of a prompt, so one
 #' over 200 bytes, or in the console margin (D-186) one wider than its content row, is printed
-#' whole (word-wrapped in the margin) and read after "> " (in the margin too) (IC-75). With `hide`
+#' whole (word-wrapped in the margin) and read after "> " (in the margin too) (IC-75). A live row
+#' shown is cleared first, so none sits between a question and its prompt, nor stays in a console
+#' that cannot erase a row once a line ends after it (RStudio); it is drawn again only once the
+#' read returns (D-301). With `hide`
 #' (a secret's tty_secret()) it reads with the echo off, the last mode set before the read, and
 #' restores `hide` first on exit, also after an interrupt; GNU readline and libedit then draw
 #' nothing typed, nor the Enter, whose newline follows the answer (IC-77)
 #' @noRd
 gptr_readline = function(prompt = "", read = readline, hide = NULL) {
+  if (!is.null(the$live_row)) the$live_row$clear()
   pad = console_pad()
   text = trimws(prompt, "left")
   if (nchar(prompt, type = "bytes") > 200L || (nzchar(pad) &&

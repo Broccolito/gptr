@@ -393,6 +393,39 @@ test_that("the live row says what the run does, its queue and the person's draft
   ))
 })
 
+test_that("a question clears the live row first; none is drawn before its answer (P30, D-301)", {
+  local_live_console("L")
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 60L)
+  # a row that erases cleanly (RStudio's, a terminal's), shown, at the sink written() reads
+  row = console_live()
+  row$erase = TRUE
+  row$sinks = sink.number() + 1L
+  the$live_row = row
+  withr::defer(assign("live_row", NULL, envir = the))
+  show = function() written(function() row$draw(list(what = "r", secs = 1)))
+  show()
+  # every read clears it before its prompt, as gptr_confirm()'s question is the prompt
+  seen = NA
+  read = function(p) {
+    seen <<- row$shown
+    "y"
+  }
+  out = written(function() gptr_readline("Trust this project? [y/N] ", read = read))
+  expect_false(seen)
+  expect_identical(out, "\r\033[K")
+  # a question too long for readline's prompt is written first, and no row is drawn after it, where
+  # RStudio would keep it in the transcript (live check: two stale rows after one consent question)
+  show()
+  long = paste(rep("Send this request to the provider?", 8L), collapse = " ")
+  out = written(function() gptr_readline(long, read = function(p) "y"))
+  expect_false(grepl("\u258c", out, fixed = TRUE))
+  expect_false(row$shown)
+  # a console question clears it before its rows, also with no foreground run on record
+  show()
+  written(function() console_before_message(kind = "prompt", tools = TRUE))
+  expect_false(row$shown)
+})
+
 test_that("Positron's and RStudio's rows say the key, then s, steers there (steering review)", {
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   # RStudio holds a typed line for the next prompt: typing there never steers (D-301)
