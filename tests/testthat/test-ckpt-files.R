@@ -832,16 +832,19 @@ test_that("a scan slower than gptr.checkpoint_scan_budget switches to per-turn s
     ckpt_files_after(ck, call, tok)
   })
   expect_length(notices, 1L)
-  expect_match(notices, paste0("Checkpoint scans of ", proj), fixed = TRUE)
+  expect_match(notices, paste0("Checkpoint scans of the project folder ", basename(proj), " "),
+               fixed = TRUE)
+  expect_false(grepl(proj, notices, fixed = TRUE))
   expect_true(ck$files$per_turn)
 })
 
-# A fresh tracker of `root` and a scan that reached every entry or stopped at the time limit
+# A fresh tracker of `root` and a scan that reached every entry or ran out of time
 notice_tracker = function(root) list2env(list(root = root, stat = ckpt_empty_walk()))
 notice_scan = function(complete) {
   list(walk = ckpt_empty_walk(), hash = character(), mode = integer(), absent = character(),
        not_files = character(), uncaptured = character(), complete = complete,
-       reason = if (complete) "" else "time limit", seconds = 0)
+       reason = if (complete) "" else "it ran out of time (gptr.checkpoint_scan_timeout)",
+       seconds = 0)
 }
 
 test_that("the coverage notice is a console line for the person, once per root", {
@@ -851,8 +854,11 @@ test_that("the coverage notice is a console line for the person, once per root",
   expect_no_message(out <- capture.output(ckpt_files_observe(notice_tracker(root),
                                                              notice_scan(FALSE))))
   text = paste(out, collapse = " ")
-  expect_match(text, paste0("File undo covers part of ", root), fixed = TRUE)
-  expect_match(text, "stopped early (time limit)", fixed = TRUE)
+  # the folder's name, not its absolute path, which a narrow console would break mid-word
+  expect_match(text, paste0("File undo covers only part of the project folder ", basename(root),
+                            ": the automatic scan stopped early because it ran out of time ",
+                            "(gptr.checkpoint_scan_timeout), so"), fixed = TRUE)
+  expect_false(grepl(root, text, fixed = TRUE))
   expect_false(grepl("ls/find/read|native CLI", text))
   expect_silent(ckpt_files_observe(notice_tracker(root), notice_scan(FALSE)))
 })
@@ -868,7 +874,7 @@ test_that("the coverage notice stays out of tool results, documents and notebook
   e = new.env()
   e$observe = function() ckpt_files_observe(notice_tracker(root), notice_scan(FALSE))
   out = capture.output(res <- eval_r("observe()", e, tee = FALSE))
-  expect_match(paste(out, collapse = " "), "File undo covers part of", fixed = TRUE)
+  expect_match(paste(out, collapse = " "), "File undo covers only part of", fixed = TRUE)
   texts = vapply(res$events, function(ev) ev$text %||% "", "")
   expect_false(any(grepl("undo", texts, ignore.case = TRUE)))
 })

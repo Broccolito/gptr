@@ -295,9 +295,10 @@ ckpt_files_observe = function(tr, s) {
   tr$walk_secs = s$seconds
   if (!isTRUE(s$complete)) {
     tr$per_turn = TRUE
-    ckpt_notice(paste0("File undo covers part of ", tr$root, ": the automatic scan stopped early (",
-                       s$reason, "), so changes to files it did not reach cannot be undone. ",
-                       "Files Peter's tools name are backed up before they change."),
+    ckpt_notice(paste0("File undo covers only part of the project folder ", basename(tr$root),
+                       ": the automatic scan stopped early because ", s$reason, ", so changes to ",
+                       "files it did not reach cannot be undone. Files Peter's tools name are ",
+                       "backed up before they change."),
                 paste0("ckpt-coverage:", tr$root))
   }
 }
@@ -514,9 +515,9 @@ ckpt_files_after = function(ck, call, token) {
     # an incomplete scan already switched and told the person
     if (!isTRUE(tr$per_turn) && tr$walk_secs > gptr_opt("checkpoint_scan_budget")) {
       tr$per_turn = TRUE
-      ckpt_notice(paste0("Checkpoint scans of ", tr$root, " take longer than ",
-                         "gptr.checkpoint_scan_budget; gptr now scans once per turn plus the ",
-                         "paths it can predict."), paste0("ckpt-scan:", tr$root))
+      ckpt_notice(paste0("Checkpoint scans of the project folder ", basename(tr$root),
+                         " take longer than gptr.checkpoint_scan_budget; gptr now scans once ",
+                         "per turn plus the paths it can predict."), paste0("ckpt-scan:", tr$root))
     }
   }
   if (!scanned && call$name %in% c("write", "edit") && isTRUE(token$exact)) coverage = TRUE

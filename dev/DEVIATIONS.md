@@ -10355,7 +10355,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   remove. A file the undo deletes previews as "would be removed" (was "would be restored", as
   objects already read). Was only the items it could not restore, so after Peter's approved edit
   and new file on claude-cli in a large project the question showed the "file coverage" row alone.
+- Rule (coverage notice, amends D-314's wording): "File undo covers only part of the project
+  folder <name>: the automatic scan stopped early because <reason>, so changes to files it did
+  not reach cannot be undone. Files Peter's tools name are backed up before they change." The
+  per-turn scan notice names the folder the same way. The scan's `reason` is plain words: "the
+  folder has more than 2,000 entries", "it ran out of time (gptr.checkpoint_scan_timeout)", "it
+  was interrupted", "a folder could not be read", "a path could not be read", "a file name is not
+  valid UTF-8", "an error stopped it" (was "entry limit", "time limit", "interrupted",
+  "unreadable directory", "unavailable path", "invalid file name", "scan error"). Was the
+  absolute root, which a console narrower than the path wrapped mid-word, and internal reasons.
 - Contract-visible: the `reason` of a `gptr_rewind(preview = TRUE)` file row (04 section 6.5);
-  the question itself is console wording.
-- Tests: ckpt-rewind "/undo's question lists what it restores after what it cannot (D-354)".
-  Evidence: progress/fixes-1.0.1/round2-Y.md.
+  04 section 7.16 (the notice); the question and the notices are console wording.
+- Tests: ckpt-rewind "/undo's question lists what it restores after what it cannot (D-354)";
+  ckpt-files "the coverage notice is a console line for the person, once per root", "a scan
+  slower than gptr.checkpoint_scan_budget switches to per-turn scans once"; ckpt-scan "the entry
+  cap leaves undiscovered files unknown", the time-limit and interrupt cases. Evidence:
+  progress/fixes-1.0.1/round2-Y.md.

@@ -3085,7 +3085,8 @@ restorable, and coverage notices explain that other changes may not be listed or
 The coverage notice (and the per-turn scan notice) is for the person, once per project root and
 process: a console line through `gptr_message_write()`, never a message condition, so it enters
 no tool result (IC-77, D-188); none is shown while knitting or in a Jupyter kernel, where it
-would fill the rendered output (D-314).
+would fill the rendered output (D-314). It names the project folder, not its absolute path, and
+says in plain words why the scan stopped (D-354).
 A fragment's coverage is `"partial"` only when a scan of its interval stopped early (time,
 entries, an interrupt, an unreadable directory or path); a capture limit leaves it complete and
 its uncaptured changes are rows without a pre-image. The files checkpointer skips R code whose

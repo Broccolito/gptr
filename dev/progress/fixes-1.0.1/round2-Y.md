@@ -24,3 +24,11 @@ each confirmed by a verifier. Decisions D-353..D-355.
 - Fix: the question lists every plan item, unrestorable first; a removal previews as "would be
   removed".
 - Red: ckpt-rewind FAIL 1. Green: `ckpt|console-command` PASS 1266.
+
+## Y-3 - The coverage notice names the folder and says why in plain words (D-354)
+- Defect: the notice printed the absolute project root, which a 120-column console wrapped
+  mid-word (`.../live/ho` + `mes/rt-ckpt/big:`), and gave internal reasons ("entry limit").
+- Fix: both checkpoint notices name the project folder (its base name); the scan's reasons are
+  plain words ("the folder has more than 2,000 entries", "it ran out of time
+  (gptr.checkpoint_scan_timeout)", ...).
+- Red: `ckpt-scan$|ckpt-files` FAIL 9. Green: `ckpt` PASS 1091.
