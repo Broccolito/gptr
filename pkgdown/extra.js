@@ -38,9 +38,9 @@ document.addEventListener("DOMContentLoaded", () => {
     block.setAttribute("aria-label", `Code block ${index + 1}`);
     makeScrollable(block);
   });
-  // Inline code of up to 32 characters fits a phone's line, so it never breaks.
+  // Inline code of up to 32 characters fits a phone's line, so outside tables it never breaks.
   document.querySelectorAll("#main :not(pre) > code").forEach((code) => {
-    if (code.textContent.length <= 32) code.classList.add("gptr-nowrap");
+    if (code.textContent.length <= 32 && !code.closest("table")) code.classList.add("gptr-nowrap");
   });
   // The home page shows a figure above each lead point; README.md itself stays plain text.
   const points = {

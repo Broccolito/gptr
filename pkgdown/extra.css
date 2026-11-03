@@ -187,6 +187,11 @@ pre code a:any-link:hover {
 }
 
 @media (max-width: 767.98px) {
+  /* On a phone a table's code may break anywhere, so the table fits and nothing is hidden. */
+  #main td code {
+    overflow-wrap: anywhere;
+  }
+
   .page-header img.logo {
     float: none;
     display: block;
