@@ -2317,7 +2317,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   the compaction request and the next request's estimate as a ledger row, from which it measures the context
   left [D-245]),
   `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
-  `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
+  `/skills`, `/skill:<name>`, `/mcp [serve]`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
   templates as `/<name> args`, registered when a session starts and by the console (the `templates.sync`
   service) before `/help`, a `/` completion and a call of a name unknown, so a template works as the first input
   and a template saved since is found (D-252). Commands are recorded as comments in transcripts. Their output,
