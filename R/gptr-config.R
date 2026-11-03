@@ -1678,7 +1678,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' project itself, moving the working directory out of the project, `rm(list = ls())`,
 #' `options(gptr.*)` and sending a secret over the network (see Secrets below); `plan` changes
 #' nothing, though a call it reads as read-only can still use the network or start a process:
-#' `gptr_models(refresh = TRUE)` downloads the model catalog, and `gptr_providers()` with
+#' `gptr_models(refresh = TRUE)` downloads the model catalog or, with `provider =`, asks that
+#' provider for its models with its credential (starting the `claude` or `codex` tool for those),
+#' and `gptr_providers()` with
 #' `check = TRUE` or `check_login = TRUE` contacts the providers or starts the `claude` and
 #' `codex` status commands. In every mode
 #' `r` code that calls `q()`, `readline()` or another function that would end, pause or hang your R
@@ -1981,10 +1983,14 @@ NULL
 #' while its local-only inference is on (the default; see `providers` in [gptr_config()]).
 #'
 #' @section Other network use:
-#' gptr contacts nothing else on its own. The model catalog is refreshed only by
-#' `gptr_models(refresh = TRUE)`, reachability checks run only with
-#' `gptr_providers(check = TRUE)`, and MCP servers, sub-agents and command-line tools are
-#' contacted only when a session uses them. The `claude` and `codex` command-line routes send
+#' After the acknowledgment above, gptr asks a provider for its model list on
+#' `gptr_models(provider = , refresh = TRUE)`, and before the first request to a provider with a
+#' native model-list API (at most once per five minutes in an R process). The listing carries only
+#' that provider's credential, never a prompt or session context; for the `claude` and `codex`
+#' tools only the explicit refresh lists models, by starting the tool without a prompt. The
+#' models.dev catalog is refreshed only by `gptr_models(refresh = TRUE)`, reachability checks run
+#' only with `gptr_providers(check = TRUE)`, and MCP servers, sub-agents and command-line tools
+#' are otherwise contacted only when a session uses them. The `claude` and `codex` command-line routes send
 #' the conversation through those vendors' tools under their own terms.
 #'
 #' @seealso [gptr_security], [gptr_options], [gptr_providers()], [gptr_config()].

@@ -9594,3 +9594,20 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `model_resolve()` stays.
 - Tests: test-cli-discovery.R ("Claude discovery uses only initialize and keeps full ids, never
   selection aliases").
+
+## D-327 - 1.0.1 lane D Provider listings in the network texts; `gptr_models()` stays level 0 (2026-11-02)
+- Rule: `?gptr_egress` ("Other network use") and `?gptr_security` (plan mode) say that a
+  provider's model list is asked for after the egress acknowledgment: on
+  `gptr_models(provider =, refresh = TRUE)`, which for `claude` and `codex` starts the tool, and
+  before the first request to a provider with a native list API (D-325). Formerly they said gptr
+  contacts nothing else on its own.
+- Rule (amends D-300): `gptr_models()` stays level 0 in `risk-functions.csv`. With `provider =`
+  it now sends that provider's configured credential, so D-300's reason "no key is sent" no
+  longer holds. The new reason: the listing is gated by the same egress acknowledgment as a
+  prompt, carries no session context, and only refreshes gptr's discovery layer.
+- Rule: the egress question of a listing (`context = "listing"`) says that no prompt is sent and
+  that the recorded answer also covers prompts with automatic context. The acknowledgment is one
+  per provider.
+- Contract-visible: `?gptr_egress`, `?gptr_security`.
+- Tests: test-provider-model-discovery.R ("the egress question of a listing says no prompt is
+  sent and what consent covers").
