@@ -784,18 +784,17 @@ mcp_check_kv = function(x, arg) {
 #' you trust the project). It never edits another harness's files. Give exactly one of
 #' `command` (a server started as a local process speaking stdio) and `url` (a Streamable HTTP
 #' server). Secret values in `env` and `headers` must be `${VAR}` placeholders: they are
-#' expanded from the environment when gptr connects, and the configuration never holds them. For
-#' a stdio server, `gptr_login("mcp:<name>", slot = "VAR")` can fill a declared secret `env` entry
-#' instead; the credential is kept per its `scope` and passed only to that server's process.
-#' Adding a server does not connect to it; listing its tools with [gptr_mcp()], refreshing it or
-#' calling a tool may connect.
+#' expanded from the environment when gptr connects and never stored. Adding a server does not
+#' connect to it; listing its tools with [gptr_mcp()], refreshing it or calling a tool may connect.
 #'
 #' @param name Server name: 1-64 letters, digits, `_` or `-`. Its tools are reached as
 #'   `peter$mcp$<name>$<tool>()` inside the `r` tool.
 #' @param command,args The program and its arguments for a stdio server.
 #' @param url The endpoint of a Streamable HTTP server.
 #' @param env,headers Named character vectors: environment variables of a stdio server, HTTP
-#'   headers of an HTTP server. Write secrets as `${VAR}` placeholders.
+#'   headers of an HTTP server. Write secrets as `${VAR}` placeholders. For a stdio server,
+#'   `gptr_login("mcp:<name>", slot = "VAR")` can fill a declared secret entry instead; the
+#'   credential is kept per its `scope` and passed only to that server's process.
 #' @param exposure How the model reaches the tools: `"r"` (R functions listed in the prompt),
 #'   `"direct"` (declared as tools), `"deferred"` (found through `peter$search()`) or
 #'   `"hidden"`.

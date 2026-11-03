@@ -28,7 +28,9 @@ gptr_mcp_remove(name, scope = c("user", "project"))
 \item{url}{The endpoint of a Streamable HTTP server.}
 
 \item{env, headers}{Named character vectors: environment variables of a stdio server, HTTP
-headers of an HTTP server. Write secrets as \verb{$\{VAR\}} placeholders.}
+headers of an HTTP server. Write secrets as \verb{$\{VAR\}} placeholders. For a stdio server,
+\code{gptr_login("mcp:<name>", slot = "VAR")} can fill a declared secret entry instead; the
+credential is kept per its \code{scope} and passed only to that server's process.}
 
 \item{exposure}{How the model reaches the tools: \code{"r"} (R functions listed in the prompt),
 \code{"direct"} (declared as tools), \code{"deferred"} (found through \code{peter$search()}) or
@@ -50,11 +52,8 @@ workspace created with \code{\link[=gptr_init]{gptr_init()}}. Trust the project 
 you trust the project). It never edits another harness's files. Give exactly one of
 \code{command} (a server started as a local process speaking stdio) and \code{url} (a Streamable HTTP
 server). Secret values in \code{env} and \code{headers} must be \verb{$\{VAR\}} placeholders: they are
-expanded from the environment when gptr connects, and the configuration never holds them. For
-a stdio server, \code{gptr_login("mcp:<name>", slot = "VAR")} can fill a declared secret \code{env} entry
-instead; the credential is kept per its \code{scope} and passed only to that server's process.
-Adding a server does not connect to it; listing its tools with \code{\link[=gptr_mcp]{gptr_mcp()}}, refreshing it or
-calling a tool may connect.
+expanded from the environment when gptr connects and never stored. Adding a server does not
+connect to it; listing its tools with \code{\link[=gptr_mcp]{gptr_mcp()}}, refreshing it or calling a tool may connect.
 }
 \examples{
 proj = tempfile("proj")
