@@ -456,6 +456,7 @@ pcli_codex_build = function(model, context, opts) {
   state = pcli_state(opts)
   pcli_codex_settle(state)
   state$pcli_request_id = context[["request_id"]]
+  state$pcli_model_arg = pcli_model_id(model)
   pcli_track(opts[["session"]], state)
   path = pcli_find("codex")
   probe = pcli_probe(path)
@@ -476,7 +477,6 @@ pcli_codex_build = function(model, context, opts) {
   }
   resume = if (isTRUE(probe$resume) && is.null(role)) state$codex_thread else NULL
   wd = path_norm(getwd())
-  state$pcli_model_arg = pcli_model_id(model)
   args = pcli_codex_args(state$pcli_model_arg, wd, sandbox, state$codex_relay, resume = resume,
                          role = role, schema = schema)
   state$cli_api = "cli-codex"
@@ -502,13 +502,16 @@ pcli_codex_tool_kinds = c("mcp_tool_call", "command_execution", "file_change", "
                          "collab_tool_call")
 
 #' The error text of an `error` or `turn.failed` event: `message`, or `error` as a string or as
-#' an object with `message`; NULL when none is a nonempty string
+#' an object with `message`; NULL when none is a nonempty string. Codex relays a rejected
+#' request's HTTP error body as that text, so a body retry_body_error() reads gives its message.
 #' @noRd
 pcli_codex_why = function(obj) {
   err = obj[["error"]]
   why = pcli_chr(obj[["message"]]) %||% pcli_chr(err) %||%
     (if (is.list(err)) pcli_chr(err[["message"]]))
-  if (is.null(why) || !nzchar(why)) NULL else why
+  if (is.null(why) || !nzchar(why)) return(NULL)
+  body = retry_body_error(why)$message
+  if (nzchar(body)) body else why
 }
 
 #' Usage of turn.completed: input_tokens includes the cached ones (OpenAI semantics, 08 3.9), so
@@ -568,12 +571,17 @@ pcli_codex_tool_name = function(item) {
 #' Emit the informational tool_execution_start/_end events of a Codex tool item (contract 8.5),
 #' marked `informational` since the step runs outside R; calls of gptr's own tools are reported
 #' where they run, mcp_serve_call() (D-192); a command's input drops the shell's `-lc` wrapper
-#' of a single-quoted script or a bare word (D-207)
+#' of a single-quoted script or a bare word (D-207); a web search whose start has no query opens
+#' its row at completion, where Codex reports the query
 #' @noRd
 pcli_codex_tool = function(s, item, phase) {
   kind = pcli_chr(item[["type"]]) %||% ""
   gptr_own = identical(kind, "mcp_tool_call") && identical(item[["server"]], "gptr")
   if (!(kind %in% pcli_codex_tool_kinds) || gptr_own) return(invisible(FALSE))
+  if (identical(phase, "start") && identical(kind, "web_search") &&
+      !nzchar(pcli_chr(item[["query"]]) %||% "")) {
+    return(invisible(FALSE))
+  }
   emit = s$opts[["emit"]]
   if (!is.function(emit)) return(invisible(FALSE))
   id = paste0("codex_", pcli_chr(item[["id"]]) %||% "item")

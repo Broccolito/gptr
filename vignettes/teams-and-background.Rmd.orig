@@ -94,6 +94,10 @@ child names; otherwise positions are used. Inspect a child with `session$A` or
 `session[[1]]`. `session$text` is the named vector of the children's answers, and printing the
 session shows each answer under its child's name.
 
+![A fan-out with parallel = 2. Every element is queued and at most two children run at once, so C
+starts when A finishes; session$text keeps the order of the elements, not the order in which they
+finished.](figures/fan-out.svg)
+
 For object-producing work, keep each child's results separate and specify exports only when
 needed. Export-name collisions are reported and results are collected in task order; this
 is not an automatic merge of competing analyses. Keep exports and returned values
@@ -140,6 +144,9 @@ at eight by default; `gptr.s1_max_active` set to one runs them sequentially. Spl
 lightweight child agents too. Workers inherit the configured decision model and its limits.
 Nested decisions are recorded in the owning session, charge its
 budgets and ancestors once, and retain completed answers in the cache if the batch stops.
+
+![System 1 decisions from an agent's R code. Each distinct input is asked once, up to eight at a
+time by default, and the typed answers return in input order.](figures/decision-leaves.svg)
 
 ## Independent calls with gptr_parallel()
 
@@ -265,6 +272,14 @@ workspace state; `"all"` requests both. Restoration covers captured objects/file
 registered checkpointers, with conflicts and unsupported changes reported. It does not undo
 arbitrary external services or uncaptured side effects. Check the report and restored data.
 Assigning a session to another name keeps the same object; use `gptr_fork()` for a branch.
+
+Automatic file scans stop after two seconds. They inspect at most 2,000 entries and back up
+at most 256 files within the configured byte limits. Peter reports partial coverage rather than
+waiting for a large directory to finish. It backs up the files its tools name before they run,
+but other changes to unvisited files (computed paths in R code, shell commands, a CLI's own
+edits) have no automatic backup. An incomplete inventory never makes an existing file look newly
+created or makes an unvisited file look deleted. Ask Peter to use `ls`, `find` or `read` for
+more detail about a folder; it does not need to load every filename before answering.
 
 For a top-level team (`agents =`) or fan-out (`parallel =`) call in a designated history
 document, the code of each child that exports objects or returns a value with `gptr_return()` is

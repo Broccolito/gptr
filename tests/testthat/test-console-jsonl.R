@@ -124,6 +124,23 @@ test_that("peter(.stdin = TRUE, .opts = list(frontend = 'jsonl')) reads prompts,
   expect_false(any(grepl("^gptr ", out)))
 })
 
+test_that("a jsonl frontend continued with mode = \"yolo\" gives the yolo notice on stderr", {
+  local_project()
+  local_gptr_options(record = "off", quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env(), mode = "edits")
+  local_mocked_bindings(console_stdin_open = function() textConnection("/exit"))
+  out = NULL
+  err = utils::capture.output(type = "message", {
+    out = utils::capture.output(s |> peter(mode = "yolo", .stdin = TRUE,
+                                           .opts = list(frontend = "jsonl")))
+  })
+  expect_identical(session_data(s)$mode, "yolo")
+  expect_true(any(grepl("Mode yolo: actions run", err, fixed = TRUE)))
+  expect_length(out, 0L)
+})
+
 test_that("a failed prompt of the jsonl frontend gives an error line and the loop goes on", {
   local_project()
   local_gptr_options(record = "off")

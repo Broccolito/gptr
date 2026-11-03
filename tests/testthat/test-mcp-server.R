@@ -763,6 +763,18 @@ test_that("the token of gptr_mcp_serve()'s session is revoked when that session 
   expect_null(mcp_token_lookup(bearer))
 })
 
+test_that("an idle refusal's notice starts a row of its own below R's prompt", {
+  local_gptr_options(quiet = FALSE)
+  y = local_served_session("manual")
+  res = NULL
+  out = utils::capture.output({
+    res = mcp_dispatch_local(r_call("a = 2"), y$session)$result
+  })
+  expect_true(res$isError)
+  expect_identical(out[[1L]], "")
+  expect_match(out[[2L]], "An MCP client asked for r, which needs your approval", fixed = TRUE)
+})
+
 test_that("gptr_mcp_serve() refuses a port other than the running socket's", {
   skip_without_server()
   st = mcp_serve_start()
@@ -803,6 +815,53 @@ test_that("client snippets carry a 3,600 s tool timeout and print without the to
   expect_null(gptr_mcp_serve(stop = TRUE))
   expect_null(the$mcp_server)
   expect_false("mcp_serve" %in% job_list()$kind)
+})
+
+test_that("snippets keep the token out of format(), str(), knitr and Jupyter's rich output", {
+  skip_without_server()
+  local_gptr_options(mode = "manual")
+  h = gptr_mcp_serve(envir = new.env())
+  withr::defer(gptr_mcp_serve(stop = TRUE))
+  value = secret_value(h$token, h$url)
+  shows = function(x) any(grepl(value, unlist(x), fixed = TRUE))
+  # $config, each snippet and the codex environment, which is still the value to start Codex with
+  shown = c(list(config = h$config), h$config, list(env = h$config$codex$env))
+  for (n in names(shown)) {
+    expect_false(shows(format(shown[[n]])), label = n)
+    expect_false(shows(utils::capture.output(print(shown[[n]]))), label = n)
+    expect_false(shows(utils::capture.output(utils::str(shown[[n]]))), label = n)
+  }
+  expect_match(format(h$config$codex$env), "GPTR_MCP_TOKEN=[secret:GPTR_MCP_TOKEN]", fixed = TRUE)
+  expect_identical(c("current", h$config$codex$env), c("current", GPTR_MCP_TOKEN = value))
+  skip_if_not_installed("knitr")
+  e = new.env()
+  e$h = h
+  knitted = knitr::knit(text = c("```{r}", "h$config", "h$config$claude_code", "h$config$codex$env",
+                                 "```"), envir = e, quiet = TRUE)
+  expect_match(paste(knitted, collapse = "\n"), "[secret:GPTR_MCP_TOKEN]", fixed = TRUE)
+  expect_false(shows(knitted))
+  # IRkernel shows every mimetype repr gives (text/html, text/markdown, text/latex, ...)
+  skip_if_not_installed("repr")
+  for (n in names(shown)) {
+    for (mime in names(repr::mime2repr)) {
+      out = tryCatch(repr::mime2repr[[mime]](shown[[n]]), error = function(e) NULL)
+      expect_false(shows(out), label = paste(n, mime))
+    }
+  }
+})
+
+test_that("a server started where R has no idle prompt says when it answers", {
+  skip_without_server()
+  local_gptr_options(mode = "manual", quiet = FALSE)
+  withr::defer(gptr_mcp_serve(stop = TRUE))
+  idle = FALSE
+  local_mocked_bindings(gptr_is_interactive = function() idle)
+  expect_message(gptr_mcp_serve(envir = new.env()), "not between them or between Jupyter cells",
+                 class = "gptr_message_notice")
+  expect_no_message(gptr_mcp_serve(envir = new.env()))
+  gptr_mcp_serve(stop = TRUE)
+  idle = TRUE
+  expect_no_message(gptr_mcp_serve(envir = new.env()))
 })
 
 test_that("gptr_mcp_serve() validates its arguments and is refused from model code", {

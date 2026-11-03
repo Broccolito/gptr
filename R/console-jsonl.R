@@ -105,6 +105,7 @@ jsonl_frontend_run = function(session, ..., call = NULL, con = stdout()) {
     return(invisible(session))
   }
   rs = repl_state(session, call$envir, stdin = TRUE, call = call)
+  mode_notice(repl_mode(rs))
   rs$reader = console_reader(stdin = TRUE, echo = FALSE)
   on.exit(repl_close(rs), add = TRUE)
   off = jsonl_sink(NULL, con)

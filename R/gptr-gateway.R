@@ -66,8 +66,9 @@
 #' so a turn that selects none keeps it. Agent-created objects remain in `envir`.
 #'
 #' @section Finding APIs:
-#' Inside agent R code, `peter$search("provider setup")` searches callable members and gptr's
-#' public APIs and help topics. `peter$help("gptr")` lists the functions and topics;
+#' Inside agent R code, `peter$search("provider setup")` searches callable members, skills, tools
+#' and gptr's public APIs and help topics; API rows follow the members, skills and tools it finds
+#' and fill the rows they leave free. `peter$help("gptr")` lists the functions and topics;
 #' `peter$help("gptr::gptr_mcp_add")` reads installed help. Add `source = TRUE` for bounded
 #' function-definition text, without executing it. Private source requires an explicit name
 #' such as `peter$help("gptr:::member_help", source = TRUE)`; private functions are not supported
@@ -1193,7 +1194,7 @@ sdk_work = function(runs, until, timeout) {
   force(until)
   force(timeout)
   if (is.null(until)) return(function() run_wait(runs, timeout = timeout))
-  allow = if (is.null(run_current())) NULL else vapply(runs, function(r) r$id, "")
+  allow = if (!is.null(run_current()) || reactor_nested()) vapply(runs, function(r) r$id, "")
   function() reactor_pump(until = until, slice_ms = 100L, allow_runs = allow, timeout = timeout)
 }
 

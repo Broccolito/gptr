@@ -347,6 +347,16 @@ once_first = function(key, kind) {
   TRUE
 }
 
+#' Evaluate `expr`; with `row`, its first gptr message starts a row of its own: a later callback at
+#' R's idle prompt writes with the cursor on the prompt row
+#' @noRd
+message_row = function(expr, row = TRUE) {
+  withCallingHandlers(expr, gptr_message = function(m) {
+    if (row) cat("\n")
+    row <<- FALSE
+  })
+}
+
 #' Print untrusted text verbatim (never as a format string)
 #' @noRd
 msg_verbatim = function(x, stream = c("stdout", "stderr")) {

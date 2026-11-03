@@ -203,13 +203,13 @@ proc_input_file = function(input) {
   f
 }
 
-#' The most a redirect file of proc_run() or bridge_run() may hold before the tree is killed
+#' The most a redirect file of proc_run() may hold before the tree is killed
 #' @noRd
 proc_output_cap = 64 * 1024^2
 
 #' Read a redirect file and decode it as UTF-8 with the code-page fallback; one over the cap
-#' gives its first 40% and last 60% of the cap and a status line, as proc_run() and bridge_run()
-#' kill the tree at the cap
+#' gives its first 40% and last 60% of the cap and a status line, as proc_run() kills the tree at
+#' the cap
 #' @noRd
 proc_read_text = function(path) {
   size = if (file.exists(path)) file.size(path) else 0
@@ -264,32 +264,33 @@ proc_echo = function(path, shown, redactor, final = FALSE) {
 
 #' Run a program to completion
 #'
-#' stdout and stderr go to temp files (deleted on exit), stdin is the null device unless
-#' `input` is given (chr or raw, through a temp file: large inputs never go on the command
-#' line, whose Windows limit is 32,767 characters), a reactor wait enforces `timeout` and
-#' `proc_output_cap`, and `on.exit()` kills the whole tree on error or interrupt. Never
-#' processx's run().
+#' stdout and stderr go to temp files (deleted on exit; `merge = TRUE` sends stderr into the
+#' stdout file and returns `stderr = ""`), stdin is the null device unless `input` is given
+#' (chr or raw, through a temp file: large inputs never go on the command line, whose Windows
+#' limit is 32,767 characters), a reactor wait enforces `timeout` and `proc_output_cap`, and
+#' `on.exit()` kills the whole tree on error or interrupt. Never processx's run().
 #' @return `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1),
 #'   elapsed = num(1))`, decoded as UTF-8 with the code-page fallback; line ends stay as the
 #'   child wrote them (CRLF from a Windows child's text-mode output), for the caller to normalise
 #' @noRd
 proc_run = function(command, args = character(), input = NULL, timeout = 120, env = NULL,
-                    wd = NULL, echo = FALSE) {
+                    wd = NULL, echo = FALSE, merge = FALSE) {
   check_number(timeout, "timeout", min = 0)
   check_flag(echo, "echo")
+  check_flag(merge, "merge")
   out_f = tempfile("gptr-out-")
   err_f = tempfile("gptr-err-")
   in_f = if (is.null(input)) NULL else proc_input_file(input)
   on.exit(unlink(c(out_f, err_f, in_f)), add = TRUE)
   t0 = reactor_now()
   p = proc_spawn(command, args, env = env, wd = wd, stdin = in_f, stdout = out_f,
-                 stderr = err_f)
+                 stderr = if (merge) "2>&1" else err_f)
   on.exit(kill_all(p, grace = 0), add = TRUE, after = FALSE)
   timed_out = FALSE
   shown = 0
   echo_redactor = if (echo) redact_stream("stream") else NULL
   repeat {
-    reactor_pump(until = function() !p$is_alive(), slice_ms = 200L, timeout = 0.2)
+    reactor_pump(until = function() !p$is_alive(), slice_ms = 20L, timeout = 0.2)
     if (echo) shown = proc_echo(out_f, shown, echo_redactor)
     if (any(file.size(c(out_f, err_f)) > proc_output_cap, na.rm = TRUE)) {
       kill_all(p, grace = 0)

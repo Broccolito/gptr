@@ -1,14 +1,9 @@
-# Real children, real filesystem changes and the public fake-provider Peter flow.
-scan_integration_library = function(.env = parent.frame()) {
-  path = getNamespaceInfo(asNamespace("gptr"), "path")
-  if (file.exists(file.path(path, "R", "aaa-state.R"))) local_worker_lib(.env)
-}
+# Real scans, real filesystem changes and the public fake-provider Peter flow.
 
 scan_integration_bytes = function(path) readBin(path, "raw", file.size(path))
 
 test_that("real partial checkpoints preserve targeted writes and report native coverage honestly", {
   skip_on_cran()
-  scan_integration_library()
   root = local_project(files = list("a-known.R" = "known = 1", "b-delete.R" = "delete = 1",
     "zz-target/deep/target.R" = "before", "zz-target/deep/preexisting.txt" = "keep me"))
   local_gptr_options(checkpoint_scan_timeout = 20, checkpoint_scan_budget = 1000, quiet = TRUE)
@@ -62,19 +57,25 @@ test_that("real partial checkpoints preserve targeted writes and report native c
   expect_false(coverage_report$ok)
   expect_match(coverage_report$action, "unobserved file changes may remain", fixed = TRUE)
 
-  # The CLI may have written an unknown file before serving a gptr tool request.
+  # The CLI may have written an unknown file before serving a gptr tool request: undo reverts
+  # the served edit of a file no scan observed and removes the file a served write created.
   writeLines("native unknown change", unknown)
-  call = list(id = "native-late-target", name = "write",
-              input = list(path = unknown_rel, content = "served write"))
-  token = ckpt_files_before(ck, call, turn = 1L, sync = FALSE)
-  expect_false(token$exact)
-  writeLines("served write", unknown)
   unknown_after = scan_integration_bytes(unknown)
-  late = ckpt_files_after(ck, call, token)
-  expect_length(late$files, 0L)
-  expect_identical(late$coverage, "partial")
-  expect_false(ckpt_files_undo(ck, late)$ok)
+  created_rel = "zz-target/deep/analysis.ipynb"
+  served = list(c(unknown_rel, "served write"), c(created_rel, "{}"))
+  late = lapply(served, function(x) {
+    call = list(id = x[[1L]], name = "write", input = list(path = x[[1L]], content = x[[2L]]))
+    token = ckpt_files_before(ck, call, turn = 1L, sync = FALSE)
+    writeLines(x[[2L]], file.path(root, x[[1L]]))
+    ckpt_files_after(ck, call, token)
+  })
+  expect_identical(late[[1L]]$files[[1L]]$status, "modified")
+  expect_identical(late[[2L]]$files[[1L]]$status, "created")
+  report = rbind(ckpt_files_undo(ck, late[[2L]]), ckpt_files_undo(ck, late[[1L]]))
+  expect_identical(report$item, paste("file", c(created_rel, unknown_rel)))
+  expect_true(all(report$ok))
   expect_identical(scan_integration_bytes(unknown), unknown_after)
+  expect_false(file.exists(file.path(root, created_rel)))
 
   known = file.path(root, "a-known.R")
   deleted = file.path(root, "b-delete.R")
@@ -109,13 +110,33 @@ test_that("real partial checkpoints preserve targeted writes and report native c
   expect_false(unknown_rel %in% transition$created)
   ckpt_files_sync(tr)
   expect_true(tr$complete)
-  expect_true(tr$coverage)
   expect_null(ckpt_files_turn_scan(ck, 3L, force = TRUE))
   expect_identical(scan_integration_bytes(unknown), unknown_after)
 })
 
+test_that("a CLI-served write to a real scanned file past the capture limit is undone", {
+  skip_on_cran()
+  root = local_project(files = list("bulk/sub/target.R" = "before"))
+  local_gptr_options(checkpoint_scan_timeout = 20, checkpoint_scan_budget = 1000, quiet = TRUE)
+  expect_true(all(file.create(file.path(root, "bulk", sprintf("f%03d.R", seq_len(300L))))))
+  target_rel = "bulk/sub/target.R"
+  ck = ckpt_ck_new("s0000000905")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  expect_true(tr$complete)
+  expect_true(target_rel %in% tr$stat$path)
+  expect_false(target_rel %in% names(tr$hash))
+  call = list(id = "c", name = "write", input = list(path = target_rel, content = "served"))
+  token = ckpt_files_before(ck, call, turn = 1L, sync = FALSE)
+  expect_true(token$exact)
+  writeLines("served", file.path(root, target_rel))
+  frag = ckpt_files_after(ck, call, token)
+  expect_identical(frag$coverage, "complete")
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
+  expect_identical(readLines(file.path(root, target_rel)), "before")
+})
+
 test_that("real complete scans detect same-size edits with an unchanged timestamp", {
-  scan_integration_library()
   root = local_project(files = list("racy.R" = "AAAA"))
   local_gptr_options(checkpoint_scan_timeout = 15, checkpoint_scan_budget = 1000)
   path = file.path(root, "racy.R")
@@ -144,7 +165,6 @@ test_that("real complete scans detect same-size edits with an unchanged timestam
 
 test_that("real scans retain old files behind a replaced directory link without reading outside", {
   skip_on_os("windows")
-  scan_integration_library()
   root = local_project(files = list("inside/known.R" = "original"))
   local_gptr_options(checkpoint_scan_timeout = 15, checkpoint_scan_budget = 1000)
   outside = withr::local_tempdir()
@@ -173,9 +193,8 @@ test_that("real scans retain old files behind a replaced directory link without 
   expect_true(dir.exists(file.path(root, "inside")))
 })
 
-test_that("a real unreadable baseline stays partial until readable contents are backed up", {
+test_that("a real unreadable file is listed without a backup until it can be read", {
   skip_on_os("windows")
-  scan_integration_library()
   root = local_project(files = list("permission.R" = "AAAA"))
   local_gptr_options(checkpoint_scan_timeout = 15, checkpoint_scan_budget = 1000, quiet = TRUE)
   path = file.path(root, "permission.R")
@@ -190,39 +209,56 @@ test_that("a real unreadable baseline stays partial until readable contents are 
   tr = ckpt_files_tr(ck)
   ckpt_files_sync(tr)
   expect_true(tr$complete)
-  expect_false(tr$coverage)
   expect_identical(tr$stat$path, "permission.R")
   expect_length(tr$hash, 0L)
   expect_null(ckpt_blob_find(original_hash))
 
+  # readable again and unchanged: nothing to record, and the next scan backs it up
   expect_true(Sys.chmod(path, "0600", use_umask = FALSE))
-  native_bytes = charToRaw("BBBB\n")
-  writeBin(native_bytes, path)
   expect_true(Sys.setFileTime(path, stamp))
-  expect_identical(file.size(path), before_info$size)
-  expect_identical(as.numeric(file.mtime(path)), as.numeric(before_info$mtime))
-  fragment = ckpt_files_turn_scan(ck, 1L, force = TRUE)
-  expect_length(fragment$files, 0L)
-  expect_identical(fragment$coverage, "partial")
-  report = ckpt_files_undo(ck, fragment)
-  expect_identical(report$item, "file coverage")
-  expect_false(report$ok)
-  expect_identical(scan_integration_bytes(path), native_bytes)
-  expect_null(ckpt_blob_find(original_hash))
-
-  expect_true(tr$complete)
-  expect_true(tr$coverage)
-  expect_identical(tr$hash[["permission.R"]], hash_file(path))
-  expect_null(ckpt_files_turn_scan(ck, 2L, force = TRUE))
+  expect_null(ckpt_files_turn_scan(ck, 1L, force = TRUE))
+  expect_identical(tr$hash[["permission.R"]], original_hash)
   later_bytes = charToRaw("CCCC\n")
   writeBin(later_bytes, path)
   expect_true(Sys.setFileTime(path, stamp))
-  later = ckpt_files_turn_scan(ck, 3L, force = TRUE)
+  expect_identical(file.size(path), before_info$size)
+  later = ckpt_files_turn_scan(ck, 2L, force = TRUE)
   expect_identical(later$coverage, "complete")
   expect_length(later$files, 1L)
   expect_identical(later$files[[1L]]$status, "modified")
   expect_true(ckpt_files_undo(ck, later)$ok)
-  expect_identical(scan_integration_bytes(path), native_bytes)
+  expect_identical(hash_file(path), original_hash)
   expect_true(ckpt_files_undo(ck, later, redo = TRUE)$ok)
   expect_identical(scan_integration_bytes(path), later_bytes)
+})
+
+test_that("R-only and text-only turns rewind fully in capped and partially scanned projects", {
+  skip_on_cran()
+  for (n in c(300L, 2100L)) {
+    root = local_project(files = list("a.R" = "a = 1"))
+    expect_true(dir.create(file.path(root, "bulk")))
+    expect_true(all(file.create(file.path(root, "bulk", sprintf("f%04d.R", seq_len(n))))))
+    local_gptr_options(checkpoint_scan_timeout = 20, quiet = TRUE)
+    local_fake_provider(list(fake_tool("r", code = "x = 1"), "made x", "hello"))
+    work = new.env()
+    session = peter("make x", model = "fake/fake-1", mode = "auto", envir = work)
+    session |> peter("say hello")
+    expect_false("file coverage" %in% gptr_rewind(session, 0, preview = TRUE)$item)
+    expect_no_warning(gptr_rewind(session, 0))
+    expect_false(session$last_rewind$partial)
+    expect_false(exists("x", envir = work, inherits = FALSE))
+  }
+})
+
+test_that("a complete scan with capped captures leaves undo coverage complete", {
+  skip_on_cran()
+  root = local_project(files = list("a.R" = "a = 1"))
+  expect_true(dir.create(file.path(root, "bulk")))
+  expect_true(all(file.create(file.path(root, "bulk", sprintf("f%04d.R", seq_len(300L))))))
+  local_gptr_options(checkpoint_scan_timeout = 20, quiet = TRUE)
+  local_fake_provider(list(fake_tool("write", path = "a.R", content = "a = 2\n"), "done"))
+  session = peter("change a.R", model = "fake/fake-1", mode = "auto", envir = new.env())
+  expect_identical(readLines(file.path(root, "a.R")), "a = 2")
+  expect_no_warning(gptr_rewind(session, 0))
+  expect_identical(readLines(file.path(root, "a.R")), "a = 1")
 })

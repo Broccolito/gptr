@@ -152,6 +152,8 @@ test_that("control actions need a person in every mode, plan included (IC-53, IC
   }
   w = gate_tool("write", ".gptr/settings.json", 2L)
   expect_identical(gate_decide(w, gate_ctx("auto")), "ask_human")
+  # reading the trust decision is not control (D-347)
+  expect_identical(gate_decide(gate_r("print(gptr::gptr_trust('.'))"), gate_ctx("auto")), "allow")
 })
 
 test_that("yolo runs control, installs, writes anywhere and secret reads; level 4 asks (IC-78)", {

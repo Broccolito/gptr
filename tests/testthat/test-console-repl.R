@@ -321,6 +321,39 @@ test_that("repl_state() takes the console call's identifiers, options and object
   expect_error(repl_state(NULL, "not an env"), class = "gptr_error_invalid_argument")
 })
 
+test_that("an explicit mode = on a continued session applies when its console opens", {
+  skip_on_cran()
+  local_console_test()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env(), mode = "edits")
+  local_console_stdin(c("/mode", "/exit"))
+  out = utils::capture.output(invisible(utils::capture.output({
+    s |> peter(mode = "plan", .stdin = TRUE)
+  }, type = "message")))
+  expect_identical(session_data(s)$mode, "plan")
+  expect_true(any(grepl("Mode: plan", out, fixed = TRUE)))
+  # an inherited mode leaves the session's own
+  local_console_stdin("/exit")
+  invisible(utils::capture.output(utils::capture.output(s |> peter(.stdin = TRUE)),
+                                  type = "message"))
+  expect_identical(session_data(s)$mode, "plan")
+})
+
+test_that("a continued console opened with mode = \"yolo\" says so after its banner", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env(), mode = "edits")
+  local_console_stdin("/exit")
+  out = utils::capture.output(s |> peter(mode = "yolo", .stdin = TRUE))
+  expect_identical(session_data(s)$mode, "yolo")
+  banner = grep("gptr [0-9]", out)
+  said = grep("Mode yolo: actions run", out, fixed = TRUE)
+  expect_length(said, 1L)
+  expect_lt(banner[[1L]], said)
+})
+
 test_that("a console opened in yolo shows the yolo notice with its banner (IC-78)", {
   local_gptr_options(quiet = FALSE)
   rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
@@ -599,6 +632,15 @@ test_that("the @files of a prompt share the user_files budget, and the line unde
   men = repl_mentions("see @wide.md", new.env())
   expect_match(men$said, "^@ wide.md [(]first [0-9]+ lines[)]$")
   expect_match(men$files, "<file path=\"wide.md\" truncated=\"true\">", fixed = TRUE)
+})
+
+test_that("a one-line @file over the budget attaches the head of its line (D-348)", {
+  skip_on_cran()
+  local_project(files = list("min.json" = strrep("a", 5e4)))
+  men = repl_mentions("see @min.json", new.env())
+  expect_identical(men$files, paste0("<file path=\"min.json\" truncated=\"true\">\n",
+                                     strrep("a", 400), " ...[+49600 chars]\n</file>"))
+  expect_identical(men$said, "@ min.json (first 1 line)")
 })
 
 test_that("!code runs in the REPL environment and leaves a note; !!code does not", {

@@ -110,6 +110,23 @@ test_that("checkpoint = 'off' records nothing, 'files' records files only, plan 
   expect_length(entries_of(s, "gptr.checkpoint"), 0L)
 })
 
+test_that("R code that can write no file skips only the files checkpointer", {
+  r = function(code) list(name = "r", input = list(code = code), risk = gptr_risk(code))
+  for (code in c("x = 1", "fit = lm(mpg ~ wt, mtcars)", "x = readRDS('a.rds')")) {
+    expect_true(ckpt_file_free(r(code)))
+  }
+  for (code in c("writeLines('a', 'f.txt')", "Sys.sleep(0)", "set.seed(1)", "source('job.R')")) {
+    expect_false(ckpt_file_free(r(code)))
+  }
+  expect_false(ckpt_file_free(list(name = "r", input = list(code = "x = 1"))))
+  expect_false(ckpt_file_free(list(name = "write", input = list(path = "a.R"),
+                                   risk = gptr_risk("x = 1"))))
+  ctx = list(mode = function() "auto")
+  expect_true(ckpt_enabled("objects", ctx, r("x = 1")))
+  expect_false(ckpt_enabled("files", ctx, r("x = 1")))
+  expect_true(ckpt_enabled("files", ctx, r("writeLines('a', 'f.txt')")))
+})
+
 test_that("only pure reads skip the checkpointers; a level-0 creation is checkpointed", {
   skip_on_cran()
   local_project()

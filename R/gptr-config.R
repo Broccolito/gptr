@@ -1093,7 +1093,9 @@ replay_provider_id = function(model) {
 
 #' In replay `mode` (a call's `replay =` overrides the process mode, contract 3.1), refuses a
 #' request to a provider whose record is not `offline = TRUE` (a local server is not); never
-#' contacts a provider (07 sections 2.1 and 4)
+#' contacts a provider (07 sections 2.1 and 4). Outside a `.gptr/` workspace the answer caches
+#' live in this process only, so the refusal says so and how to keep them, as
+#' doc_replay_no_answer() does
 #' @noRd
 replay_guard = function(model, what = "model call", mode = replay_mode()) {
   check_string(what, "what")
@@ -1103,6 +1105,10 @@ replay_guard = function(model, what = "model call", mode = replay_mode()) {
   if (isTRUE(rec[["offline"]])) return(invisible(TRUE))
   gptr_abort(c(paste0("Replay mode: gptr may not make a ", what, " to ", pid,
                       " because nothing is recorded for it."),
+               if (is.null(workspace_dir())) {
+                 paste0("Outside a .gptr/ workspace, recorded answers last only for the R ",
+                        "session that made them; gptr_init(\".\") keeps them for later sessions.")
+               },
                "Unset GPTR_REPLAY or pass replay = \"auto\" to call the model."),
              "not_recorded", document = NA_character_, prompt = NA_character_)
 }
@@ -1173,11 +1179,15 @@ egress_can_ask = function(safety = egress_safety()) {
 
 #' The question shown before the first automatic context or System 1 input goes to a provider
 #' (gptr_confirm() appends the ` [y/N] ` hint itself); it names the effective endpoint when there
-#' is one, and the model `asker` of a sub-agent that model code starts
+#' is one, and the model `asker` of a sub-agent that model code starts. `context = "listing"`, a
+#' model listing, says that no prompt is sent and that the answer also covers prompts.
 #' @noRd
 egress_question = function(id, origin = NULL, asker = NULL, context = NULL) {
   to = if (is.null(origin)) id else paste0(id, " (", origin, ")")
-  lead = if (is.null(asker)) {
+  lead = if (identical(context, "listing")) {
+    paste0("Listing models asks ", to, " for its model list; no prompt is sent. Allowing it ",
+           "also lets gptr send your prompts to ", id)
+  } else if (is.null(asker)) {
     paste0("gptr sends your prompts to ", to)
   } else {
     paste0("The agent's code starts a sub-agent on ", asker, ", which sends its prompt to ", to)
@@ -1397,7 +1407,8 @@ settings_model_warn = function(patch, scope) {
 #' accepted only at user scope. `mode = yolo` and turning off local-only Ollama inference
 #' (`providers = list(ollama = list(local_only = FALSE))`) are accepted only at user or session
 #' scope; a project can only keep local-only inference on. A change called from model code
-#' during a run requires your approval; otherwise it signals `gptr_error_permission`.
+#' during a run needs an allowing permission decision (a person's, in every mode but `yolo`; see
+#' [gptr_security]); otherwise it signals `gptr_error_permission`.
 #'
 #' The `"session"` scope means this R process, not one conversation. User settings live at
 #' `tools::R_user_dir("gptr", "config")/settings.json`; project settings live in `.gptr/`.
@@ -1674,7 +1685,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' project itself, moving the working directory out of the project, `rm(list = ls())`,
 #' `options(gptr.*)` and sending a secret over the network (see Secrets below); `plan` changes
 #' nothing, though a call it reads as read-only can still use the network or start a process:
-#' `gptr_models(refresh = TRUE)` downloads the model catalog, and `gptr_providers()` with
+#' `gptr_models(refresh = TRUE)` downloads the model catalog or, with `provider =`, asks that
+#' provider for its models with its credential (starting the `claude` or `codex` tool for those),
+#' and `gptr_providers()` with
 #' `check = TRUE` or `check_login = TRUE` contacts the providers or starts the `claude` and
 #' `codex` status commands. In every mode
 #' `r` code that calls `q()`, `readline()` or another function that would end, pause or hang your R
@@ -1977,11 +1990,15 @@ NULL
 #' while its local-only inference is on (the default; see `providers` in [gptr_config()]).
 #'
 #' @section Other network use:
-#' gptr contacts nothing else on its own. The model catalog is refreshed only by
-#' `gptr_models(refresh = TRUE)`, reachability checks run only with
-#' `gptr_providers(check = TRUE)`, and MCP servers, sub-agents and command-line tools are
-#' contacted only when a session uses them. The `claude` and `codex` command-line routes send
-#' the conversation through those vendors' tools under their own terms.
+#' After the acknowledgment above, gptr asks a provider for its model list on
+#' `gptr_models(provider = , refresh = TRUE)`, and before the first request to a provider with a
+#' native model-list API (at most once per five minutes in an R process). The listing carries only
+#' that provider's credential, never a prompt or session context; for the `claude` and `codex`
+#' tools only the explicit refresh lists models, by starting the tool without a prompt. The
+#' models.dev catalog is refreshed only by `gptr_models(refresh = TRUE)`, reachability checks run
+#' only with `gptr_providers(check = TRUE)`, and MCP servers, sub-agents and command-line tools
+#' are otherwise contacted only when a session uses them. The `claude` and `codex` command-line
+#' routes send the conversation through those vendors' tools under their own terms.
 #'
 #' @seealso [gptr_security], [gptr_options], [gptr_providers()], [gptr_config()].
 #' @name gptr_egress

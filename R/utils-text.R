@@ -40,8 +40,9 @@ agent_label = function(run) {
 
 #' Keep the first `head` and last `1 - head` share of lines within a token budget
 #'
-#' When the text fits, it is returned unchanged. Otherwise the full text is stored in the out
-#' store and in a spill file, and the kept lines surround the notice
+#' When the text fits, it is returned unchanged. Otherwise lines over 400 characters continue as
+#' 400-character pieces, so the cut always has lines to keep; these lines are stored in the out
+#' store and in a spill file, and the kept ones surround the notice
 #' `[... n lines omitted; all: peter$out("<id>")]`.
 #' @noRd
 truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) {
@@ -49,14 +50,25 @@ truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) 
   class = check_choice(class, names(token_cpt), "class")
   head = check_number(head, "head", min = 0, max = 1)
   lines = text_lines(text)
-  total = length(lines)
   costs = est_tokens_each(paste0(lines, "\n"), class)
   if (sum(costs) <= budget) {
     return(list(
       text = paste(lines, collapse = "\n"), truncated = FALSE, omitted = 0L,
-      total_lines = total, out_id = NULL, spill = NULL
+      total_lines = length(lines), out_id = NULL, spill = NULL
     ))
   }
+  long = which(nchar(lines, allowNA = TRUE) > 400L)
+  if (length(long)) {
+    lines = as.list(lines)
+    # by code points: substring() rescans a non-ASCII string from its start for every piece
+    lines[long] = lapply(lines[long], function(x) {
+      cp = utf8ToInt(x)
+      vapply(split(cp, (seq_along(cp) - 1L) %/% 400L), intToUtf8, "", USE.NAMES = FALSE)
+    })
+    lines = unlist(lines)
+    costs = est_tokens_each(paste0(lines, "\n"), class)
+  }
+  total = length(lines)
   out_id = out_put(lines, "stdout", list(class = class))
   spill = spill_write(lines, prefix = paste0("gptr-output-", out_id))
   notice_cost = est_tokens_each(paste0(truncation_notice(total, out_id), "\n"), class)
@@ -86,6 +98,18 @@ truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) 
     truncated = TRUE, omitted = as.integer(omitted), total_lines = total,
     out_id = out_id, spill = spill
   )
+}
+
+#' Lines of text a view did not store, within `budget` tokens: unchanged when they fit, else each
+#' line over 400 characters as its first 400 and ` ...[+N chars]`, so the line count stays that of
+#' the text (D-348)
+#' @noRd
+view_lines = function(lines, budget, class = "r_output") {
+  if (sum(est_tokens_each(paste0(lines, "\n"), class)) <= budget) return(lines)
+  width = nchar(lines, allowNA = TRUE)
+  long = !is.na(width) & width > 400L
+  lines[long] = paste0(substr(lines[long], 1L, 400L), " ...[+", width[long] - 400L, " chars]")
+  lines
 }
 
 #' The truncation notice (about 26 tokens; G5 fact-check 13)
@@ -250,8 +274,8 @@ doc_one_line = function(x) {
   ui_escape(trimws(gsub("[\r\n\t\u0085\u2028\u2029]+", " ", x)))
 }
 
-#' Clean terminal output: drop ANSI/OSC sequences, keep the last frame of \r progress lines,
-#' cap lines at 400 characters. Returns lines.
+#' Clean terminal output: drop ANSI/OSC sequences and keep the last frame of \r progress lines.
+#' Returns lines, each whole: the token budget of the view that shows them is the only bound.
 #' @noRd
 clean_terminal = function(x) {
   x = as_utf8(as.character(x))
@@ -265,18 +289,6 @@ clean_terminal = function(x) {
   # the last frame of each line, without a regex: [^\n\r]*\r is quadratic on one long line
   cr = grepl("\r", lines, fixed = TRUE)
   lines[cr] = vapply(strsplit(lines[cr], "\r", fixed = TRUE), function(p) p[length(p)], "")
-  cap_lines(lines, 400L)
-}
-
-#' Cut lines longer than `max_chars`, noting how many characters were dropped
-#' @noRd
-cap_lines = function(lines, max_chars = 400L) {
-  width = nchar(lines, type = "chars", allowNA = TRUE)
-  long = !is.na(width) & width > max_chars
-  if (any(long)) {
-    extra = width[long] - max_chars
-    lines[long] = paste0(substr(lines[long], 1L, max_chars), " ...[+", extra, " chars]")
-  }
   lines
 }
 
@@ -293,7 +305,7 @@ new_listing = function(df, class, footer = NULL) {
 }
 
 #' Print a listing: at most 20 rows, a count line (naming as.data.frame() when rows are left out),
-#' then the footer
+#' then the footer wrapped to the console width
 #'
 #' @param x A listing data frame.
 #' @param ... Ignored.
@@ -316,11 +328,12 @@ print.gptr_listing = function(x, ...) {
   }
   cat(count, "\n", sep = "")
   footer = attr(x, "footer", exact = TRUE)
-  if (length(footer)) cat(footer, sep = "\n")
+  if (length(footer)) cat(strwrap(footer, width = cli::console_width()), sep = "\n")
   invisible(x)
 }
 
-#' A width-bounded display copy: provenance/state first, at most two column groups, no row loss
+#' A width-bounded display copy: provenance/state first, at most two column groups, no row loss;
+#' identifier, state and date columns are never shortened, so free text gives way first
 #' @noRd
 listing_print_lines = function(x, width = cli::console_width()) {
   if (!ncol(x)) return(character())
@@ -334,7 +347,11 @@ listing_print_lines = function(x, width = cli::console_width()) {
   x = x[idx]
   headers = listing_cell(names(x), min(24L, budget))
   values = lapply(x, function(col) {
-    text = if (is.character(col) || is.factor(col)) as.character(col) else format(col, trim = TRUE)
+    text = if (is.character(col) || is.factor(col)) {
+      as.character(col)
+    } else {
+      format(col, trim = TRUE, scientific = FALSE)
+    }
     listing_cell(text, Inf)
   })
   caps = ifelse(names(x) == "description", 40L, ifelse(names(x) == "path", 28L, 24L))
@@ -344,7 +361,8 @@ listing_print_lines = function(x, width = cli::console_width()) {
     min(budget, caps[[j]], max(nchar(c(headers[[j]], values[[j]]), type = "width")))
   }, 0)
   minimum = pmax(nchar(headers, type = "width"), pmin(wanted, 8L))
-  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status", "branch")
+  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status", "branch",
+                                        "date", "created", "updated")
   minimum[state] = wanted[state]
   groups = list()
   group = integer()
@@ -412,6 +430,23 @@ doc_rmd_fence = function(fence, lines) {
   runs = regmatches(lines, regexpr("^[\t >]*`{3,}", lines))
   n = if (length(runs)) max(nchar(gsub("[^`]", "", runs))) else 0L
   if (n >= nchar(fence)) strrep("`", n + 1L) else fence
+}
+
+#' Display text as inert HTML: escaped, in a `<pre>`
+#' @noRd
+doc_repr_pre = function(text) {
+  text = gsub("&", "&amp;", text, fixed = TRUE)
+  text = gsub("<", "&lt;", text, fixed = TRUE)
+  text = gsub(">", "&gt;", text, fixed = TRUE)
+  paste0("<pre>", text, "</pre>")
+}
+
+#' Display text as literal Markdown: in a fence longer than any backtick run it holds
+#' @noRd
+doc_repr_fence = function(text) {
+  runs = regmatches(text, gregexpr("`+", text))[[1L]]
+  fence = strrep("`", max(3L, nchar(runs) + 1L))
+  paste(c(fence, text, fence), collapse = "\n")
 }
 
 #' Safe notebook Markdown: keep fenced code and matched backtick spans literal, while prose

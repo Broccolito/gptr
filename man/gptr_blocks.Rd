@@ -19,7 +19,9 @@ Reads an \code{.R}, \code{.Rmd}, \code{.qmd} or \code{.ipynb} document and lists
 status: \code{fresh} (the owning call's prompt matches), \code{stale} (the prompt changed, or no call
 owns the block), \code{user-edited} (the body no longer matches its \code{sha}) or \code{undone} (made inert
 by a rewind). Interpolated values are only known when the call runs, so they are not checked
-here. It reads the document; the only write is that blocks an \code{Rscript} run queued before it
+here, nor are the answer caches: a fresh System 1 block replays from its cached answers, which
+outside a \verb{.gptr/} workspace last only for the R session that made them (\code{\link[=gptr_init]{gptr_init()}} keeps
+them). It reads the document; the only write is that blocks an \code{Rscript} run queued before it
 was killed are applied first (never over your edits).
 }
 \examples{

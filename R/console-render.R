@@ -1032,11 +1032,11 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL,
                      error = function(e) NULL) %||% model
   }
   reported = if (rlang::is_string(response_model) && nzchar(response_model)) {
-    console_escape(substr(redact(response_model, "context"), 1L, 200L), FALSE)
+    substr(redact(response_model, "context"), 1L, 200L)
   }
   if (n && rlang::is_string(model) && (identical(usage$route[[n]], "plan-cli") ||
       (!is.null(reported) && !identical(model, response_model)))) {
-    selected = console_escape(substr(redact(model, "context"), 1L, 200L), FALSE)
+    selected = substr(redact(model, "context"), 1L, 200L)
     model = if (is.null(reported)) {
       paste("selected", selected)
     } else if (identical(model, response_model)) {

@@ -32,16 +32,20 @@ your permission settings; R code evaluates in \code{envir}, where its objects pe
 belong to a dedicated gptr session whose permission mode is the configured default when the
 server starts, independently of a chat's explicit mode; like any new session, it becomes
 \code{\link[=gptr_last]{gptr_last()}}. A running server keeps its original workspace and mode until stopped.
-Requests are answered at R's top-level idle prompt or during an outermost reactor wait.
-A nested console \code{readline()} (including Peter's prompt in R.app), ordinary blocking R code,
-or a nested tool wait can pause serving. In Peter, \verb{/mcp serve} starts or reuses the server
-and returns to R's prompt; a new server uses that chat's workspace and mode. Resume the chat
-with \code{gptr_last() |> peter()}. Calls that need approval are refused with a note on how to allow
-them, because gptr never asks from a background callback. The token appears only in the
-snippets of \verb{$config} (printed redacted; \code{as.character()} gives the text to paste;
-\verb{$config$codex} holds the \code{codex} options
-in \verb{$args} and the environment to start Codex with in \verb{$env}). One server runs per R process.
-Needs 'httpuv', 'later' and 'openssl'; gptr's own codex route does not use this server.
+Requests are answered at R's top-level idle prompt or during an outermost gptr wait. Serving
+pauses while Peter's own prompt waits (in every console), while other R code runs and during a
+nested tool wait. Where R has no idle prompt (Rscript, knitr, Quarto, or a Jupyter kernel
+between cells), a request waits for the next gptr wait, such as \code{peter$sh()} or
+\code{\link[=gptr_wait]{gptr_wait()}}, and a client may time out (a server started there says so); serve from an
+interactive R console instead.
+In Peter, \verb{/mcp serve} starts or reuses the server and returns to R's prompt; a new server
+uses that chat's workspace and mode. Resume the chat with \code{gptr_last() |> peter()}. Calls that
+need approval are refused with a note on how to allow them, because gptr never asks from a
+background callback. The token appears only in the snippets of \verb{$config}, which show it
+redacted, in notebooks and documents too (\code{as.character()} gives the text to paste;
+\verb{$config$codex} holds the \code{codex} options in \verb{$args} and the environment to start Codex with
+in \verb{$env}). One server runs per R process. Needs 'httpuv', 'later' and 'openssl'; gptr's own
+codex route does not use this server.
 }
 \details{
 If shutdown cannot be confirmed, access is revoked and the server is retained for retry.

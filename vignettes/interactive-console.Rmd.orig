@@ -84,8 +84,8 @@ To let an external MCP client use this workspace, enter `/mcp serve`. Peter star
 the server and returns to R's top-level prompt, where idle callbacks can run. A new server uses
 the chat's workspace and mode; an existing server keeps its original settings. Leave R at its
 prompt while the client works, then resume this chat with `gptr_last() |> peter()`.
-This handoff avoids the blocking nested reader in R.app. See [MCP](mcp.html) for client
-configuration and the limits of synchronous tool waits.
+The server does not answer while Peter's own prompt waits, in any console. See [MCP](mcp.html)
+for client configuration and the limits of synchronous tool waits.
 
 ## Enter prompts, objects and your own R
 

@@ -982,6 +982,20 @@ test_that("System 1 emits a decision event and writes one summary line at top le
                    paste0("gptr_decision: 1 TRUE / 1 FALSE (judge-s1-1.0, ", Sys.Date(), ")"))
 })
 
+test_that("a summary the notebook already shows as the block is not said again", {
+  s1_fresh()
+  local_fake_provider(list(0.9, 0.1, 0.9, 0.1), name = "judge", type = "classifier")
+  local_gptr_options(quiet = FALSE, verbose = 1L)
+  shown = new.env()
+  shown$value = TRUE
+  local_service("doc.s1_block", function(call, summary) invisible(shown$value))
+  expect_no_message(peter("Q?", c(a = "x", b = "y"), model = "judge/judge-s1"),
+                    message = "gptr_decision")
+  shown$value = NULL
+  expect_message(peter("Q?", c(a = "x2", b = "y2"), model = "judge/judge-s1"),
+                 "gptr_decision: 1 TRUE / 1 FALSE", class = "gptr_message_progress")
+})
+
 test_that("failures: a scalar call signals, a vector gives NA and one s1_errors warning", {
   skip_on_cran()
   s1_fresh()

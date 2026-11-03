@@ -153,3 +153,33 @@ test_that("pending notebook code publishes one MIME bundle while source and side
   expect_identical(readBin(nb, "raw", n = file.info(nb)$size), before)
   expect_false(any(setdiff(c("repr", "IRdisplay"), loaded) %in% loadedNamespaces()))
 })
+
+test_that("a System 1 block shown in the cell output reports that it was shown", {
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto")
+  st = doc_state()
+  withr::defer({
+    st$docs = list()
+    doc_lock_release_all()
+  })
+  nb = file.path(getwd(), "s1.ipynb")
+  cell = list(cell_type = "code", execution_count = NULL, id = "c1", metadata = json_obj(),
+              outputs = list(), source = list("is_rct = peter(\"Is this an RCT?\", abstracts)"))
+  writeLines(json_encode(list(cells = list(cell), metadata = json_obj(), nbformat = 4L,
+                              nbformat_minor = 5L)), nb)
+  shown = new.env(parent = emptyenv())
+  shown$n = 0L
+  withr::local_options(jupyter.in_kernel = TRUE, jupyter.base_display_func = function(data, ...) {
+    shown$n = shown$n + 1L
+    invisible(TRUE)
+  })
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  call = call_new("Is this an RCT?", "Is this an RCT?",
+                  sys_call = quote(peter("Is this an RCT?", abstracts)), nframe = 0L)
+  x = structure(c(TRUE, FALSE), class = c("gptr_decision", "gptr_s1", "logical"),
+                meta = list(model = "jev-1.13.0", date = "2026-09-29"))
+  expect_true(doc_s1_block_service(call, x))
+  expect_identical(shown$n, 1L)
+  withr::local_options(jupyter.in_kernel = FALSE)
+  expect_false(doc_s1_block_service(call, x))
+})
