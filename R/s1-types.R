@@ -650,6 +650,10 @@ s1_prepare = function(ref, safety = NULL, replay = NULL) {
   model_prepare(ref, safety = safety, replay = replay)
 }
 
+#' Does Ollama serve this model (natively or through a provider at an Ollama endpoint)?
+#' @noRd
+s1_ollama_route = function(model, provider) catalog_ollama_route(model, provider)
+
 #' The configured System 1 reference, or NULL when none is usable (contract 7.5, IC-74)
 #' @noRd
 s1_default_ref = function() model_default("system1")

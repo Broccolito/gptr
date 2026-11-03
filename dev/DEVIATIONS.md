@@ -9611,6 +9611,30 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   "ctx$decide() gives .session only to an s1.decide service that declares it". Evidence:
   progress/fixes-1.0.1/lane-C.md.
 
+## D-321 - Fixes 1.0.1 lane C System 1 accounting (2026-11-02)
+- Rule (unbilled failures): D-251's sessions-6 rule applies to System 1 attempts: a failed attempt
+  that reports no count and whose request was rejected (HTTP status >= 400) or never received
+  (`network`, `timeout_connect`) records `input = 0, output = 0` (`s1_failed_usage()`, from
+  `s1_failure()` and `s1_outcome()`, so the TypeSafe, Ollama, in-process and emulated paths alike),
+  and so does a request the adapter's `build` refuses (never sent). Idle and first-byte timeouts
+  and a received reply without usage stay unknown (NA). Was NA for every such attempt since
+  PR #105 charged each attempt: one retried 429 made the batch's `meta$usage` and the owning
+  session's totals unknown, and a cost limit then named the model as having no prices.
+- Rule (workers): a worker's `result` line sums its chat rows only (`worker_outcome()`), and its
+  System 1 rows travel in the result file (`s1`); the parent charges each to the proxy session
+  (its adapter state's `worker_session`) with the worker's provider, model, route and cost
+  (`worker_s1_charge()` through P13's `s1_charge_row()`, a declared `subagent` contract edge of
+  `helper-arch.R`). Was one
+  summed row priced at the chat model's rates (10,000 decisions of about 300 tokens read as $6.06
+  of claude-sonnet-5-5, not about $0.13), and one System 1 row with unknown usage made the whole
+  sum NULL, so the parent charged only its estimate.
+- Contract-visible: 04 sections 7.13 (owned System 1 usage) and 11.11 (the worker's result).
+- Tests: s1-client "an unbilled System 1 failure costs a known zero, as a chat request does
+  (D-251)", "bounded rounds resubmit only failed elements ..."; subagent-worker "a worker's
+  System 1 rows stay out of its chat usage (D-321)"; subagent-backends "a worker composes native
+  typed decisions with provenance and their own charges". Evidence:
+  progress/fixes-1.0.1/lane-C.md.
+
 ## D-322 - Fixes 1.0.1 lane C Gateway refusals of System 1 and agent arguments (2026-11-02)
 - Rule (unknown model): `route_refuse_s1_args()` first resolves a character `model =` that
   `gateway_model_type()` cannot type (`run_model_resolve()`, with the continued session's own
@@ -9632,31 +9656,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   "a named dot that names an agent() option warns and stays context (D-322)". Evidence:
   progress/fixes-1.0.1/lane-C.md.
 
-## D-321 - Fixes 1.0.1 lane C System 1 accounting (2026-11-02)
-- Rule (unbilled failures): D-251's sessions-6 rule applies to System 1 attempts: a failed attempt
-  that reports no count and whose request was rejected (HTTP status >= 400) or never received
-  (`network`, `timeout_connect`) records `input = 0, output = 0` (`s1_failed_usage()`, from
-  `s1_failure()` and `s1_outcome()`, so the TypeSafe, Ollama, in-process and emulated paths alike),
-  and so does a request the adapter's `build` refuses (never sent). Idle and first-byte timeouts
-  and a received reply without usage stay unknown (NA). Was NA for every such attempt since
-  PR #105 charged each attempt: one retried 429 made the batch's `meta$usage` and the owning
-  session's totals unknown, and a cost limit then named the model as having no prices.
-- Rule (workers): a worker's `result` line sums its chat rows only (`worker_outcome()`), and its
-  System 1 rows travel in the result file (`s1`); the parent charges each to the proxy session with
-  the worker's provider, model, route and cost (`worker_s1_charge()`, `s1_charge_row()`). Was one
-  summed row priced at the chat model's rates (10,000 decisions of about 300 tokens read as $6.06
-  of claude-sonnet-5-5, not about $0.13), and one System 1 row with unknown usage made the whole
-  sum NULL, so the parent charged only its estimate.
-- Contract-visible: 04 sections 7.13 (owned System 1 usage) and 11.11 (the worker's result).
-- Tests: s1-client "an unbilled System 1 failure costs a known zero, as a chat request does
-  (D-251)", "bounded rounds resubmit only failed elements ..."; subagent-worker "a worker's
-  System 1 rows stay out of its chat usage (D-321)"; subagent-backends "a worker composes native
-  typed decisions with provenance and their own charges". Evidence:
-  progress/fixes-1.0.1/lane-C.md.
-
 ## D-323 - Fixes 1.0.1 lane C Emulated System 1 on Ollama and worker start (2026-11-02)
 - Rule (emulation on Ollama): `s1_ready()` prepares an emulation's chat model on an Ollama route
-  as `run_target()` prepares a chat call's (egress check, then `model_prepare()`, which discovers
+  (`s1_ollama_route()`, the L1 wrapper of `catalog_ollama_route()`) as `run_target()` prepares a
+  chat call's (egress check, then `model_prepare()`, which discovers
   only without current evidence), on live calls; replay keeps the preflight alone. Was a
   preflight only, so every new R process failed with "there is no current discovery evidence"
   until `gptr_models(provider = "ollama", refresh = TRUE)`, while a chat call on the same model

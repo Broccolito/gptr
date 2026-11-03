@@ -4250,9 +4250,10 @@ events with Pi names plus `{"type":"ask","id","questions"}`, `{"type":"permissio
 denial), `{"type":"cancel"}`. Exported objects come back through
 `result_path` (`save_rds()`), never the JSON stream. Non-JSON stdout lines are ignored. The result line's
 `usage` sums the worker's chat rows only; its System 1 rows (routes `system-one` and `emulated`) come back
-in `result_path` as `s1`, whatever the status, and the parent charges each to the proxy session through
-`s1_charge_row()` at the price the worker gave it, so budgets and `gptr_usage()` see the System 1 model,
-and one unknown row leaves the chat total known (D-321).
+in `result_path` as `s1`, whatever the status, and the parent charges each to the proxy session (held in
+its adapter state as `worker_session`) through P13's `s1_charge_row()`, a `subagent` contract edge of the
+layering test (12.2), at the price the worker gave it, so budgets and `gptr_usage()` see the System 1
+model, and one unknown row leaves the chat total known (D-321).
 
 ### 11.12 Plugins: manifest and package fields [stable]
 

@@ -526,7 +526,7 @@ s1_ready = function(target, safety = s1_safety(), replay = NULL) {
     target$frozen = TRUE
   } else if (emulated) {
     m = target$model
-    if (live && catalog_ollama_route(m, target$provider)) {
+    if (live && s1_ollama_route(m, target$provider)) {
       egress_check(m[["provider"]], target$provider, safety)
       m = s1_prepare(m[["ref"]], safety = safety)
     }

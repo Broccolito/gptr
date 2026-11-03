@@ -464,6 +464,7 @@ backend_worker_start = function(spec, ctx) {
   s1_options = c("s1_max_active", "s1_rounds", "s1_state_max", "s1_max_elements")
   state = session_live(child)$adapter
   state$worker_home = session_home(child)
+  state$worker_session = child
   state$worker_spec = list(
     prompt = spec$prompt, model = spec$info$ref, mode = spec$mode, depth = spec$depth,
     agent = spec$agent, name = spec$name, object_names = c(spec$objects, spec$bind),
@@ -589,7 +590,7 @@ worker_on_exit = function(st, status) {
 #' model gave it (D-321)
 #' @noRd
 worker_s1_charge = function(st, rows) {
-  s = if (rlang::is_string(st$opts$session)) session_by_id(st$opts$session)
+  s = st$session
   if (is.null(s) || !is.data.frame(rows)) return(invisible(NULL))
   d = session_data(s)
   for (i in seq_len(nrow(rows))) {
@@ -690,6 +691,7 @@ worker_stream = function(model, context, opts) {
   st = new.env(parent = emptyenv())
   st$spec = get0("worker_spec", envir = opts$state, inherits = FALSE)
   st$home = get0("worker_home", envir = opts$state, inherits = FALSE)
+  st$session = get0("worker_session", envir = opts$state, inherits = FALSE)
   real = st$spec$model %||% "worker/worker"
   st$provider = sub("/.*$", "", real)
   st$model_id = sub("^[^/]*/", "", real)
