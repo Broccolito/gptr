@@ -553,12 +553,12 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
 
-#' Console confirm() (gptr_confirm() through the UI, D-306): `? <question>`, its keys row (`y yes ·
-#' n no · enter no`, Enter's the `default`) and the answer's prompt (ui_answer_prompt()), read as
-#' every console question (ui_console_read(): what was typed before it is routed or kept as the
-#' draft, never its answer; the live row is off until the answer); TRUE for y or yes, `default` for
-#' an empty answer, FALSE for any other and when cancelled; a console command typed there waits for
-#' the next prompt (ui_console_command())
+#' Console confirm() (gptr_confirm() through the UI, D-306): `? <question>`, its keys row (`y yes`,
+#' `n no`, `enter no`, joined by U+00B7; Enter's the `default`) and the answer's prompt
+#' (ui_answer_prompt()), read as every console question (ui_console_read(): what was typed before it
+#' is routed or kept as the draft, never its answer; the live row is off until the answer); TRUE for
+#' y or yes, `default` for an empty answer, FALSE for any other and when cancelled; a console
+#' command typed there waits for the next prompt (ui_console_command())
 #' @noRd
 ui_console_confirm = function(question, default = FALSE, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())

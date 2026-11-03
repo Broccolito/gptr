@@ -305,7 +305,7 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
     # readline shows what it reads only where the echo is on as it starts; its prompt erases a key
     # the terminal echoed in that moment (tty_question()), after its leading blanks, which it then
     # steps over: macOS libedit in TERM=dumb draws an answer over a prompt whose hidden start is
-    # followed by a blank and a wide glyph (`  › `)
+    # followed by a blank and a wide glyph (two blanks, U+203A, a blank)
     tty$quiet = FALSE
     tty_modes(tty$saved)
     lead = attr(regexpr("^ *", prompt), "match.length")
