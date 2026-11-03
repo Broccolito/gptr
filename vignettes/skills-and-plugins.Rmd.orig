@@ -32,7 +32,10 @@ gptr_plugins(installed = TRUE)
 `gptr_skills(scope = c("all", "project", "user", "packages"))` reports each skill's name,
 description, source, path, catalog token estimate and visibility. The same scope choices apply
 to `gptr_agents()`. A short skill catalog helps the model choose relevant instructions; the body
-is loaded on demand. Preload a known skill with `skills = "name"`:
+is loaded on demand. The catalog gives each skill one line, its name and description, within
+1,500 estimated tokens by default (`gptr_config(skills = list(budget = ...))`). Past that, the
+least recently used skills lose their descriptions, then their lines; `peter$search()` finds
+the skills left out. Preload a known skill with `skills = "name"`:
 
 ```{r, eval = FALSE}
 peter("Review the normalization steps.", skills = "analysis-review")
@@ -41,12 +44,16 @@ peter$read("skill:analysis-review/references/checklist.md")
 ```
 
 These paths refer to files inside the skill directory. Keep long references and examples in
-separate files and tell the skill when to read them. A skill supplies instructions, not a data
-snapshot; objects named in its text must still be available to the tools that use them. See
-[Execution model](execution-model.html) for the R environment and provider context,
-[Language models](language-models.html)
-for choosing the model used by these calls, and [Tools and artifacts](tools-and-artifacts.html)
-for reading files.
+separate files and tell the skill when to read them.
+
+![Skills load in layers. Every request carries the skill's catalog line; the model reads the
+body when a task matches it, and a reference file only when the body points to
+it.](figures/skill-on-demand.svg)
+
+A skill supplies instructions, not a data snapshot; objects named in its text must still be
+available to the tools that use them. See [Execution model](execution-model.html) for the R
+environment and provider context, [Language models](language-models.html) for choosing the model
+used by these calls, and [Tools and artifacts](tools-and-artifacts.html) for reading files.
 
 ## Write a skill
 
@@ -236,6 +243,13 @@ configuration. gptr reads compatible installed Claude plugin inventories but doe
 plugins for you. Claude hooks and executable Claude plugin behavior are not imported. Supported
 root substitutions include `${CLAUDE_PLUGIN_ROOT}` and `${GPTR_PLUGIN_ROOT}` in plugin resources.
 See [MCP](mcp.html) for the connection and authentication steps.
+
+Each `plugins` entry names one plugin. A marketplace root, a directory that only lists plugins
+in `.claude-plugin/marketplace.json`, is refused with a message to name one of the plugin
+directories it lists. A plugin with no skills, prompts, commands, agents, MCP servers or R
+extension code fails to activate with a warning, and `gptr_plugins()` shows it as `failed`. An
+entry of the `plugins` setting that cannot be resolved is skipped with a footer under that
+listing; `gptr_registry(diagnostics = TRUE)` says why.
 
 ## Trust and precedence
 

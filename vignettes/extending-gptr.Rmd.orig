@@ -82,6 +82,24 @@ tool is found through `peter$search()`, while `"hidden"` omits it from the model
 An R package's tools should use the package name as their namespace. Use
 `peter$help("demo/add")` to inspect a registered member's schema.
 
+A handler returns text, or `gptr_tool_result()` to give each reader its part:
+
+```{r}
+area_tool = gptr_tool(
+  "circle_area", "Area of a circle of radius r",
+  parameters = list(type = "object", required = I("r"),
+                    properties = list(r = list(type = "number"))),
+  execute = function(input, ctx) {
+    a = pi * input$r^2
+    gptr_tool_result(sprintf("%.2f", a), details = list(r = input$r), value = a)
+  }
+)
+```
+
+The model reads `text` and `images`. `details` stay in the transcript and are never sent;
+`value` goes to R code that calls a `peter$` member and is never saved. `is_error = TRUE`
+reports a failure to the model.
+
 An R helper runs in the current R process and can compute on already-loaded objects without a
 file export. Its allocations follow ordinary R rules; an external backend may need its own
 serialization. See [Execution model](execution-model.html) for these boundaries.
@@ -129,8 +147,16 @@ session$text
 off_policy()
 ```
 
-The denial reached the model as an error result, even in `auto` mode. This text match illustrates
-the callback; it is not a general R code security filter. See
+The denial reached the model as an error result, even in `auto` mode. gptr's own permission
+checks are policies too, such as `mode`, `rules` and `critical_guard`; `gptr_registry("policy")`
+lists them. Deny wins over ask, ask over modify and modify over allow, while `NULL` gives no
+answer, so a policy can make a call stricter but never looser.
+
+![Policies, strictest answer wins. In `auto` mode the `mode` policy allows `rm(list = ls())`,
+`critical_guard` asks and `keep_data` denies, so the call is denied and the model receives an
+error result.](figures/policy-strictest.svg)
+
+This text match illustrates the callback; it is not a general R code security filter. See
 [Configuration](configuration.html) for modes, trust and permission rules.
 
 ## A hook on a session
