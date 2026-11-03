@@ -254,7 +254,7 @@ test_that("a T console's steer on a CLI route still says it waits for the CLI's 
   expect_true(paste(receipt_line("steer", "use base R"), "(after the CLI's answer)") %in% rows)
 })
 
-test_that("a steer taken back says so under its receipt (Task 37, D-301)", {
+test_that("a steer taken back says so, naming it, a block of its own (Task 37, D-301)", {
   skip_on_cran()
   local_console_test()
   local_gptr_options(verbose = 2L)
@@ -269,12 +269,49 @@ test_that("a steer taken back says so under its receipt (Task 37, D-301)", {
   cli = " (after the CLI's answer)"
   sym = console_style()
   lines = c(paste0(receipt_line("steer", "use base R"), cli),
-            paste0(sym$queued, " steer taken back"),
+            paste0(sym$queued, " steer taken back", sym$sep, "use base R"),
             paste0(receipt_line("steer", "use dplyr"), cli))
   at = match(lines, rows)
   expect_false(anyNA(at) || is.unsorted(at))
+  expect_identical(rows[at[[2L]] - 1L], "")
   ops = Filter(function(m) identical(m$kind, "steer_relay"), res$s$messages)
   expect_identical(vapply(ops, msg_text, ""), relay("use dplyr"))
+})
+
+test_that("a steer taken back as text streams is a block of its own, naming it (P30 review)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE, cli.num_colors = 1L, cli.width = 40L)
+  local_mocked_bindings(front_end = function() "terminal")
+  words = paste(sprintf("word%02d", 1:40), collapse = " ")
+  fake = gptr_fake_provider(list(list(text = words, chunk = 8L, gap = 0.03), "second"))
+  # Enter once the answer's first row is written, Up (then Ctrl-U) 0.4 s later, as it streams
+  sent = NULL
+  local_keys(function() {
+    streaming = any(vapply(as.list(console_state()$active),
+                           function(r) identical(r$last, "text"), NA))
+    if (is.null(sent) && streaming) {
+      sent <<- Sys.time()
+      return("use base R\r")
+    }
+    if (is.null(sent) || Sys.time() - sent < 0.4) return("")
+    sent <<- Sys.time() + Inf
+    "\033[A"
+  })
+  res = typing_console(fake, c("go", "/exit"))
+  rows = sub(".*\r", "", term_rows(paste(res$out, collapse = "\n")))
+  sym = console_style()
+  said = c(receipt_line("steer", "use base R"),
+           paste0(sym$queued, " steer taken back", sym$sep, "use base R"))
+  at = match(said, rows)
+  expect_false(anyNA(at))
+  expect_identical(rows[at[[2L]] + c(-1L, 1L)], c("", ""))
+  first = grep("word01", rows, fixed = TRUE)
+  last = grep("word40", rows, fixed = TRUE)
+  expect_true(at[[1L]] + 1L < at[[2L]] && at[[2L]] < last)
+  whole = utils::capture.output(console_print_text(words))
+  expect_identical(setdiff(rows[first:last], c("", said)), whole)
 })
 
 test_that("type_ahead = 'follow_up' sends the line as the next prompt, its own run (D-242)", {

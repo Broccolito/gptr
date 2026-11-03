@@ -167,8 +167,8 @@ console_trigger = function(line) {
 #' `rd` (`rd$compose`, console_compose()) for session `s`: a message is queued as its kind says
 #' (policy_enqueue(): a steer for the next step boundary, a follow-up in `rd$typed` for the next
 #' prompt, its receipt written at once) and Up takes back the newest one (console_newest()) into the
-#' draft, under a dim `<queued glyph> <kind> taken back`, as its receipt stays in the transcript
-#' (D-301); Tab on a trigger word completes it
+#' draft, saying so (console_taken_back()), as its receipt stays in the transcript (D-301); Tab on a
+#' trigger word completes it
 #' (console_complete()), and several candidates are kept as `rd$compose$candidates`, which the live
 #' row shows until the next key; the live row is drawn again where it shows. A batch read at most
 #' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, timed
@@ -224,11 +224,7 @@ console_keys = function(rd, s, chars) {
     } else if (identical(act$type, "take_back")) {
       it = console_newest(s, rd, take = TRUE)
       rd$compose$draft = it$text %||% ""
-      if (!is.null(it)) {
-        sym = console_style()
-        kind = if (identical(it$kind, "steer")) "steer" else "follow-up"
-        console_write(sym$dim(paste0(sym$queued, " ", kind, " taken back")))
-      }
+      if (!is.null(it)) console_taken_back(s, it)
     } else if (identical(act$type, "complete")) {
       rd$compose$candidates = act$candidates
     }

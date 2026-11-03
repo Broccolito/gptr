@@ -349,10 +349,8 @@ policy_enqueue = function(s, text, as, source = "pause_menu", shown = NULL) {
 #' reads it at its next step boundary) or `next> <text>` (after this answer), its word as the
 #' prompt `peter> ` reads, the text wrapped under itself (console_person_rows()); a steer on a CLI
 #' route ends with a dim `(after the CLI's answer)`, on a row of its own where the last is full. A
-#' block of the person's lines (console_gap()), except right under a question whose read routed it,
-#' written between whole rows: the live row is cleared and drawn again under it
-#' (gptr_message_write()), and a streamed answer's held row continues after it (D-245). Inside an
-#' evaluation it has the console's colours.
+#' block of the person's lines (console_person_write()). Inside an evaluation it has the console's
+#' colours.
 #' @noRd
 console_receipt = function(s, text, as) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -369,10 +367,31 @@ console_receipt = function(s, text, as) {
       rows = c(rows, paste0(strrep(" ", 7L), grey(note)))
     }
   }
+  console_person_write(s, console_band(rows))
+}
+
+#' The dim row that says a message `it` (console_newest()) went back into the draft (Up, D-301):
+#' `<queued glyph> steer taken back<sep><text>` (`follow-up`), cut to one row, a block of the
+#' person's lines (console_person_write()), in the console's colours
+#' @noRd
+console_taken_back = function(s, it) {
+  rlang::local_options(cli.num_colors = console_colors())
+  sym = console_style()
+  kind = if (identical(it$kind, "steer")) "steer" else "follow-up"
+  said = paste0(sym$queued, " ", kind, " taken back", sym$sep, live_text(it$text))
+  console_person_write(s, sym$dim(live_fit(said, cli::console_width() - 1L, sym$ellipsis)))
+}
+
+#' Write the person's `rows` for session `s` as a block of their own (console_gap()), except right
+#' under a question whose read routed them, between whole rows: the live row is cleared and drawn
+#' again under them (gptr_message_write()), and a streamed answer's held row continues after them
+#' (D-245)
+#' @noRd
+console_person_write = function(s, rows) {
   rec = Find(function(rec) identical(rec$session, s) && console_foreground(rec, tools = TRUE),
              as.list(console_state()$active))
   if (!is.null(rec) && !identical(rec$last, "prompt")) console_gap(rec, "person")
-  console_write(console_band(rows))
+  console_write(rows)
 }
 
 #' A line typed before a console question (readline_answer()): routed as a line typed during the
