@@ -991,7 +991,7 @@ contain no value.
 | `gptr_prompt_view` | P07 | list(system = list(t0, t1), tools_json, first_message (chr), sections df(name, tier, tokens), total_tokens); `print` shows each part with its token estimate |
 | `gptr_check` | P02 | `c("gptr_check", "data.frame")`: `target`, `check`, `ok` (lgl), `message` |
 | `gptr_api` | P02 | list(version = package_version, features = chr) |
-| `gptr_mcp_handle` | P18 | environment: `url`, `port`, `token_env` (chr(1): the variable name, never the token), `config` (named list of client snippets), `stop()` |
+| `gptr_mcp_handle` | P18 | environment: `url`, `port`, `token_env` (chr(1): the variable name, never the token), `config` (`c("gptr_mcp_config", "list")` of client snippets; it, each snippet and the codex `$env` print, format and show in notebooks redacted), `stop()` |
 
 ### 5.12 Listing data frames
 

@@ -824,21 +824,28 @@ test_that("snippets keep the token out of format(), str(), knitr and Jupyter's r
   withr::defer(gptr_mcp_serve(stop = TRUE))
   value = secret_value(h$token, h$url)
   shows = function(x) any(grepl(value, unlist(x), fixed = TRUE))
-  for (n in names(h$config)) expect_false(shows(format(h$config[[n]])), label = n)
-  expect_false(shows(utils::capture.output(utils::str(h$config))))
+  # $config, each snippet and the codex environment, which is still the value to start Codex with
+  shown = c(list(config = h$config), h$config, list(env = h$config$codex$env))
+  for (n in names(shown)) {
+    expect_false(shows(format(shown[[n]])), label = n)
+    expect_false(shows(utils::capture.output(print(shown[[n]]))), label = n)
+    expect_false(shows(utils::capture.output(utils::str(shown[[n]]))), label = n)
+  }
+  expect_match(format(h$config$codex$env), "GPTR_MCP_TOKEN=[secret:GPTR_MCP_TOKEN]", fixed = TRUE)
+  expect_identical(c("current", h$config$codex$env), c("current", GPTR_MCP_TOKEN = value))
   skip_if_not_installed("knitr")
   e = new.env()
   e$h = h
-  knitted = knitr::knit(text = c("```{r}", "h$config", "h$config$claude_code", "```"),
-                        envir = e, quiet = TRUE)
+  knitted = knitr::knit(text = c("```{r}", "h$config", "h$config$claude_code", "h$config$codex$env",
+                                 "```"), envir = e, quiet = TRUE)
   expect_match(paste(knitted, collapse = "\n"), "[secret:GPTR_MCP_TOKEN]", fixed = TRUE)
   expect_false(shows(knitted))
   # IRkernel shows every mimetype repr gives (text/html, text/markdown, text/latex, ...)
   skip_if_not_installed("repr")
-  for (x in c(list(h$config), h$config)) {
+  for (n in names(shown)) {
     for (mime in names(repr::mime2repr)) {
-      out = tryCatch(repr::mime2repr[[mime]](x), error = function(e) NULL)
-      expect_false(shows(out), label = mime)
+      out = tryCatch(repr::mime2repr[[mime]](shown[[n]]), error = function(e) NULL)
+      expect_false(shows(out), label = paste(n, mime))
     }
   }
 })

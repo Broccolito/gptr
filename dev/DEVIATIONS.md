@@ -9592,15 +9592,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `print()`. repr's list method returns `NULL` when an element does, so `$config` is covered too.
   `format()` gives the redacted text that `print()` shows, and `str()` shows the redacted value.
   knitr and Quarto print through `print()`.
-- Residual: by contract the token stays in the snippet values, since `as.character()` and
-  `$config$codex$env` are the paste paths. Code that reads raw values (`dput()`, `unlist()`,
-  `format()` of the whole `$config` list for the codex element, an IDE's variable pane) shows it.
-  Rejected: storing only redacted text and restoring the token in `as.character()`, `$` and `[[`
-  methods, which changes `$env` and adds a method for every accessor.
-- Contract-visible: `?gptr_mcp_serve` (snippets are redacted in notebooks and documents too).
+- Rule (verification of the fix, low): the codex `$env` is a snippet too, a named character vector
+  that processx and withr still take as the child's environment (`c()` and `[[` give plain
+  values), and `$config` has class `c("gptr_mcp_config", "list")` with `format()` and `print()`
+  methods. `format()` of a list unlists each element, which dropped the snippet class. Printing,
+  formatting, `str()`, knitr and Jupyter's repr of `$config`, of a snippet and of `$env` now all
+  redact.
+- Residual: by contract the token stays in the snippet values, since `as.character()` is the paste
+  path. Code that reads raw values (`as.character()`, `c()`, `unlist()`, `toString()`, `dput()`,
+  an IDE's variable pane) shows it. Rejected: storing only redacted text and restoring the token
+  in `as.character()`, `$` and `[[` methods, which changes `$env` and adds a method for every
+  accessor.
+- Contract-visible: `?gptr_mcp_serve` (snippets are redacted in notebooks and documents too); 04
+  section 5.11 (`config` is a `gptr_mcp_config`).
 - Tests: test-mcp-server.R "snippets keep the token out of format(), str(), knitr and Jupyter's
   rich output" (the repr part runs where repr is installed; it failed for text/html, text/markdown
-  and text/latex before the change).
+  and text/latex before the change, and for `format()` of `$config` and every path of `$env`
+  before the follow-up).
 
 ## D-337 - FIX-1.0.1 lane F: when the MCP server answers, and where its notices go (2026-11-02)
 - Rule (live and review #103, one medium and two low reports): serving pauses at Peter's own prompt

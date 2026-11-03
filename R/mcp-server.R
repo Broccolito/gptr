@@ -609,28 +609,26 @@ mcp_http_route = function(st, req) {
 
 #' Client snippets for Codex, Claude Code, Claude Desktop and Cursor, each with a tool timeout of
 #' 3,600 s (HTTP MCP clients time a request out after 60 s by default). They carry the token, so
-#' they print redacted. The Codex snippet is a list: `args` (the `-c` overrides, which read the
-#' token from GPTR_MCP_TOKEN) and `env` (the environment to start Codex with); the others are JSON
-#' text (contract 6.3)
+#' they, the codex `env` and the list of them (a `gptr_mcp_config`) print and format redacted. The
+#' Codex snippet is a list: `args` (the `-c` overrides, which read the token from GPTR_MCP_TOKEN)
+#' and `env` (the environment to start Codex with); the others are JSON text (contract 6.3)
 #' @noRd
 mcp_client_snippets = function(url, token) {
   bearer = paste("Bearer", token)
-  obj = function(x) {
-    structure(json_encode(list(mcpServers = list(gptr = x)), pretty = TRUE),
-              class = c("gptr_mcp_snippet", "character"))
-  }
-  list(
-    codex = structure(list(args = c("-c", paste0("mcp_servers.gptr.url=", url), "-c",
-                                    "mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN",
-                                    "-c", "mcp_servers.gptr.tool_timeout_sec=3600"),
-                           env = c(GPTR_MCP_TOKEN = token)),
-                      class = c("gptr_mcp_snippet", "list")),
+  snippet = function(x) structure(x, class = c("gptr_mcp_snippet", class(x)))
+  obj = function(x) snippet(json_encode(list(mcpServers = list(gptr = x)), pretty = TRUE))
+  structure(list(
+    codex = snippet(list(args = c("-c", paste0("mcp_servers.gptr.url=", url), "-c",
+                                  "mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN",
+                                  "-c", "mcp_servers.gptr.tool_timeout_sec=3600"),
+                         env = snippet(c(GPTR_MCP_TOKEN = token)))),
     claude_code = obj(list(type = "http", url = url, headers = list(Authorization = bearer),
                            timeout = 3600000L)),
     claude_desktop = obj(list(command = "npx", args = I(c("-y", "mcp-remote", url, "--header",
                                                           paste0("Authorization: ", bearer))),
                               timeout = 3600000L)),
-    cursor = obj(list(url = url, headers = list(Authorization = bearer), timeout = 3600000L)))
+    cursor = obj(list(url = url, headers = list(Authorization = bearer), timeout = 3600000L))),
+    class = c("gptr_mcp_config", "list"))
 }
 
 #' A `gptr_mcp_handle` (contract 5.11): url, port, token_env, config and stop(), plus `token`,
@@ -762,9 +760,11 @@ print.gptr_mcp_handle = function(x, ...) {
 #' @noRd
 format.gptr_mcp_snippet = function(x, ...) {
   text = if (is.list(x)) {
-    c(paste(x$args, collapse = " "), paste0(names(x$env), "=", unname(x$env)))
-  } else {
+    c(paste(x$args, collapse = " "), format(x$env))
+  } else if (is.null(names(x))) {
     as.character(x)
+  } else {
+    paste0(names(x), "=", unname(x))
   }
   redact(text, "persist")
 }
@@ -783,6 +783,27 @@ print.gptr_mcp_snippet = function(x, ...) {
     "(the token is hidden; as.character() gives the text to paste)"
   }
   msg_verbatim(c(format(x), note))
+  invisible(x)
+}
+
+#' The client snippets' text with their token redacted
+#'
+#' @param x A `gptr_mcp_config`.
+#' @param ... Passed to `format()`.
+#' @return A named character vector.
+#' @export
+#' @noRd
+format.gptr_mcp_config = function(x, ...) format(lapply(x, format), ...)
+
+#' Print the client snippets with their token redacted
+#'
+#' @param x A `gptr_mcp_config`.
+#' @param ... Passed to `print()`.
+#' @return `x`, invisibly.
+#' @export
+#' @noRd
+print.gptr_mcp_config = function(x, ...) {
+  print(unclass(x), ...)
   invisible(x)
 }
 
