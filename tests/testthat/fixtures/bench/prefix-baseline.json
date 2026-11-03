@@ -2,8 +2,8 @@
   "preset": {
     "minimal": 1317,
     "standard_core": 2502,
-    "standard_all": 2979,
-    "standard_interactive": 3122
+    "standard_all": 2997,
+    "standard_interactive": 3140
   },
   "estimate": {
     "minimal": 1713,

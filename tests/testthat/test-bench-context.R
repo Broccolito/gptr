@@ -19,8 +19,8 @@ test_that("each preset's estimated prefix is within 5% of prefix-baseline.json",
 
 test_that("the measured o200k baselines are pinned (architecture 12.1, IC-68)", {
   expect_identical(unlist(prefix_fixture()$preset),
-                   c(minimal = 1317L, standard_core = 2502L, standard_all = 2979L,
-                     standard_interactive = 3122L))
+                   c(minimal = 1317L, standard_core = 2502L, standard_all = 2997L,
+                     standard_interactive = 3140L))
 })
 
 test_that("every section is within its budget", {

@@ -185,7 +185,9 @@ arch_kernel_sdk = function() {
 # skill_discover() lists (08 section 3.2); P18's own write of a project's trust-gated .gptr/mcp.json
 # carries the trust over with P08's trust_holds() and trust_carry(), as settings_write() does
 # (IC-52). Explicit provider inventory uses the existing P08 egress and replay guards before its L1
-# HTTP request (contract 6.2 and 7.5).
+# HTTP request (contract 6.2 and 7.5). P03's child environment forwards a session login with P08's
+# provider_credential() and provider_base_url(), which resolve and bind it as a request
+# would (D-315).
 arch_contract_edges = function() {
   gptr_child = c("subagent_schedule", "subagent_limit", "worker_registry", "worker_registry_apply",
                  "worker_spec_revive", "worker_key_provider", "perm_rules_effective",
@@ -194,7 +196,8 @@ arch_contract_edges = function() {
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp",
                     "mcp", "console", "console", "console", "console", "console", "subagent",
                     "subagent", "s1", "s1", "s1", "console", "s1", "subagent", "subagent",
-                    rep("gptr", length(gptr_child)), "mcp", "mcp", rep("catalog", 4L), "console"),
+                    rep("gptr", length(gptr_child)), "mcp", "mcp", rep("catalog", 4L), "console",
+                    "auth", "auth"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
                "tool_execute_frame", "checkpoint_before", "checkpoint_after", "perm_denial_text",
                "perm_refused", "r_call_new", "model_canonical", "pcli_default_model",
@@ -202,7 +205,8 @@ arch_contract_edges = function() {
                "model_canonical", "usage_add_durable", "budget_check", "usage_row_store",
                "kernel_model_ref", "session_by_id", "model_default", "s1_charge_row",
                gptr_child, "trust_holds", "trust_carry", "egress_check", "egress_safety",
-               "replay_guard", "replay_mode", "entries_path")
+               "replay_guard", "replay_mode", "entries_path", "provider_credential",
+               "provider_base_url")
   )
 }
 
