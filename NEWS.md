@@ -62,8 +62,8 @@ gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version insta
   in Jupyter or knitr output, or in `format()` and `str()`. An explicit `mode =` on a resumed chat
   applies when the console opens, so `/mcp serve` uses it.
 * Notebooks run unattended (`jupyter nbconvert --execute`, papermill) no longer wait for an answer
-  to a gptr question; console recordings into `.Rmd` and `.qmd` replay; the notebook bound with
-  `gptr_doc()` is the one recorded.
+  to a gptr question; console recordings into `.Rmd` and `.qmd` load gptr and keep `!` lines, so
+  the documents knit; the notebook bound with `gptr_doc()` is the one recorded.
 * Lines of R output reach the model whole instead of being cut at 400 characters; assignments
   inside `local()` and reading a trust decision are no longer flagged as risky.
 * `peter$search()` keeps callable members, skills and tools ahead of help pages, and a bare plugin
