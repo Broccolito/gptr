@@ -1841,8 +1841,9 @@ catalog_grepl = function(pattern, x) {
 #'   date from the available catalog; `0` for verified local inference, `NA` when unknown),
 #'   `reasoning` (`NA` when unknown), `aliases`, `status`, `availability` (`unknown`,
 #'   `advertised`, `unlisted`, or
-#'   the latter two with ` (stale)`) and `checked_at` (UTC time of the last successful provider
-#'   listing, `NA` when none). Unlisted models remain in the catalog. Catalog prices can be
+#'   the latter two with ` (stale)`; a `claude-cli` or `codex` `default` row takes that of the
+#'   full id it runs) and `checked_at` (UTC time of the last successful provider listing, `NA`
+#'   when none). Unlisted models remain in the catalog. Catalog prices can be
 #'   stale and are not an account quote.
 #' @examples
 #' gptr_models("sonnet")
@@ -1892,9 +1893,14 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   inventory = the$catalog[["inventory"]] %||% list()
   state = lapply(unique(rows$provider), function(pid) {
     entry = inventory[[pid]]
+    p = provider_get(pid)
     entry$stale = !is.null(entry$error) || is.null(entry$checked) ||
       reactor_now() - entry$checked >= 300 ||
-      !identical(entry$route, catalog_inventory_route(provider_get(pid)))
+      !identical(entry$route, catalog_inventory_route(p))
+    # a built-in CLI's `default` row is listed as the full id the CLI gets (03 8.4)
+    if (isTRUE(p[["api"]] %in% c("cli-claude", "cli-codex"))) {
+      entry$default = pcli_default_model(p[["api"]])
+    }
     entry
   })
   names(state) = unique(rows$provider)
@@ -1902,9 +1908,11 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
     pid = rows$provider[[i]]
     entry = state[[pid]]
     if (is.null(entry$checked_at)) return("unknown")
+    id = rows$id[[i]]
+    if (identical(id, "default")) id = entry$default %||% id
     # an Ollama name without a tag means :latest, as preflight reads it
     tag = if (identical(pid, "ollama")) function(x) vapply(x, catalog_ollama_tag, "") else identity
-    label = if (tag(rows$id[[i]]) %in% tag(entry$ids)) "advertised" else "unlisted"
+    label = if (tag(id) %in% tag(entry$ids)) "advertised" else "unlisted"
     paste0(label, if (entry$stale) " (stale)")
   }, "")
   checked_at = vapply(rows$provider, function(pid) state[[pid]]$checked_at %||% NA_character_, "",

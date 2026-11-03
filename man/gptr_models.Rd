@@ -32,8 +32,9 @@ A \code{gptr_models} data frame with columns \code{ref}, \code{provider}, \code{
 date from the available catalog; \code{0} for verified local inference, \code{NA} when unknown),
 \code{reasoning} (\code{NA} when unknown), \code{aliases}, \code{status}, \code{availability} (\code{unknown},
 \code{advertised}, \code{unlisted}, or
-the latter two with \code{ (stale)}) and \code{checked_at} (UTC time of the last successful provider
-listing, \code{NA} when none). Unlisted models remain in the catalog. Catalog prices can be
+the latter two with \code{ (stale)}; a \code{claude-cli} or \code{codex} \code{default} row takes that of the
+full id it runs) and \code{checked_at} (UTC time of the last successful provider listing, \code{NA}
+when none). Unlisted models remain in the catalog. Catalog prices can be
 stale and are not an account quote.
 }
 \description{

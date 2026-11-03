@@ -137,6 +137,21 @@ test_that("the Claude catalog waits through the reactor and CLI catalogs run onl
   expect_identical(listed, 1L)
 })
 
+test_that("a CLI route's default row is advertised when the full id it runs is", {
+  local_mocked_bindings(check_running = function() FALSE, egress_check = function(...) TRUE,
+    replay_guard = function(...) TRUE, pcli_discover_models = function(provider) {
+      list(list(id = pcli_default_model(provider_get(provider)$api)))
+    })
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  for (pid in c("claude-cli", "codex")) {
+    found = gptr_models(provider = pid, refresh = TRUE)
+    runs = paste0(pid, c("/default", paste0("/", pcli_default_model(provider_get(pid)$api))))
+    expect_identical(found$availability[found$ref %in% runs], c("advertised", "advertised"))
+    expect_true(all(found$availability[!found$ref %in% runs] == "unlisted"))
+  }
+})
+
 test_that("CLI identity records each request's reports separately from the selected model", {
   withr::local_options(gptr.quiet = FALSE)
   opts = stub_opts()

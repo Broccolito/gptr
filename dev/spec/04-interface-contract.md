@@ -1408,7 +1408,8 @@ Failed discovery retains previous models. A successful empty listing removes onl
 discovery layer; reviewed, configured and registered entries remain. Sparse new ids gain no guessed
 tools, token limits or prices. Absent reasoning metadata is displayed as `NA`. `availability` is `unknown`, `advertised`, `unlisted`, or the latter two
 with ` (stale)` after expiry, failure or endpoint change; `checked_at` is the last successful listing's
-UTC time (`NA` before any). Advertisement does not establish inference capability, entitlement or
+UTC time (`NA` before any). A built-in CLI's `default` row takes the availability of the full id it
+runs (D-326). Advertisement does not establish inference capability, entitlement or
 billing access. Native Ollama evidence and preflight requirements remain unchanged.
 Conditions: `invalid_argument`, `egress`, `not_recorded`; native Ollama and global catalog refresh
 can signal `network`. Other failed provider listings are advisory and reported in the listing footer.

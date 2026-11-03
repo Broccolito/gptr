@@ -9592,8 +9592,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `unlisted` next to an `advertised` alias row. #106's sentence "Claude selection aliases come
   from `value`" (04 section 7.20) is replaced. The IC-19 declared-alias precedence of
   `model_resolve()` stays.
+- Rule: in `gptr_models()`, the `default` row of `claude-cli` and `codex` takes the availability of
+  the full id it runs (`pcli_default_model()`), since no CLI lists `default`. Formerly that row
+  read `unlisted` after a successful refresh. Amends 04 section 6.2 and `?gptr_models`.
 - Tests: test-cli-discovery.R ("Claude discovery uses only initialize and keeps full ids, never
-  selection aliases").
+  selection aliases"; "a CLI route's default row is advertised when the full id it runs is").
 
 ## D-327 - 1.0.1 lane D Provider listings in the network texts; `gptr_models()` stays level 0 (2026-11-02)
 - Rule: `?gptr_egress` ("Other network use") and `?gptr_security` (plan mode) say that a
