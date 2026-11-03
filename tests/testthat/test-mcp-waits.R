@@ -128,8 +128,7 @@ test_that("idle served tools do not reenter later callbacks or sibling tools dur
     seen$order = c(seen$order, "end")
     expect_false(isTRUE(response$result$isError))
     expect_identical(seen$inside, "start")
-    expect_identical(reactor_depth(), 0L)
-    expect_identical(reactor_get()$tool_depth, 0L)
+    expect_false(reactor_nested())
     expect_true(reactor_pump(until = function() all(c("later", "sibling") %in% seen$order),
                              timeout = 2))
     expect_identical(seen$order, c("start", "end", "later", "sibling"))
@@ -174,8 +173,7 @@ test_that("an idle served-tool guard is released after evaluation errors and int
     response = mcp_dispatch_local(mcp_test_msg("tools/call",
       list(name = "r", arguments = list(code = code))), chat)
     expect_true(isTRUE(response$result$isError))
-    expect_identical(reactor_get()$tool_depth, 0L)
-    expect_identical(reactor_depth(), 0L)
+    expect_false(reactor_nested())
   }
 })
 
@@ -253,6 +251,7 @@ test_that("a failed or piped serving handoff does not leave the console or read 
   rs$stdin = TRUE
   expect_match(paste(mcp_serve_command(rs), collapse = " "), "interactive R prompt", fixed = TRUE)
   expect_false(rs$exit)
+  expect_match(cmd_mcp("serv", ctx_new(chat)), "/mcp serve to serve from R's prompt", fixed = TRUE)
 })
 
 test_that("the serving handoff closes the reader, preserves typeahead and keeps the server", {
