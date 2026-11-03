@@ -21,6 +21,7 @@ runs:
         set -euo pipefail
         archives="$RUNNER_TEMP/apt-archives"
         mkdir -p "$archives/partial"
+        sudo chown _apt "$archives/partial"
         sudo apt-get update
         packages=(
           libcurl4-openssl-dev libssl-dev xz-utils cmake make libuv1-dev zlib1g-dev
