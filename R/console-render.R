@@ -1137,7 +1137,9 @@ console_on_agent_start = function(event, ctx) {
   NULL
 }
 
-#' before_request: announce waiting; at verbosity 3 also a request line
+#' before_request: mark the request pending; for a child set its model and phase (`working` for a
+#' worker, else `thinking`), print a changed group roster and start the live row at verbosity 2+;
+#' announce waiting; at verbosity 3 also a request line
 #' @noRd
 console_on_before_request = function(event, ctx) {
   rec = console_record(event)

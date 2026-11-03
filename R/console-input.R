@@ -636,7 +636,8 @@ console_live = function() {
 }
 
 #' The live row's state for the record `rec` of a foreground run (console_live_row()): the state
-#' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds (a
+#' word (`rec$what`; while sub-agents it shows run, a scheduled group's counts and each active
+#' child's phase, console_group_state(), else `sub-agent <label>`), the run's seconds (a
 #' direct group's since the group started, as the row passes between its children), the person's
 #' messages waiting for its session, whether a question waits (`rec$question`,
 #' console_ask_wait()), whether an r call evaluates in this process (`rec$frozen`, its call id;
@@ -678,7 +679,7 @@ console_live_state = function(rec) {
        newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))
 }
 
-#' The records of the sub-agents the console shows (console_child_shown()), by label
+#' The records of the sub-agents the console shows (console_child_shown()), by depth, then label
 #' @noRd
 console_kids = function() {
   kids = Filter(function(r) !is.null(r$child), as.list(console_state()$active))
@@ -699,11 +700,12 @@ console_queued = function(s) {
     rep("follow_up", length(console_repl_prompt()$reader$typed)))
 }
 
-#' Show the live row for the record `rec` of a foreground run while it waits for its model
-#' (`what` thinking): drawn now and once a second by a reactor task while the record renders
-#' (console_render_on()) or a sub-agent it shows runs, whose run pumps the reactor inside the
-#' parent's r call, on a dynamic console of an interactive R (not class P), but not in
-#' R.app, whose console gives everything after a carriage return the input's colour
+#' Show the live row for the record `rec` of a foreground run while it waits for its model (a root
+#' run's `what` thinking; a child's phase is set by the hooks): drawn now and once a second by a
+#' reactor task while the record renders (console_render_on()) or a sub-agent it shows runs, whose
+#' run pumps the reactor inside the parent's r call, on a dynamic console of an interactive R (not
+#' class P), but not in R.app, whose console gives everything after a carriage return the input's
+#' colour
 #' @noRd
 console_live_start = function(rec) {
   if (is.null(rec$child)) {

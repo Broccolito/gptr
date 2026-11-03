@@ -6547,8 +6547,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       `Text typed while peter works waits as R code; Ctrl-C, then s, steers.`); in RStudio ` · esc, then s, to steer · typed lines run after this answer`, in Windows' Rterm, which has no composer either, ` · ctrl-c, then s, to steer · typed lines run after this answer` (P30, D-304: it read ` · esc pause · typed lines run next`, and a person typed and pressed Enter to steer; the banner and `/help` say it too, as in R.app; steering review:
       its console keeps a line entered during the run for the next prompt, unless a question reads it, and
       hides the entered line at its next output, so the row says where it goes).
-      `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
-      while a sub-agent it shows runs. A scheduled group shows completed/total, active and pending counts
+      `<state>` is `thinking` (a request), `responding` (its text streams, any agent's, P30 follow-up),
+      `retrying` (a child's request waits to be sent again), the running tool's name (`console_tool_name()`),
+      a worker's `working`, or `sub-agent <label>` while a sub-agent it shows runs. A scheduled group shows completed/total, active and pending counts
       (`1 pending`, the members not started, only when there are some, so the row's `queued` is the person's
       messages alone, D-309) and active names with their phases; the short form keeps the counts. Membership
       changes append rosters above the single live row (eight names per active/pending list, then an explicit
