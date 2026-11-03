@@ -1255,7 +1255,7 @@ catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
   }
   pid = p[["id"]] %||% p[["name"]]
   if (native) catalog_ollama_endpoint(p, safety)
-  egress_check(pid, p, safety = safety %||% egress_safety(), context = "none")
+  egress_check(pid, p, safety = safety %||% egress_safety(), context = "listing")
   replay_guard(p, what = "model listing", mode = replay_mode(replay))
   credential = tryCatch(if (!native && !callback) provider_credential(p) else NULL,
                         error = function(e) e)

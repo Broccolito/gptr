@@ -239,6 +239,21 @@ test_that("discovery preserves consent and replay refusals before credentials or
   expect_true(nrow(gptr_models(provider = "openai")) > 0L)
 })
 
+test_that("the egress question of a listing says no prompt is sent and what consent covers", {
+  local_inventory_catalog()
+  local_gptr_options(interactive = TRUE)
+  box = new.env(parent = emptyenv())
+  local_mocked_bindings(egress_state = function(...) list(exempt = FALSE),
+    settings_get = function(...) NULL, gptr_confirm = function(question, default = FALSE) {
+      box$q = question
+      FALSE
+    }, catalog_http_request = function(...) stop("network"))
+  expect_error(gptr_models(provider = "openai", refresh = TRUE), class = "gptr_error_egress")
+  expect_match(box$q, "^Listing models asks openai for its model list; no prompt is sent\\.")
+  expect_match(box$q, "also lets gptr send your prompts to openai together with automatic context",
+               fixed = TRUE)
+})
+
 test_that("custom discover callbacks support sparse records and successful empty inventories", {
   local_inventory_catalog()
   p = provider_get("openai")

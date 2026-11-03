@@ -1173,11 +1173,15 @@ egress_can_ask = function(safety = egress_safety()) {
 
 #' The question shown before the first automatic context or System 1 input goes to a provider
 #' (gptr_confirm() appends the ` [y/N] ` hint itself); it names the effective endpoint when there
-#' is one, and the model `asker` of a sub-agent that model code starts
+#' is one, and the model `asker` of a sub-agent that model code starts. `context = "listing"`, a
+#' model listing, says that no prompt is sent and that the answer also covers prompts.
 #' @noRd
 egress_question = function(id, origin = NULL, asker = NULL, context = NULL) {
   to = if (is.null(origin)) id else paste0(id, " (", origin, ")")
-  lead = if (is.null(asker)) {
+  lead = if (identical(context, "listing")) {
+    paste0("Listing models asks ", to, " for its model list; no prompt is sent. Allowing it ",
+           "also lets gptr send your prompts to ", id)
+  } else if (is.null(asker)) {
     paste0("gptr sends your prompts to ", to)
   } else {
     paste0("The agent's code starts a sub-agent on ", asker, ", which sends its prompt to ", to)
