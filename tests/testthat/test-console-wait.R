@@ -129,7 +129,7 @@ test_that("the live row is drawn at once and stays under the rows of an answer (
   bytes = written(function() wait_delta(w, "\nx = 1\n"))
   # cleared, the rows written, then the row again below them
   expect_true(startsWith(bytes, "\r\033[K"))
-  expect_identical(term_rows(bytes), c("", "  ```r", "  x = 1", "# thinking 0s - ctrl-c stop"))
+  expect_identical(term_rows(bytes), c("", "  ```r", "  x = 1", "# responding 0s - ctrl-c stop"))
   expect_identical(the$live_row, row)
   expect_true(row$shown)
 })
