@@ -1987,6 +1987,21 @@ test_that("the live row says responding while any agent's text streams (P30 foll
   }
 })
 
+test_that("the console lists sub-agents by depth, then label (#99 review)", {
+  s = render_session()
+  for (k in list(c("u_kid_z", "z-child", 1L), c("u_kid_a", "a-grand", 2L))) {
+    rec = console_track(k[[1L]], s)
+    rec$child = list(label = k[[2L]], run = list(depth = as.integer(k[[3L]])))
+  }
+  withr::defer({
+    console_drop("u_kid_z")
+    console_drop("u_kid_a")
+  })
+  # a grandchild never owns the row's text before its parent's sibling
+  expect_identical(unname(vapply(console_kids(), function(r) r$child$label, "")),
+                   c("z-child", "a-grand"))
+})
+
 test_that("a line routed at a question sits under it; a later person's line opens a block", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
