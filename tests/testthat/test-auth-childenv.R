@@ -122,6 +122,26 @@ test_that("workers receive only their designated chat and System 1 provider keys
                class = "gptr_error_invalid_argument")
 })
 
+test_that("a session login reaches workers as its provider's key, bound to the endpoint", {
+  local_user_dirs()
+  withr::local_envvar(SESSION_CHILD_KEY = NA, SESSION_CHILD_ALT = NA)
+  off = gptr_register(gptr_provider("session-child", api = "openai-completions",
+                                    base_url = "https://session.test/v1",
+                                    auth = c("SESSION_CHILD_KEY", "SESSION_CHILD_ALT")))
+  withr::defer(off())
+  key = paste0("session-child-canary-", strrep("s", 20))
+  local_scripted_ui(list(key, key))
+  gptr_login("session-child", method = "key")
+  # a remembered login stays in auth.json, which the worker reads itself
+  expect_false("SESSION_CHILD_KEY" %in% names(child_env("worker", provider = "session-child")))
+  gptr_login("session-child", method = "key", scope = "session")
+  env = child_env("worker", provider = "session-child")
+  expect_identical(env[["SESSION_CHILD_KEY"]], key)
+  expect_false("SESSION_CHILD_ALT" %in% names(env))
+  local_mocked_bindings(provider_base_url = function(provider) "https://moved.test/v1")
+  expect_false("SESSION_CHILD_KEY" %in% names(child_env("worker", provider = "session-child")))
+})
+
 test_that("designated provider keys reject case-insensitive ambiguity without exposing values", {
   local_vault()
   same = paste0("FAKE-shared-", "worker-key-12345")

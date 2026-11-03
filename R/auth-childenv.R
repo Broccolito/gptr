@@ -155,7 +155,9 @@ child_env_put = function(out, values) {
 }
 
 #' The key a provider's worker needs, as a named character vector (empty when none is found);
-#' a `bedrock-converse` key pair travels with its key id and session token (IC-80)
+#' a `bedrock-converse` key pair travels with its key id and session token (IC-80). A session
+#' login, which lives only in this process, travels under the provider's first key variable; a
+#' remembered one the worker reads from auth.json itself
 #' @noRd
 child_env_provider_key = function(provider) {
   spec = tryCatch(registry_get("provider", provider), error = function(e) NULL)
@@ -183,11 +185,16 @@ child_env_provider_key = function(provider) {
   pair = if (identical(spec[["api"]], "bedrock-converse")) {
     c("AWS_ACCESS_KEY_ID", "AWS_SESSION_TOKEN")
   }
-  for (nm in as.character(spec[["auth"]])) {
+  vars = as.character(spec[["auth"]])
+  for (nm in vars) {
     key = one(nm)
     if (length(key)) return(c(key, unlist(lapply(pair, one))))
   }
-  character()
+  if (!identical(auth_store_scope(provider), "session")) return(character())
+  h = tryCatch(provider_credential(spec), gptr_error_no_key = function(e) NULL)
+  if (!inherits(h, "gptr_secret")) return(character())
+  key = stats::setNames(secret_value(h, provider_base_url(spec)), vars[[1L]])
+  c(key, unlist(lapply(pair, one)))
 }
 
 #' The complete environment of a child process for one profile (processx form, no NA)
