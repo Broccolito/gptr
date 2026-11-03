@@ -1658,7 +1658,9 @@ doc_bind_format = function(full, format) {
 #' status: `fresh` (the owning call's prompt matches), `stale` (the prompt changed, or no call
 #' owns the block), `user-edited` (the body no longer matches its `sha`) or `undone` (made inert
 #' by a rewind). Interpolated values are only known when the call runs, so they are not checked
-#' here. It reads the document; the only write is that blocks an `Rscript` run queued before it
+#' here, nor are the answer caches: a fresh System 1 block replays from its cached answers, which
+#' outside a `.gptr/` workspace last only for the R session that made them ([gptr_init()] keeps
+#' them). It reads the document; the only write is that blocks an `Rscript` run queued before it
 #' was killed are applied first (never over your edits).
 #'
 #' @param file Path of the document.
