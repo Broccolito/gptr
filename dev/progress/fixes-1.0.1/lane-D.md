@@ -30,6 +30,25 @@ Each fix had a test written first and seen failing, except the refactors and doc
 | `3c8cd61b` | `?gptr_egress` and `?gptr_security` describe provider listings. `gptr_models()` stays level 0, with a new reason (D-327, amends D-300). | review: network statements and D-300 rationale are false (low) | none (docs) |
 | `1c0c12aa` | The `gptr_runtime` rule moves to 04 section 7.6, the kind joins section 4.1.1, and the `run_model_ready()` comment names the inventory (D-328). | review: contract placement (low, parts a-c) | none (docs) |
 
+## Follow-up after verification
+
+The verifier of the first pass (head `c1975ac4`) reported five problems. Four are fixed; the fifth
+is a note for the coordinator.
+
+| Commit | Fix | Problem | Tests |
+| --- | --- | --- | --- |
+| `9a70c441` | The new `?gptr_egress` sentence is wrapped at 100 columns (`gptr_egress.Rd` regenerated). The first pass wrongly claimed a clean lint. | changed file fails `line_length_linter` (medium) | `isolated-check.R lint` over every changed R and test file now exits 0 |
+| `3c358baf` | `pcli_claude_models()` takes the id with `Find()`, so a selection with neither a string `value` nor `resolvedModel` is skipped rather than failing the whole listing. | `startsWith(NULL)` error loses Claude discovery (low) | test-cli-discovery.R: "Claude discovery uses only initialize ..." gains a record with no id |
+| `e2a078bd` | `?gptr_provider` says a `discover()` callback runs only on `gptr_models(provider = , refresh = TRUE)`, after consent. | stale "before first use" text (low) | none (docs; Rd regenerated) |
+| `a4d0c71a` | The `default` row of `claude-cli` and `codex` takes the availability of the full id it runs (`pcli_default_model()`), recorded under D-326; 04 section 6.2 and `?gptr_models` amended. `codex/default` was also `unlisted` after a refresh before this. | `claude-cli/default` reads `unlisted` after refresh (low) | test-cli-discovery.R: "a CLI route's default row is advertised when the full id it runs is" |
+
+Note for the coordinator (verifier problem 5): D-325 changes documented extension behaviour. A
+user's `gptr_provider(discover = )` callback, like the `claude` and `codex` catalogs, no longer runs
+before first use; it runs only on `gptr_models(provider = , refresh = TRUE)`. This needs a NEWS
+1.0.1 bullet, together with D-326 (Claude discovery keeps full ids; a CLI `default` row is listed as
+the id it runs) and D-327 (listings in `?gptr_egress` and `?gptr_security`). This lane does not
+edit NEWS.md.
+
 ## Validation
 
 - Focused filters, each green after its fix: `^cli-discovery$`, `^cli-codex$`, `^provider-model-discovery$`,
@@ -40,8 +59,11 @@ Each fix had a test written first and seen failing, except the refactors and doc
   line) and test-session-budget.R:423 (a `gptr.checkpoint` entry is last). The five `WARN`s are
   `gptr_rewind()` "file coverage: not restored" warnings in test-cli-claude.R and test-cli-codex.R.
   All of these come from the #98 checkpoint scan under host load (lane A), not this lane.
-- Every changed R and test file lints clean. `isolated-check.R document` regenerated
-  `gptr_models.Rd`, `gptr_egress.Rd` and `gptr_security.Rd`, with no stray diff.
+  After the follow-up, the same filter gives FAIL 2 | WARN 5 | SKIP 5 | PASS 15464, with the same
+  two failures and warnings.
+- Lint: the first pass missed one long line in R/gptr-config.R (fixed in `9a70c441`). Every
+  changed R and test file now lints clean. `isolated-check.R document` regenerated
+  `gptr_models.Rd`, `gptr_egress.Rd`, `gptr_security.Rd` and `gptr_provider.Rd`, with no stray diff.
 - `precompute.R language-models`: the changed paragraph. The knit also refreshed one session
   footer, to 3.5k tokens and a new id. The run reports one problem, "wrote outside the session temp
   directory", which the base knit reports too.
