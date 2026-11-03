@@ -293,8 +293,8 @@ ckpt_files_observe = function(tr, s) {
   tr$complete = isTRUE(s$complete) && fits
   tr$last_coverage = s$coverage %||% tr$complete
   tr$walk_secs = s$seconds
-  if (!isTRUE(s$complete)) tr$per_turn = TRUE
   if (!isTRUE(s$complete)) {
+    tr$per_turn = TRUE
     ckpt_notice(paste0("File undo covers part of ", tr$root, ": the automatic scan stopped early (",
                        s$reason, "), so changes to files it did not reach cannot be undone. ",
                        "Files Peter's tools name are backed up before they change."),
