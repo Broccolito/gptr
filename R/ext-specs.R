@@ -1091,11 +1091,17 @@ gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, c
 #' @return A spec of class `c("gptr_adapter", "gptr_spec")`.
 #' @section Callback results:
 #' HTTP `build()` returns a named list with an absolute HTTP(S) `url`, optional `method`
-#' (POST with a body, otherwise GET), named `headers` (strings or origin-bound secret handles),
-#' `body` (UTF-8 text or raw bytes) and `stream` (`"sse"`, `"ndjson"`, `"json"` or `"raw"`;
-#' the transport supplies the default). For `process_jsonl`, it returns `start`, a process
-#' specification with `command` (or `NULL` to reuse the session child), optional `send`, an
-#' unnamed list of objects to write as JSON lines (default empty), and optional `close_stdin`.
+#' (POST with a body, otherwise GET), named `headers` (each a string, an origin-bound secret
+#' handle such as `opts$credential`, or an unnamed list of strings and handles joined in order,
+#' for example `list("Bearer ", opts$credential)`), `body` (UTF-8 text or raw bytes), `stream`
+#' (`"sse"`, `"ndjson"`, `"json"` or `"raw"`; the transport supplies the default) and optional
+#' `sign`, `function(method, url, body, value)`, called once per attempt with the raw body, where
+#' `value(handle)` reads a handle bound to the origin of the URL; it returns a named list of extra
+#' headers, for request signing. Never paste a handle into a string.
+#'
+#' For `process_jsonl`, `build()` returns `start`, a process specification with `command` (or
+#' `NULL` to reuse the session child), optional `send`, an unnamed list of objects to write as
+#' JSON lines (default empty), and optional `close_stdin`.
 #'
 #' `parse()` returns a list of functions: `push(unit)` consumes a decoded unit, `finish()`
 #' ends input and returns the final assistant message, `fail(cnd)` handles a transport failure,
@@ -1339,11 +1345,15 @@ gptr_context_block = function(name, provide, placement = c("turn", "first", "bot
 #'
 #' @param name Backend name, usable as `backend = <name>`.
 #' @param start `function(spec, ctx)`, receiving the prepared child specification and parent
-#'   context, and returning the handle described above.
+#'   context, and returning the handle described above. [gptr_check()] calls it with a minimal
+#'   probe (`name`, `prompt`, `model` and `tools`) and a scratch context, so it should tolerate a
+#'   specification without the other prepared fields.
 #' @param poll `function(handle)` or `NULL`, retained in the spec. The built-in team scheduler
 #'   observes `handle$run` on the reactor and does not call this callback.
-#' @param cancel `function(handle)`, retained in the spec. The team scheduler cancels through
-#'   the handle's zero-argument `cancel` function.
+#' @param cancel `function(handle)` that stops the child and every process it started.
+#'   [gptr_check()] calls it on its probe handle and requires that no child process remains. The
+#'   team scheduler cancels through the handle's zero-argument `cancel` function instead, so a
+#'   backend normally sets `cancel = function(handle) handle$cancel()`.
 #' @param capabilities Named list: for a custom backend, `parallel = "cpu"` selects the worker
 #'   concurrency pool (other values select inline); `live_objects` (logical) and `ask`
 #'   (`"queue"`, `"forward"` or `"none"`) describe the backend rather than enforcing scheduler
@@ -1351,7 +1361,7 @@ gptr_context_block = function(name, provide, placement = c("turn", "first", "bot
 #' @return A spec of class `c("gptr_backend", "gptr_spec")`.
 #' @examples
 #' # This constructs a spec; a working start() must return the handle described above.
-#' gptr_backend("echo", start = function(spec, ctx) NULL, cancel = function(handle) NULL)
+#' gptr_backend("echo", start = function(spec, ctx) NULL, cancel = function(handle) handle$cancel())
 #' @export
 gptr_backend = function(name, start, poll = NULL, cancel, capabilities = list()) {
   if (missing(start)) spec_missing("backend", name, "start")

@@ -53,7 +53,9 @@ you trust the project). It never edits another harness's files. Give exactly one
 \code{command} (a server started as a local process speaking stdio) and \code{url} (a Streamable HTTP
 server). Secret values in \code{env} and \code{headers} must be \verb{$\{VAR\}} placeholders: they are
 expanded from the environment when gptr connects and never stored. Adding a server does not
-connect to it; listing its tools with \code{\link[=gptr_mcp]{gptr_mcp()}}, refreshing it or calling a tool may connect.
+connect to it; listing its tools with \code{\link[=gptr_mcp]{gptr_mcp()}}, refreshing it or calling a tool may connect,
+and a server with \code{"direct"} exposure (also through the setting \code{mcp.exposure}) is connected
+when a session starts unless its tool list is cached.
 }
 \examples{
 proj = tempfile("proj")

@@ -913,29 +913,39 @@ ns_gptr_rd = function() {
   tryCatch(tools::Rd_db("gptr", lib.loc = dirname(path)), error = function(e) list())
 }
 
-#' Text of selected top-level Rd fields, without evaluating examples or code
+#' Top-level Rd fields with a tag such as `"alias"` or `"title"`, without evaluating anything
 #' @noRd
-ns_rd_text = function(rd, tags) {
+ns_rd_fields = function(rd, tags) {
   fields = vapply(rd, function(x) attr(x, "Rd_tag") %||% "", "")
-  as_utf8(paste(unlist(rd[fields %in% paste0("\\", tags)], use.names = FALSE), collapse = " "))
+  rd[fields %in% paste0("\\", tags)]
 }
 
-#' Public exports (pkgload may export every internal, so read its NAMESPACE instead)
+#' Text of selected top-level Rd fields
+#' @noRd
+ns_rd_text = function(rd, tags) {
+  as_utf8(paste(unlist(ns_rd_fields(rd, tags), use.names = FALSE), collapse = " "))
+}
+
+#' The aliases of an Rd page
+#' @noRd
+ns_rd_aliases = function(rd) {
+  vapply(ns_rd_fields(rd, "alias"), function(x) paste(unlist(x), collapse = ""), "")
+}
+
+#' Public exports, read from NAMESPACE (pkgload may export every internal)
 #' @noRd
 ns_gptr_exports = function() {
-  ns = topenv(environment(ns_gptr_exports))
-  path = getNamespaceInfo(ns, "path")
-  if (dir.exists(file.path(path, "man"))) {
-    return(parseNamespaceFile(basename(path), dirname(path))$exports)
-  }
-  getNamespaceExports(ns)
+  path = getNamespaceInfo(topenv(environment(ns_gptr_exports)), "path")
+  parseNamespaceFile(basename(path), dirname(path))$exports
 }
 
 #' A package function for text inspection only; never return it from a member
 #' @noRd
 ns_gptr_fun = function(name) {
   ns = topenv(environment(ns_gptr_fun))
-  if (!exists(name, envir = ns, inherits = FALSE) || bindingIsActive(name, ns)) return(NULL)
+  if (!nzchar(name) || !exists(name, envir = ns, inherits = FALSE) || bindingIsActive(name, ns)) {
+    return(NULL)
+  }
   get0(name, envir = ns, mode = "function", inherits = FALSE)
 }
 
@@ -943,12 +953,9 @@ ns_gptr_fun = function(name) {
 #' @noRd
 ns_gptr_docs = function(ctx = NULL) {
   pages = ns_gptr_rd()
-  aliases = lapply(pages, function(rd) {
-    fields = vapply(rd, function(x) attr(x, "Rd_tag") %||% "", "")
-    vapply(rd[fields == "\\alias"], function(x) paste(unlist(x), collapse = ""), "")
-  })
+  aliases = lapply(pages, ns_rd_aliases)
   public = ns_gptr_exports()
-  names = sort(unique(c(public, unlist(aliases, use.names = FALSE))))
+  names = sort(unique(c(public, unlist(aliases, use.names = FALSE))), method = "radix")
   rows = lapply(names, function(name) {
     at = which(vapply(aliases, function(x) name %in% x, NA))
     rd = if (length(at)) pages[[at[1L]]] else list()
@@ -974,9 +981,12 @@ ns_gptr_index = function() {
 
 # ---- member functions (contract section 9.4) -----------------------------------------------------
 
-#' `peter$search(words, limit = 8L)`: BM25 over members, tools, sources, skills and MCP tools
+#' `peter$search(words, limit = 8L)`: BM25 over gptr APIs and topics, members, tools, sources,
+#' skills and MCP tools
 #' Documents are indexed by row, so sources sharing an id keep their kind and signature; a tool's
-#' signature is its catalog line (a lazy plugin's declared one), any other document's its id.
+#' signature is its catalog line (a lazy plugin's declared one), a gptr function's its id plus
+#' formals, any other document's its id. The `api` documents are ranked apart and only fill the rows
+#' the others leave free (D-330).
 #' @noRd
 member_search = function(words, limit = 8L) {
   check_string(words, "words")
@@ -987,7 +997,9 @@ member_search = function(words, limit = 8L) {
   docs = rbind(docs, ns_catalog_docs(s))
   rows = data.frame(id = as.character(seq_len(nrow(docs))), text = docs$text,
                     stringsAsFactors = FALSE)
-  hits = bm25_search(bm25_index(rows), words, limit)
+  api = docs$kind %in% "api"
+  hits = bm25_search(bm25_index(rows[!api, ]), words, limit)
+  hits = rbind(hits, bm25_search(bm25_index(rows[api, ]), words, limit - nrow(hits)))
   m = as.integer(hits$id)
   ids = docs$id[m]
   kinds = docs$kind[m]
@@ -1036,14 +1048,13 @@ ns_tool_help = function(spec) {
     if (length(args)) c("", "Arguments:", args))
 }
 
-#' R help page as plain text: utils::help(), tools::Rd_db(), tools::Rd2txt() (no `:::`; report 20
-#' section 5.2)
+#' R help page as plain text: gptr's own Rd first, then utils::help(), tools::Rd_db() and
+#' tools::Rd2txt() (no `:::`; report 20 section 5.2)
 #' @noRd
 ns_r_help = function(topic, package = NULL) {
   if (is.null(package) || identical(package, "gptr")) {
     for (rd in ns_gptr_rd()) {
-      aliases = strsplit(ns_rd_text(rd, "alias"), " ", fixed = TRUE)[[1L]]
-      if (topic %in% aliases) return(ns_rd_help(rd, "gptr", topic))
+      if (topic %in% ns_rd_aliases(rd)) return(ns_rd_help(rd, "gptr", topic))
     }
   }
   hf = tryCatch(if (is.null(package)) {
@@ -1087,8 +1098,9 @@ ns_plugin_spec = function(key, sid = NULL) {
   spec
 }
 
-#' `peter$help(name, package = NULL, budget = 800L, source = FALSE)`: member schema or R help
-#' (`"<ns>/<name>"`) or an MCP tool (`"<server>/<tool>"`) that resolves (IC-37), else R help
+#' `peter$help(name, package = NULL, budget = 800L, source = FALSE)`: the schema of a member, a
+#' plugin function (`"<ns>/<name>"`) or an MCP tool (`"<server>/<tool>"`) that resolves (IC-37);
+#' `"gptr"` gives the package index and `source = TRUE` a gptr function's text; else R help
 #' @noRd
 member_help = function(name, package = NULL, budget = 800L, source = FALSE) {
   check_string(name, "name")

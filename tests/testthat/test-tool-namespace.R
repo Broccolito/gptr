@@ -729,9 +729,22 @@ test_that("skills and MCP tools are searched from their catalog texts", {
   ))
   local_bootstrap_service("skill.catalog", function(session, budget) stop("no skills"))
   local_bootstrap_service("mcp.catalog", function(session, budget) NULL)
-  expect_false(any(member_search("bslib cards pull requests")$kind %in% c("skill", "mcp")))
+  expect_true(all(member_search("bslib cards pull requests")$kind == "api"))
   local_bootstrap_service("skill.catalog", function(session, budget) character())
   expect_identical(nrow(member_search("bslib cards")), 0L)
+})
+
+test_that("peter$search() lists api documents only after the members, tools and skills it found", {
+  skip_on_cran()
+  for (q in c("read file", "run code", "describe object", "add mcp server")) {
+    hits = member_search(q)
+    expect_false(is.unsorted(hits$kind == "api"), info = q)
+  }
+  expect_true(all(c("read", "write", "edit", "grep", "find") %in% member_search("read file")$name))
+  expect_true(all(c("sh", "sql", "app", "script") %in% member_search("run code")$name))
+  expect_identical(member_search("describe object")$name[1L], "describe")
+  expect_true("gptr::gptr_mcp_add" %in% member_search("add mcp server")$name)
+  expect_true("gptr::gptr_mcp_remove" %in% member_search("gptr_mcp_remove")$name)
 })
 
 test_that("peter$help() shows only members that resolve, a primitive's arguments, and no error", {
@@ -776,8 +789,7 @@ test_that("peter$search() indexes text that is not valid UTF-8 instead of failin
                   "[skill:shiny-bslib/SKILL.md]"),
             "</skills>"), collapse = "\n")
   })
-  shiny = member_search("shiny apps")
-  expect_identical(shiny$name[shiny$kind == "skill"][1L], "shiny-bslib")
+  expect_identical(member_search("shiny apps")$name[1L], "shiny-bslib")
   cv = member_search("cv")
   expect_identical(cv$kind[1L], "skill")
   expect_true(all(validUTF8(c(cv$name[1L], cv$signature[1L]))))

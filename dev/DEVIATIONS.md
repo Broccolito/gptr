@@ -10093,3 +10093,101 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   ("script-as-history").
 - Tests: test-doc-knitr.R "a calling chunk that uses the block's objects after the call is told
   so, once" (also with `error = FALSE`). Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-330 - Lane E `peter$search()` ranks api documents after the members, tools and skills (2026-11-02)
+- Rule (review #100; regression from 1.0.0): the roughly 106 `api` documents (`gptr::name`, one per
+  export and Rd alias) share generic words such as file, code and session, and in one BM25 pool they
+  pushed callable members, skills and deferred tools out of the default 8 rows ("read file" lost
+  write, edit, grep and find; "run code" lost sh, sql and script). `member_search()` now indexes the
+  `api` documents apart from every other kind: the other kinds rank as they did in 1.0.0, and `api`
+  rows fill only the slots they leave free. A query only the API answers (`login credentials`)
+  still returns api rows, and `peter$help("gptr")` lists the whole API whatever a search showed.
+- Rule (review #100): the api documents are ordered by bytes (`sort(method = "radix")`), since
+  equal scores keep document order and every S3 alias of a page has the same text, so the rows
+  returned differed between the C and a UTF-8 collation; `peter$help("gptr::", source = TRUE)`
+  answers "No function found" instead of a base error; `ns_gptr_exports()` reads NAMESPACE for an
+  installed package and a source tree alike, and one `ns_rd_aliases()` serves search and help.
+- Contract-visible: 04 section 9.4 (`search`).
+- Tests: test-tool-namespace.R "peter$search() lists api documents only after the members, tools and
+  skills it found"; the 1.0.0 assertion that a skill ranks first for "shiny apps" is restored.
+
+## D-331 - Lane E Plugin resolution: a bare name falls through, an installed Claude plugin always resolves (2026-11-02)
+- Rule (review #101; regression from 1.0.0): only a name that contains `/` or `\`, or starts with `.`
+  or `~`, is a path that must be a plugin directory (P17, contract 7.17), and "This path is not a
+  plugin directory" ends resolution for such names only. A bare name that happens to match a
+  folder of the working directory (`docs/`, or a package author's source folder) still falls
+  through to `.gptr/plugins/<name>/`, installed packages and installed Claude Code plugins, as in
+  1.0.0; 1.0.1 had made the same-named folder end resolution. The marketplace explanation is chosen
+  last: a path or a bare name whose folder is a marketplace root gets it when nothing else resolves
+  the name, so `plugins = "my-marketplace-clone"` run from its parent still learns why.
+- Rule (review #101; D-088): the marketplace-only exclusion of `plugin_from_dir()` applies only when
+  no `kind` is given, so "a given `kind` always resolves" holds again: an installed Claude Code
+  plugin whose install root holds only `.claude-plugin/marketplace.json` (a `strict: false` entry
+  with `source: "./"`) is listed and resolves by name as in 1.0.0, and `plugin_enable()` reports an
+  empty bundle if nothing is usable. A path to a marketplace root is still refused. The marketplace
+  message ends "and name that path in `plugins`", which fits both `peter(plugins =)` and the
+  setting.
+- Contract-visible: 04 section 11.12, amended in place.
+- Tests: test-ext-plugins.R "a bare plugin name is not blocked by a same-named folder in the working
+  directory" (also with a same-named marketplace clone), "an installed Claude plugin whose install
+  root is a marketplace resolves by its name", and the marketplace-root test, which now also covers
+  `.mcp.json` and `skills/`.
+
+## D-332 - Lane E A configured plugin entry that fails is recorded once, with its path (2026-11-02)
+- Rule (review #101; live finding): `gptr_plugins()` and the session-start sync (`plugins_sync()`,
+  run by the skills, prompts and agents `session_start` hooks, so three times at every top-level
+  start) wrote the same failure in two forms: the listing once, with the entry named, the sync
+  three times and nameless, so a marketplace root in the `plugins` setting added three or four rows
+  per start and the log (1,000 rows) lost older diagnostics within about 300 starts. Both call one
+  function, `plugin_entry_failed()`, which records `<entry>: <message>` unless that row is already
+  in `gptr_registry(diagnostics = TRUE)`. No console warning is added: an unresolved configured entry
+  stays a diagnostic, as contract 10.8 has it, and `gptr_plugins()` shows the footer (a `/plugins`
+  command was never specified, `03` section 6.17).
+- Rule (review #101): `gptr_plugins()` no longer counts a configured extension entry (an `.R` file or
+  a named extension) as a skipped plugin, since activation enables it through `extension_resolve()`
+  before `plugin_resolve()`.
+- Contract-visible: 04 section 11.12 (unchanged).
+- Tests: test-ext-plugins.R "a configured marketplace path is recorded once, with its path, at every
+  start".
+
+## D-333 - Lane E The control exports state the permission rule once, in one wording (2026-11-02)
+- Rule (review #102): `gptr_steer()`, `gptr_cancel()`, `gptr_on()`, `gptr_tailor()`, `gptr_resume()`,
+  `gptr_config()` and `gptr_permissions()` said, in three wordings, that a call from model code
+  "requires human approval" (for steer, cancel and on "targeting another session"). That is the
+  second line (`session_control_check()`), which spares the run's own session. The rule a user meets
+  is the first: every statically flagged `control` call asks in every mode but `yolo`, whichever
+  session it targets, and `yolo` runs it without asking (`?gptr_security`). All seven pages now say
+  "From model code during a run, `<fn>()` needs an allowing permission decision (a person's, in every
+  mode but `yolo`; see gptr_security); otherwise it signals `gptr_error_permission`." The other
+  control exports (`gptr_trust()`, `gptr_fork()`, `gptr_init()`, `gptr_doc()`, `gptr_env()`,
+  `gptr_login()`, `gptr_logout()`, `gptr_mcp_add()`, `gptr_mcp_remove()`) stay as they are: the
+  sentence is on the pages that named the rule, and `?gptr_security` states it for all of them.
+- Rule (review #102): `?gptr_mcp_add` says that a server with `"direct"` exposure (also through the
+  setting `mcp.exposure`) is connected when a session starts unless its tool list is cached;
+  `?gptr_backend` says that `gptr_check()` probes `start()` with a minimal specification and calls
+  `cancel(handle)` on its probe handle, while the scheduler uses `handle$cancel()`; `?gptr_adapter`
+  lists `sign` and the header-piece form `list("Bearer ", opts$credential)`; `?gptr_env` again says
+  that it never prints, logs or returns a value.
+- Contract-visible: none (no code change).
+- Tests: none (text only); `isolated-check.R document` shows no further change.
+
+## D-334 - Lane E The r tool description points gptr's own setup at discovery; token baselines re-measured (2026-11-02)
+- Rule (live finding on the Codex route): asked to "set up an MCP server for this project", a model
+  edited `.codex/config.toml`, because nothing it saw said that MCP servers, skills and settings for
+  the project are gptr's (`gptr_mcp_add()`, `gptr_init()`, `.gptr/mcp.json`); `peter$search("mcp")`
+  was run only after the user corrected it. The sentence the `r` description carries since #100,
+  "For harness APIs, ...", now reads "To set up MCP servers, skills or settings in gptr itself, or
+  find its APIs, use `peter$search("words")` and `peter$help("gptr")` inside r; ...". It is one rule
+  for every preset and route, costs 13 o200k tokens more (55 in all, 42 of them since #100), and
+  names no function, so the minimal preset still teaches discovery without loading the API.
+- Rule (review #100, baselines): the measured totals move to 1,317 / 2,502 / 2,979 / 3,122 (minimal,
+  standard core, all, interactive) and the golden transcripts' prefixes by 13 (the others by up to
+  21 more, the drift of earlier merges); the `estimate` block, which had drifted to 3.5% above, is
+  re-measured at 1,713 / 2,675 / 3,177 / 3,385, so the 2% and 5% gates bind again. Architecture 7.1,
+  7.2 and 12.1 and contract 9.2 and the IC-68 fixture row state the new figures (each was 42 below
+  the measurement). A later change to a prompt text re-measures with
+  `Rscript --vanilla dev/bench/tokens/run.R --update` and records the figures here or in a D-n.
+- Contract-visible: 03 sections 7.1, 7.2 and 12.1; 04 sections 9.2 and the IC-68 fixture row.
+- Tests: test-tool-discovery.R "minimal tool declarations teach discovery without loading the API
+  documentation"; test-bench-context.R "the measured o200k baselines are pinned" and the 5% estimate
+  test; `dev/bench/tokens/run.R --check`.

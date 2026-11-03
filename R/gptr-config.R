@@ -1407,7 +1407,8 @@ settings_model_warn = function(patch, scope) {
 #' accepted only at user scope. `mode = yolo` and turning off local-only Ollama inference
 #' (`providers = list(ollama = list(local_only = FALSE))`) are accepted only at user or session
 #' scope; a project can only keep local-only inference on. A change called from model code
-#' during a run requires your approval; otherwise it signals `gptr_error_permission`.
+#' during a run needs an allowing permission decision (a person's, in every mode but `yolo`; see
+#' [gptr_security]); otherwise it signals `gptr_error_permission`.
 #'
 #' The `"session"` scope means this R process, not one conversation. User settings live at
 #' `tools::R_user_dir("gptr", "config")/settings.json`; project settings live in `.gptr/`.
