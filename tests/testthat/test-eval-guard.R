@@ -247,6 +247,12 @@ test_that("eval_assign_targets finds assignments, replacements, assign(), := and
                c("dt", "dt2", "w"))
   expect_equal(at("f = function() { inner = 1; outer <<- 2 }"), c("f", "outer"))
   expect_equal(at("for (i in 1:3) total = i"), c("i", "total"))
+  # local()'s code binds plain names and for variables in its own environment (D-346)
+  expect_equal(at("local({ x = 1; for (i in 1:3) NULL })"), character())
+  expect_equal(at("local({ x$a = 1; y <<- 2; assign('z', 3); dt[, a := 1] })"),
+               c("dt", "x", "y", "z"))
+  expect_equal(at("local(x <- 1, envir = e)"), "x")
+  expect_equal(guard("local({ q = 1; print(q) })")$blocked, character())
 })
 
 test_that("gptr_shim rewrites peter calls only when peter is not visible", {

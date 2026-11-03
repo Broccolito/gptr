@@ -1780,6 +1780,34 @@ test_that("a name assign(), list2env() or eval() binds in local() is one outside
   }
 })
 
+test_that("a plain assignment in local()'s code binds in local()'s own environment (D-346)", {
+  root = local_project()
+  e = new.env(parent = globalenv())
+  e$x = data.frame(a = 1:3)
+  e$cfg = new.env()
+  for (code in c("local({ x = 5 })", "local({ x = nrow(x) * 2; x })",
+                 paste("base::local(if (TRUE) x", la, "1)"), "local(for (x in 1:2) NULL)",
+                 "with(x, local({ x = 5 }))")) {
+    r = gptr_risk(code, envir = e, root = root)
+    expect_false("object_write" %in% r$flagged$category, label = code)
+    expect_lte(r$level, 1L)
+    expect_false("x" %in% r$assigned, label = code)
+  }
+  expect_false("x" %in% code_targets("local({ x = 5 })")$assign)
+  # what reaches the caller's objects still does: <<-, assign(), a second argument, eval() with
+  # an environment, a replacement (an environment changes by reference), a local() the code or
+  # the session binds
+  for (code in c("local({ x <<- 5 })", "local({ assign('x', 5, envir = e) })",
+                 "local({ x = 5 }, envir = e)", "local({ eval(quote(x <- 5), e) })",
+                 "local({ cfg$a = 1 })", "local = function(code) code; local({ x = 5 })")) {
+    expect_match(gptr_risk(code, envir = e, root = root)$flagged$call,
+                 "(overwrites|modifies) `(x|cfg)`", all = FALSE, label = code)
+  }
+  e$local = function(code) code
+  expect_match(gptr_risk("local({ x = 5 })", envir = e, root = root)$flagged$call,
+               "overwrites `x`", fixed = TRUE, all = FALSE)
+})
+
 test_that("with_dir() and in_dir() leave R where it was (D-293)", {
   root = local_project()
   lv = function(code) gptr_risk(code, root = root)$level

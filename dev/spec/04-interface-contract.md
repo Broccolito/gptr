@@ -1985,9 +1985,10 @@ gptr_risk(code, envir = NULL, root = NULL)
 
 The advisory static classifier (not a security boundary). `code`: chr (R code) or a call/expression; `envir`:
 optional environment the code would run in (enables overwrite-size detection of bound names by `env_snapshot()`'s
-size rule, D-247: a plain assignment evaluated in `envir` is looked up there only; a `<<-`, `assign()` or replacement
-target, or one inside `local()`, `with()` or `within()`, also in the enclosing environments up to the global one,
-D-213; read-only lookups, never forcing promises); `root`: project root (default `project_root()`). Never evaluates
+size rule, D-247: a plain assignment evaluated in `envir` is looked up there only, and one in the code of a
+one-argument `local()` not at all (D-346); a `<<-`, `assign()` or replacement target, or one inside
+`local(envir =)`, `with()` or `within()`, also in the enclosing environments up to the global one, D-213; read-only
+lookups, never forcing promises); `root`: project root (default `project_root()`). Never evaluates
 `code`. Returns a `gptr_risk` (§5.11). Commands passed to `peter$sh()` are classified with the command table,
 `peter$sql()`/`peter$py()` with keyword classifiers (P11 registers them for P22). Copy-safety: [R4].
 

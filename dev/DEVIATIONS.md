@@ -4641,8 +4641,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule: `gptr_risk(envir =)` reports "overwrites `x`" (level 2, 3 above `gptr.protect_size`) for a
   plain `=`/`<-` or a `for` variable evaluated in `envir` only when `x` is bound in `envir` itself,
   where R creates the binding; `<<-`, `assign()`, replacement calls (an environment changes by
-  reference) and an assignment inside a call that may evaluate it elsewhere (`local()`, `with()`,
-  `within()`, `evalq()` and the other unknown-effect calls of IC-31) still look up the enclosing
+  reference) and an assignment inside a call that may evaluate it elsewhere (`local(envir =)`,
+  `with()`, `within()`, `evalq()` and the other unknown-effect calls of IC-31; amended by D-346 for
+  one-argument `local()`) still look up the enclosing
   environments to the global one. A sub-agent overlay's `x = ...` over a caller's `x` is level 1
   (new object), as is one in plan mode's scratch overlay over the home (it runs there and is
   discarded).
@@ -9586,3 +9587,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   "clean_terminal() drops ANSI and OSC sequences, collapses progress, keeps long lines";
   test-eval-format.R "a long line within the budget reaches the model whole". Evidence:
   progress/fixes-1.0.1/lane-I.md.
+
+## D-346 - Fixes 1.0.1 lane I local()'s code binds plain names in its own environment (2026-11-02)
+- Rule (amends D-213 and 04 `gptr_risk()`): in the code of a one-argument `local()` that is base R's
+  (not bound by the code or in the session), a plain `=`/`<-` of a name and a `for` variable bind in
+  local()'s own environment, as R does. `gptr_risk()` no longer reports them as overwrites of the
+  caller's object or as `assigned`, `code_targets()` and the checkpointer no longer predict them,
+  and `eval_assign_targets()` leaves them out of the evaluation's `assigned`, so the result no
+  longer says `~ x modified` for an object the code only read. Formerly `local({ x = 5 })` with
+  `x` in the workspace read "overwrites `x`" (level 2, 3 above `gptr.protect_size`, 4 for a
+  harness) and reported `x` modified although it was unchanged. Unchanged: `<<-`, `assign()`,
+  `list2env()`, a replacement (an environment changes by reference), `:=` and `set*()` inside
+  local(), `local(expr, envir =)`, an assignment inside `eval()`, `evalq()`, `with()` or
+  `within()` within local()'s code, and a `local` the code or the session binds still reach the
+  caller's objects. The guard still treats names local()'s code binds as bound (`q = 1` there is
+  not base `q`).
+- Contract-visible: 04 `gptr_risk()` (the lookup of overwrites); `?gptr_risk` (`envir`).
+- Tests: test-perm-classify.R "a plain assignment in local()'s code binds in local()'s own
+  environment (D-346)"; test-eval-guard.R "eval_assign_targets finds assignments, replacements,
+  assign(), := and set*()"; test-eval-core.R "an object local()'s code only reads is not reported
+  as modified (D-346)". Evidence: progress/fixes-1.0.1/lane-I.md.
