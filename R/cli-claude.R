@@ -71,9 +71,8 @@ pcli_claude_models = function() {
   for (m in obj$models) {
     if (!is.list(m)) next
     value = pcli_chr(m$value)
-    ids = c(value, pcli_chr(m$resolvedModel))
-    id = ids[which(startsWith(ids, "claude-"))[1L]]
-    if (!length(id) || is.na(id)) next
+    id = Find(function(x) startsWith(x, "claude-"), c(value, pcli_chr(m$resolvedModel)))
+    if (is.null(id)) next
     out[[length(out) + 1L]] = compact(list(id = id,
       name = if (identical(id, value)) pcli_chr(m$displayName),
       reasoning = if (isTRUE(m$supportsEffort) || isTRUE(m$supportsAdaptiveThinking)) TRUE,

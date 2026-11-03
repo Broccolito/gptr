@@ -36,6 +36,7 @@ test_that("Claude discovery uses only initialize and keeps full ids, never selec
       resolvedModel = "claude-new-sonnet", supportsEffort = TRUE,
       supportedEffortLevels = list("low", "high")),
       list(value = "claude-haiku-4-5", displayName = "Haiku 4.5"),
+      list(displayName = "No id"),
       list(value = "opusplan", displayName = "Opus Plan"),
       list(value = "default", resolvedModel = "default")))
   })
