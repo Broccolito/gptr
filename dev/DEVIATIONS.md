@@ -10371,3 +10371,24 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   slower than gptr.checkpoint_scan_budget switches to per-turn scans once"; ckpt-scan "the entry
   cap leaves undiscovered files unknown", the time-limit and interrupt cases. Evidence:
   progress/fixes-1.0.1/round2-Y.md.
+
+## D-355 - Fixes 1.0.1 round 2 lane Y Listings keep short columns whole and state first (2026-11-03)
+- Rule (`listing_print_lines()`): identifiers and every column whose values and header fit in 24
+  columns are never shortened; only longer free text (descriptions, paths, prompts, long model
+  names) gives way, widest first. This one rule replaces the list of state and date names
+  (source, visible, trusted, status, branch, date, created, updated; 7f53fdfb), which missed
+  provider, availability and checked_at. `provider`, `availability` and `checked_at` join the
+  columns placed first (after name, ref, id, rule, source, visible, trusted, status, branch), so at
+  80 columns they stay in the two column groups and numbers such as prices move to "# Other
+  columns:" instead.
+- Why: at 120 columns `gptr_models()` cut "advertised (stale)" to "advertised (..." and
+  "versa-bedrock" to "versa-be...", and at 80 columns it listed availability and checked_at only
+  as "# Other columns", hiding the freshness the 1.0.1 listings promise (live retest rt-disc,
+  captures 07, 26, 29).
+- Trade-off: a listing with many short columns can need a second column group sooner (at 120
+  columns `gptr_providers()` shows `api` whole and puts `version` in group 2; it cut `api` to
+  "openai-c..." before).
+- Contract-visible: none (display copy; the returned data frames are unchanged).
+- Tests: listing-print "model listings keep provider, availability and checked_at whole and shown
+  (D-355)" (flaky, codex and versa-bedrock shapes at 80 and 120 columns). Evidence:
+  progress/fixes-1.0.1/round2-Y.md.

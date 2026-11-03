@@ -131,3 +131,32 @@ test_that("a block listing at width 80 keeps its date whole and shortens free te
   expect_true(any(grepl("2026-11-02", out, fixed = TRUE)))
   expect_true(any(grepl("8697/178", out, fixed = TRUE)))
 })
+
+test_that("model listings keep provider, availability and checked_at whole and shown (D-355)", {
+  row = function(ref, name, availability, checked_at) {
+    data.frame(ref = ref, provider = sub("/.*$", "", ref), name = name, context = 200000,
+               max_output = 8192, input_price = NA_real_, output_price = NA_real_,
+               reasoning = NA, aliases = "", status = "active", availability = availability,
+               checked_at = checked_at)
+  }
+  stamp = "2026-11-03T08:42:19.048Z"
+  frames = list(
+    rbind(row("flaky/m-a", "m-a", "advertised (stale)", stamp),
+          row("flaky/m-b", "m-b", "advertised (stale)", stamp)),
+    rbind(row("codex/default", "ChatGPT plan default model (Codex CLI)", "advertised", stamp),
+          row("codex/gemma4:31b:cloud", "gemma4:31b:cloud", "unlisted (stale)", stamp)),
+    row("versa-bedrock/us.anthropic.claude-sonnet-4-8", "us.anthropic.claude-sonnet-4-8",
+        "unknown", NA_character_))
+  for (df in frames) for (width in c(80L, 120L)) {
+    x = new_listing(df, "models")
+    out = withr::with_options(list(cli.width = width), utils::capture.output(print(x)))
+    info = paste(df$provider[[1L]], "at", width)
+    expect_true(all(nchar(out, type = "width") <= width), info = info)
+    shown = paste(out, collapse = "\n")
+    for (v in c(df$ref, df$name, df$provider, df$availability, stats::na.omit(df$checked_at))) {
+      expect_true(grepl(v, shown, fixed = TRUE), info = paste(info, v))
+    }
+    other = grep("^# Other columns:", out, value = TRUE)
+    expect_false(any(grepl("provider|availability|checked_at", other)), info = info)
+  }
+})

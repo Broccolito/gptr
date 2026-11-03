@@ -32,3 +32,15 @@ each confirmed by a verifier. Decisions D-353..D-355.
   plain words ("the folder has more than 2,000 entries", "it ran out of time
   (gptr.checkpoint_scan_timeout)", ...).
 - Red: `ckpt-scan$|ckpt-files` FAIL 9. Green: `ckpt` PASS 1091.
+
+## Y-4 - Listings keep short columns whole and state first (D-355)
+- Defect: `listing_print_lines()` never shortened only a named list of state and date columns,
+  which missed provider, availability and checked_at; at 120 columns "advertised (stale)" became
+  "advertised (..." and "versa-bedrock" "versa-be...", and at 80 columns availability and
+  checked_at were only named in "# Other columns".
+- Fix: a column whose values fit in 24 columns is never shortened (identifiers never are), and
+  provider, availability and checked_at are placed first after the existing provenance columns.
+- Red: listing-print FAIL on the flaky (120), codex (80) and versa-bedrock shapes. Green:
+  `listing|models|provider|skill|mcp-config|plugin|session-store|session-history|doc-blocks|
+  doc-replay|subagent-defs|perm-rules|session-budget|proc-supervise|artifact|utils-text|
+  console-commands` PASS 10615.

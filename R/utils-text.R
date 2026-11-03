@@ -333,14 +333,16 @@ print.gptr_listing = function(x, ...) {
 }
 
 #' A width-bounded display copy: provenance/state first, at most two column groups, no row loss;
-#' identifier, state and date columns are never shortened, so free text gives way first
+#' identifiers and every column whose values fit in 24 columns (state, dates, numbers) are never
+#' shortened, so only longer free text gives way
 #' @noRd
 listing_print_lines = function(x, width = cli::console_width()) {
   if (!ncol(x)) return(character())
   width = max(10L, as.integer(width))
   row_width = nchar(as.character(nrow(x))) + 1L
   budget = width - row_width
-  priority = c("name", "ref", "id", "rule", "source", "visible", "trusted", "status", "branch")
+  priority = c("name", "ref", "id", "rule", "source", "visible", "trusted", "status", "branch",
+               "provider", "availability", "checked_at")
   first = which(names(x) %in% priority)
   first = first[order(match(names(x)[first], priority))]
   idx = c(first, setdiff(seq_along(x), first))
@@ -357,13 +359,13 @@ listing_print_lines = function(x, width = cli::console_width()) {
   caps = ifelse(names(x) == "description", 40L, ifelse(names(x) == "path", 28L, 24L))
   identifiers = names(x) %in% c("id", "ref", "name", "rule")
   caps[identifiers] = budget
-  wanted = vapply(seq_along(x), function(j) {
-    min(budget, caps[[j]], max(nchar(c(headers[[j]], values[[j]]), type = "width")))
+  full = vapply(seq_along(x), function(j) {
+    max(nchar(c(headers[[j]], values[[j]]), type = "width"))
   }, 0)
+  wanted = pmin(budget, caps, full)
   minimum = pmax(nchar(headers, type = "width"), pmin(wanted, 8L))
-  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status", "branch",
-                                        "date", "created", "updated")
-  minimum[state] = wanted[state]
+  whole = identifiers | full <= 24L
+  minimum[whole] = wanted[whole]
   groups = list()
   group = integer()
   used = 0
