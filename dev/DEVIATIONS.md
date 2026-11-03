@@ -5904,12 +5904,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
     read the ECHO flag when they start and then draw nothing typed, so the newline of Enter is
     written after the answer. Where R reads no terminal or stty fails (R.app, Windows, IRkernel,
     radian; RStudio, and Positron with rstudioapi installed, ask in their own dialog,
-    `rstudioapi::askForPassword()`, as before), one dim row above the chevron says once in the
-    session `This console shows the key as you type; gptr_env() loads keys from a
-    file instead.` R's history never held a `readline()` answer. Contract-visible: 04 section 15.10
-    IC-77. Tests: test-console-ui.R "a terminal reads a secret with its echo off, then restores it
-    (cheat-sheet review)", "a console that shows a secret as typed says so once (cheat-sheet
-    review)", "a terminal: gptr_login() reads a key without showing it (cheat-sheet review)".
+    `rstudioapi::askForPassword()`, as before), secret entry is refused before reading (#104; it
+    first said once that the console shows the key as typed), and the refusal names
+    `gptr_env(path)` or a remembered login made once in RStudio or terminal R on Unix (1.0.1 lane
+    B). R's history never held a `readline()` answer. Contract-visible: 04 section 15.10 IC-77.
+    Tests: test-console-ui.R "a terminal reads a secret with its echo off, then restores it
+    (cheat-sheet review)", "secret reads refuse consoles without hidden input before reading", "a
+    terminal: gptr_login() reads a key without showing it (cheat-sheet review)".
 - Cheat-sheet review (2026-10-23, console-1): the first-use setup menu adds
   `4  Cancel and return to R`, its default, so its hint reads
   `Choose a number; Enter = Cancel and return to R` and Enter cancels at once; before, it had no
@@ -5945,10 +5946,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
     (the drain, Task 2). Tests: test-console-typing.R "a question drains fd 0 before it reads: lines
     steer, a partial line is kept".
   - A secret read in Emacs' comint (M-x shell, ESS: `INSIDE_EMACS` names it) is no hidden read
-    (`tty_secret()` gives NULL), so the dim row says once that this console shows the key as typed:
-    comint's buffer shows the text and keeps it in its input ring whatever the tty's echo, while
-    gptr set `-echo` there and said nothing. Contract-visible: 04 section 15.10 IC-77. Tests:
-    test-console-ui.R "a console that shows a secret as typed says so once (cheat-sheet review)".
+    (`tty_secret()` gives NULL), so it is refused before reading, as on other consoles without
+    hidden input (#104): comint's buffer shows the text and keeps it in its input ring whatever the
+    tty's echo, while gptr set `-echo` there and said nothing. Contract-visible: 04 section 15.10
+    IC-77. Tests: test-console-ui.R "secret reads refuse consoles without hidden input before
+    reading".
   - The width the live row pads its status to (`status_w`) counts the lasting words only, not
     `keys wait` or `question waiting`, which go when `r` returns or the question is asked: one row
     with both kept every later draft of the run 20 columns from its status
@@ -9771,3 +9773,78 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (D-348)"; test-tool-namespace.R "print.gptr_text() prints head and tail within the budget with a
   notice"; test-console-repl.R "a one-line @file over the budget attaches the head of its line
   (D-348)". Evidence: progress/fixes-1.0.1/lane-I.md.
+
+## D-315 - 1.0.1 lane B A session login reaches worker and coaching children (2026-11-02)
+- Rule (review #104 and combined interactions; amends 03 section 6.13): a `scope = "session"`
+  credential lives only in the parent's vault state, so a worker sub-agent (chat and System 1
+  providers) or a coaching child could not resolve it and failed with `gptr_error_no_key`.
+  `child_env_provider_key()` now forwards it under the provider's first `auth` variable, through
+  `provider_credential()`, so the endpoint binding and the vault origin still apply; an edited
+  endpoint forwards nothing. The worker keeps the parent's order: a vault handle, then the session
+  login, then an environment variable (a set variable no longer wins over the session login). A remembered (`"user"` or
+  `"keyring"`) login is not forwarded: the child reads `auth.json` or the keyring itself, as before,
+  and no further secret enters its environment.
+- Contract-visible: 03 section 6.13 (worker credential forwarding).
+- Tests: test-auth-childenv.R "a session login reaches workers as its provider's key, bound to the
+  endpoint".
+
+## D-316 - 1.0.1 lane B Stdio slot consent ignores R's working directory and the environment (2026-11-02)
+- Rule (review #104 correctness and design): `mcp_stdio_binding()` hashed `getwd()` for a server
+  without a configured `cwd`, the expanded arguments and the whole expanded environment, the slot's
+  own `${VAR}` value included, so a remembered slot aborted with "changed since credential entry"
+  after `setwd()`, in an R session started elsewhere, or once any placeholder's variable was set or
+  rotated (a PAT under a name such as `GH_PAT`, a `DATABASE_URL`, a `--token ${X}` argument). The
+  binding is now the configuration as written (`mcp_cache_key()`: command, arguments, `env` and
+  `cwd` before expansion), its source file and the resolved executable's path and contents. What
+  placeholders expand to is the user's environment, trusted like the allowlisted variables
+  (`PATH`, `HOME`, proxies, certificate files) the server inherits anyway; binding a part of it gave
+  no protection those do not already bypass, and broke remembered logins. The executable's content
+  hash stays (the review proposed dropping it): an updated launcher is a changed executable, and
+  the error says to log in again. The login prompt names "R's working directory when the server
+  starts" when no `cwd` is configured.
+- Contract-visible: `?gptr_login` (`slot`); 04 `gptr_login()` paragraph; the MCP guide.
+- Tests: test-auth-setup.R "a remembered stdio slot survives setwd() and environment values, not a
+  config edit".
+
+## D-317 - 1.0.1 lane B Credential entry says what happened and where it went (2026-11-02)
+- Rule (live credential test): `/skip` and `/cancel` typed at the hidden prompt skip and cancel,
+  as in the questions; they were stored as the key. Ctrl-D in a terminal reads as blank
+  (interactive `readline()` returns `""` at EOF), so it skips; `?gptr_login` says so.
+- Rule (assisted setup): every outcome of `gptr_login()` is one `gptr_message_login` notice
+  (`key`, `status`), "Stored the credential for <key> in <store>." or "Skipped/Cancelled: no
+  credential was stored for <key>.", never the value; inside the `r` tool it is a message event
+  the model reads. The invisible return value is unchanged (no `"stored"` status on `TRUE`), and
+  `options(gptr.quiet = TRUE)` silences the notice like any other.
+- Rule (storage): the review and the notice name the one store used. A remembered login reuses an
+  existing keyring item for the record's own secret field (`refresh` for OAuth, else `key`); an
+  item for another field no longer leaves the new secret in `auth.json` beside it.
+- Rule (refusals): a UI without hidden input refuses before the OAuth paste fallback opens the
+  browser, and the refusal names `gptr_env(path)` or a remembered login made once in RStudio or
+  terminal R on Unix; `scope = "keyring"` without the package names `install.packages("keyring")`.
+  The hidden answer's own vault entry (`login-input`) is redaction-only (`active = FALSE`), so only
+  the destination-bound handle resolves.
+- Rule (rstudio UI): prompts keep their line feeds (`console_escape()`), and a `select()` title goes
+  in the dialog's message, its caption `gptr`.
+- Contract-visible: `?gptr_login`; 04 `gptr_login()` paragraph and section 11.8; the language-models
+  guide.
+- Tests: test-auth-setup.R "/skip and /cancel at the hidden prompt skip and cancel instead of
+  storing a key", "login says what it stored, skipped or cancelled, never the value", "an end of
+  input at a terminal's hidden prompt reads as blank and skips", "a remembered login names the one
+  store it uses and keeps an existing keyring item", "an OAuth paste fallback without hidden input
+  refuses before the browser opens", "keyring storage without the keyring package says how to
+  install it", "model-initiated login sends only safe status to requests, messages and history";
+  test-console-ui.R "the rstudio UI keeps the line feeds of gptr's own prompts and escapes the
+  rest". Evidence: progress/fixes-1.0.1/lane-B.md.
+
+## D-318 - 1.0.1 lane B MCP credential reads and logout names (2026-11-02)
+- Rule: a stdio start reads the credential store fail-soft (the session's credentials remain), as
+  `provider_credential()` does, so a malformed `auth.json` no longer stops every stdio server. An
+  HTTP request reads its record once (`oauth_access(rec = )`); every destination check stays.
+  `mcp_http_auth()` uses only the connection's setup-time binding; a missing one fails closed.
+  Logout resolves a name with login's rule (`mcp_server_resolve()`) and uses a cached connection's
+  name only once the configuration is gone: an R-style alias of a running server no longer wins
+  over the configured name it imitates.
+- Contract-visible: none.
+- Tests: test-auth-setup.R "a malformed credential store does not stop stdio servers; session slots
+  still work", "HTTP MCP path and authentication configuration edits invalidate login", "logout
+  resolves a configured name before a cached alias".

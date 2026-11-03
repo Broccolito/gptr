@@ -369,9 +369,11 @@ ui_undo_note = function(request) {
 #' rows, right above the chevron; then readline_answer(). When the REPL's reader finds lines
 #' waiting after the answer (a paste; a last line without a newline is not waiting), the answer and
 #' the lines go to the console history as one entry (a `secret` is dropped) and the question is
-#' asked again (IC-75); Ctrl-C or EOF gives NA, and in a terminal ends the person's row, which
-#' readline() leaves open then. A `secret` requires echo-free input (tty_secret()); unsupported
-#' consoles fail before reading. Secret reads never drain or display a composer's draft.
+#' asked again (IC-75); Ctrl-C gives NA, and in a terminal ends the person's row, which
+#' readline() leaves open then. Interactive readline() returns "" at EOF, so Ctrl-D reads as a
+#' blank line (a `.stdin` reader's EOF is NA). A `secret` requires echo-free input
+#' (tty_secret()); unsupported consoles fail before reading. Secret reads never drain or display
+#' a composer's draft.
 #' A T console's ordinary draft stays in its composer, for the live row after the
 #' answer; a dim row above the chevron says so (ui_draft_kept(), D-243). A whole line that
 #' `accept(line)` takes, one of the question's answers, typed once its rows showed is its answer:
@@ -755,10 +757,11 @@ ui_rstudio_spec = function() {
                     allow_other = FALSE) {
     if (!ui_rstudio()) return(NA_integer_)
     labels = as.character(unlist(choices))
-    msg = paste(ui_escape(c(details, sprintf("%d: %s", seq_along(labels), labels))),
+    # a dialog caption is one line: gptr's title goes in the message, its line feeds kept
+    msg = paste(c(console_escape(title),
+                  ui_escape(c(details, sprintf("%d: %s", seq_along(labels), labels)))),
                 collapse = "\n")
-    ans = tryCatch(rstudioapi::showPrompt(ui_escape(title), msg, default = ""),
-                   error = function(e) NULL)
+    ans = tryCatch(rstudioapi::showPrompt("gptr", msg, default = ""), error = function(e) NULL)
     if (!rlang::is_string(ans)) return(NA_integer_)
     idx = ui_parse_choice(ans, labels, multiple)
     if (!anyNA(idx)) return(idx)
@@ -768,9 +771,9 @@ ui_rstudio_spec = function() {
   input = function(prompt, default = "", secret = FALSE) {
     if (!ui_rstudio()) return(NA_character_)
     ans = tryCatch(if (isTRUE(secret)) {
-      rstudioapi::askForPassword(ui_escape(prompt))
+      rstudioapi::askForPassword(console_escape(prompt))
     } else {
-      rstudioapi::showPrompt("gptr", ui_escape(prompt), default = default)
+      rstudioapi::showPrompt("gptr", console_escape(prompt), default = default)
     }, error = function(e) {
       if (isTRUE(secret)) {
         gptr_abort("Hidden credential dialog failed.", "not_available",

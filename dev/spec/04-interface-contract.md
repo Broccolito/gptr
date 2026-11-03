@@ -1348,10 +1348,15 @@ credential store (`auth.json`, 0600, or an existing keyring reference); `"keyrin
 through a native OS credential backend and saves only a reference. It refuses file/environment backend
 fallbacks. Hidden input is not encryption. Access tokens stay in memory. `slot` names a declared secret
 environment entry for a stdio MCP server; its credential is injected only in the owned child environment
-and bound to the reviewed configuration and resolved executable. Provider endpoint edits and MCP
+and bound to the configuration as written (command, arguments, `env` and `cwd` before placeholder
+expansion), its source file and the resolved executable's path and contents; what placeholders expand to
+and R's working directory are not part of it (D-316). Provider endpoint edits and MCP
 destination/configuration edits invalidate stored authorization. Needs a human
-(`gptr_error_noninteractive`). `gptr_login()` returns `invisible(TRUE)` on success; blank input returns
-`invisible(FALSE)` with `status = "skipped"`, while dismissal/interrupt gives `status = "cancelled"`.
+(`gptr_error_noninteractive`). `gptr_login()` returns `invisible(TRUE)` on success; blank input or
+`/skip` returns `invisible(FALSE)` with `status = "skipped"`, while `/cancel`, dismissal or interrupt
+gives `status = "cancelled"`; neither command is ever stored as a credential. Each outcome is also a
+`gptr_message_login` notice (`key`, `status` = `"stored"`, `"skipped"` or `"cancelled"`) naming the
+store used, so a person and a model calling it from the `r` tool see what happened.
 No credential value is returned to model/tool results, UI logs, transcript or history.
 `gptr_logout()` removes stored and in-memory credentials and returns `invisible(<lgl: something removed>)`.
 Conditions: `noninteractive`, `not_available` (hidden input or OS keyring unavailable),
@@ -3487,7 +3492,7 @@ is `read` and `r` (plus `ask` with a human). The `r` schema below is the full va
 variants (IC-68): `record` and `note` only when a document is bound at freeze, `timeout` (described `"Seconds; best
 effort. Default 3600."`) only when no human can answer; measured 188 (document, no human), 169 (document, human),
 137 (no document, no human: sub-agents), 118 (no document, human) o200k tokens; `read`, `edit` and `write` are Pi's strings (MIT, Pi `1b347794`, byte-identical
-[01 §4.8]). Measured o200k tokens: four tools 674, with `ask` 819, `r` alone 197 (§7.2 of `03`).
+[01 §4.8]). Measured o200k tokens: four tools 674, with `ask` 840, `r` alone 197 (§7.2 of `03`).
 
 ```json
 [{"name":"read","description":"Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.","input_schema":{"type":"object","required":["path"],"properties":{"path":{"type":"string","description":"Path to the file to read (relative or absolute)"},"offset":{"type":"number","description":"Line number to start reading from (1-indexed)"},"limit":{"type":"number","description":"Maximum number of lines to read"}}}},{"name":"r","description":"Run R code in the user's live R session. Objects persist between calls and belong to the user. Returns printed output, messages, warnings, errors with a traceback, and plots as images. Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and last 60% and names a peter$out(id) handle for the rest.","input_schema":{"type":"object","required":["code"],"properties":{"code":{"type":"string","description":"R code to evaluate. May contain several expressions."},"record":{"type":"boolean","description":"Record this code in the user's document (default true). Use false for throwaway inspection."},"note":{"type":"string","description":"One-line decision or rationale, recorded as a '## Decision:' comment."},"timeout":{"type":"number","description":"Seconds; best effort. Default: none when the user is present, else 3600."}}}},{"name":"edit","description":"Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.","input_schema":{"type":"object","required":["path","edits"],"properties":{"path":{"type":"string","description":"Path to the file to edit (relative or absolute)"},"edits":{"type":"array","items":{"type":"object","required":["oldText","newText"],"properties":{"oldText":{"type":"string","description":"Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call."},"newText":{"type":"string","description":"Replacement text for this targeted edit."}}},"description":"One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead."}}}},{"name":"write","description":"Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.","input_schema":{"type":"object","required":["path","content"],"properties":{"path":{"type":"string","description":"Path to the file to write (relative or absolute)"},"content":{"type":"string","description":"Content to write to the file"}}}},{"name":"ask","description":"Ask the user one to four questions and wait for the answers, when a decision changes the result and cannot be inferred. The user may always type their own answer. Not for permission to run code: the harness asks for that itself. Answers are visible to the model; use gptr_login(..., scope = \"session\") for credentials.","input_schema":{"type":"object","required":["questions"],"properties":{"questions":{"type":"array","maxItems":4,"items":{"type":"object","required":["id","question"],"properties":{"id":{"type":"string"},"question":{"type":"string"},"type":{"enum":["single","multi","text"]},"options":{"type":"array","maxItems":9,"items":{"type":"string"}},"default":{"type":"string"}}}}}}}]
@@ -4179,12 +4184,20 @@ documented), written under a lock with umask 077 [G6 §3.10]:
 
 ```json
 {"anthropic":  {"type": "api_key", "keyring": {"service": "gptr", "username": "anthropic"}},
- "openrouter": {"type": "api_key", "key": "<value>"},
+ "openrouter": {"type": "api_key", "key": "<value>", "resource": "https://openrouter.ai/api/v1",
+                "endpoint_hash": "<sha256 of the configured endpoint>"},
  "mcp:github": {"type": "oauth", "issuer": "https://auth.example.com", "client_id": "...", "expires": 1759100000000,
-                "keyring": {"service": "gptr", "username": "mcp:github:refresh"}}}
+                "resource": "https://api.example.com/mcp", "binding": "<sha256>",
+                "keyring": {"service": "gptr", "username": "mcp:github:refresh"}},
+ "mcp:srv:env:SERVICE_TOKEN": {"type": "env", "key": "<value>", "slot": "SERVICE_TOKEN",
+                               "binding": "<sha256>", "resource": "https://<sha256>.stdio.invalid"}}
 ```
 
-Every value read is registered in the vault at once; access tokens stay in memory. `trust.json`:
+Every value read is registered in the vault at once; access tokens stay in memory. `scope = "session"`
+records live only in the process's vault state (`secrets_state()$auth`) and never reach `auth.json`; they
+shadow a remembered record of the same key until logout or exit. A record whose `endpoint_hash` or
+`binding` no longer matches the configured endpoint, server or executable is not used, and
+`gptr_login()` must run again (D-316). `trust.json`:
 `{"version": 1, "projects": {"<path_key of the project root>": {"trusted": true, "date": "2026-09-29",
 "fingerprint": "<sha256 of the trust-gated files>", "base_url_confirmed": {"<provider>": "<url>"}}}}` (IC-52;
 written under a short file lock). Egress acknowledgements live in the user `settings.json`
@@ -5411,7 +5424,7 @@ calls and suggests `GPTR_REPLAY=replay`.
   never library paths (which cost more and leak the Windows user name): 152 -> 143 tokens for the two built-ins.
 - `<context>` adds one sentence for `trusted="false"` blocks (106 -> 141). `<r_session>` drops the MCP sentence
   (the `<mcp>` section says it) and adds the `record = false` rule (443 -> 455; 433 after D-135).
-- Non-interactive runs in `manual` mode keep `ask` declared (+145 tokens of schema); calling it stops the run
+- Non-interactive runs in `manual` mode keep `ask` declared (+166 tokens of schema); calling it stops the run
   with status `blocked` and `gptr_error_noninteractive` carrying the questions (NS-12). The manual suffix reads
   `No one can answer questions or approvals in this run: actions that need approval, and questions asked with the
   ask tool, stop the run. Ask only when no reasonable assumption lets you continue.`; other modes keep the

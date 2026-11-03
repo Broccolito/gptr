@@ -28,7 +28,9 @@ gptr_mcp_remove(name, scope = c("user", "project"))
 \item{url}{The endpoint of a Streamable HTTP server.}
 
 \item{env, headers}{Named character vectors: environment variables of a stdio server, HTTP
-headers of an HTTP server. Write secrets as \verb{$\{VAR\}} placeholders.}
+headers of an HTTP server. Write secrets as \verb{$\{VAR\}} placeholders. For a stdio server,
+\code{gptr_login("mcp:<name>", slot = "VAR")} can fill a declared secret entry instead; the
+credential is kept per its \code{scope} and passed only to that server's process.}
 
 \item{exposure}{How the model reaches the tools: \code{"r"} (R functions listed in the prompt),
 \code{"direct"} (declared as tools), \code{"deferred"} (found through \code{peter$search()}) or

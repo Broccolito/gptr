@@ -173,8 +173,11 @@ gptr_logout("mcp:catalog-http")
 `method = "oauth"` requests the browser flow; `"key"` requests masked key entry when supported.
 The server must support the chosen authentication method. A model tool call does not open a
 browser for you; an authentication error names the sign-in function to run. Credentials are
-stored separately from the MCP configuration. A stdio server's environment-based credentials
-are configured through its `env` placeholders.
+stored separately from the MCP configuration. A stdio server takes credentials from its `env`
+placeholders, or from `gptr_login("mcp:<server>", slot = "VAR")` for a declared secret entry
+such as `VAR = "${VAR}"`: the value reaches only that server's process. A change to the server's
+configuration or executable asks you to log in again; changing R's working directory or an
+environment variable does not.
 
 ## Serve your R session
 

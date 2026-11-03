@@ -1717,7 +1717,7 @@ Nested calls are recorded in the outer result's `details$nested` (at most 20) [0
 An `ask` with no human stops the run with `status = "blocked"` and a classed `gptr_error_permission` stating
 the action and how to allow it (`mode = auto`, a rule, or `gptr_permissions()`); the session is attached to
 the condition. `options(gptr.noninteractive_ask = "deny")` returns a denial to the model instead [P-A §6.7]. In a
-non-interactive `manual` run the `ask` tool stays declared (+145 tokens), and calling it stops the run with status
+non-interactive `manual` run the `ask` tool stays declared (+166 tokens), and calling it stops the run with status
 `blocked` and `gptr_error_noninteractive` carrying the questions (NS-12: "stops with a clear error instead of
 guessing") [IC-68]. Plan mode (`mode = plan`) uses the `readonly` preset: `read`, and `r` evaluated in a scratch
 `new.env(parent = envir)` where only calls known to be read-only run (an allowlist; anything else is denied as
@@ -2040,7 +2040,11 @@ the parent's model, without an automatic downgrade or provider switch.
 Workers snapshot the parent's effective System 1 role and its `s1_max_active`, `s1_rounds`,
 `s1_state_max` and `s1_max_elements` options. Only credentials of the designated chat and
 System 1 providers are forwarded, through the worker environment; unrelated providers' keys
-are omitted. Local credential forwarding requires no separate egress acknowledgment. Each
+are omitted. A `scope = "session"` login, which exists only in the parent process, is forwarded
+under the provider's first key variable while it matches the configured endpoint, ahead of an
+environment variable as in the parent; a remembered one the worker reads from `auth.json` itself,
+so no further secret enters its environment [D-315].
+Local credential forwarding requires no separate egress acknowledgment. Each
 actual System 1 dispatch retains its ordinary consent and replay guards before network I/O.
 
 Workers and fan-out children return no scratch objects [D-189]: a worker writes its home as a reference that the
