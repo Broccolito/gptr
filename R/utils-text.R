@@ -334,7 +334,11 @@ listing_print_lines = function(x, width = cli::console_width()) {
   x = x[idx]
   headers = listing_cell(names(x), min(24L, budget))
   values = lapply(x, function(col) {
-    text = if (is.character(col) || is.factor(col)) as.character(col) else format(col, trim = TRUE)
+    text = if (is.character(col) || is.factor(col)) {
+      as.character(col)
+    } else {
+      format(col, trim = TRUE, scientific = FALSE)
+    }
     listing_cell(text, Inf)
   })
   caps = ifelse(names(x) == "description", 40L, ifelse(names(x) == "path", 28L, 24L))

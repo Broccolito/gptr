@@ -123,3 +123,12 @@ test_that("listings print at most 20 rows, a count line and the footer", {
   expect_output(print(new_listing(df[0, ], "gptr_demo")), "# 0 rows", fixed = TRUE)
   expect_output(print(new_listing(df[1, ], "gptr_demo")), "# 1 row", fixed = TRUE)
 })
+
+test_that("listings print numbers in fixed notation", {
+  local_reproducible_output(width = 80)
+  printed = capture.output(print(new_listing(data.frame(id = c("a", "b"),
+                                                       context = c(200000, 1e6)), "demo")))
+  expect_true(any(grepl("200000", printed, fixed = TRUE)))
+  expect_true(any(grepl("1000000", printed, fixed = TRUE)))
+  expect_false(any(grepl("e+0", printed, fixed = TRUE)))
+})
