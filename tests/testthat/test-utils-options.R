@@ -335,5 +335,24 @@ test_that("a T console's modes keep what is typed at SIGINT, as a D console's do
   expect_true("noflsh" %in% tty$set)
   expect_true("noflsh" %in% log)
   tty_restore()
-  expect_identical(utils::tail(log, 2L), c("SAVED", "-paste"))
+  expect_identical(utils::tail(log, 3L), c("SAVED", "-paste", "-g"))
+})
+
+test_that("tty_restore() sets the saved modes again where a Ctrl-C killed its stty (P30)", {
+  # the stty child is in the terminal's foreground group, so a Ctrl-C kills it with R: the first
+  # restore leaves the call's modes, which the check reads back
+  current = "CALL"
+  log = character()
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    log <<- c(log, modes)
+    if (identical(modes, "-g")) return(current)
+    if (length(log) > 2L) current <<- modes
+    character()
+  })
+  the$tty = list2env(list(saved = "SAVED", set = c("-echo", "noflsh")))
+  withr::defer(assign("tty", NULL, envir = the))
+  tty_restore()
+  expect_identical(log, c("SAVED", "-g", "SAVED"))
+  expect_identical(current, "SAVED")
+  expect_null(the$tty)
 })

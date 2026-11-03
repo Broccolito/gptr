@@ -142,8 +142,9 @@ skip_if_sigint_ignored = function() {
 # question's prompt clears its row, tty_question()) dropped, also one after the prompt's leading
 # blanks, which a cursor move right then steps over (gptr_readline()); `all` keeps
 # everything shown and `seen(x)` counts `x` in it; `interrupt()` sends SIGINT, as a terminal's
-# Ctrl-C does where isig is on (the pty is not the child's controlling terminal, so `\003` is not).
-# The child dies with the test.
+# Ctrl-C does where isig is on (the pty is not the child's controlling terminal, so `\003` is not),
+# and `ctrl_c()` sends it to the child's process group, its stty runs too, as that Ctrl-C reaches
+# the terminal's foreground group. The child dies with the test.
 local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = parent.frame()) {
   dir = withr::local_tempdir("gptr-pty-", .local_envir = .env)
   script = file.path(dir, "child.R")
@@ -187,6 +188,7 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
     p$write_input(x)
   }
   pty$interrupt = function() p$interrupt()
+  pty$ctrl_c = function() system2("kill", c("-INT", "--", paste0("-", p$get_pid())))
   pty$wait = function(x, timeout = 30) {
     deadline = Sys.time() + timeout
     repeat {

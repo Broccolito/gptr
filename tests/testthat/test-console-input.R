@@ -1000,7 +1000,7 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
                                                       fixed = TRUE))), 4L)
   expect_identical(r$prompts, character())
   expect_identical(r$kept, character())
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   expect_identical(r$draft, "")
   # a Tab at a batch's end off a trigger word does nothing here either; Enter sends
   r = idle_read("and label", list(" it\t", "\r"))
@@ -1051,7 +1051,7 @@ test_that("a draft at the prompt completes a trigger word; several are listed ab
 test_that("a bracketed paste at the prompt's editor stays in the draft until Enter (D-263)", {
   r = idle_read("note:", list("\033[200~a\rb\r\033[201~", " c\r"))
   expect_identical(r$x, "note:a\nb\n c")
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   # one whose end marker never comes keeps Enter adding lines; Ctrl-C hands the draft over
   r = idle_read("x", list("\033[200~a\r", "\r", ctrl_c), "next")
   expect_identical(r$x, "next")
@@ -1108,7 +1108,7 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
   expect_identical(r$rows, "")
   expect_identical(r$prompts, "peter> ")
   expect_identical(r$kept, character())
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   # Ctrl-C adds the draft to the history and lists it, as Codex clears its composer
   r = idle_read("and plot", list(ctrl_c), "next")
   expect_identical(r$x, "next")
@@ -1117,7 +1117,7 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
   expect_identical(r$prompts, "peter> ")
   expect_identical(r$kept, "and plot")
   expect_null(r$draft)
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   # in character mode Ctrl-C is a key read like any other; the keys before it count (review)
   r = idle_read("and plot", list(" it\003x"), "next")
   expect_identical(r$rows, c(kept_line("and plot it"), "", ""))
@@ -1167,7 +1167,7 @@ test_that("a hand-over keeps the editor's modes until readline is called, which 
   expect_false(is.null(the$tty))
   expect_identical(rd$handed, the$tty)
   written(function() expect_identical(rd$read("peter> "), "X"))
-  expect_identical(at_read$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(at_read$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   expect_null(at_read$tty)
   expect_identical(at_read$prompt, "\001\r\033[K\002peter> ")
   expect_null(the$tty)
@@ -1175,7 +1175,7 @@ test_that("a hand-over keeps the editor's modes until readline is called, which 
   # where R's readline does not read the tty the editor restores at once, and the prompt is plain
   local_mocked_bindings(console_readline_tty = function() FALSE)
   expect_null(idle("\025"))
-  expect_identical(stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   expect_null(rd$handed)
   written(function() rd$read("peter> "))
   expect_identical(at_read$prompt, "peter> ")
@@ -1183,7 +1183,7 @@ test_that("a hand-over keeps the editor's modes until readline is called, which 
   local_mocked_bindings(console_readline_tty = function() TRUE)
   at_read = NULL
   expect_identical(idle("x\r"), "and colourx")
-  expect_identical(stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   expect_null(rd$handed)
   expect_null(at_read)
 })

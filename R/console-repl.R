@@ -1243,9 +1243,11 @@ repl_main = function(rs) {
   }
   repeat {
     if (rs$exit) break
-    repl_waiting_notice(rs)
-    line = tryCatch(withCallingHandlers(repl_read_logical(rs$reader, repl_prompt(rs)),
-                                        gptr_warning = warned), interrupt = function(e) FALSE)
+    # a Ctrl-C as the prompt comes, right after a run's footer too, is the prompt's
+    line = tryCatch({
+      repl_waiting_notice(rs)
+      withCallingHandlers(repl_read_logical(rs$reader, repl_prompt(rs)), gptr_warning = warned)
+    }, interrupt = function(e) FALSE)
     if (isFALSE(line)) {
       rs$interrupts = rs$interrupts + 1L
       # an interrupted readline() leaves its prompt's row open (the hint, too, ends it first)

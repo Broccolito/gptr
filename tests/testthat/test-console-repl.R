@@ -1269,6 +1269,26 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
   expect_match(written(function() console_run(NULL, new.env())), "peter> \n$")
 })
 
+test_that("a Ctrl-C as the prompt comes is the prompt's: the hint, and the console stays (P30)", {
+  skip_on_cran()
+  local_console_test()
+  box = local_readline("/exit")
+  # live steering test: a Ctrl-C right after a run's footer landed in the loop's notice check and
+  # left peter()
+  first = TRUE
+  local_mocked_bindings(repl_waiting_notice = function(rs) {
+    if (first) {
+      first <<- FALSE
+      signalCondition(structure(class = c("interrupt", "condition"),
+                                list(message = "", call = NULL)))
+    }
+  })
+  out = tryCatch(utils::capture.output(console_run(NULL, new.env())),
+                 interrupt = function(e) "left")
+  expect_true("ctrl-c again leaves - /exit" %in% out)
+  expect_identical(box$i, 1L)
+})
+
 test_that("a line at the readline limit is reported at once and not sent", {
   skip_on_cran()
   local_console_test()

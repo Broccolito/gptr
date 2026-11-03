@@ -764,16 +764,17 @@ test_that("a T console's call reads keys in character mode; its modes return aft
   # Ctrl-C is a key the composer reads; opost stays on; `min 1` keeps a tool that reads stdin
   # blocking
   expect_identical(during[[1L]], list(log = c("-g", char_mode), saved = "SAVED"))
-  expect_identical(during[[2L]]$log, c("-g", char_mode, "SAVED", "-paste", "-g", char_mode))
+  # the restore reads the modes back (`-g`), to set them again where a Ctrl-C killed its stty
+  expect_identical(during[[2L]]$log, c("-g", char_mode, "SAVED", "-paste", "-g", "-g", char_mode))
   expect_true(any(startsWith(err, "Error: ")))
-  expect_identical(tty$log, rep(c("-g", char_mode, "SAVED", "-paste"), 2L))
+  expect_identical(tty$log, rep(c("-g", char_mode, "SAVED", "-paste", "-g"), 2L))
   expect_null(the$tty)
   # a D console (TERM=dumb, Emacs) reads whole lines with the echo off (D-221), and SIGINT leaves a
   # line being typed in place, for the pause menu to keep (visual round 2)
   local_live_console("D")
   tty$log = character()
   typing_console(fake, c("go", "/exit"))
-  expect_identical(tty$log, c("-g", "-echo", "noflsh", "SAVED"))
+  expect_identical(tty$log, c("-g", "-echo", "noflsh", "SAVED", "-g"))
   expect_null(the$tty)
 })
 
@@ -790,7 +791,7 @@ test_that("a terminal call's modes return after an interrupt, also one while stt
   })
   res = typing_console(slow, c("go", "/exit"))
   expect_true("aborted - the session is kept" %in% res$out)
-  expect_identical(tty$log, c("-g", char_mode, "SAVED", "-paste"))
+  expect_identical(tty$log, c("-g", char_mode, "SAVED", "-paste", "-g"))
   expect_null(the$tty)
   tty$log = character()
   local_mocked_bindings(tty_modes = function(modes = "-g") {
@@ -804,7 +805,7 @@ test_that("a terminal call's modes return after an interrupt, also one while stt
   fake = gptr_fake_provider(list("ok"))
   res = typing_console(fake, c("go", "/exit"))
   expect_true("interrupted" %in% res$out)
-  expect_identical(tty$log, c("-g", char_mode, "SAVED", "-paste"))
+  expect_identical(tty$log, c("-g", char_mode, "SAVED", "-paste", "-g"))
   expect_null(the$tty)
 })
 
@@ -1021,7 +1022,7 @@ test_that("in-process R code runs with isig on, so Ctrl-C interrupts it (review)
   typing_console(fake, c("go", "/exit"))
   # then bracketed paste is on again, which GNU readline 8.1+ turns off as a read of the code ends
   # (FIX-28)
-  expect_identical(tty$log, c("-g", char_mode, "isig", "-isig", "paste", "SAVED", "-paste"))
+  expect_identical(tty$log, c("-g", char_mode, "isig", "-isig", "paste", "SAVED", "-paste", "-g"))
 })
 
 test_that("after in-process R code the toggle reaches the console, never the result (FIX-28)", {
@@ -1916,6 +1917,34 @@ test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (vi
   expect_identical(pty$seen("not a key"), 0L)
 })
 
+test_that("TERM=dumb: a Ctrl-C right after a run's footer keeps the console and the echo (P30)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  # an stty that takes 2 s to set saved modes (an argument without a leading -), so the Ctrl-C
+  # comes while the run's end restores them and kills it, as a terminal's Ctrl-C does (live
+  # steering test: peter() was left and the echo stayed off)
+  bin = withr::local_tempdir()
+  writeLines(c("#!/bin/sh", "case \"$1\" in -*) ;; *) sleep 2 ;; esac",
+               paste0("exec ", Sys.which("stty"), " \"$@\"")), file.path(bin, "stty"))
+  Sys.chmod(file.path(bin, "stty"), "0755")
+  withr::local_envvar(PATH = paste(bin, Sys.getenv("PATH"), sep = ":"))
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE)",
+    "fake = gptr_fake_provider(list('first'))",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))",
+    "cat('ECHO', any(grepl('(^| )echo( |$)', system('stty -a', intern = TRUE))), '\\n')"
+  ), term = "dumb")
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("1 request"))
+  Sys.sleep(0.5)
+  pty$ctrl_c()
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("ECHO TRUE"))
+})
+
 test_that("lines read in the drain's mode get the terminal's edits (Task 80's visual check)", {
   x = structure(c("ab\177c", "ab\bc", "f1 a follow-up\t\025", "one two \027three"), partial = TRUE)
   expect_identical(tty_line_edit(x), structure(c("ac", "ac", "", "one three"), partial = TRUE))
@@ -1975,7 +2004,7 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
     # the wait reads in the drain's mode; the question in the saved modes from before its rows, the
     # drain's restored before it reads; the call's after it
     expect_identical(tty$log, c("-g", "-echo", "noflsh", "-g", drain, "SAVED", "SAVED", "-g",
-                                drain, "SAVED", "-echo", "noflsh", "SAVED"))
+                                drain, "SAVED", "-echo", "noflsh", "SAVED", "-g"))
   }
 })
 

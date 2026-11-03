@@ -146,14 +146,20 @@ tty_call = function(keys) {
   invisible(tty)
 }
 
-#' Restore the modes a console call saved (tty_call()), once
+#' Restore the modes a console call saved (tty_call()), once, as one unit a Ctrl-C does not cut:
+#' that Ctrl-C kills the stty child too, in the terminal's foreground group, so the modes are read
+#' back and set again where they did not take
 #' @noRd
 tty_restore = function(tty = the$tty) {
   if (identical(the$tty, tty)) the$tty = NULL
   saved = tty$saved
   if (is.null(saved)) return(invisible(NULL))
   tty$saved = NULL
-  tty_modes(c(saved, if ("paste" %in% tty$set) "-paste"))
+  back = c(saved, if ("paste" %in% tty$set) "-paste")
+  suspendInterrupts({
+    tty_modes(back)
+    if (!identical(tty_modes(), saved)) tty_modes(back)
+  })
   invisible(NULL)
 }
 
