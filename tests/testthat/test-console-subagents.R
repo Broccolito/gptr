@@ -169,15 +169,15 @@ test_that("a terminal fanout keeps its roster, phases and the parent's composer"
     "    'fan = peter(\"each\", list(alpha = 1, beta = 2, gamma = 3), ',",
     "    'model = kid, parallel = 2, .opts = list(backend = \"inline\")); 1L'))))",
     "  if (req$n > 2L) return(paste0('NEXT [', req$last_user, ']'))",
-    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  ops = Filter(function(m) identical(m$kind, 'steer_relay'), req$messages)",
     "  if (!length(ops)) return('PARENT MISSING STEER')",
     "  text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
     "  paste0('PARENT STEER [', text, ']')",
     "})",
     "main = peter(model = fake, mode = 'auto', envir = new.env())",
     "ops = sum(vapply(kid$log$requests, function(req) sum(vapply(req$messages,",
-    "  function(m) identical(m$role, 'operator'), NA)), 0L))",
-    "cat('CHILD OPERATORS ', ops, '\\n', sep = '')",
+    "  function(m) identical(m$kind, 'steer_relay'), NA)), 0L))",
+    "cat('CHILD STEERS ', ops, '\\n', sep = '')",
     "cat('ROW CLEARED ', is.null(gptr:::the$live_row), '\\n', sep = '')"
   ), term = "xterm")
   utf8 = l10n_info()[["UTF-8"]]
@@ -203,7 +203,7 @@ test_that("a terminal fanout keeps its roster, phases and the parent's composer"
   expect_true(pty$wait("NEXT [next-draft]", timeout = 5), info = pty$all)
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
-  expect_true(pty$wait("CHILD OPERATORS 0"))
+  expect_true(pty$wait("CHILD STEERS 0"))
   expect_true(pty$wait("ROW CLEARED TRUE"))
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("PRIVATE-CHILD-REPORT"), 0L)
