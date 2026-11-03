@@ -763,6 +763,18 @@ test_that("the token of gptr_mcp_serve()'s session is revoked when that session 
   expect_null(mcp_token_lookup(bearer))
 })
 
+test_that("an idle refusal's notice starts a row of its own below R's prompt", {
+  local_gptr_options(quiet = FALSE)
+  y = local_served_session("manual")
+  res = NULL
+  out = utils::capture.output({
+    res = mcp_dispatch_local(r_call("a = 2"), y$session)$result
+  })
+  expect_true(res$isError)
+  expect_identical(out[[1L]], "")
+  expect_match(out[[2L]], "An MCP client asked for r, which needs your approval", fixed = TRUE)
+})
+
 test_that("gptr_mcp_serve() refuses a port other than the running socket's", {
   skip_without_server()
   st = mcp_serve_start()

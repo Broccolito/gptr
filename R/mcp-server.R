@@ -166,9 +166,10 @@ mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   }
   if (is.null(ask)) return(list(decision = "allow", reason = ""))
   if (notice) {
-    gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your approval; it ",
-                       "was refused. Allow it with gptr_permissions(allow = ...) or run it ",
-                       "yourself."), "notice")
+    message_row(gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your ",
+                                   "approval; it was refused. Allow it with gptr_permissions(",
+                                   "allow = ...) or run it yourself."), "notice"),
+                row = reactor_depth() == 0L)
   }
   list(decision = "deny",
        reason = paste0(if (nzchar(ask$reason)) ask$reason else "this needs approval",
