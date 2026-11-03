@@ -4264,14 +4264,17 @@ not used (`mcp.json`, not `.mcp.json`). `.claude-plugin/plugin.json` bundles are
 `${CLAUDE_PLUGIN_ROOT}`, `${GPTR_PLUGIN_ROOT}`); hooks are v1.x.
 
 A directory containing only `.claude-plugin/marketplace.json` is a marketplace, not a plugin;
-resolution explains that the user must select an individual plugin directory. A marketplace may
+resolving its path explains that the user must select an individual plugin directory (a bare name
+that is not a path falls through to the other places, and an installed Claude Code plugin always
+resolves by its name, D-331). A marketplace may
 also be a plugin when it has its own plugin manifest or supported resource directories. Activation
 fails with a plugin diagnostic when no supported declarative resources or R extension code are
 found. A valid R factory may intentionally register nothing. Passive plugin listing does not
 verify compatibility, credentials or required external programs; skipped components are recorded
 in `gptr_registry(diagnostics = TRUE)`.
 Invalid explicitly configured targets are skipped by `gptr_plugins()` with a listing footer and
-a registry diagnostic, even before activation.
+a registry diagnostic, even before activation; the session-start sync records the same
+`<entry>: <message>` row, once (D-332).
 
 ### 11.13 Frontmatter of skills, agents and templates
 
