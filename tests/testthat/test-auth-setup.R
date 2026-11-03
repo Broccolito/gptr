@@ -76,8 +76,9 @@ test_that("login refuses unsupported hidden input and missing humans before read
   ui = ui_scripted_spec(ui_scripted_state(list("never-consumed")))
   ui$has_secret_input = function() FALSE
   withr::local_options(gptr.ui = ui, gptr.interactive = TRUE)
-  expect_error(gptr_login("openrouter", method = "key", scope = "session"),
-               "hidden", class = "gptr_error_not_available")
+  err = expect_error(gptr_login("openrouter", method = "key", scope = "session"),
+                     "hidden", class = "gptr_error_not_available")
+  expect_match(conditionMessage(err), "gptr_env(path)", fixed = TRUE)
   withr::local_options(gptr.interactive = FALSE)
   expect_error(gptr_login("openrouter", method = "key", scope = "session"),
                class = "gptr_error_noninteractive")

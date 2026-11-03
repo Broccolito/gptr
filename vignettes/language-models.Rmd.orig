@@ -95,7 +95,8 @@ Repeat this for each provider you use, including a custom provider or remote CLI
 providers and local loopback routes need no acknowledgment; Ollama is exempt only while its
 local-only inference is on. Consent does not pre-approve tool actions. Read `?gptr_security`
 before using sensitive data. `gptr_login("openrouter")`
-offers an interactive login; `gptr_login("anthropic", method = "key")` offers masked key entry.
+offers an interactive login; `gptr_login("anthropic", method = "key")` offers masked key entry
+in RStudio, Positron and terminal R on Unix; elsewhere, load keys with `gptr_env()`.
 These credentials are separate from a command-line tool's sign-in.
 
 An OpenAI-compatible service can use the existing completions adapter. Register its endpoint,

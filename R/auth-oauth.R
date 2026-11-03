@@ -632,8 +632,9 @@ oauth_need_hidden = function() {
   hidden = is.function(ui$has_secret_input) &&
     isTRUE(tryCatch(ui$has_secret_input(), error = function(e) FALSE))
   if (!hidden) {
-    gptr_abort(paste0("This UI cannot provide hidden credential input. Use an interactive ",
-                      "terminal with echo disabled or an RStudio password dialog."),
+    gptr_abort(paste0("This UI cannot provide hidden credential input; nothing was read. Load ",
+                      "the key from a private file with gptr_env(path), or log in once in ",
+                      "RStudio or terminal R on Unix with scope = \"user\" or \"keyring\"."),
                "not_available", member = "hidden credential input", provided_by = "UI backend")
   }
   ui
@@ -736,6 +737,9 @@ oauth_login_store = function(key, rec, scope) {
 #' when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
 #' on. A login inside a tool also uses hidden paste entry because loopback callbacks cannot run
 #' recursively. Key entry requires a UI with hidden input; it never falls back to visible typing.
+#' Hidden entry works in RStudio and Positron (through 'rstudioapi') and in terminal R on Unix;
+#' where the UI has none (Windows Rgui or Rterm, R.app, Jupyter, Emacs ESS), load keys with
+#' [gptr_env()] instead, or log in once elsewhere with a remembering `scope`.
 #' The host prompt shows the destination and storage before entry. For key entry, leave it blank
 #' or type `/skip` to skip; type `/cancel`, dismiss or interrupt it to cancel. The initial OAuth
 #' review offers Skip and Cancel.

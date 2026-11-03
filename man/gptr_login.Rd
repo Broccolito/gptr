@@ -43,6 +43,9 @@ get the authorization-code flow with PKCE (S256): a page on 127.0.0.1 receives t
 when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
 on. A login inside a tool also uses hidden paste entry because loopback callbacks cannot run
 recursively. Key entry requires a UI with hidden input; it never falls back to visible typing.
+Hidden entry works in RStudio and Positron (through 'rstudioapi') and in terminal R on Unix;
+where the UI has none (Windows Rgui or Rterm, R.app, Jupyter, Emacs ESS), load keys with
+\code{\link[=gptr_env]{gptr_env()}} instead, or log in once elsewhere with a remembering \code{scope}.
 The host prompt shows the destination and storage before entry. For key entry, leave it blank
 or type \verb{/skip} to skip; type \verb{/cancel}, dismiss or interrupt it to cancel. The initial OAuth
 review offers Skip and Cancel.
