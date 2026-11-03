@@ -136,6 +136,27 @@ test_that("idle served tools do not reenter later callbacks or sibling tools dur
   }
 })
 
+test_that("a nested peter() inside an idle served tool runs no sibling R tool", {
+  skip_on_cran()
+  local_project()
+  withr::defer(reactor_shutdown())
+  home = new.env()
+  chat = peter("hello", model = gptr_fake_provider(list("ok")), envir = home, mode = "yolo",
+                .run = FALSE)
+  seen = new.env(parent = emptyenv())
+  seen$order = "start"
+  home$nested = function() {
+    peter("q", model = gptr_fake_provider(list("inner")), envir = new.env())
+    seen$inside = seen$order
+  }
+  reactor_enqueue_tool("sibling", function() seen$order = c(seen$order, "sibling"))
+  response = mcp_dispatch_local(mcp_test_msg("tools/call",
+    list(name = "r", arguments = list(code = "nested()"))), chat)
+  expect_false(isTRUE(response$result$isError))
+  expect_identical(seen$inside, "start")
+  expect_true(reactor_pump(until = function() "sibling" %in% seen$order, timeout = 2))
+})
+
 test_that("an idle served-tool guard is released after evaluation errors and interrupts", {
   skip_on_cran()
   local_project()

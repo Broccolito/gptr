@@ -1193,7 +1193,7 @@ sdk_work = function(runs, until, timeout) {
   force(until)
   force(timeout)
   if (is.null(until)) return(function() run_wait(runs, timeout = timeout))
-  allow = if (is.null(run_current())) NULL else vapply(runs, function(r) r$id, "")
+  allow = if (!is.null(run_current()) || reactor_nested()) vapply(runs, function(r) r$id, "")
   function() reactor_pump(until = until, slice_ms = 100L, allow_runs = allow, timeout = timeout)
 }
 

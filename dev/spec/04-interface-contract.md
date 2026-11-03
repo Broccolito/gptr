@@ -5101,7 +5101,9 @@ step list before its first action.
 
 - The reactor tracks its pump depth. A nested pump (depth > 1) runs FIFO tools only of the runs it was given in
   `allow_runs`; its default is `NULL` only outside all pumps and served tools, else `character()`, so System 1
-  and MCP HTTP calls made from inside an `r` evaluation never run a sibling's R tool.
+  and MCP HTTP calls made from inside an `r` evaluation never run a sibling's R tool. Waits that name their runs
+  (`run_wait()`, a nested `peter()` or `gptr_wait()`, sub-agent teams) decide nesting by the same test, so one
+  inside a served tool entered at R's idle prompt runs only its own runs' tools (D-338).
 - `later::run_now(0)` is called only at depth 1, so an HTTP request to `gptr_mcp_serve()` is answered only by the
   outermost pump or at R's top-level idle prompt. Serving pauses while Peter's own prompt waits (in every
   console), while other R code runs and during a nested tool wait. Rscript, knitr, Quarto and a Jupyter kernel

@@ -413,13 +413,7 @@ s1_outcome = function(res, model_id = NA_character_) {
 #' A nested pump passes no run ids, so it never starts another run's FIFO tool (contract 8.2,
 #' IC-57).
 #' @noRd
-s1_pump = function(until) {
-  if (reactor_depth() > 0L) {
-    reactor_pump(until = until, allow_runs = character())
-  } else {
-    reactor_pump(until = until)
-  }
-}
+s1_pump = function(until) reactor_pump(until = until)
 
 #' Wait on the reactor (interruptible; never a sleep inside a callback)
 #' @noRd
