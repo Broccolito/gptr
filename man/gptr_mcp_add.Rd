@@ -36,7 +36,9 @@ headers of an HTTP server. Write secrets as \verb{$\{VAR\}} placeholders.}
 
 \item{timeout}{Seconds per request; progress notifications from the server extend it.}
 
-\item{scope}{\code{"user"} (default) or \code{"project"}.}
+\item{scope}{\code{"user"} (default) or \code{"project"}. Project scope requires a \verb{.gptr/}
+workspace created with \code{\link[=gptr_init]{gptr_init()}}. Trust the project before using its servers
+(see \code{\link[=gptr_trust]{gptr_trust()}}); \code{gptr_mcp_add()} neither initializes a workspace nor grants trust.}
 }
 \value{
 \code{gptr_mcp_add()} returns the server spec invisibly; \code{gptr_mcp_remove()} returns
@@ -48,8 +50,8 @@ headers of an HTTP server. Write secrets as \verb{$\{VAR\}} placeholders.}
 you trust the project). It never edits another harness's files. Give exactly one of
 \code{command} (a server started as a local process speaking stdio) and \code{url} (a Streamable HTTP
 server). Secret values in \code{env} and \code{headers} must be \verb{$\{VAR\}} placeholders: they are
-expanded from the environment when gptr connects and never stored. Nothing connects until a
-tool is used.
+expanded from the environment when gptr connects and never stored. Adding a server does not
+connect to it; listing its tools with \code{\link[=gptr_mcp]{gptr_mcp()}}, refreshing it or calling a tool may connect.
 }
 \examples{
 proj = tempfile("proj")

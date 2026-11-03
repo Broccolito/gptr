@@ -58,6 +58,8 @@ interpolation, \code{\link[=gptr_last]{gptr_last()}}, pipes, \code{\link[=lapply
 Arguments you give in a call win over the fixed ones, except that \code{tools}, \code{extensions},
 \code{plugins} and \code{skills} add to the fixed values and \code{.opts} entries replace them by name. The
 same rule applies when you tailor a harness again; \code{NULL} drops a fixed single value.
+A call from model code requires human approval; otherwise it signals
+\code{gptr_error_permission}.
 
 To share a harness, save it with \code{\link[=saveRDS]{saveRDS()}}. Treat a harness from someone else like an R
 script from them: functions among its fixed arguments, and the extension files it names, run

@@ -1396,8 +1396,8 @@ settings_model_warn = function(patch, scope) {
 #' removes a key from the scope. `egress` (the providers you allow automatic context to go to) is
 #' accepted only at user scope. `mode = yolo` and turning off local-only Ollama inference
 #' (`providers = list(ollama = list(local_only = FALSE))`) are accepted only at user or session
-#' scope; a project can only keep local-only inference on. Called from model code during a run, it
-#' is refused.
+#' scope; a project can only keep local-only inference on. A change called from model code
+#' during a run requires your approval; otherwise it signals `gptr_error_permission`.
 #'
 #' The `"session"` scope means this R process, not one conversation. User settings live at
 #' `tools::R_user_dir("gptr", "config")/settings.json`; project settings live in `.gptr/`.

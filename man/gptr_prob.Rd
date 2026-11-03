@@ -15,7 +15,8 @@ scores: the confidence), \code{"confidence"} (decisions: \code{abs(2 * p - 1)}) 
 columns \code{FALSE} and \code{TRUE}).}
 }
 \value{
-A named numeric vector, or a matrix for \code{what = "probabilities"}.
+A numeric vector preserving the names of \code{x} (including no names), or a matrix for
+\code{what = "probabilities"}.
 }
 \description{
 System 1 calls (\code{peter(question, x, model = jev)}) return typed vectors: a \code{gptr_decision}

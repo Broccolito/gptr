@@ -39,7 +39,7 @@ names (\code{jev-key}, \code{JEV_KEY}, \code{JEV_API_KEY} and \code{TYPESAFE_KEY
 line spelled exactly as the canonical name wins over an alias), registers secret values
 in gptr's vault for redaction, and exports the canonical names with \code{\link[=Sys.setenv]{Sys.setenv()}}. Plain
 configuration fields with suffixes such as \verb{_URL} or \verb{_PATH} are not registered as
-secrets. It never prints, logs or returns a value.
+secrets. It never prints, logs or returns secret values.
 }
 \examples{
 f = tempfile(fileext = ".env")

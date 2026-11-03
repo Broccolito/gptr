@@ -106,8 +106,8 @@ reactor_timer = function(at, fn, run = NULL) {
 
 #' Register a task: `fn()` runs once per pump iteration until it returns FALSE
 #'
-#' `TRUE` or `NULL` means "call me again in the next iteration" (iterations then last at most
-#' 5 ms, never zero: see reactor_next_due()); a number means "call me again after that many
+#' `TRUE` or `NULL` means "call me again in the next iteration" (repeating tasks cap the next
+#' I/O wait at 5 ms: see reactor_next_due()); a number means "call me again after that many
 #' seconds" (the `wait` of an `inprocess` generator, contract 8.1). A task that fails is
 #' removed (the error becomes a diagnostic).
 #' @return the task id

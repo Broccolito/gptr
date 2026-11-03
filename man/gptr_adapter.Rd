@@ -41,6 +41,26 @@ An adapter turns gptr's request context into one provider's wire format and its 
 into gptr events. HTTP and process adapters give \code{build()} and \code{parse()}; \code{inprocess} adapters
 give \code{stream()}, a generator factory; classifier adapters give \code{classify}.
 }
+\section{Callback results}{
+
+HTTP \code{build()} returns a named list with an absolute HTTP(S) \code{url}, optional \code{method}
+(POST with a body, otherwise GET), named \code{headers} (strings or origin-bound secret handles),
+\code{body} (UTF-8 text or raw bytes) and \code{stream} (\code{"sse"}, \code{"ndjson"}, \code{"json"} or \code{"raw"};
+the transport supplies the default). For \code{process_jsonl}, it returns \code{start}, a process
+specification with \code{command} (or \code{NULL} to reuse the session child), optional \code{send}, an
+unnamed list of objects to write as JSON lines (default empty), and optional \code{close_stdin}.
+
+\code{parse()} returns a list of functions: \code{push(unit)} consumes a decoded unit, \code{finish()}
+ends input and returns the final assistant message, \code{fail(cnd)} handles a transport failure,
+and \code{message()} returns the partial assistant message. The normalizer emits events through
+\code{opts$emit} and ends with one \code{done} or \code{error} event carrying the final or partial message.
+
+\code{stream()} returns a zero-argument generator. Each step returns
+\code{list(events = list(...), wait = 0)}; \code{wait} is seconds before the next step. Emit a terminal
+\code{done} or \code{error} event before returning \code{NULL}. Steps must return promptly (within 50 ms)
+so other work on the shared reactor can progress.
+}
+
 \examples{
 gptr_adapter("echo", transport = "inprocess",
              stream = function(model, context, opts) {
@@ -49,7 +69,13 @@ gptr_adapter("echo", transport = "inprocess",
                function() {
                  if (state$done) return(NULL)
                  state$done = TRUE
-                 list(events = list())
+                 message = list(role = "assistant", content = list(), api = model$api,
+                                provider = model$provider, model = model$id,
+                                stop_reason = "stop")
+                 list(events = list(
+                   list(type = "start", api = model$api, provider = model$provider,
+                        model = model$id),
+                   list(type = "done", reason = "stop", message = message)))
                }
              })
 }
