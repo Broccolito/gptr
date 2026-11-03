@@ -1184,14 +1184,25 @@ test_that("keys piled up off the beat are typed: each Enter, Up and Tab acts in 
     read(80.1, "")
     read(80.15, "\rc\rd")
     expect_identical(rs$reader$compose$draft, "c\nd")
+    # so do keys typed before a marked paste in their batch, the paste the draft; an Enter after
+    # a paste's end in its batch sends nothing, as pasted text may hold an end marker (D-263)
+    rs$reader$compose = NULL
+    read(100, "two risk\r\033[A of bias\rthen fit\t\033[200~p1\np2\033[201~")
+    expect_identical(steers()[[7L]], "two risk of bias")
+    expect_identical(rs$reader$typed, c("then plot", "then fit"))
+    expect_identical(rs$reader$compose$draft, "p1\np2")
+    rs$reader$compose = NULL
+    read(120, "\033[200~q\033[201~ r\rs\r")
+    expect_length(steers(), 7L)
+    expect_identical(rs$reader$compose$draft, "q r\ns\n")
   })
   expect_identical(steers()[[6L]], "a\nb")
-  expect_identical(sum(grepl("steer taken back", out, fixed = TRUE)), 1L)
+  expect_identical(sum(grepl("steer taken back", out, fixed = TRUE)), 2L)
   # where gptr did not turn bracketed paste on, a batch off the beat is one message, as before
   the$tty = NULL
   rs$reader$compose = NULL
-  utils::capture.output(read(100, "x\ry\r"))
-  expect_identical(steers()[[7L]], "x\ny")
+  utils::capture.output(read(140, "x\ry\r"))
+  expect_identical(steers()[[8L]], "x\ny")
 })
 
 test_that("a batch is timed by its last key read, not the reader's wait after it (CI-94)", {

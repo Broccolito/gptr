@@ -6112,9 +6112,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     one in 30 ms plus one (P28 Task 32: a read late under load held Enter and the next key, and the
     steer stayed in the draft); the idle editor always; the background probe never. A batch read
     off the beat (a run's first read, the keys piled up while an in-process tool held the reactor)
-    without markers, outside a paste, where the call turned bracketed paste on (`the$tty$set`, so a
-    paste comes marked), is typed keys: `console_keys()` cuts it after each Enter, Up and Tab and
-    gives the pieces to the composer in turn, acting on each result before the next, so each Enter
+    outside a paste, where the call turned bracketed paste on (`the$tty$set`, so a paste comes
+    marked), is typed keys up to a paste's start marker (the marked paste and what follows it stay
+    one piece, as pasted text may hold an end marker; text before an end marker that comes first is
+    pasted): `console_keys()` cuts it after each Enter, Up and Tab and gives the pieces to the
+    composer in turn, acting on each result before the next, so each Enter
     sends its own message, a Tab sends the text before it, and an Up takes back what an Enter before
     it sent (D-306; the live steering test: three messages typed during a 20 s `r` call went as one
     three-line steer, and an Up after Enter was dropped). Elsewhere a batch off the beat keeps the

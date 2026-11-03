@@ -9760,7 +9760,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   sends the text before it as the other kind, and an Up takes back what an Enter before it sent.
   Marked batches, batches on the beat (`paste`) and calls without the mode keep IC-76's paste rule.
   Accepted: a multi-line paste off the beat in a terminal that ignores the mode is one message per
-  line.
+  line. Follow-up (verification of the amendment: `one risk` Enter, Up, ` of overfitting` Enter,
+  `then plot` Tab, then a marked paste, all in one blocked window, went as one two-line steer and a
+  draft `then plot<Tab>` before the paste): a marked batch off the beat is cut the same way up to
+  its paste's start marker; the paste and what follows it stay one piece, as pasted text may hold
+  an end marker (D-263), and a batch whose first marker is an end marker is not cut.
 - Contract-visible: section 10.2 row 22 (`confirm`), the `gptr_confirm()` row, `gptr_init(path)`,
   IC-76's drain passage and its batch off the beat, the `tty_query()` and `tty_unreply()` rows and
   section 15.10's background probe (the cursor query); `?gptr_init`.

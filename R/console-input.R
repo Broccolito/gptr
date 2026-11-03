@@ -177,12 +177,14 @@ console_trigger = function(line) {
 #' paste to console_compose(); fewer were typed, as when a late read under load holds Enter and the
 #' next key. Bracketed-paste markers decide first: this rule decides only a batch without them read
 #' while no paste they opened is open (console_compose(), D-263). console_compose() acts once a
-#' batch, so the batch is cut into pieces it takes in turn: one off the beat without markers,
-#' outside a paste, where gptr turned bracketed paste on (tty_call(), so a paste comes marked), is
-#' typed keys, as those piled up while an in-process tool held the reactor, cut after each Enter,
-#' Up and Tab, so each acts after the text before it and Up takes back what an Enter before it sent
-#' (D-306); any other batch only before a Tab or Up that ends it right after a newline, after the
-#' message the newline sent, as when Enter and Up share a late read. Ctrl-C, a key in character mode
+#' batch, so the batch is cut into pieces it takes in turn: one off the beat, outside a paste, where
+#' gptr turned bracketed paste on (tty_call(), so a paste comes marked), is typed keys up to a
+#' paste's start marker (the paste and what follows it one piece, as pasted text may hold an end
+#' marker; none where an end marker comes first), as those piled up while an in-process tool held
+#' the reactor, cut after each Enter, Up and Tab, so each acts after the text before it and Up takes
+#' back what an Enter before it sent (D-306); any other batch only before a Tab or Up that ends it
+#' right after a newline, after the message the newline sent, as when Enter and Up share a late
+#' read. Ctrl-C, a key in character mode
 #' (tty_call()), interrupts as SIGINT would, after the keys before it (in a batch holding a
 #' bracketed-paste marker, read while a paste is open up to 2 s after its last read, or read on the
 #' beat right after such a batch with no empty read between, `rd$compose$pasted`, it is pasted
@@ -202,8 +204,8 @@ console_keys = function(rd, s, chars) {
   # read, console_paste_open()), or read on the beat right after such a batch with no empty read
   # between (the rest of a paste whose text ended it early, split again) holds no Ctrl-C key: its
   # Ctrl-C bytes are pasted text, which the composer drops (D-263)
-  pasted = nzchar(chars) && (console_paste_open(rd$compose, now) ||
-                               (isTRUE(rd$compose$pasted) && gap <= 0.2) ||
+  rest = isTRUE(rd$compose$pasted) && gap <= 0.2
+  pasted = nzchar(chars) && (console_paste_open(rd$compose, now) || rest ||
                                grepl("\033\\[20[01]~", paste0(rd$compose$esc, chars)))
   if (pasted) chars = gsub("\003", "", chars, fixed = TRUE)
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
@@ -212,11 +214,17 @@ console_keys = function(rd, s, chars) {
     rd$after_interrupt = paste0(rd$after_interrupt, after)
     chars = substr(chars, 1L, ctrl_c - 1L)
   }
-  typed = !paste && !pasted && !isTRUE(rd$compose$bracket) && "paste" %in% the$tty$set
+  typed = !paste && !rest && !isTRUE(rd$compose$bracket) && "paste" %in% the$tty$set
   cut = if (typed) "\r\n?|\n|\t|\033\\[A|\033OA" else "[\r\n](?=(?:\t|\033\\[A|\033OA)\\z)"
   compose = function(chars) {
-    pieces = regmatches(chars, gregexpr(paste0("(?s).*?(?:", cut, "|\\z)"), chars, perl = TRUE))
-    for (piece in Filter(nzchar, pieces[[1L]])) {
+    # typed keys only before a paste's start marker: what follows it may be pasted
+    mark = regexpr("\033\\[20[01]~", chars)
+    n = if (!typed || mark < 0L) nchar(chars) else
+      if (regmatches(chars, mark) == "\033[200~") mark - 1L else 0L
+    head = substr(chars, 1L, n)
+    at = gregexpr(paste0("(?s).*?(?:", cut, "|\\z)"), head, perl = TRUE)
+    pieces = c(regmatches(head, at)[[1L]], substring(chars, n + 1L))
+    for (piece in Filter(nzchar, pieces)) {
       res = console_compose(rd$compose, piece, now, setting_get("type_ahead", s),
                             console_complete, paste)
       rd$compose = res$state
