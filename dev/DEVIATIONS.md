@@ -9672,7 +9672,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `s1_emulate()` itself discovery-free; subagent-backends "workers freeze the effective System 1
   role and its bounded policy". Evidence: progress/fixes-1.0.1/lane-C.md.
 
-## D-324 - Fixes 1.0.1 lane C System 1 batch messages (2026-11-02)
+## D-324 - Fixes 1.0.1 lane C System 1 batch messages and cache listing (2026-11-02)
 - Rule (failure warning): a vectorised call's `s1_errors` warning quotes its most common failure
   message and how many elements it failed ("3 of 3 System 1 elements failed and are NA (3 with:
   System 1 request failed with HTTP 400: ...); see attr(x, "meta")$errors."). Was the count
@@ -9680,7 +9680,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   one-element call showed the reason. The NA results and the one warning stay (contract 2.2).
 - Rule (launch notice): the cache-miss notice counts both nouns ("1 uncached input (1 request).");
   was "1 uncached inputs".
-- Contract-visible: 04 section 2.2 (`s1_errors`).
+- Rule (cache listing): `gptr_cache("info")` gives the `s1` row the path `memory` when its
+  answers are held in memory only (no `.gptr/`); was a temporary directory with 0 bytes.
+- Contract-visible: 04 sections 2.2 (`s1_errors`) and 6.4 (`gptr_cache()`); `?gptr_cache`.
 - Tests: s1-route "a vector call's warning quotes its most common failure", "INFRA-18: choices
   give a classed character ..."; s1-composition "decision launch notices identify real cache
-  misses ...". Evidence: progress/fixes-1.0.1/lane-C.md.
+  misses ..."; doc-replay "without .gptr/, gptr_cache() counts and clears the System 1 answers in
+  memory". Evidence: progress/fixes-1.0.1/lane-C.md.

@@ -1622,7 +1622,8 @@ gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tm
 
 `info` returns a `gptr_cache_info` data frame (including unapplied document sidecars, which are never pruned
 automatically, IC-51: one row for the workspace root's, one for those of documents outside any `.gptr/` in
-`R_user_dir("gptr", "cache")/pending/`); `prune` removes S2 entries of deleted blocks, S1 entries unused for
+`R_user_dir("gptr", "cache")/pending/`; the `s1` row's `path` is `memory` for answers held without a workspace,
+D-324); `prune` removes S2 entries of deleted blocks, S1 entries unused for
 90 days (mtime touched on hit), `cache/tmp` files older than `gptr.spill_days`, the refreshed catalog cache beyond
 the newest, checkpoint blobs per G7 retention; `clear` removes the kind entirely. `prune`/`clear` return the number
 of files removed invisibly. Works on the workspace root (or `tempdir()/gptr`) and `R_user_dir("gptr", "cache")`.
