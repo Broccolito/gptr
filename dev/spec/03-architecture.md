@@ -678,7 +678,10 @@ element; a data frame, one per row; a named list, one state; `I(x)`, exactly one
 data-frame condition in `while()`; a function cannot see that it is a condition, so gptr prints a once-per-session
 message naming `I(x)` when it splits a data frame into several states [IC-71]). A piped session gives one state built by
 `as_state(s)`: its last answer (at most 2,000 characters) plus value facts; no turn is added and a
-`gptr.decision` custom entry is appended [G3 (12)]. Question type: `choices` -> choice, `levels` -> score,
+`gptr.decision` custom entry is appended [G3 (12)]. A state is keyed by its argument name when the context is
+named (`text = x`), else `input` (`input_1`, ... for more), and the question names that key; how a value is
+spelled (`x`, `reviews[2]`, `unname(r)`) never reaches the request, the describer text or the cache key
+[D-320]. Question type: `choices` -> choice, `levels` -> score,
 else a boolean (wire name `noul`, never the public `bool` [04a]). Results: `gptr_decision` (logical),
 `gptr_choice` (classed character; a factor only when `choices` is a factor or `.opts$output = "factor"`, a
 plain factor without probabilities whose `meta` attribute holds only `errors`, when elements failed [D-250]),
@@ -2994,8 +2997,8 @@ prompt per request [07].
 
 1. `if (peter("Is this abstract about a randomised controlled trial?", abstract, model = jev))`: the literal is
    the prompt, `abstract` the context; `jev` resolves to `typesafe/jev-latest`, a classifier provider, so
-   route a applies and no session is created. One state `{"abstract": "<text>"}`, question `{type: "noul",
-   instructions: "... The input is in abstract.", criteria: ...}`.
+   route a applies and no session is created. One state `{"input": "<text>"}`, question `{type: "noul",
+   instructions: "...", criteria: ...}`, whose instructions end "The input is in `input`."
 2. S1 cache lookup (memory before `gptr_init()`, else `.gptr/cache/s1/`, input hash only); a miss is one
    reactor request with the key materialised only for the TypeSafe origin; `noul: 0.97` ->
    `structure(TRUE, class = c("gptr_decision", "gptr_s1", "logical"), prob = 0.97, ...)` goes straight into

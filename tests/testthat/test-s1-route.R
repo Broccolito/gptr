@@ -49,14 +49,16 @@ test_that("matrices, environments and functions are one described state", {
 test_that("large values are described instead of sent, and long text is cut", {
   skip_on_cran()
   local_mocked_bindings(
-    describe_binding = function(name, envir, budget = 150L) c("<numeric> 5000 values", name),
+    describe_binding = function(name, envir, budget = 150L) {
+      c(paste0(name, ": <numeric> 5000 values"), "  more")
+    },
     gptr_describe = function(x, budget = 150L, ...) "<numeric> described"
   )
   e = new.env()
   e$big = I(seq_len(5000) / 7)
   inner = new.env(parent = e)
   st = s1_states(e$big, "big", name = "big", envir = inner)
-  expect_identical(st[[1]]$big, "<numeric> 5000 values\nbig")
+  expect_identical(st[[1]]$big, "<numeric> 5000 values\n  more")
   el = s1_states(list(seq_len(5000) / 7, "short"), "item")
   expect_identical(el[[1]]$item, "<numeric> described")
   expect_identical(el[[2]]$item, "short")
@@ -101,7 +103,7 @@ test_that("inputs combine element-wise and must share one length", {
   expect_identical(split$split, "diagnostics(fit)")
 })
 
-test_that("context labels become state keys", {
+test_that("named context labels become state keys", {
   expect_identical(s1_key_name("abstracts"), "abstracts")
   expect_identical(s1_key_name("samples$description"), "samples_description")
   expect_identical(s1_key_name("my.data"), "my_data")
@@ -119,6 +121,11 @@ test_that("s1_inputs() reads symbols by name and adds the piped session last", {
   expect_identical(vapply(parts, function(p) p$label, ""), c("samples", "session"))
   expect_identical(parts[[1]]$states$a, list(samples = "x"))
   expect_identical(parts[[2]]$states, list(list(session = "Answer: All good.")))
+  # an unnamed input is `input`, whatever its expression
+  call$context[[1]]$named = FALSE
+  parts = s1_inputs(call)
+  expect_identical(vapply(parts, function(p) p$label, ""), c("input", "session"))
+  expect_identical(parts[[1]]$display, "samples")
 })
 
 # ---- Task 7 beyond the plan: the batch rule for further classes and the session cap ------------
@@ -795,7 +802,7 @@ test_that("INFRA-18: against a mocked /systemone: if (peter(\"q\", x, model = je
   body = json_decode(log$body[[1L]])
   expect_identical(body$model, "jev-latest")
   expect_identical(body$questions$answer$type, "noul")
-  expect_identical(body$state, list(x = x))
+  expect_identical(body$state, list(input = x))
 })
 
 test_that("INFRA-18: against a mocked /systemone: if() works; 100 states stay within 8 active", {
@@ -843,7 +850,7 @@ test_that("INFRA-18: min_confidence with uncertain NA, \"stop\" or a function fo
   skip_on_cran()
   s1_fresh()
   local_fake_provider(function(state, question) {
-    switch(state$x, sure = 0.95, unsure = 0.55, no = 0.02)
+    switch(state$input, sure = 0.95, unsure = 0.55, no = 0.02)
   }, name = "band", type = "classifier")
   x = c("sure", "unsure", "no")
   na = peter("Q?", x, model = "band/band-s1", min_confidence = 0.6)
@@ -861,7 +868,7 @@ test_that("INFRA-18: min_confidence with uncertain NA, \"stop\" or a function fo
                FALSE
              })
   expect_identical(as.logical(esc), c(TRUE, FALSE, FALSE))
-  expect_identical(seen$state, list(x = "unsure"))
+  expect_identical(seen$state, list(input = "unsure"))
   expect_identical(unname(seen$p), 0.55)
   yes = peter("Q?", x, model = "band/band-s1", min_confidence = 0.6, uncertain = TRUE)
   expect_identical(as.logical(yes), c(TRUE, TRUE, FALSE))
@@ -873,7 +880,7 @@ test_that("INFRA-18: choices give a classed character with a plain ==; a factor 
   # carry descriptions, so this test asks the mocked /systemone through the TypeSafe adapter. The
   # server starts before s1_fresh() moves the working directory into a temporary project.
   srv = local_mock_server("systemone", answers = function(body) {
-    p = if (grepl("liver", body$state$x, fixed = TRUE)) {
+    p = if (grepl("liver", body$state$input, fixed = TRUE)) {
       list(liver = 0.8, lung = 0.1, other = 0.1)
     } else {
       list(liver = 0.1, lung = 0.2, other = 0.7)

@@ -36,8 +36,8 @@ s1_test_call = function(prompt, ..., model, args = list(), session = NULL) {
   items = list()
   for (nm in names(objs)) {
     assign(nm, objs[[nm]], envir = env)
-    items[[length(items) + 1L]] = list(label = nm, kind = "symbol", name = nm, slot = NULL,
-                                       facts = list(class = class(objs[[nm]])))
+    items[[length(items) + 1L]] = list(label = nm, kind = "symbol", name = nm, named = TRUE,
+                                       slot = NULL, facts = list(class = class(objs[[nm]])))
   }
   full = list(threshold = 0.5, choices = NULL, levels = NULL, min_confidence = NULL,
               uncertain = NULL, replay = NULL, opts = list())

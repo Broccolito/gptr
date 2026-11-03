@@ -13,7 +13,9 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
       .stdin = FALSE)
 }
 \arguments{
-\item{...}{A session to continue, the prompt, and context objects.}
+\item{...}{A session to continue, the prompt, and context objects. A decision model reads a
+named object under its name (\code{text = x}) and any other as \code{input}, so its answers and cache
+entries never depend on how a variable is named or subset.}
 
 \item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}), a provider or router spec
 such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default. A call made by the

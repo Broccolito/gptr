@@ -167,17 +167,17 @@ warn_partial_names = function(nms, facts, idx) {
   }
 }
 
-#' Context items of the call record (contract 7.8): label, kind, name (symbols), slot (values and
-#' literals in `values`), address (symbols; IC-40) and facts
+#' Context items of the call record (contract 7.8): label, kind, name (symbols), named (an argument
+#' name was given), slot (values and literals in `values`), address (symbols; IC-40) and facts
 #' @noRd
-gateway_context_items = function(idx, kinds, sites, labels, facts, addrs) {
+gateway_context_items = function(idx, kinds, sites, labels, facts, addrs, nms) {
   out = vector("list", length(idx))
   for (k in seq_along(idx)) {
     j = idx[k]
     f = facts[[j]]
     sym = identical(kinds[j], "symbol")
     out[[k]] = list(label = labels[j], kind = kinds[j],
-                    name = if (sym) sites[j] else NULL,
+                    name = if (sym) sites[j] else NULL, named = nzchar(nms[j]),
                     slot = if (sym) NULL else paste0(".v", j),
                     address = if (sym) addrs[j] else NULL,
                     facts = list(class = f$class, dim = f$dim, length = f$length, bytes = f$bytes,

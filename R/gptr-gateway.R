@@ -81,7 +81,9 @@
 #'       prompt = NULL, envir = parent.frame(), background = FALSE,
 #'       budget = NULL, replay = NULL, .opts = list(), .run = TRUE,
 #'       .stdin = FALSE)
-#' @param ... A session to continue, the prompt, and context objects.
+#' @param ... A session to continue, the prompt, and context objects. A decision model reads a
+#'   named object under its name (`text = x`) and any other as `input`, so its answers and cache
+#'   entries never depend on how a variable is named or subset.
 #' @param model A model name (`sonnet`, `"anthropic/claude-sonnet-5-5"`), a provider or router spec
 #'   such as [gptr_fake_provider()], or `NULL` for the configured default. A call made by the
 #'   agent's own R code, and a team or fan-out it starts, uses the running session's model instead.
@@ -278,7 +280,7 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
                "noninteractive", what = "console", questions = character())
   }
   labels = dot_labels(exprs, nms)
-  items = gateway_context_items(sel$context, kinds, sites, labels, facts, addrs)
+  items = gateway_context_items(sel$context, kinds, sites, labels, facts, addrs, nms)
   call = call_new(prompt = prompt_text, template = template, interp = interp, session = target,
                   context = items, values = values,
                   envir = unmask_env(if (env_given) envir else caller),

@@ -9572,8 +9572,20 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `exists("jev")`) before asking which model to use. A bare `model = jev` still resolves (IC-41).
   The o200k counts are unchanged (`model = jev)` and `model = "jev")` are both 12 tokens in the
   measured phrase; `run.R --check` OK, no `--update`).
-- Contract-visible: 03 section 7.3 (`{s1}`), 04 section 9.3; `?peter` `choices`, `?gptr_prob`,
-  vignette system-one.
+- Rule (inputs): a System 1 state is keyed by the context's argument name only when it is named
+  (`peter(q, text = x)`: `text`, through `s1_key_name()`); any other input is `input` (`input_1`,
+  ... for more; the piped session stays `session`), and a value described from its binding drops
+  the `name: ` prefix of `describe_binding()`. Context items carry `named` (contract 7.8). Was the
+  expression label (`reviews`, `x`, `feedback_text`, else `input`), which entered the state, the
+  "The input is in `...`." sentence and so the cache key: `x = reviews; peter(q, x)` sent every
+  request again and could flip answers (0.46 to 0.54). Existing System 1 cache entries of unnamed
+  inputs miss once; the Jev and Ollama fixtures name their input (`text =`).
+- Contract-visible: 03 sections 4.1.5, 7.3 (`{s1}`) and 10.3 NS-4, 04 sections 7.8 (`context`)
+  and 9.3; `?peter` `...` and `choices`, `?gptr_prob`, vignette system-one.
 - Tests: prompt-sections "{s1} is replaced by the configured System 1 alias, quoted as an R
   string"; northstar's frozen prompt; gptr-gateway "System 1 arguments are refused on a
-  conversational route (D-250)". Evidence: progress/fixes-1.0.1/lane-C.md.
+  conversational route (D-250)"; s1-client "a System 1 request does not depend on how its input
+  is spelled (D-320)", "NS-4: if (peter(..., model = judge)) works ..."; s1-route "s1_inputs()
+  reads symbols by name ...", "large values are described instead of sent ..."; gptr-capture
+  "gateway_context_items() builds the context items ...". Evidence:
+  progress/fixes-1.0.1/lane-C.md.

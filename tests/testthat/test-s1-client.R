@@ -876,9 +876,40 @@ test_that("NS-4: if (peter(..., model = judge)) works and creates no session", {
   expect_identical(included, "a01")
   expect_length(setdiff(names(live_all()), before), 0L)
   req = fake_requests(judge)[[1]]
-  expect_identical(req$state, list(abstract = abstract))
+  expect_identical(req$state, list(input = abstract))
   expect_identical(req$question$type, "noul")
-  expect_match(req$question$instructions, "The input is in `abstract`.", fixed = TRUE)
+  expect_match(req$question$instructions, "The input is in `input`.", fixed = TRUE)
+})
+
+test_that("a System 1 request does not depend on how its input is spelled (D-320)", {
+  skip_on_cran()
+  s1_fresh()
+  judge = rct_judge()
+  q = "Is this abstract about a randomised controlled trial?"
+  abstracts = abstracts20()[1:3]
+  first = peter(q, abstracts, model = judge)
+  expect_length(fake_requests(judge), 3L)
+  x = abstracts
+  again = list(peter(q, x, model = judge), peter(q, abstracts[2], model = judge),
+               peter(q, unname(abstracts[3]), model = judge))
+  expect_length(fake_requests(judge), 3L)
+  expect_true(all(vapply(again, function(a) all(attr(a, "meta")$cached), NA)))
+  expect_identical(as.logical(again[[1]]), as.logical(first))
+  # a large value is described without its binding's name
+  big = matrix(1:100000, 100)
+  m = big
+  peter(q, big, model = judge)
+  peter(q, m, model = judge)
+  expect_length(fake_requests(judge), 4L)
+  expect_false(grepl("big", fake_requests(judge)[[4]]$state$input, fixed = TRUE))
+  # a named input keeps its name as the state key, and several unnamed ones are numbered
+  peter(q, text = abstracts[[1]], model = judge)
+  req = fake_requests(judge)[[5]]
+  expect_identical(req$state, list(text = abstracts[[1]]))
+  expect_match(req$question$instructions, "The input is in `text`.", fixed = TRUE)
+  peter(q, abstracts[[1]], abstracts[[2]], model = judge)
+  req = fake_requests(judge)[[6]]
+  expect_identical(names(req$state), c("input", "input_1"))
 })
 
 test_that("NS-4: a vector gives a named decision vector; repeats come from the cache", {
@@ -1066,7 +1097,7 @@ test_that("NS-5: System 1 routes each task to a strong or a cheap System 2 model
   skip_on_cran()
   s1_fresh()
   local_fake_provider(function(state, question) {
-    if (grepl("subtle", state$task, fixed = TRUE)) 0.9 else 0.1
+    if (grepl("subtle", state$input, fixed = TRUE)) 0.9 else 0.1
   }, name = "hardness", type = "classifier")
   strong_fake = local_fake_provider(list("strong answer"), name = "fstrong")
   cheap_fake = local_fake_provider(list("cheap answer"), name = "fcheap")

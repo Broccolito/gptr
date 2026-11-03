@@ -71,7 +71,7 @@ test_that("a System 2 child composes a thousand durable typed leaves without mor
   s1_fresh(gptr = TRUE)
   local_gptr_options(unsafe_no_permissions = TRUE)
   judge = local_fake_provider(function(state, question) {
-    if (as.integer(state$items) %% 2L == 0L) 0.9 else 0.1
+    if (as.integer(state$input) %% 2L == 0L) 0.9 else 0.1
   }, name = "largejudge", type = "classifier")
   code = paste0("items = setNames(as.character(seq_len(1000)), paste0('item', seq_len(1000))); ",
                 "answers = peter('Is it even?', items, model = 'largejudge/largejudge-s1'); ",

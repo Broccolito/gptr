@@ -2782,7 +2782,7 @@ compact_threshold(200000, max_output = 64000)
 | `id` | chr(1) | `c` + 8 hex |
 | `prompt`, `template` | chr(1)\|NULL | interpolated prompt; the literal template (`NULL` for non-literal prompts: then `template = prompt`) |
 | `session` | `<session>`\|NULL | the continuation target |
-| `context` | list | one `list(label, kind = "symbol" \| "value" \| "literal", name = chr(1) \| NULL, slot = chr(1) \| NULL, facts = list(class, dim, length, bytes, is_chr1))` per context dot; symbols are read by name from `envir` in leaves; `value` items live in `values` |
+| `context` | list | one `list(label, kind = "symbol" \| "value" \| "literal", name = chr(1) \| NULL, named = lgl(1) (the dot has an argument name; System 1 keys only a named input by its label, D-320), slot = chr(1) \| NULL, facts = list(class, dim, length, bytes, is_chr1))` per context dot; symbols are read by name from `envir` in leaves; `value` items live in `values` |
 | `values` | env | call values bound as `.v1`, `.v2`, ...; removed with `rm()` by `call_release()` |
 | `envir` | env binding | the caller frame or explicit `envir`; set to `NULL` by `call_release()` [R2] |
 | `ids` | named list | resolved `model` (chr or registered spec name), `mode`, `skills`, `plugins`, `extensions`, `tools`, `agents` (list of `<spec:agent>`) |

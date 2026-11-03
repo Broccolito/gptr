@@ -129,14 +129,17 @@ s1_binding_env = function(name, envir) {
 }
 
 #' The describer text of a value: describe_binding() for a symbol read from a known environment
-#' (it never forces promises), else the gptr_describe() generic (both P09, rule R4)
+#' (it never forces promises), without the binding's name, else the gptr_describe() generic (both
+#' P09, rule R4)
 #' @noRd
 s1_describe = function(x, name = NULL, envir = NULL) {
   home = if (!is.null(name) && is.environment(envir)) s1_binding_env(name, envir) else NULL
   lines = if (is.null(home)) {
     gptr_describe(x, budget = 150L)
   } else {
-    describe_binding(name, home, 150L)
+    d = describe_binding(name, home, 150L)
+    d[1L] = substring(d[1L], nchar(env_text(name)) + 3L)
+    d
   }
   paste(lines, collapse = "\n")
 }
@@ -330,7 +333,7 @@ s1_part = function(value, label, display = label, name = NULL, envir = NULL) {
        states = s1_states(value, label, name = name, envir = envir))
 }
 
-#' A state key from a context label ("samples$description" -> "samples_description")
+#' A state key from a named context label ("my.data" -> "my_data")
 #' @noRd
 s1_key_name = function(label) {
   key = gsub("[.$]", "_", label %||% "")
@@ -338,7 +341,8 @@ s1_key_name = function(label) {
 }
 
 #' The inputs of a gateway call: the context objects (symbols read by name from the call's
-#' environment, other values through call_value()) and the piped session, last
+#' environment, other values through call_value()) and the piped session, last. A named input is
+#' keyed by its name, any other by `input`, so how a value is spelled never changes the request.
 #' @noRd
 s1_inputs = function(call) {
   items = call$context
@@ -346,7 +350,7 @@ s1_inputs = function(call) {
   labels = character(n)
   k = 1L
   while (k <= n) {
-    labels[k] = s1_key_name(items[[k]]$label)
+    labels[k] = if (isTRUE(items[[k]]$named)) s1_key_name(items[[k]]$label) else "input"
     k = k + 1L
   }
   has_session = !is.null(call$session)
