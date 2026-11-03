@@ -31,6 +31,7 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <path class="ln" d="M12 104H252" marker-end="url(#h)"/>
 <text class="n" x="252" y="114" text-anchor="end">time</text>
 <rect class="s2 a1" x="12" y="28" width="11" height="16"/>
+<text class="n a1" x="12" y="23">child agent</text>
 <rect class="s2 a1" x="12" y="52" width="11" height="16"/>
 <path class="dash a1" d="M12 84H104"/>
 <text class="n a1" x="30" y="80">queued</text>

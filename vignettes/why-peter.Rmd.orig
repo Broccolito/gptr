@@ -48,5 +48,7 @@ cognition or that Wason introduced those labels.
 
 Use [typed decisions](system-one.html) to screen or route inputs, keeping uncertainty visible.
 Use [agent sessions](language-models.html) to inspect objects and carry out requested R work.
+[Coach the agent](tailor-and-coach.html) on your own task: code, not a model, keeps a revision
+only when a new run passes its checks and yours.
 Keep useful work in a [readable history document](script-as-history.html), and verify the
 calculations and outputs before relying on a model-generated explanation.

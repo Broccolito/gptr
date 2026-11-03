@@ -51,7 +51,8 @@ function run(tables, pre = [], blockedStorage = false) {
       observe(region) { observed.push({ region, update: this.update }); this.update(); }
     },
     IntersectionObserver: class { observe() {} },
-    MutationObserver: class { observe() {} }
+    MutationObserver: class { observe() {} },
+    window: { matchMedia: () => ({ matches: false }) }
   });
   vm.runInContext(script, context, { timeout: 1000 });
   assert.equal(typeof callbacks.DOMContentLoaded, "function");

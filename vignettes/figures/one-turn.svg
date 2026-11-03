@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 174" width="468" height="313.2" id="dark">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 0 248 158" width="446.4" height="284.4" id="dark">
 <style>
 svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
 :target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
@@ -23,7 +23,7 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 <defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
-<rect class="bg" width="260" height="174"/>
+<rect class="bg" width="260" height="158"/>
 <text class="t" x="36" y="16" text-anchor="middle">R session</text>
 <text class="n" x="36" y="28" text-anchor="middle">your objects</text>
 <path class="ln" d="M36 34V154"/>
@@ -45,5 +45,5 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <text class="n a5" x="224" y="104">repeats</text>
 <path class="ln a6" pathLength="1" d="M204 142H40" marker-end="url(#h)"/>
 <text class="n a6" x="121" y="137" text-anchor="middle">answer</text>
-<text class="a7" x="0" y="169">session$text, $value</text>
+<text class="a7" x="121" y="153" text-anchor="middle">session$text, $value</text>
 </svg>

@@ -38,10 +38,16 @@ document.addEventListener("DOMContentLoaded", () => {
     block.setAttribute("aria-label", `Code block ${index + 1}`);
     makeScrollable(block);
   });
-  // Inline code of up to 32 characters (12 in a table) fits a phone's line, so it never breaks.
+  // Inline code of up to 32 characters (12 in a table) fits a phone's line, so it never breaks;
+  // longer code in a table breaks only after _ / - or ::, never inside a name.
   document.querySelectorAll("#main :not(pre) > code").forEach((code) => {
-    if (code.textContent.length <= (code.closest("table") ? 12 : 32)) {
+    const table = code.closest("table");
+    if (code.textContent.length <= (table ? 12 : 32)) {
       code.classList.add("gptr-nowrap");
+    } else if (table && !code.children.length) {
+      const parts = code.textContent.split(/(?<=.(?:[_/-]|::))(?=.)/);
+      code.replaceChildren(...parts.flatMap((part, i) =>
+        i ? [document.createElement("wbr"), part] : part));
     }
   });
   // The home page shows a figure above each lead point; README.md itself stays plain text.
@@ -55,8 +61,8 @@ document.addEventListener("DOMContentLoaded", () => {
       "to the model and the R code it returns is recorded under the call; a later replay runs " +
       "that code in an R session with no model call."],
     "Improve the agent on your own task.": ["coach", "A harness of note, skills, review and " +
-      "rules runs your task; coaches propose new coaching; code checks a final run before the " +
-      "revised harness is kept, and the kept harness can be coached again."]
+      "rules runs your task; coaches write new coaching; code checks a final run with it, the " +
+      "revised harness is kept only if that run passes, and a kept harness can be coached again."]
   };
   document.querySelectorAll(".template-home #main > .section > ul > li > strong:first-child")
     .forEach((lead) => {
@@ -81,7 +87,16 @@ document.addEventListener("DOMContentLoaded", () => {
   figures.forEach((figure) => paint(figure));
   new MutationObserver(() => figures.forEach((figure) => paint(figure)))
     .observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
-  // A figure draws once at load and again from the start when it first comes into view.
+  // A caption describes its figure to assistive technology.
+  figures.forEach((figure, index) => {
+    const caption = figure.nextElementSibling;
+    if (!caption || !caption.classList.contains("figcaption")) return;
+    caption.id = `figure-caption-${index + 1}`;
+    figure.setAttribute("aria-describedby", caption.id);
+  });
+  // A figure draws once at load and again from the start when it first comes into view,
+  // unless the reader asks for reduced motion, which shows the final frame.
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const replay = new IntersectionObserver((entries) => entries.forEach((entry) => {
     if (!entry.isIntersecting) return;
     replay.unobserve(entry.target);

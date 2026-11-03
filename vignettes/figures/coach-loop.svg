@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 252" width="432" height="453.6" id="dark">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="11 0 229 252" width="412.2" height="453.6" id="dark">
 <style>
 svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
 :target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
@@ -56,8 +56,8 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <text class="n a6" x="152" y="201">no riskier action</text>
 <path class="ln a7" pathLength="1" d="M108 183L84 215" marker-end="url(#h)"/>
 <path class="ln a7" pathLength="1" d="M132 183L156 215" marker-end="url(#h)"/>
-<g class="a7"><rect class="ln" x="24.5" y="218.5" width="96" height="30" rx="3"/><text class="t" x="72" y="231" text-anchor="middle">new harness</text><text class="n" x="72" y="242" text-anchor="middle">kept</text></g>
-<g class="a7"><rect class="ln" x="130.5" y="218.5" width="96" height="30" rx="3"/><text class="t" x="178" y="231" text-anchor="middle">starting harness</text><text class="n" x="178" y="242" text-anchor="middle">otherwise</text></g>
+<g class="a7"><rect class="ln" x="24.5" y="218.5" width="96" height="30" rx="3"/><text class="t" x="72" y="231" text-anchor="middle">new harness</text><text class="n" x="72" y="242" text-anchor="middle">kept if checks pass</text></g>
+<g class="a7"><rect class="ln" x="130.5" y="218.5" width="96" height="30" rx="3"/><text class="t" x="178" y="231" text-anchor="middle">starting harness</text><text class="n" x="178" y="242" text-anchor="middle">returned otherwise</text></g>
 <path class="ln a7" pathLength="1" d="M24 233.5H12V19H56" marker-end="url(#h)"/>
 <text class="n a7" x="16" y="50">coach</text>
 <text class="n a7" x="16" y="60">again</text>

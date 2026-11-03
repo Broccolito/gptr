@@ -38,9 +38,9 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <text class="a2" x="180" y="126" text-anchor="middle">2</text>
 <g class="a3"><text x="180" y="78" text-anchor="middle">1</text><text x="218" y="78" text-anchor="middle">10</text></g>
 <text class="a4" x="218" y="62" text-anchor="middle">5</text>
-<path class="ln a5" pathLength="1" d="M176.5 139.5H183.5"/>
-<path class="ln a5" pathLength="1" d="M176.5 123.5H183.5"/>
-<path class="ln a5" pathLength="1" d="M212 75.5H224"/>
+<path class="ln a5" pathLength="1" d="M177.6 139.5H182.4"/>
+<path class="ln a5" pathLength="1" d="M177.6 123.5H182.4"/>
+<path class="ln a5" pathLength="1" d="M213.4 75.5H222.6"/>
 <path class="ln a6" pathLength="1" d="M140 134V39" marker-end="url(#h)"/>
 <path class="ln a6" pathLength="1" d="M180 70V39" marker-end="url(#h)"/>
 <path class="ln a6" pathLength="1" d="M218 54V39" marker-end="url(#h)"/>

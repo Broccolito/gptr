@@ -79,7 +79,7 @@ Keep the file out of version control.
 | Anthropic | `ANTHROPIC_API_KEY` | `"anthropic/claude-sonnet-5-5"` |
 | OpenAI | `OPENAI_API_KEY` | `"openai/gpt-6-sol"` |
 | Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `"google/gemini-3.8-flash"` |
-| OpenRouter | `OPENROUTER_API_KEY` | Choose a reference from `gptr_models(provider = "openrouter")` |
+| OpenRouter | `OPENROUTER_API_KEY` | Any model that `gptr_models()` lists for OpenRouter |
 | Hosted System 1 | `TYPESAFE_API_KEY` (`jev-key` is a `.env` alias) | `"typesafe/jev-latest"` |
 
 ```{r, eval = FALSE}

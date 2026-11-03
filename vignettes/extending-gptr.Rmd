@@ -170,7 +170,7 @@ checks are policies too, such as `mode`, `rules` and `critical_guard`; `gptr_reg
 lists them. Deny wins over ask, ask over modify and modify over allow, while `NULL` gives no
 answer, so a policy can make a call stricter but never looser.
 
-![Policies, strictest answer wins. In `auto` mode the `mode` policy allows `rm(list = ls())`,
+![Each policy answers; the strictest answer wins. In `auto` mode the `mode` policy allows `rm(list = ls())`,
 `critical_guard` asks and `keep_data` denies, so the call is denied and the model receives an
 error result.](figures/policy-strictest.svg){alt="Diagram: policy layers answering one tool request"}
 

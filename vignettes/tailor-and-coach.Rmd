@@ -1,6 +1,6 @@
 ---
 title: "Harnesses and coaching"
-description: "Build your own peter, improve it by running your task, and coach the result again."
+description: "Build your own peter and let it improve itself on your task, round after round."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Harnesses and coaching}
@@ -36,8 +36,9 @@ know about your data, ask it to check its work before it stops, and set hard rul
 Two functions make one. Both return a harness: a function you call exactly like `peter()`.
 
 - `gptr_tailor()` builds a harness from parts you write. It calls no model and returns at once.
-- `gptr_coach()` improves a harness by running your task several times and keeping the changes
-  that helped. It calls models, runs several sessions and takes minutes.
+- `gptr_coach()` lets Peter improve itself on your task: models revise the coaching from runs of
+  your task, and code keeps a revision only when a new run passes gptr's checks and yours. It
+  calls models, runs several sessions and takes minutes.
 
 ![A harness, from peter outwards. gptr_tailor() sets the fixed arguments, your rules and the
 coaching; gptr_coach() changes only the coaching.](figures/harness-layers.svg){alt="Diagram: the layers of a harness"}
@@ -73,7 +74,7 @@ survey_peter = gptr_tailor(
   )
 )
 survey_peter
-#> <gptr_harness b5a56cd6d7f5> built on peter (gptr 1.0.1)
+#> <gptr_harness 3b06296c2196> built on peter (gptr 1.0.1)
 #> fixed: mode = "auto"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review 1 round(s), rules none
@@ -126,14 +127,14 @@ co = survey_peter$coaching
 co$review = NULL
 quick_peter = gptr_tailor(survey_peter, mode = "edits", coaching = co)
 quick_peter
-#> <gptr_harness 611624a75cd7> built on peter (gptr 1.0.1)
+#> <gptr_harness 9cb85dd8c978> built on peter (gptr 1.0.1)
 #> fixed: mode = "edits"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review none, rules none
 #> record: none
 ```
 
-## Improve Peter on your own task
+## Self-improvement: coach Peter on your task
 
 With `gptr_coach()`, Peter's harness improves from its own runs. Coaches, which are language
 models, read runs of your task and rewrite the coaching, and code, not a model, decides whether
@@ -263,10 +264,9 @@ Code then checks every final run as above. When more than one passes, a blind ju
 only the task and what each final delivered, picks one; with `"sequential"` it need not be the
 last round's.
 
-![Parallel and sequential coaching at k = 3, where each coach block is a procedure and domain pair
-with its probe runs: in parallel every composer sees every proposal, in sequence each round starts
-from the composition before it. Code checks every final run, and a judge picks one when several
-pass.](figures/coach-rounds.svg){alt="Diagram: parallel and sequential coaching rounds"}
+![Parallel and sequential coaching at k = 3. In parallel every composer sees every proposal; in
+sequence each round starts from the composition before it. Code checks every final run, and a judge
+picks one when several pass.](figures/coach-rounds.svg){alt="Diagram: parallel and sequential coaching rounds"}
 
 
 ``` r
@@ -320,7 +320,7 @@ path = tempfile(fileext = ".rds")
 saveRDS(survey_peter, path)
 their_peter = gptr_tailor(readRDS(path))
 their_peter
-#> <gptr_harness 650506c146e1> built on peter (gptr 1.0.1)
+#> <gptr_harness 832f58c1b151> built on peter (gptr 1.0.1)
 #> fixed: mode = "auto"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review 1 round(s), rules none

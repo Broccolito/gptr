@@ -15,10 +15,9 @@ inspect, reuse or modify.
 - **Keep a record you can rerun.** Record agent calls and their executed
   R code alongside your analysis, then replay the code with the required
   inputs and packages.
-- **Improve the agent on your own task.** Models revise its instructions
-  from runs of your task, and gptr keeps a revision only when a new run
-  does no worse and passes any check you give. A revised agent can be
-  revised again.
+- **Improve the agent on your own task.** Models revise the agent's
+  instructions from runs of your task; gptr keeps only revisions that
+  pass its checks and yours, round after round.
 
 ## Installation
 
@@ -107,7 +106,7 @@ session:
 
 ``` r
 session = peter("Fit mpg on wt in mtcars and store the model as fit.", mtcars)
-session |> peter("Which cars have the largest residuals in fit?")
+session |> peter("Store the residuals of fit as res. Which cars have the largest?")
 session$text
 coef(fit)
 ```
@@ -217,15 +216,20 @@ times (4 runs and 3 coach sessions by default) and takes minutes.
 
 ``` r
 auto_peter = gptr_tailor(peter, mode = "auto")
-slope_peter = gptr_coach("Regress mpg on wt in mtcars; store the slope as b.", mtcars,
-                         harness = auto_peter, check = function(r) is.numeric(r$objects$b))
+slope_peter = gptr_coach(
+  "Regress mpg on wt in mtcars; store the slope as b.", mtcars,
+  harness = auto_peter,
+  check = function(r) is.numeric(r$objects$b)
+)
 slope_peter("Regress mpg on hp in mtcars; store the slope as b.", mtcars)
 saveRDS(slope_peter, "slope_peter.rds")
-slope_peter = gptr_tailor(readRDS("slope_peter.rds"))  # load and check it in a later session
+# load and check it in a later session
+slope_peter = gptr_tailor(readRDS("slope_peter.rds"))
 ```
 
 The result is a harness too, so `gptr_coach(..., harness = slope_peter)`
-coaches it again on your next task. See [Harnesses and
+coaches it again on your next task: recursive self-improvement, limited
+to the coaching. See [Harnesses and
 coaching](https://broccolito.github.io/gptr/articles/tailor-and-coach.html)
 for what coaching may change and how gptr decides what to keep.
 

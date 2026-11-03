@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 140" width="432" height="252" id="dark">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 0 232 140" width="417.6" height="252" id="dark">
 <style>
 svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
 :target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
@@ -32,6 +32,6 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <g class="a3"><rect class="ln" x="8.5" y="34.5" width="200" height="22" rx="3"/><text class="t" x="16" y="48.5">coaching</text><text class="n" x="96" y="48.5">note, skills, review, rules</text></g>
 <path class="ln a4" pathLength="1" d="M220 22V108H213M220 35H213"/>
 <text class="a4" x="236" y="16" text-anchor="end">gptr_tailor()</text>
-<g class="a5"><rect class="s2" x="14" y="4" width="11" height="16"/><text x="31" y="16">gptr_coach()</text></g>
+<g class="a5"><rect class="s2" x="14" y="4" width="11" height="16"/><text x="31" y="16">gptr_coach()</text><text class="n" x="97" y="16">coaches</text></g>
 <path class="ln a5" pathLength="1" d="M19.5 22V32" marker-end="url(#h)"/>
 </svg>

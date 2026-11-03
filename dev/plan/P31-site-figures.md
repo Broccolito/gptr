@@ -48,6 +48,8 @@ bar, the blue System 2 block and the `>` chevron, with no decoration.
   `height` at 1.8 times W and H, so labels are 13.5 to 15 px on a desktop, close to code text, and
   stay legible at 390 px. Keep at least 2 units between ink and the edge in a wide fallback font
   (Verdana, Courier New); text near the right edge ends there with `text-anchor="end"` or moves in.
+  A drawing that starts right of 0 moves the viewBox origin there (`viewBox="8 0 252 160"`, width
+  1.8 times 252), so every figure starts at the text margin.
 - **Classes.** `ln` a 1-unit ink line or outline, `dash` a dashed one, `dot` an ink fill (dots,
   gate bars), `s1` the red System 1 fill (5 x 16), `s2` the blue System 2 fill: 22 x 32 for a
   model that persists through the figure (an agent, a server's client), 11 x 16 for a model that

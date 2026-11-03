@@ -34,17 +34,19 @@ settings, project settings, user-level project permission rules, R options, then
 this R process. Explicit call arguments choose the values for that call. Safety and trust
 restrictions still apply; an explicit call cannot disable the inherited permission guards.
 
-![Settings resolve from the bottom up. Each layer replaces only the entries it sets, so this
-call's budget takes its token limit from the package defaults, its cost limit from this R
-process and its turn limit from the call.](figures/settings-layers.svg){alt="Diagram: settings layers, from the call argument down to package defaults"}
+![The budget resolves from the bottom up, and each layer replaces only the entries it sets. With
+`cost = 2` in the user file, `cost = 1` and `turns = 10` for this R process (as below) and
+`budget = list(turns = 5)` in the call, the call takes its token limit from the package
+defaults, its cost limit from this R process and its turn limit from the call.](figures/settings-layers.svg){alt="Diagram: settings layers, from the call argument down to package defaults"}
 
 | Scope | Lifetime and location | Use it for |
 |---|---|---|
 | `"session"` | This R process; no settings file | Temporary defaults for scripts or exploration. It is not limited to one `gptr_session` conversation. |
 | `"project"` | `.gptr/settings.json` in an initialized project | Shared project defaults and stricter context/permission policy. |
-| `"user"` | `tools::R_user_dir("gptr", "config")/settings.json` | Personal defaults across projects and provider egress acknowledgments. |
+| `"user"` | `settings.json` in the user configuration directory | Personal defaults across projects and provider egress acknowledgments. |
 | `NULL` | Project when a `.gptr/` workspace exists; otherwise this R process | Convenient interactive changes; use an explicit scope in scripts. |
 
+The user configuration directory is `tools::R_user_dir("gptr", "config")`.
 `gptr_config()` with no settings reads the effective values; it does not read only the scope
 named in `.scope`. A setter returns the previous values **in the chosen scope** invisibly.
 Setting a key to `NULL` removes that override and exposes the lower layers. Unknown setting

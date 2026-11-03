@@ -94,7 +94,7 @@ Keep the file out of version control.
 | Anthropic | `ANTHROPIC_API_KEY` | `"anthropic/claude-sonnet-5-5"` |
 | OpenAI | `OPENAI_API_KEY` | `"openai/gpt-6-sol"` |
 | Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `"google/gemini-3.8-flash"` |
-| OpenRouter | `OPENROUTER_API_KEY` | Choose a reference from `gptr_models(provider = "openrouter")` |
+| OpenRouter | `OPENROUTER_API_KEY` | Any model that `gptr_models()` lists for OpenRouter |
 | Hosted System 1 | `TYPESAFE_API_KEY` (`jev-key` is a `.env` alias) | `"typesafe/jev-latest"` |
 
 
@@ -294,7 +294,7 @@ other = gptr_fake_provider(list("An association does not establish causation."),
 session = peter("Describe how mpg relates to wt.", mtcars, model = fake)
 session |> peter("Add a caveat.", model = other)
 #> An association does not establish causation.
-#> idle . other/other-1 . 2 turns . 3.5k tokens . $0.0000 . s103d54e893
+#> idle . other/other-1 . 2 turns . 3.5k tokens . $0.0000 . sab5a7d5946
 ```
 
 ## Put calls in functions and scripts

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 120" width="468" height="216" id="dark">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="2 0 258 120" width="464.4" height="216" id="dark">
 <style>
 svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
 :target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
@@ -31,14 +31,16 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <text class="t" x="191" y="12">R session</text>
 <text x="191" y="24">survey</text>
 <path class="ln a1" pathLength="1" d="M30 24V48" marker-end="url(#h)"/>
-<path class="ln a1" pathLength="1" d="M194 31L112 48" marker-end="url(#h)"/>
-<text class="n a1" x="124" y="38">copy</text>
+<path class="ln a1" pathLength="1" d="M200 31V38H117V47" marker-end="url(#h)"/>
+<text class="n a1" x="158" y="35" text-anchor="middle">copy</text>
 <g class="a2"><rect class="ln" x="8.5" y="50.5" width="140" height="20" rx="2"/><text class="t" x="14" y="63">v001/</text><text x="50" y="63">app.R</text><text x="86" y="63">data/001.rds</text></g>
 <path class="ln a3" pathLength="1" d="M151 60.5H181" marker-end="url(#h)"/>
 <text class="n a3" x="166" y="55" text-anchor="middle">launch</text>
 <g class="a3"><rect class="ln" x="184.5" y="45.5" width="64" height="30" rx="2"/><text class="t" x="191" y="57">R process</text><text x="191" y="69">127.0.0.1</text></g>
-<path class="ln a4" pathLength="1" d="M8 13.5H3V106.5H6" marker-end="url(#h)"/>
+<path class="ln a4" pathLength="1" d="M8 13.5H3V106.5H5" marker-end="url(#h)"/>
+<path class="ln a4" pathLength="1" d="M251 14.5H255V101H152" marker-end="url(#h)"/>
+<text class="n a4" x="203" y="97" text-anchor="middle">copy</text>
 <text class="n a4" x="14" y="86">edit app.R, call peter$app() again</text>
 <g class="a5"><rect class="ln" x="8.5" y="96.5" width="140" height="20" rx="2"/><text class="t" x="14" y="109">v002/</text><text x="50" y="109">app.R</text><text x="86" y="109">data/001.rds</text></g>
-<text class="n a6" x="156" y="109">each version is kept</text>
+<text class="n a6" x="156" y="114">each version is kept</text>
 </svg>

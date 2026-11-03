@@ -34,16 +34,14 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <text class="n a1" x="106" y="17" text-anchor="middle">runs of your task</text>
 <rect class="s2" x="152" y="14" width="11" height="16"/>
 <rect class="s2" x="167" y="14" width="11" height="16"/>
-<text class="n" x="183" y="21">coaches</text>
-<text class="n" x="183" y="31">propose</text>
+<text class="n" x="183" y="25">coaches</text>
 <path class="ln a2" pathLength="1" d="M165 35V68H136" marker-end="url(#h)"/>
 <text class="n a2" x="171" y="55">new coaching</text>
 <rect class="dot a3" x="128" y="59" width="2" height="18"/>
-<text class="n a3" x="129" y="88" text-anchor="middle">final run,</text>
-<text class="n a3" x="129" y="98" text-anchor="middle">checked by code</text>
+<text class="n a3" x="129" y="91" text-anchor="middle">final run,</text>
+<text class="n a3" x="129" y="101" text-anchor="middle">checked by code</text>
 <path class="ln a4" pathLength="1" d="M124 68H67" marker-end="url(#h)"/>
-<text class="n a4" x="95" y="63" text-anchor="middle">kept</text>
-<path class="ln a5" pathLength="1" d="M9 55.5V77.5"/>
-<path class="ln a6" pathLength="1" d="M74 58C92 54 92 32 74 28" marker-end="url(#h)"/>
-<text class="n a6" x="93" y="45">coach again</text>
+<text class="n a4" x="70" y="78">kept if passed</text>
+<path class="ln a5" pathLength="1" d="M76 68C96 64 96 30 77 26.5" marker-end="url(#h)"/>
+<text class="n a5" x="96" y="48">coach again</text>
 </svg>

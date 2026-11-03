@@ -37,11 +37,9 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <text x="8" y="112">peter("Check residuals.")</text>
 <path class="ln" d="M9 117.5V126.5"/><text x="15" y="124">quantile(resid(fit))</text>
 <g class="a1"><text x="158" y="48">fresh</text><text class="n" x="158" y="60">runs as recorded</text><rect class="dash" x="232.5" y="44.5" width="10" height="15"/></g>
-<path class="ln a2" pathLength="1" d="M84.8 83H113.6"/>
 <g class="a2"><text x="158" y="80">stale</text><text class="n" x="158" y="92">prompt changed</text></g>
 <rect class="s2 a3" x="232" y="76" width="11" height="16"/>
 <text class="a4" x="15" y="92">plot(resid(fit) ~ d$cyl)</text>
-<path class="ln a5" pathLength="1" d="M15 127H53.4"/>
 <g class="a5"><text x="158" y="112">user-edited</text><text class="n" x="158" y="124">your edit runs</text><rect class="dash" x="232.5" y="108.5" width="10" height="15"/></g>
 <path class="ln" d="M1 142.5V151.5"/><text class="n" x="7" y="149">recorded code</text>
 <rect class="dash" x="78.5" y="139.5" width="10" height="15"/><text class="n" x="94" y="149">no model call</text>

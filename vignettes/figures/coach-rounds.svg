@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 152" width="468" height="273.6" id="dark">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="3 0 257 160" width="462.6" height="288" id="dark">
 <style>
 svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
 :target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
@@ -23,15 +23,17 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 <defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
-<rect class="bg" width="260" height="152"/>
+<rect class="bg" width="260" height="160"/>
 <text x="102" y="10" text-anchor="middle">"parallel"</text>
 <text x="207" y="10" text-anchor="middle">"sequential"</text>
 <text class="n" x="4" y="24.5">starting runs</text>
-<text class="n" x="4" y="51">coach pairs</text>
+<text class="n" x="4" y="47">coach pairs</text>
+<text class="n" x="4" y="56">and probes</text>
 <text class="n" x="4" y="83">composers</text>
-<text class="n" x="4" y="106">final runs</text>
-<text class="t" x="4" y="122.5">code decides</text>
-<text class="n" x="4" y="143">judge</text>
+<text class="n" x="4" y="109">final runs</text>
+<text class="t" x="4" y="128.5">code decides</text>
+<text class="n" x="4" y="146">judge picks one</text>
+<text class="n" x="4" y="155">if several pass</text>
 <rect class="s2" x="66.5" y="40" width="11" height="16"/>
 <rect class="s2" x="66.5" y="72" width="11" height="16"/>
 <rect class="s2" x="96.5" y="40" width="11" height="16"/>
@@ -44,8 +46,8 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <rect class="s2" x="201.5" y="72" width="11" height="16"/>
 <rect class="s2" x="231.5" y="40" width="11" height="16"/>
 <rect class="s2" x="231.5" y="72" width="11" height="16"/>
-<rect class="s2" x="96.5" y="132" width="11" height="16"/>
-<rect class="s2" x="201.5" y="132" width="11" height="16"/>
+<rect class="s2" x="96.5" y="140" width="11" height="16"/>
+<rect class="s2" x="201.5" y="140" width="11" height="16"/>
 <circle class="ln a1" pathLength="1" cx="72" cy="22" r="4.5"/>
 <circle class="ln a1" pathLength="1" cx="102" cy="22" r="4.5"/>
 <circle class="ln a1" pathLength="1" cx="132" cy="22" r="4.5"/>
@@ -61,36 +63,34 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <path class="ln a2" pathLength="1" d="M72 62V70" marker-end="url(#h)"/>
 <path class="ln a2" pathLength="1" d="M102 62V70" marker-end="url(#h)"/>
 <path class="ln a2" pathLength="1" d="M132 62V70" marker-end="url(#h)"/>
-<path class="ln a3" pathLength="1" d="M72 89V97" marker-end="url(#h)"/>
-<path class="ln a3" pathLength="1" d="M102 89V97" marker-end="url(#h)"/>
-<path class="ln a3" pathLength="1" d="M132 89V97" marker-end="url(#h)"/>
-<circle class="ln a3" pathLength="1" cx="72" cy="103.5" r="4.5"/>
-<circle class="ln a3" pathLength="1" cx="102" cy="103.5" r="4.5"/>
-<circle class="ln a3" pathLength="1" cx="132" cy="103.5" r="4.5"/>
+<path class="ln a3" pathLength="1" d="M72 89V99" marker-end="url(#h)"/>
+<path class="ln a3" pathLength="1" d="M102 89V99" marker-end="url(#h)"/>
+<path class="ln a3" pathLength="1" d="M132 89V99" marker-end="url(#h)"/>
+<circle class="ln a3" pathLength="1" cx="72" cy="106" r="4.5"/>
+<circle class="ln a3" pathLength="1" cx="102" cy="106" r="4.5"/>
+<circle class="ln a3" pathLength="1" cx="132" cy="106" r="4.5"/>
 <path class="ln a2" pathLength="1" d="M177 31V38" marker-end="url(#h)"/>
 <path class="ln a2" pathLength="1" d="M177 57V70" marker-end="url(#h)"/>
-<path class="ln a3" pathLength="1" d="M177 89V97" marker-end="url(#h)"/>
-<circle class="ln a3" pathLength="1" cx="177" cy="103.5" r="4.5"/>
+<path class="ln a3" pathLength="1" d="M177 89V99" marker-end="url(#h)"/>
+<circle class="ln a3" pathLength="1" cx="177" cy="106" r="4.5"/>
 <path class="ln a3" pathLength="1" d="M184 74L199 58" marker-end="url(#h)"/>
 <path class="ln a3" pathLength="1" d="M207 31V38" marker-end="url(#h)"/>
 <path class="ln a3" pathLength="1" d="M207 57V70" marker-end="url(#h)"/>
-<path class="ln a4" pathLength="1" d="M207 89V97" marker-end="url(#h)"/>
-<circle class="ln a4" pathLength="1" cx="207" cy="103.5" r="4.5"/>
+<path class="ln a4" pathLength="1" d="M207 89V99" marker-end="url(#h)"/>
+<circle class="ln a4" pathLength="1" cx="207" cy="106" r="4.5"/>
 <path class="ln a4" pathLength="1" d="M214 74L229 58" marker-end="url(#h)"/>
 <path class="ln a4" pathLength="1" d="M237 31V38" marker-end="url(#h)"/>
 <path class="ln a4" pathLength="1" d="M237 57V70" marker-end="url(#h)"/>
-<path class="ln a5" pathLength="1" d="M237 89V97" marker-end="url(#h)"/>
-<circle class="ln a5" pathLength="1" cx="237" cy="103.5" r="4.5"/>
-<path class="ln a6" pathLength="1" d="M72 108.5V115.5" marker-end="url(#h)"/>
-<path class="ln a6" pathLength="1" d="M102 108.5V115.5" marker-end="url(#h)"/>
-<path class="ln a6" pathLength="1" d="M132 108.5V115.5" marker-end="url(#h)"/>
-<path class="ln a6" pathLength="1" d="M177 108.5V115.5" marker-end="url(#h)"/>
-<path class="ln a6" pathLength="1" d="M207 108.5V115.5" marker-end="url(#h)"/>
-<path class="ln a6" pathLength="1" d="M237 108.5V115.5" marker-end="url(#h)"/>
-<rect class="dot a6" x="67" y="118" width="70" height="2"/>
-<rect class="dot a6" x="172" y="118" width="70" height="2"/>
-<path class="ln a7" pathLength="1" d="M102 121V129.5" marker-end="url(#h)"/>
-<path class="ln a7" pathLength="1" d="M207 121V129.5" marker-end="url(#h)"/>
-<text class="n a7" x="113" y="143">picks one</text>
-<text class="n a7" x="218" y="143">picks one</text>
+<path class="ln a5" pathLength="1" d="M237 89V99" marker-end="url(#h)"/>
+<circle class="ln a5" pathLength="1" cx="237" cy="106" r="4.5"/>
+<path class="ln a6" pathLength="1" d="M72 111V121" marker-end="url(#h)"/>
+<path class="ln a6" pathLength="1" d="M102 111V121" marker-end="url(#h)"/>
+<path class="ln a6" pathLength="1" d="M132 111V121" marker-end="url(#h)"/>
+<path class="ln a6" pathLength="1" d="M177 111V121" marker-end="url(#h)"/>
+<path class="ln a6" pathLength="1" d="M207 111V121" marker-end="url(#h)"/>
+<path class="ln a6" pathLength="1" d="M237 111V121" marker-end="url(#h)"/>
+<rect class="dot a6" x="67" y="124" width="70" height="2"/>
+<rect class="dot a6" x="172" y="124" width="70" height="2"/>
+<path class="ln a7" pathLength="1" d="M102 127V137.5" marker-end="url(#h)"/>
+<path class="ln a7" pathLength="1" d="M207 127V137.5" marker-end="url(#h)"/>
 </svg>

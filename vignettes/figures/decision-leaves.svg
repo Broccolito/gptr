@@ -42,5 +42,5 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <text class="n a2" x="206" y="80">asked once</text>
 <g class="a3"><text x="86" y="98" text-anchor="middle">TRUE</text><text x="122" y="98" text-anchor="middle">FALSE</text><text x="158" y="98" text-anchor="middle">TRUE</text></g>
 <text class="a4" x="194" y="98" text-anchor="middle">TRUE</text>
-<text class="n a5" x="212" y="98">input order</text>
+<text class="n a5" x="26" y="98">input order</text>
 </svg>
