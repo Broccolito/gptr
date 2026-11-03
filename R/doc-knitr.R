@@ -29,6 +29,20 @@ knit_print.gptr_s1 = function(x, ...) {
   knitr::asis_output(paste0("`", redact(doc_s1_summary(x), "persist"), "`\n"))
 }
 
+#' Notebook text of a System 1 vector: what print() shows (values with p or conf, the footer
+#' naming model, calibration and date) without styling, redacted as knit_print.gptr_s1 is; the
+#' HTML and Markdown displays keep it inert, so repr's bare-vector methods never drop them
+#' @noRd
+doc_s1_repr_text = function(x, ...) {
+  redact(paste(cli::ansi_strip(utils::capture.output(print(x))), collapse = "\n"), "persist")
+}
+
+#' @noRd
+doc_s1_repr_html = function(x, ...) doc_repr_pre(doc_s1_repr_text(x))
+
+#' @noRd
+doc_s1_repr_markdown = function(x, ...) doc_repr_fence(doc_s1_repr_text(x))
+
 #' Use the compact history printer before knitr delegates to a data-frame renderer
 #' @noRd
 doc_history_knit_print = function(x, ...) {
@@ -133,3 +147,7 @@ on_load(s3_register("repr::repr_html", "gptr_session_summary", method = doc_hist
 on_load(s3_register("repr::repr_markdown", "gptr_session_summary",
                    method = doc_history_repr_markdown))
 on_load(s3_register("repr::repr_latex", "gptr_session_summary", method = doc_history_repr_latex))
+on_load(s3_register("repr::repr_text", "gptr_s1", method = doc_s1_repr_text))
+on_load(s3_register("repr::repr_html", "gptr_s1", method = doc_s1_repr_html))
+on_load(s3_register("repr::repr_markdown", "gptr_s1", method = doc_s1_repr_markdown))
+on_load(s3_register("repr::repr_latex", "gptr_s1", method = doc_history_repr_latex))

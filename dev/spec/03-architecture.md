@@ -2336,7 +2336,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   Console selector titles intentionally preserve line feeds for setup and question text; option
   labels, details and other control/bidi/zero-width characters remain escaped. Permission approval
   rendering retains its separate escaping contract.
-- **Other front ends**: `knit_print` for sessions and System 1 vectors; the JSONL event sink (`frontend`
+- **Other front ends**: `knit_print` for sessions and System 1 vectors, and Jupyter `repr` methods for sessions,
+  histories and System 1 vectors (a System 1 vector shows what `print()` shows: each value's p or conf and the
+  model, calibration and date footer); the JSONL event sink (`frontend`
   "jsonl": redacted Pi-named events on a connection, used by worker children and by agentic layers written in
   other languages) [P-B graft].
 

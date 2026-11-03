@@ -253,6 +253,39 @@ test_that("knitr's generic dispatches to the lazily registered methods", {
   expect_identical(as.character(knitr::knit_print(x)), "`gptr_score: mean 1.5 (m, 2026-10-05)`\n")
 })
 
+test_that("System 1 vectors show their probabilities and provenance in a notebook", {
+  testthat::local_reproducible_output(width = 80, crayon = TRUE)
+  meta = list(model = "jev-1.14.0", calibrated = NA, date = "2026-11-02")
+  vecs = list(
+    new_gptr_decision(c(Corolla = TRUE, Civic = FALSE), c(0.95, 0.06), meta = meta),
+    new_gptr_choice(c("liver", "<b>lung</b>"), levels = c("liver", "<b>lung</b>"),
+                    probabilities = rbind(c(0.8, 0.2), c(0.3, 0.7)), confidence = c(0.6, 0.4),
+                    meta = meta),
+    new_gptr_score(1.5, levels = c("low", "high"), probabilities = rbind(c(0.5, 0.5)),
+                   confidence = 0.2, meta = meta))
+  for (x in vecs) {
+    plain = doc_s1_repr_text(x)
+    expect_false(grepl("\033", plain, fixed = TRUE))
+    expect_identical(plain, paste(cli::ansi_strip(utils::capture.output(print(x))),
+                                  collapse = "\n"))
+    for (text in c(plain, doc_s1_repr_html(x), doc_s1_repr_markdown(x))) {
+      expect_match(text, if (inherits(x, "gptr_score")) "(conf 0.20)" else "(p=0.", fixed = TRUE)
+      expect_match(text, "jev-1.14.0 . calibration unknown . 2026-11-02", fixed = TRUE)
+    }
+  }
+  expect_match(doc_s1_repr_html(vecs[[2L]]), "&lt;b&gt;lung&lt;/b&gt;", fixed = TRUE)
+  hooks = getHook(packageEvent("repr", "onLoad"))
+  methods = vapply(hooks, function(h) {
+    if (identical(get0("class", environment(h), inherits = FALSE), "gptr_s1")) {
+      get0("name", environment(h), inherits = FALSE)
+    } else {
+      NA_character_
+    }
+  }, "")
+  expect_setequal(methods[!is.na(methods)],
+                  c("repr_text", "repr_html", "repr_markdown", "repr_latex"))
+})
+
 # ---- knitr and Quarto through peter() and the fake provider (05 P15 acceptance 2) ---------------
 
 test_that("knitr records an agent chunk through peter() and replays it on the next knit", {
