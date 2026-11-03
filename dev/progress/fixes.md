@@ -11394,11 +11394,19 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   `ci_shard_files()` gives the slowest file first to the shard with the least time so far, by a
   table of each file's median seconds per OS from four runs (Linux from the connection gate, macOS,
   Windows); a file not in the table counts 1 s, so files of equal time still take turns in name
-  order. The OS comes from `Sys.info()`. macOS runs 5 shards again, one wave. Names are matched
-  exactly (a data frame's row names match partially).
-- Predicted test time per shard (from the same medians): macOS 9.1 to 9.2 minutes, Windows 5.4 to
-  5.5, connection gate 6.5, `LC_ALL=C` even across its 4 shards (two workers each).
+  order. The OS comes from `Sys.info()`. Shard 1 starts with a head start for the work only it
+  does: 115 s on macOS (vignettes and examples) and 170 s on Windows (the native fixtures). macOS
+  runs 5 shards again, one wave. Names are matched exactly (a data frame's row names match
+  partially).
+- Measured on the PR's first head (no head start yet): every check green; R-CMD-check.yaml took
+  16.5 minutes of wall clock (24.4 to 25.3 before) and Windows-check.yaml 14.6. Windows shards 2
+  to 12 took 10.3 to 11.7 minutes (up to 16.8 before), connection shards 6.7 to 10.5 (up to 15.7)
+  and macOS shards 8.8 to 16.3, all five at once. Each macOS shard's tests were predicted at 529 to
+  541 s; they took 0.67 to 1.13 times that, the same ratio for every file in a shard, so the rest
+  of the spread is the runner's speed. Shard 1 was the slowest on macOS (16.3) and Windows (13.9),
+  which the head start corrects.
 - Tests: test-zzz.R "CI shards run each test file once, Windows native ones in shard 1 (D-239)"
-  adds that a file's time decides its shard and that the table names only existing test files with
-  a column per OS; "each sharded lane's required context gates the latest attempt of its shards
-  (CI-107)" covers the new macOS matrix.
+  adds that a file's time decides its shard, that names match exactly, that shard 1's head start
+  leaves its share to the others, and that the table names only existing test files with a column
+  per OS; "each sharded lane's required context gates the latest attempt of its shards (CI-107)"
+  covers the new macOS matrix.

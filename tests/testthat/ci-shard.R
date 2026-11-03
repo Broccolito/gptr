@@ -183,18 +183,23 @@ windows-security,1,1,13
 zzz,1,1,2
 ")
 
+# Seconds shard 1 spends besides its files: on macOS the vignettes and examples the other shards
+# skip, on Windows the native fixtures
+ci_shard_head = c(linux = 0, macos = 115, windows = 170)
+
 ci_shard_os = function() {
   switch(Sys.info()[["sysname"]], Darwin = "macos", Windows = "windows", "linux")
 }
 
-# Shard i's files: the slowest file first, each goes to the shard with the least time so far, so
-# files of equal time take turns in name order
+# Shard i's files: the slowest file first, each goes to the shard with the least time so far
+# (shard 1 starts with its head start), so files of equal time take turns in name order
 ci_shard_files = function(files, shard = ci_shard(), os = ci_shard_os()) {
   stopifnot(shard[[2L]] <= length(files))
   files = sort(files)
   seconds = ci_shard_seconds[[os]][match(ci_shard_names(files), rownames(ci_shard_seconds))]
   seconds[is.na(seconds)] = 1
   load = numeric(shard[[2L]])
+  load[[1L]] = ci_shard_head[[os]]
   owner = integer(length(files))
   for (i in order(-seconds)) {
     owner[[i]] = which.min(load)
