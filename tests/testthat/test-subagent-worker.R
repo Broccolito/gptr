@@ -211,6 +211,21 @@ test_that("the result line of a worker session carries status, text, usage and t
   expect_identical(out$usage$input, 0)
 })
 
+test_that("a worker's System 1 rows stay out of its chat usage (D-321)", {
+  skip_on_cran()
+  local_project()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  data = session_data(s)
+  data$usage = data.frame(request_id = c("qa", "q1", "q2"),
+    route = c("api", "system-one", "emulated"), input = c(3, 300, NA), output = c(2, 1, NA),
+    cache_read = 0, cache_write_5m = 0, cache_write_1h = 0, reasoning = 0,
+    cost = c(0.01, 0.0001, NA))
+  out = worker_outcome(s)
+  expect_identical(out$usage[c("input", "output", "cost")],
+                   list(input = 3, output = 2, cost = 0.01))
+  expect_identical(worker_s1(data$usage), 2:3)
+})
+
 test_that("worker_exit_now() refuses to quit outside a worker process", {
   withr::local_envvar(GPTR_WORKER = NA)
   expect_error(worker_exit_now(), class = "gptr_error_internal")

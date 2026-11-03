@@ -10191,3 +10191,134 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-tool-discovery.R "minimal tool declarations teach discovery without loading the API
   documentation"; test-bench-context.R "the measured o200k baselines are pinned" and the 5% estimate
   test; `dev/bench/tokens/run.R --check`.
+
+## D-320 - Fixes 1.0.1 lane C Agent guidance and System 1 inputs (2026-11-02)
+- Rule (alias): `{s1}` is written as an R string in every branch (`model = "jev"`, `"clef"`,
+  `"ollama/clef-flash"`), and every agent-read hint and help example quotes it. Was the bare `jev`
+  (quoted only with `/` or `:`), which agents read as an R object and looked for (`get("jev")`,
+  `exists("jev")`) before asking which model to use. A bare `model = jev` still resolves (IC-41).
+  The o200k counts are unchanged (`model = jev)` and `model = "jev")` are both 12 tokens in the
+  measured phrase; `run.R --check` OK, no `--update`).
+- Rule (inputs): a System 1 state is keyed by the context's argument name only when it is named
+  (`peter(q, text = x)`: `text`, through `s1_key_name()`); any other input is `input` (`input_1`,
+  ... for more; the piped session stays `session`), and a value described from its binding drops
+  the `name: ` prefix of `describe_binding()`. Context items carry `named` (contract 7.8). Was the
+  expression label (`reviews`, `x`, `feedback_text`, else `input`), which entered the state, the
+  "The input is in `...`." sentence and so the cache key: `x = reviews; peter(q, x)` sent every
+  request again and could flip answers (0.46 to 0.54). Answers that 1.0.0 recorded for an unnamed
+  input no longer match: a live call requests them again, and replay (`GPTR_REPLAY=replay`,
+  `replay = "replay"`, R CMD check) stops with `gptr_error_not_recorded` for a provider that is
+  not offline until the call runs once with `replay = "auto"`. Naming the input after its 1.0.0
+  variable (`peter(q, reviews = reviews)`) reuses the entries of values sent whole, not of described
+  ones (probe in progress/fixes-1.0.1/lane-C.md). The Jev and Ollama fixtures name their input
+  (`text =`).
+- Rule (decision notes): the `documents` section says a note is "recorded as a "## Decision:"
+  comment", as the r tool's schema does (was "written as "## Decision: ..."", which models read as
+  the note's own format), and `doc_turn_r()` drops a leading `#* decision:` (any case) from the
+  note before it adds the marker, so a block holds one "## Decision: " (was "## Decision: ##
+  Decision: ..." in Rmd, notebook and Quarto blocks). The o200k static prefixes of standard_all
+  and standard_interactive grow by one token (2966 to 2967, 3109 to 3110; within the 2% gate, no
+  `--update`).
+- Rule (scores): the `system1` section adds "levels = c("low", "high") returns an expected 0-based
+  score", and `?peter` `choices,levels,threshold` names the three result types. Was silent on
+  `levels`, so agents asked to rate or score used `choices` and hand-coded 1..3. The static
+  prefixes grow by 17 o200k tokens (standard_all 2967 to 2984, standard_interactive 3110 to 3127;
+  within the 2% gate of 2966 and 3109, no `--update`); the section stays within its 150 budget.
+- Rule (ctx$decide): `ctx$decide()` passes `.session` (the ctx's session or its id) only to an
+  `s1.decide` service whose formals declare it, as the builtin `s1_decide()` does; a replacement
+  with the documented `function(question, x, ...)` gets the call alone. Was `.session` for every
+  service (PR #105): a replacement forwarding `...` to `peter()` sent the session as a second
+  input, its last answer included, and `function(question, x, choices = NULL)` failed with
+  "unused argument".
+- Contract-visible: 03 sections 4.1.5, 7.3 (`{s1}`, `documents`, `system1`) and 10.3 NS-4, 04
+  sections 7.0 (`s1.decide`), 7.8 (`context`) and 9.3; `?peter` `...` and `choices`,
+  `?gptr_prob`, vignette system-one.
+- Tests: prompt-sections "{s1} is replaced by the configured System 1 alias, quoted as an R
+  string"; northstar's frozen prompt; gptr-gateway "System 1 arguments are refused on a
+  conversational route (D-250)"; s1-client "a System 1 request does not depend on how its input
+  is spelled (D-320)", "NS-4: if (peter(..., model = judge)) works ..."; s1-route "s1_inputs()
+  reads symbols by name ...", "large values are described instead of sent ..."; gptr-capture
+  "gateway_context_items() builds the context items ..."; doc-blocks "a note that already
+  starts with the Decision marker is not marked twice"; doc-formats' documents text; ext-api
+  "ctx$decide() gives .session only to an s1.decide service that declares it". Evidence:
+  progress/fixes-1.0.1/lane-C.md.
+
+## D-321 - Fixes 1.0.1 lane C System 1 accounting (2026-11-02)
+- Rule (unbilled failures): D-251's sessions-6 rule applies to System 1 attempts: a failed attempt
+  that reports no count and whose request was rejected (HTTP status >= 400) or never received
+  (`network`, `timeout_connect`) records `input = 0, output = 0` (`s1_failed_usage()`, from
+  `s1_failure()` and `s1_outcome()`, so the TypeSafe, Ollama, in-process and emulated paths alike),
+  and so does a request the adapter's `build` refuses (never sent). Idle and first-byte timeouts
+  and a received reply without usage stay unknown (NA). Was NA for every such attempt since
+  PR #105 charged each attempt: one retried 429 made the batch's `meta$usage` and the owning
+  session's totals unknown, and a cost limit then named the model as having no prices.
+- Rule (workers): a worker's `result` line sums its chat rows only (`worker_outcome()`), and its
+  System 1 rows travel in the result file (`s1`); the parent charges each to the proxy session
+  (its adapter state's `worker_session`) with the worker's provider, model, route and cost
+  (`worker_s1_charge()` through P13's `s1_charge_row()`, a declared `subagent` contract edge of
+  `helper-arch.R`). Was one
+  summed row priced at the chat model's rates (10,000 decisions of about 300 tokens read as $6.06
+  of claude-sonnet-5-5, not about $0.13), and one System 1 row with unknown usage made the whole
+  sum NULL, so the parent charged only its estimate.
+- Contract-visible: 04 sections 7.13 (owned System 1 usage) and 11.11 (the worker's result).
+- Tests: s1-client "an unbilled System 1 failure costs a known zero, as a chat request does
+  (D-251)", "bounded rounds resubmit only failed elements ..."; subagent-worker "a worker's
+  System 1 rows stay out of its chat usage (D-321)"; subagent-backends "a worker composes native
+  typed decisions with provenance and their own charges". Evidence:
+  progress/fixes-1.0.1/lane-C.md.
+
+## D-322 - Fixes 1.0.1 lane C Gateway refusals of System 1 and agent arguments (2026-11-02)
+- Rule (unknown model): `route_refuse_s1_args()` first resolves a character `model =` that
+  `gateway_model_type()` cannot type (`run_model_resolve()`, with the continued session's own
+  providers), so a reference that resolves to nothing is `gptr_error_unknown_model` with its
+  suggestions. Was "model jev-1.14.0 is conversational, so peter() would start a conversation",
+  for the physical id a decision's `meta$model` reports, on the `new`, `nested` and `continue`
+  routes (an unresolved model counted as conversational).
+- Rule (agent options): a named context dot `backend`, `objects` or `export` whose value is
+  character warns `gptr_warning_partial_name` ("`export =` is attached as a context object: it is
+  an agent() option, not a peter() argument.", with the `agents = list(<name> = agent(export =
+  ...))` form) and stays context (D-251's sessions-5 rule, which keeps named context a feature).
+  Other `gptr_agent()` options (`name`, `description`, `file`, ...) are common context names and
+  stay quiet. Was silent: an agent's `peter(..., backend = "cli", objects = "d", export = "x")`
+  attached the three strings and exported nothing. The orchestration skill now says
+  `agent(export = ...)`.
+- Contract-visible: 04 sections 2.2 (warnings) and 6.1 (dots), 6.1.1 (the System 1 argument
+  refusal); `?peter` details; skill gptr-orchestration.
+- Tests: gptr-gateway "System 1 arguments with an unknown model name the unknown model (D-322)",
+  "a named dot that names an agent() option warns and stays context (D-322)". Evidence:
+  progress/fixes-1.0.1/lane-C.md.
+
+## D-323 - Fixes 1.0.1 lane C Emulated System 1 on Ollama and worker start (2026-11-02)
+- Rule (emulation on Ollama): `s1_ready()` prepares an emulation's chat model on an Ollama route
+  (`s1_ollama_route()`, the L1 wrapper of `catalog_ollama_route()`) as `run_target()` prepares a
+  chat call's (egress check, then `model_prepare()`, which discovers
+  only without current evidence), on live calls; replay keeps the preflight alone. Was a
+  preflight only, so every new R process failed with "there is no current discovery evidence"
+  until `gptr_models(provider = "ollama", refresh = TRUE)`, while a chat call on the same model
+  worked.
+- Rule (worker start): `backend_worker_start()` keeps the canonical System 1 reference when it
+  resolves and ships the setting as written when it is `gptr_error_unknown_model` (a typo, a
+  removed local model, an `emulate:` model without catalog rows), so a chat-only worker starts and
+  only a decision it asks reports the error. Was an abort of every `agent(backend = "worker")`
+  start, naming System 1, although the worker never decided (PR #105).
+- Contract-visible: 04 sections 6.1.1 (model preparation) and 11.11 (the `system1` snapshot).
+- Tests: s1-emulate "emulation through a local Ollama chat model discovers it as a chat call does
+  (D-323)"; "emulation preflights the chat model before any state is serialised or sent" keeps
+  `s1_emulate()` itself discovery-free; subagent-backends "workers freeze the effective System 1
+  role and its bounded policy". Evidence: progress/fixes-1.0.1/lane-C.md.
+
+## D-324 - Fixes 1.0.1 lane C System 1 batch messages and cache listing (2026-11-02)
+- Rule (failure warning): a vectorised call's `s1_errors` warning quotes its most common failure
+  message and how many elements it failed ("3 of 3 System 1 elements failed and are NA (3 with:
+  System 1 request failed with HTTP 400: ...); see attr(x, "meta")$errors."). Was the count
+  alone, so a model-level failure (Ollama's legacy-format 400, a bad key) read as noise while a
+  one-element call showed the reason. The NA results and the one warning stay (contract 2.2).
+- Rule (launch notice): the cache-miss notice counts both nouns ("1 uncached input (1 request).");
+  was "1 uncached inputs".
+- Rule (cache listing): `gptr_cache("info")` gives the `s1` row the path `memory` when its
+  answers are held in memory only (no `.gptr/`); was a temporary directory with 0 bytes.
+- Contract-visible: 04 sections 2.2 (`s1_errors`) and 6.4 (`gptr_cache()`); `?gptr_cache`.
+- Tests: s1-route "a vector call's warning quotes its most common failure", "INFRA-18: choices
+  give a classed character ..."; s1-composition "decision launch notices identify real cache
+  misses ..."; doc-replay "without .gptr/, gptr_cache() counts and clears the System 1 answers in
+  memory". Evidence: progress/fixes-1.0.1/lane-C.md.

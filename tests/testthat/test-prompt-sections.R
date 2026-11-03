@@ -360,11 +360,19 @@ test_that("the r schema is frozen in the variant for the document and the human 
   expect_identical(arr(compose_case("standard_core")), c("code", "timeout"))
 })
 
-test_that("{s1} is replaced by the configured System 1 alias", {
+test_that("{s1} is replaced by the configured System 1 alias, quoted as an R string", {
   skip_on_cran()
   fr = compose_case("standard_all")
-  expect_match(fr$t0, "System 1 decisions are peter(..., model = jev)", fixed = TRUE)
+  expect_match(fr$t0, "System 1 decisions are peter(..., model = \"jev\")", fixed = TRUE)
+  expect_match(fr$t0, "abstracts, model = \"jev\") returns", fixed = TRUE)
   expect_false(grepl("{s1}", fr$t0, fixed = TRUE))
+  # a bare alias is a string too, never an R object the agent would look for
+  local_gptr_options(system1 = "clef")
+  expect_identical(prompt_s1_alias(), "\"clef\"")
+  local_gptr_options(system1 = "ollama/clef-flash")
+  expect_identical(prompt_s1_alias(), "\"ollama/clef-flash\"")
+  local_gptr_options(system1 = "emulate:fake/fake-1")
+  expect_identical(prompt_s1_alias(), "\"jev\"")
 })
 
 test_that("fragments are inserted at the marker, or the marker line is dropped", {

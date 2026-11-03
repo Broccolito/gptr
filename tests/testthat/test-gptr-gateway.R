@@ -1171,7 +1171,8 @@ test_that("System 1 arguments are refused on a conversational route (D-250)", {
     expect_identical(cnd$arg, arg)
     expect_match(conditionMessage(cnd), paste0("`", arg, "` shapes a System 1 decision"),
                  fixed = TRUE)
-    expect_match(conditionMessage(cnd), "model = jev runs it through a chat model", fixed = TRUE)
+    expect_match(conditionMessage(cnd), "model = \"jev\" runs it through a chat model",
+                 fixed = TRUE)
   }
   expect_length(fake_requests(fake), 0L)
   # the default threshold, and an explicit 0.5, are no System 1 request
@@ -1194,6 +1195,19 @@ test_that("System 1 arguments are refused on a conversational route (D-250)", {
   local_gptr_options(system1 = "emulate:fake/fake-1")
   expect_error(ask$choices(new.env()), class = "gptr_error_invalid_argument")
   expect_length(fake_requests(fake), 2L)
+})
+
+test_that("System 1 arguments with an unknown model name the unknown model (D-322)", {
+  local_gw()
+  fake = local_fake_provider(list("ok"))
+  # the id a decision's meta reports, which the catalog may not list yet
+  cnd = expect_error(peter("Is it fine?", c("ok", "bad"), model = "jev-1.14.0",
+                           choices = c("yes", "no")), class = "gptr_error_unknown_model")
+  expect_false(grepl("conversational", conditionMessage(cnd), fixed = TRUE))
+  s = peter("Start.", model = fake, envir = new.env())
+  expect_error(s |> peter("Which?", model = "nosuch/nosuch-1", levels = c("lo", "hi")),
+               class = "gptr_error_unknown_model")
+  expect_length(fake_requests(fake), 1L)
 })
 
 test_that("gateway_model_ref() and router_model() keep colon ids and thinking levels (IC-74)", {
@@ -1761,6 +1775,24 @@ test_that("a named dot that abbreviates an argument warns and stays context (D-2
   expect_no_warning(peter("x", mod = lm(mpg ~ wt, mtcars), m = mtcars, data = mtcars,
                           a = list(1), p = "a title", model = fake))
   expect_identical(fake$log$n, 5L)
+})
+
+test_that("a named dot that names an agent() option warns and stays context (D-322)", {
+  local_gw()
+  fake = local_fake_provider(as.list(paste("reply", 1:4)))
+  cnd = expect_warning(peter("Count rows of d", backend = "cli", model = fake),
+                       class = "gptr_warning_partial_name")
+  expect_match(conditionMessage(cnd), paste0("`backend =` is attached as a context object: it is ",
+                                             "an agent() option, not a peter() argument."),
+               fixed = TRUE)
+  expect_match(conditionMessage(cnd), "agents = list(<name> = agent(backend = ...))", fixed = TRUE)
+  expect_warning(peter("x", objects = "d", model = fake), "`objects =`", fixed = TRUE,
+                 class = "gptr_warning_partial_name")
+  expect_warning(peter("x", export = "fit", model = fake), "`export =`", fixed = TRUE,
+                 class = "gptr_warning_partial_name")
+  # a value that is no option's, and other names, stay quiet context
+  expect_no_warning(peter("x", export = mtcars, file = "a.csv", name = "Bob", model = fake))
+  expect_identical(fake$log$n, 4L)
 })
 
 # Task 12: append

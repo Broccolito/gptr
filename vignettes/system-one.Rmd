@@ -53,7 +53,7 @@ is_rct = peter("Is this a randomized trial?", abstracts, model = judge)
 is_rct
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 gptr_prob(is_rct)
 #>  trial cohort  pilot
 #>   0.94   0.07   0.55
@@ -74,7 +74,9 @@ the probability of a positive answer.
 A data frame supplies one record per row. An atomic vector or an unnamed list supplies one
 state per element. A fully named list supplies one structured state; `I(x)` also requests one
 state for the whole object. Multiple inputs must have compatible batch sizes: a single state
-can accompany every item in a batch.
+can accompany every item in a batch. The model reads a named input under its name, such as
+`text = x`, and any other as `input`, so renaming or subsetting a variable reuses cached
+answers.
 
 
 ``` r
@@ -86,7 +88,7 @@ studies = data.frame(
 peter("Was allocation randomized?", studies, model = judge)
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 
 record = list(abstract = abstracts[["trial"]], sample_size = 200L,
               allocation = "randomized")
@@ -119,7 +121,7 @@ screened = peter("Is this a randomized trial?", abstracts, model = judge,
 screened
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)    NA (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 names(abstracts)[!is.na(screened) & screened]
 #> [1] "trial"
 names(abstracts)[is.na(screened)]
@@ -174,7 +176,7 @@ tissue = peter("Which tissue is this?", samples, model = judge,
 tissue
 #>             s1             s2             s3
 #>  lung (p=0.91) liver (p=0.88) brain (p=0.80)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 gptr_prob(tissue)
 #>   s1   s2   s3
 #> 0.91 0.88 0.80
@@ -191,7 +193,7 @@ severity = peter("Rate this event's severity.",
 severity
 #>                a                b
 #> 0.20 (conf 0.85) 1.88 (conf 0.90)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 gptr_prob(severity, "probabilities")
 #>   mild moderate severe
 #> a 0.85     0.10   0.05
@@ -260,7 +262,7 @@ session = peter("Summarize mtcars in one sentence.", model = summary_model)
 
 session |> peter("Did the analysis succeed?", model = judge)
 #> [1] TRUE (p=0.94)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 session$turns
 #> [1] 1
 ```
@@ -278,7 +280,7 @@ The following examples can contact real providers and are not executed here. Jev
 
 ``` r
 gptr_env("~/keys/jev.env")
-peter("Is this a randomized trial?", abstracts, model = jev)
+peter("Is this a randomized trial?", abstracts, model = "jev")
 
 # Prepare an installed native decision model on your local Ollama server first.
 peter("Is this a randomized trial?", abstracts, model = "ollama/clef-flash")

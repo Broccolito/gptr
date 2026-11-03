@@ -236,24 +236,32 @@ worker_registry_apply = function(reg, sid) {
   invisible(ids)
 }
 
-#' Save the result file: the status and, on success only, the exported objects by name (R7
-#' through save_rds()). The worker's home is written as a reference, read back as the proxy's
-#' overlay, so an export that captured it (a formula, plot or closure) ships none of the worker's
-#' other objects. Returns the names saved, invisibly.
+#' Save the result file: the status, the System 1 usage rows `s1` whatever the status, and, on
+#' success only, the exported objects by name (R7 through save_rds()). The worker's home is
+#' written as a reference, read back as the proxy's overlay, so an export that captured it (a
+#' formula, plot or closure) ships none of the worker's other objects. Returns the names saved,
+#' invisibly.
 #' @noRd
-worker_exports_save = function(export, envir, result_path, status) {
+worker_exports_save = function(export, envir, result_path, status, s1 = NULL) {
   keep = if (identical(status, "idle")) intersect(export, names(envir)) else character()
   vals = if (length(keep)) mget(keep, envir = envir) else list()
-  save_rds(list(status = status, exports = vals), result_path,
+  save_rds(list(status = status, exports = vals, s1 = s1), result_path,
            refhook = function(x) if (identical(x, envir)) "home")
   invisible(keep)
 }
 
-#' The fields of the `result` line of a settled worker session
+#' The rows of usage table `u` that System 1 charged (routes `system-one` and `emulated`)
+#' @noRd
+worker_s1 = function(u) which(u[["route"]] %in% c("system-one", "emulated"))
+
+#' The fields of the `result` line of a settled worker session; its usage is the chat model's
+#' alone, as the parent prices it so (System 1 rows travel in the result file, D-321)
 #' @noRd
 worker_outcome = function(s) {
   d = session_data(s)
-  usage = lapply(subagent_usage_sums(d$usage), function(x) if (is.na(x)) NULL else x)
+  s1 = worker_s1(d$usage)
+  chat = if (length(s1)) d$usage[-s1, , drop = FALSE] else d$usage
+  usage = lapply(subagent_usage_sums(chat), function(x) if (is.na(x)) NULL else x)
   list(status = d$status, text = if (is.na(d$last_text)) "" else d$last_text,
        usage = usage, turns = d$turns)
 }
@@ -321,7 +329,9 @@ worker_main = function(spec_path, result_path) {
     tryCatch(frontend$run(s, con = io$out), gptr_error = function(e) NULL)
   }
   out = worker_outcome(s)
-  worker_exports_save(spec$export, envir, result_path, out$status)
+  rows = session_data(s)$usage
+  worker_exports_save(spec$export, envir, result_path, out$status,
+                      rows[worker_s1(rows), , drop = FALSE])
   worker_send(io, c(list(type = "result"), out))
   invisible(out$status)
 }
@@ -445,12 +455,16 @@ backend_worker_start = function(spec, ctx) {
   system1 = model_default("system1")
   if (!is.null(system1)) {
     emulated = startsWith(system1, "emulate:")
-    ref = subagent_model_info(sub("^emulate:", "", system1), session_data(spec$parent)$id)$ref
+    ref = sub("^emulate:", "", system1)
+    # an unknown reference ships as written: only a decision the worker asks reports it (D-323)
+    ref = tryCatch(subagent_model_info(ref, session_data(spec$parent)$id)$ref,
+                   gptr_error_unknown_model = function(e) ref)
     system1 = paste0(if (emulated) "emulate:" else "", ref)
   }
   s1_options = c("s1_max_active", "s1_rounds", "s1_state_max", "s1_max_elements")
   state = session_live(child)$adapter
   state$worker_home = session_home(child)
+  state$worker_session = child
   state$worker_spec = list(
     prompt = spec$prompt, model = spec$info$ref, mode = spec$mode, depth = spec$depth,
     agent = spec$agent, name = spec$name, object_names = c(spec$objects, spec$bind),
@@ -554,6 +568,7 @@ worker_on_exit = function(st, status) {
     tryCatch(readRDS(st$result_path, refhook = function(x) st$home), error = function(e) NULL)
   }
   if (is.environment(st$home)) list2env(res$exports %||% list(), envir = st$home)
+  worker_s1_charge(st, res$s1)
   keys = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h", "reasoning")
   usage = c(lapply(stats::setNames(keys, keys), function(k) as.numeric(r$usage[[k]] %||% NA)),
             list(cost = list(total = as.numeric(r$usage$cost %||% NA))))
@@ -569,6 +584,22 @@ worker_on_exit = function(st, status) {
     worker_events(st, usage = usage, error = if (nzchar(tail)) paste0(why, ": ", tail) else why)
   }
   worker_cleanup(st)
+}
+
+#' Charge the worker's System 1 rows to the proxy session, each at the price the worker's System 1
+#' model gave it (D-321)
+#' @noRd
+worker_s1_charge = function(st, rows) {
+  s = st$session
+  if (is.null(s) || !is.data.frame(rows)) return(invisible(NULL))
+  d = session_data(s)
+  for (i in seq_len(nrow(rows))) {
+    row = rows[i, , drop = FALSE]
+    row$session = d$id
+    row$parent_id = d$parent_id %||% NA_character_
+    s1_charge_row(s, row)
+  }
+  invisible(NULL)
 }
 
 #' End the worker's abort guard at once, so no reactor task outlives the worker; remove its job
@@ -660,6 +691,7 @@ worker_stream = function(model, context, opts) {
   st = new.env(parent = emptyenv())
   st$spec = get0("worker_spec", envir = opts$state, inherits = FALSE)
   st$home = get0("worker_home", envir = opts$state, inherits = FALSE)
+  st$session = get0("worker_session", envir = opts$state, inherits = FALSE)
   real = st$spec$model %||% "worker/worker"
   st$provider = sub("/.*$", "", real)
   st$model_id = sub("^[^/]*/", "", real)

@@ -13,7 +13,9 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
       .stdin = FALSE)
 }
 \arguments{
-\item{...}{A session to continue, the prompt, and context objects.}
+\item{...}{A session to continue, the prompt, and context objects. A decision model reads a
+named object under its name (\code{text = x}) and any other as \code{input}, so its answers and cache
+entries never depend on how a variable is named or subset.}
 
 \item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}), a provider or router spec
 such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default. A call made by the
@@ -45,10 +47,14 @@ Each child gets its element alone as \code{.x}, a named list of one attached as 
 \code{.opts = list(context = "none")}, which would drop it, is refused. A child that succeeds
 keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}, so they must be self-contained.}
 
-\item{choices, levels, threshold}{System 1 answer shape, for a decision model (\code{jev},
-\code{"ollama/clef-flash"}; after \code{gptr_config(system1 = "emulate:<ref>")}, \code{model = jev} runs it
-through a chat model). A conversational model refuses them, \code{min_confidence} and \code{uncertain}
-(\code{threshold} only when it is not 0.5) rather than ignore them. \code{choices} given as a factor, or
+\item{choices, levels, threshold}{System 1 answer shape, for a decision model (\code{"jev"},
+\code{"ollama/clef-flash"}; after \code{gptr_config(system1 = "emulate:<ref>")}, \code{model = "jev"} runs
+it through a chat model). The default is a logical \code{gptr_decision}, TRUE when P(yes) is at
+least \code{threshold}; \code{choices} give a \code{gptr_choice} of labels; ordered \code{levels} give a
+\code{gptr_score}, the expected 0-based level (0 to k - 1), whose level probabilities
+\code{gptr_prob(x, "probabilities")} returns. A conversational model refuses them,
+\code{min_confidence} and \code{uncertain} (\code{threshold} only when it is not 0.5) rather than ignore
+them. \code{choices} given as a factor, or
 \code{.opts = list(output = "factor")}, return a plain factor with those levels and no
 probabilities or confidence.}
 
@@ -119,8 +125,9 @@ unnamed string literal, else the first unnamed length-1 character value), and co
 (unnamed ones are labeled by their expression, named ones by name). Conversational context
 bindings refer to objects where they live; descriptions are budgeted separately from
 in-memory R computation. Every other argument is matched by its exact name only: a named
-object whose name abbreviates one and whose value fits it, such as \code{mo = "plan"}, stays context
-and warns (\code{gptr_warning_partial_name}).
+object whose name abbreviates one and whose value fits it, such as \code{mo = "plan"}, or a string
+named as an \code{\link[=gptr_agent]{gptr_agent()}} option, such as \code{export = "fit"}, stays context and warns
+(\code{gptr_warning_partial_name}).
 
 A literal prompt gets \code{{name}} interpolation from \code{envir} (atomic vectors of 1 to 50 values;
 \verb{\{\{} and \verb{\}\}} are literal braces); \code{.opts = list(interpolate = FALSE)} switches it off.

@@ -293,9 +293,10 @@ names the intermediate class when there is one. Fields are in addition to `messa
 
 Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02),
 `two_prompts` (P08; two unnamed string literals), `partial_name` (P08; a named context dot
-abbreviates a `peter()` argument its value fits, D-251), `replay_downgraded` (P15; live/stale
+abbreviates a `peter()` argument its value fits, D-251, or is a character `backend`, `objects` or
+`export`, `gptr_agent()` options `peter()` lacks, D-322), `replay_downgraded` (P15; live/stale
 regeneration downgraded under `source()`), `doc_conflict` (P15; md5 conflict after three attempts),
-`s1_errors` (P13; failed elements in a vectorised call; field `errors`), `readline_limit` (P14),
+`s1_errors` (P13; failed elements in a vectorised call, quoting the most common failure, D-324; field `errors`), `readline_limit` (P14),
 `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only when
 `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs
 in live session entries; field `counts`), `untrusted_setting` (P08; `gptr_config()` saved keys an
@@ -1057,7 +1058,9 @@ peter = function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 exact name. A named context dot whose name (two characters or more) is a prefix of a formal or that formal plus
 `s`, and whose value fits it (character: `model`, `mode`, `skills`, `plugins`, `extensions`, `tools`, `prompt`,
 `replay`; a plain list: `.opts`, `budget`, `agents`; a function or spec: `model`, `extensions`, `tools`), stays
-context and signals the warning `partial_name` naming each such formal (D-251).
+context and signals the warning `partial_name` naming each such formal (D-251); so does a character dot named
+`backend`, `objects` or `export`, which names a `gptr_agent()` option instead, with the `agents = list(<name> =
+agent(...))` form (D-322).
 
 | Argument | Type / default | Meaning and validation |
 |---|---|---|
@@ -1118,9 +1121,10 @@ context and signals the warning `partial_name` naming each such formal (D-251).
    `GPTR_REPLAY=replay` still proves that a script makes no model calls. The `team`, `fanout`, `nested`,
    `continue` and `new` routes refuse the System 1 arguments before anything starts: `.opts$system1_images`,
    then the first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain`, as
-   `gptr_error_invalid_argument` naming it, since a conversation would ignore them; a decision model serves
-   them, and `model = jev` runs through a chat model after `gptr_config(system1 = "emulate:<ref>")`, which
-   alone moves no call to emulation (IC-74, D-250). P19's call of P08's `route_refuse_s1_args()` is a
+   `gptr_error_invalid_argument` naming it, since a conversation would ignore them, but a model reference that
+   resolves to nothing (`"jev-1.14.0"`) is `gptr_error_unknown_model` with its suggestions (D-322); a decision
+   model serves them, and `model = "jev"` runs through a chat model after
+   `gptr_config(system1 = "emulate:<ref>")`, which alone moves no call to emulation (IC-74, D-250). P19's call of P08's `route_refuse_s1_args()` is a
    contract edge of the layering test (12.2). The `classifier` route, which matches first, refuses `agents`,
    then `parallel`, as `gptr_error_invalid_argument` naming it: a decision model answers in one call.
 
@@ -1166,7 +1170,8 @@ context and signals the warning `partial_name` naming each such formal (D-251).
   egress and replay only: `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member
   that cannot reach its model ends `error` (`on_error`). A run's first request to its session's model prepares it
   as the checks do (`model_prepare()` discovers an Ollama model only without current evidence), so a plain call,
-  `gptr_step()`, `gptr_wait()` and a member each discover an Ollama model once, a member at its first request. A
+  `gptr_step()`, `gptr_wait()` and a member each discover an Ollama model once, a member at its first request;
+  so does a System 1 emulation through an Ollama chat model (`s1_ready()`, live calls only; D-323). A
   piped `.run = FALSE` call applies its model, mode and tools at once; a `gptr_step()` or `gptr_wait()` that then
   refuses leaves them, with no turn.
 
@@ -1629,7 +1634,8 @@ gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tm
 
 `info` returns a `gptr_cache_info` data frame (including unapplied document sidecars, which are never pruned
 automatically, IC-51: one row for the workspace root's, one for those of documents outside any `.gptr/` in
-`R_user_dir("gptr", "cache")/pending/`); `prune` removes S2 entries of deleted blocks, S1 entries unused for
+`R_user_dir("gptr", "cache")/pending/`; the `s1` row's `path` is `memory` for answers held without a workspace,
+D-324); `prune` removes S2 entries of deleted blocks, S1 entries unused for
 90 days (mtime touched on hit), `cache/tmp` files older than `gptr.spill_days`, the refreshed catalog cache beyond
 the newest, checkpoint blobs per G7 retention; `clear` removes the kind entirely. `prune`/`clear` return the number
 of files removed invisibly. Works on the workspace root (or `tempdir()/gptr`) and `R_user_dir("gptr", "cache")`.
@@ -2330,7 +2336,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `ui.get` | P11 | `ctx$ui()`, `ctx$has_ui()`, `perm_check()` (P06) | `function(session = NULL) <spec:ui>` |
 | `risk.classify` | P11 | `r` tool (P10), bridges (P22), `ctx$risk()` | `function(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python")) <gptr_risk>` |
 | `plan.pending` | P11 | `plan` context block (P07) | `function(envir_address, consume = TRUE) chr(1) or NULL` |
-| `s1.decide` | P13 | `ctx$decide()` | `function(question, x, ...) <gptr_s1>` |
+| `s1.decide` | P13 | `ctx$decide()` | `function(question, x, ...) <gptr_s1>`; a service that also declares `.session` (the builtin) gets the ctx's session, or its id, as the owner of provenance and usage; any other gets none in its dots (D-320) |
 | `doc.site` | P15 | `r` tool record flag (P10), `documents` section (P07), `/doc` and `/status` (P14) | `function(session) list(path, format) or NULL`; outside a run where a person can answer, without a document or binding, the transcript the project remembers (cheat-sheet review R10) |
 | `doc.edit` | P15 | `edit` tool (P10) | `function(path, edits, session) <gptr_tool_result> or NULL` (NULL: not a bound document) |
 | `doc.s1_block` | P15 | top-level System 1 calls (P13) | `function(call, summary) invisible(lgl(1))` (writes the one-line block; TRUE when it showed it, as a notebook's pending block in the cell output, so the caller does not say the summary again) |
@@ -2803,7 +2809,7 @@ compact_threshold(200000, max_output = 64000)
 | `id` | chr(1) | `c` + 8 hex |
 | `prompt`, `template` | chr(1)\|NULL | interpolated prompt; the literal template (`NULL` for non-literal prompts: then `template = prompt`) |
 | `session` | `<session>`\|NULL | the continuation target |
-| `context` | list | one `list(label, kind = "symbol" \| "value" \| "literal", name = chr(1) \| NULL, slot = chr(1) \| NULL, facts = list(class, dim, length, bytes, is_chr1))` per context dot; symbols are read by name from `envir` in leaves; `value` items live in `values` |
+| `context` | list | one `list(label, kind = "symbol" \| "value" \| "literal", name = chr(1) \| NULL, named = lgl(1) (the dot has an argument name; System 1 keys only a named input by its label, D-320), slot = chr(1) \| NULL, facts = list(class, dim, length, bytes, is_chr1))` per context dot; symbols are read by name from `envir` in leaves; `value` items live in `values` |
 | `values` | env | call values bound as `.v1`, `.v2`, ...; removed with `rm()` by `call_release()` |
 | `envir` | env binding | the caller frame or explicit `envir`; set to `NULL` by `call_release()` [R2] |
 | `ids` | named list | resolved `model` (chr or registered spec name), `mode`, `skills`, `plugins`, `extensions`, `tools`, `agents` (list of `<spec:agent>`) |
@@ -2998,7 +3004,9 @@ The console's named `kernel_model_ref(..., strict = TRUE)` edge rejects native c
 explicit `emulate:` references before opening a conversation or switching its model. Startup
 uses `strict = FALSE` so an unresolved conversational choice keeps the usual setup behavior.
 Completed answers enter the cache immediately,
-so interruption or budget exhaustion retains them. Unknown counts stay NA. Process and session
+so interruption or budget exhaustion retains them. Unknown counts stay NA, except that a failed
+attempt reporting none whose request was rejected (HTTP status >= 400), never received (`network`,
+`timeout_connect`) or never built records known zeros, as a chat request does (D-251, D-321). Process and session
 usage deduplicate shared request ids; standalone calls keep one aggregate process row per batch.
 The driver sums retry usage before duplicate inputs are expanded. A cache miss announces the
 target and unique request count; completion announces the summary, respecting quiet/verbosity and
@@ -3162,8 +3170,8 @@ mcp_close(conn)
 | `subagent_start(spec, parent_run)` | `subagent-backends.R` | starts a child through the backend: `spec` = `list(agent = <spec:agent>, prompt, context (list of call items), model, mode, depth, export, objects, preset, rng_state, registry)`; returns a handle `list(session = <session>, fds = function() int, poll = function() NULL, cancel = function() NULL)`; enforces the limits of §6.13 of `03` (`max_tasks` only at depth >= 1, IC-39; pools capped at 2 under check, IC-60); budget charged to the root (IC-66) | P19 |
 | `worker_main(spec_path, result_path)` | `subagent-worker.R` | runs inside a fixed `Rscript --vanilla` child (started with `supervise_default()`, UTF8 pipes and the complete `child_env("worker")` vector): reads the spec (`readRDS`), re-registers `spec$registry` (IC-69), runs `peter()` with the `jsonl` frontend on stdout and answers on stdin (§11.11), exits on stdin EOF, EPIPE or a dead parent pid (checked every 5 s, IC-60), saves exports with `save_rds()`, its home written as a reference that the parent reads back as the proxy's overlay, so exports carry none of the worker's other objects (D-189) | P19 (Rscript/processx) |
 
-A child's model is its explicit spec or agent model, else its parent's model, then the settings
-default. Omitting `model` in a running session therefore preserves that model and its scoped
+A child's model is its explicit spec or agent model, else its parent's model (every session has
+one). Omitting `model` in a running session therefore preserves that model and its scoped
 provider/router spec, including when the global default differs. Selecting another conversational
 provider is supported in either direction between Claude Code and Codex; `claude-cli/sonnet` selects
 a Sonnet child of a Claude Code Opus parent. Provider-qualified references fix the route;
@@ -3539,7 +3547,8 @@ blank line. T0 = sections with `tier =
 "T0"`, T1 = `tier = "T1"`; the frozen blocks never change during a session, but for IC-85's refreeze
 (D-291) (mid-session changes are appended operator section patches:
 `Updated system prompt section "<name>":\n\n<section>` or `Removed system prompt section
-"<name>".`). `{s1}` is replaced by the configured System 1 alias (`jev`).
+"<name>".`). `{s1}` is replaced by the configured System 1 alias written as an R string (`"jev"`), so an agent never
+looks for an object of that name (D-320).
 
 | Section | Tier | Order | Budget | Included when | Registered by |
 |---|---|---|---|---|---|
@@ -4271,7 +4280,8 @@ list(specs, plugins, filters))` (IC-69; the worker re-registers `registry` befor
 `settings` snapshot includes the canonical effective `system1` reference (retaining an explicit
 `emulate:` prefix) and `s1 = list(s1_max_active, s1_rounds, s1_state_max, s1_max_elements)`.
 P19 calls P05's pure `model_default("system1")` as a named contract edge, then P06's existing
-canonical-reference helper. `key_provider` names only the registered remote chat and configured
+canonical-reference helper; a reference it cannot resolve ships as written, so only a decision the
+worker asks reports it and a chat-only worker starts (D-323). `key_provider` names only the registered remote chat and configured
 System 1 providers, deduplicated; `child_env(..., provider = chr)` accepts these IDs, retaining
 scalar compatibility. Equal keys with the same case-insensitive environment name are deduplicated;
 different values for that name from distinct providers are refused without echoing either value.
@@ -4283,7 +4293,12 @@ events with Pi names plus `{"type":"ask","id","questions"}`, `{"type":"permissio
 `{"type":"result","status","text","usage","turns"}`); stdin carries `{"type":"answer","id","answers"}`,
 `{"type":"permission","id","decision","feedback","reason"}` (`feedback` the person's text, `reason` the parent gate's
 denial), `{"type":"cancel"}`. Exported objects come back through
-`result_path` (`save_rds()`), never the JSON stream. Non-JSON stdout lines are ignored.
+`result_path` (`save_rds()`), never the JSON stream. Non-JSON stdout lines are ignored. The result line's
+`usage` sums the worker's chat rows only; its System 1 rows (routes `system-one` and `emulated`) come back
+in `result_path` as `s1`, whatever the status, and the parent charges each to the proxy session (held in
+its adapter state as `worker_session`) through P13's `s1_charge_row()`, a `subagent` contract edge of the
+layering test (12.2), at the price the worker gave it, so budgets and `gptr_usage()` see the System 1
+model, and one unknown row leaves the chat total known (D-321).
 
 ### 11.12 Plugins: manifest and package fields [stable]
 

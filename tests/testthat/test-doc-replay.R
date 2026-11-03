@@ -3954,6 +3954,7 @@ test_that("without .gptr/, gptr_cache() counts and clears the System 1 answers i
   key = strrep("ab", 32L)
   s1_cache_put(key, list(key = key, answer = "yes"))
   expect_identical(gptr_cache("info", "s1")$entries[1L], 1L)
+  expect_identical(gptr_cache("info", "s1")$path[1L], "memory")
   expect_identical(gptr_cache("prune", "s1"), 0L)
   expect_identical(gptr_cache("clear", "s1"), 1L)
   expect_null(s1_cache_get(key))

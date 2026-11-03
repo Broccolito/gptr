@@ -16,7 +16,8 @@ gptr_cache(
 }
 \value{
 \code{info}: a \code{gptr_cache_info} data frame with columns \code{kind}, \code{entries}, \code{bytes},
-\code{oldest}, \code{path}. \code{prune} and \code{clear}: the number of entries removed, invisibly.
+\code{oldest}, \code{path} (\code{"memory"} for System 1 answers held without a \verb{.gptr/} workspace).
+\code{prune} and \code{clear}: the number of entries removed, invisibly.
 }
 \description{
 \code{info} lists the System 1 answer cache (held in memory for the R session while there is no
