@@ -387,8 +387,26 @@ gptr_has_human = function() {
 gptr_can_prompt = function() {
   opt = getOption("gptr.interactive")
   if (!is.null(opt)) return(isTRUE(opt))
-  asks = gptr_is_interactive() || isTRUE(getOption("jupyter.in_kernel"))
+  asks = gptr_is_interactive() || (isTRUE(getOption("jupyter.in_kernel")) && jupyter_stdin())
   asks && !is_knitting() && !is_testthat() && !check_running()
+}
+
+#' Does the Jupyter client answer this kernel's readline()? IRkernel installs its executor's
+#' readline() in base, and the executor holds the current request: a client that serves no input
+#' (nbconvert, papermill, Quarto's jupyter engine) sends `allow_stdin = false`, and the readline
+#' would then wait forever. Only that explicit false says no, once with a notice (IC-43)
+#' @noRd
+jupyter_stdin = function(read = readline) {
+  allow = tryCatch(get0("current_request", environment(read), inherits = FALSE)$content$allow_stdin,
+                   error = function(e) NULL)
+  if (!isFALSE(allow)) return(TRUE)
+  gptr_inform(paste0("gptr asks no questions in this kernel: its Jupyter client takes no input ",
+                     "(nbconvert, papermill and Quarto run notebooks so). Each question takes ",
+                     "its unattended answer: a document is recorded into only with consent ",
+                     "given beforehand (gptr_doc()), an untrusted project's resources are not ",
+                     "loaded and actions that need approval are refused."), "notice",
+              .once = "jupyter_no_stdin")
+  FALSE
 }
 
 #' Yes/no question; `default` when nobody can answer. Never askYesNo().

@@ -9564,3 +9564,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   08 sections 3.3 and 3.5 (limit 8) and Part 4; `cran-comments.md`; dev/HANDOFF.md's Remaining.
 - Tests: none (no code change). Evidence: progress/fixes.md FIX-40, FIX-43, FIX-44, FIX-45 and
   FIX-48; progress/open-findings.md.
+
+## D-340 - v1.0.1 lane G A Jupyter client that takes no input gets no question (2026-11-02)
+- Rule (headless notebooks; live findings disc, start, docs): `gptr_can_prompt()` counts an
+  IRkernel as able to ask only when its current execute request does not say
+  `allow_stdin = false`, the flag nbconvert, papermill and Quarto's jupyter engine send. IRkernel
+  1.3.2 sends an input request whatever the flag says and waits forever, so record consent,
+  project trust, approvals and every other question hung the cell. The flag is read from the
+  executor that IRkernel installs as `base::readline()`; only an explicit false says no, so a
+  missing request or another kernel keeps today's behaviour. The first time it says no, one
+  notice tells that each question takes its unattended answer (recording only with consent given
+  beforehand, as `gptr_doc()` gives it; untrusted project resources not loaded; approvals refused).
+- Contract-visible: 04 section 3 (`jupyter.in_kernel` row), 7.1 (`gptr_can_prompt()` row) and 15.2
+  IC-43; 03 section 6 (UI backends); vignette("script-as-history").
+- Tests: test-utils-options.R "a Jupyter request with allow_stdin = false asks nothing, said once
+  (IC-43)". Evidence: progress/fixes-1.0.1/lane-G.md.

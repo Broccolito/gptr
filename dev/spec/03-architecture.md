@@ -2330,8 +2330,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   Ctrl-C notices at the prompt and of the pause menu start with a line end (D-225).
 - **UI backends** (`ui` specs): `console`, `none`, `scripted` (tests), `rstudio` (dialogs; a timed-out dialog
   is a denial with a notice). The UI abstraction is how Shiny or RPC front ends replace the console. Whether anyone
-  can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works
-  [18 §2; IC-43].
+  can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works,
+  unless the client takes no input (`allow_stdin = false`: nbconvert, papermill) [18 §2; IC-43; D-340].
   Console selector titles intentionally preserve line feeds for setup and question text; option
   labels, details and other control/bidi/zero-width characters remain escaped. Permission approval
   rendering retains its separate escaping contract.

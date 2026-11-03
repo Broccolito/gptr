@@ -294,6 +294,10 @@ gptr_doc(FALSE)
 A notebook edited since a pending block was queued may need conflict resolution. Reopening
 or listing a file is not proof that pending blocks were applied successfully.
 
+A notebook that nbconvert, papermill or Quarto runs takes no input, so gptr asks it no
+question and says so once. Bind it with `gptr_doc()` in a cell before its calls to record, and
+allow the agent's code as for `Rscript` above.
+
 ## Harness calls and coaching calls
 
 A harness made with `gptr_tailor()` or `gptr_coach()` is called like `peter()`, and its
