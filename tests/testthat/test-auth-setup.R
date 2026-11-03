@@ -109,6 +109,15 @@ test_that("an OAuth paste fallback without hidden input refuses before the brows
   expect_identical(st$log$method, "select")
 })
 
+test_that("provider login refuses a provider without a valid endpoint before input", {
+  local_user_dirs()
+  local_mocked_bindings(provider_base_url = function(provider) NULL)
+  ui = local_scripted_ui(list("never-consumed"))
+  expect_error(gptr_login("openrouter", method = "key", scope = "session"),
+               "valid provider endpoint", class = "gptr_error_invalid_argument")
+  expect_identical(ui$remaining(), 1L)
+})
+
 test_that("provider login binds the configured endpoint and refuses an endpoint edit", {
   local_user_dirs()
   withr::local_envvar(OPENROUTER_API_KEY = NA_character_)
@@ -182,6 +191,18 @@ test_that("keyring storage without the keyring package says how to install it", 
   err = expect_error(need(), "install.packages(\"keyring\")", fixed = TRUE,
                      class = "gptr_error_missing_package")
   expect_identical(err$package, "keyring")
+})
+
+test_that("explicit keyring storage accepts the native backends only", {
+  skip_if_not_installed("keyring")
+  backend = NULL
+  local_mocked_bindings(default_backend = function(...) structure(list(), class = backend),
+                        .package = "keyring")
+  for (backend in c("backend_macos", "backend_wincred", "backend_secret_service")) {
+    expect_true(auth_need_os_keyring())
+  }
+  backend = c("backend_file", "backend_keyrings", "backend")
+  expect_error(auth_need_os_keyring(), "native OS", class = "gptr_error_not_available")
 })
 
 test_that("explicit OS keyring storage refuses an environment fallback before input", {
@@ -292,6 +313,9 @@ test_that("a remembered stdio slot survives setwd() and credential variables, no
                      expect_identical(slot(), key))
   withr::with_envvar(c(DEMO_HOST = "elsewhere.example"),
                      expect_error(slot(), "changed", class = "gptr_error_untrusted"))
+  expect_true("mcp:demo:env:DEMO_API_TOKEN" %in% names(auth_store_read()))
+  expect_true(gptr_logout("mcp:demo"))
+  expect_false("mcp:demo:env:DEMO_API_TOKEN" %in% names(auth_store_read()))
 })
 
 test_that("a malformed credential store does not stop stdio servers; session slots still work", {
