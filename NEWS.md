@@ -134,16 +134,7 @@ generated code can inspect and modify objects already in memory.
 * Checkpoints: `gptr_rewind()`, `gptr_checkpoints()` and `/undo` restore objects, files and the
   conversation.
 * Sub-agents, teams and fan-outs (`agents =`, `parallel =`, `gptr_parallel()`), across
-  providers. The console shows completed, active and queued counts, named rosters when the
-  group changes with their models, and child tool progress. Direct team and fan-out calls print
-  their reports.
-* Sub-agent model aliases resolve before backend selection, retaining the selected provider's
-  configuration. Children inherit the running session's model by default; explicit references
-  can select another API provider, Claude Code or Codex.
-* System 1 decision batches inside an agent record their provenance and charge session and
-  ancestor budgets. Completed attempts survive resume, retry usage is retained, and completed
-  answers remain cached when a batch stops. Lightweight children receive decision guidance;
-  workers retain the configured decision model and its limits.
+  providers.
 * Skills, prompt templates, agent files, extensions and plugins in R packages, all on one
   versioned extension API (`gptr_register()`, `gptr_spec()` and the spec constructors).
 * `gptr_tailor()` makes a harness: a function you call exactly like `peter()` that carries
