@@ -46,6 +46,20 @@ img.logo {
   margin-bottom: 0.75rem;
 }
 
+/* Home: the launch video spans the text column above the lead points (extra.js adds it). */
+.gptr-video video {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #f3f1ec;
+}
+
+.gptr-video figcaption {
+  margin-top: 0.5rem;
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+}
+
 /* Articles: each section's name beside its titles and one-line descriptions. */
 .template-article-index main {
   flex: 0 0 100%;

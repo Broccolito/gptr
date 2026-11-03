@@ -76,6 +76,17 @@ document.addEventListener("DOMContentLoaded", () => {
       lead.parentElement.prepend(figure);
       lead.parentElement.parentElement.classList.add("gptr-points");
     });
+  // The launch video sits above the lead points; it plays only if the reader allows motion.
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.querySelector(".gptr-points")?.insertAdjacentHTML("beforebegin",
+    `<figure class="gptr-video"><video ${still ? "" : "autoplay "}muted loop playsinline ` +
+    'controls preload="metadata" poster="video/gptr.jpg" width="1920" height="1080" ' +
+    'aria-label="Objects stay in memory across prompts; System 1 returns typed decisions and ' +
+    "System 2 agents use tools; each session becomes a runnable document; gptr runs in " +
+    "terminals, RStudio, VS Code, Positron and Jupyter, serves its session over MCP and " +
+    "coaches its harness on your task. The end card reads gptr, a grammar of Peter, honoring " +
+    'Peter Naur and Peter Wason."><source src="video/gptr.mp4" type="video/mp4"></video>' +
+    "<figcaption>gptr in 36 seconds, without sound.</figcaption></figure>");
   // Figures follow the light switch in every browser: the fragment "#dark" selects dark colours.
   const figures = document.querySelectorAll('#main img[src^="figures/"]');
   const paint = (figure, search) => {
@@ -96,7 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   // A figure draws once at load and again from the start when it first comes into view,
   // unless the reader asks for reduced motion, which shows the final frame.
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (still) return;
   const replay = new IntersectionObserver((entries) => entries.forEach((entry) => {
     if (!entry.isIntersecting) return;
     replay.unobserve(entry.target);
