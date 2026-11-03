@@ -1,5 +1,6 @@
 ---
 title: "Tools and artifacts"
+description: "Inspect objects, run programs, and build and reopen artifacts."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Tools and artifacts}

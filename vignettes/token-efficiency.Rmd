@@ -1,5 +1,6 @@
 ---
 title: "Token efficiency"
+description: "Budgets, caches and descriptions that keep context small."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Token efficiency}

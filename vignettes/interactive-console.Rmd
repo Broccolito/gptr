@@ -1,5 +1,6 @@
 ---
 title: "Interactive console"
+description: "Chat in the console, steer a running answer and approve changes."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Interactive console}

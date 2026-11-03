@@ -1,5 +1,6 @@
 ---
 title: "Typed decisions"
+description: "Logical answers, labels and scores, one per input, with probabilities."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Typed decisions}

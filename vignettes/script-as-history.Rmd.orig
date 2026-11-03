@@ -1,5 +1,6 @@
 ---
 title: "Record, replay and export"
+description: "Record agent calls beside your code, replay them and export a script."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Record, replay and export}

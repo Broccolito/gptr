@@ -1,5 +1,6 @@
 ---
 title: "Language models"
+description: "Choose a provider, a command-line login or a local Ollama model."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Language models}

@@ -1,5 +1,6 @@
 ---
 title: "MCP"
+description: "Call MCP tools as R functions, or serve your R session over MCP."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{MCP}

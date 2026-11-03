@@ -1,5 +1,6 @@
 ---
 title: "Skills and plugins"
+description: "Skills, prompt templates, agent files and plugins."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Skills and plugins}

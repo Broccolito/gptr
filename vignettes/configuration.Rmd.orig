@@ -1,5 +1,6 @@
 ---
 title: "Configuration"
+description: "Settings, scopes and precedence; R options and credentials."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Configuration}

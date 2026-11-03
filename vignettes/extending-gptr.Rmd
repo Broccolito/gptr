@@ -1,5 +1,6 @@
 ---
 title: "Extending gptr"
+description: "Add a tool, a policy or a hook with a small spec."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Extending gptr}

@@ -1,5 +1,6 @@
 ---
 title: "Teams and background work"
+description: "Teams, fan-outs and sub-agents; background jobs, checkpoints and usage."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Teams and background work}

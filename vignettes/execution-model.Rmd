@@ -1,5 +1,6 @@
 ---
 title: "Execution model"
+description: "What one model turn does, and where objects live."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Execution model}

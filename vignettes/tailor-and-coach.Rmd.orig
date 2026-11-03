@@ -1,5 +1,6 @@
 ---
 title: "Harnesses and coaching"
+description: "Build your own peter and improve it by running your task."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Harnesses and coaching}
