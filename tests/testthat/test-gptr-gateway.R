@@ -700,6 +700,8 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
   cnd = expect_error(peter(txt, model = fake, envir = new.env()),
                      class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "prompt")
+  # the person's no: the console prints it as a notice, not an error (D-307)
+  expect_true(cnd$declined)
   expect_false(grepl(key, conditionMessage(cnd), fixed = TRUE))
   expect_match(box$question, "secret-looking value", fixed = TRUE)
   expect_true(box$default)

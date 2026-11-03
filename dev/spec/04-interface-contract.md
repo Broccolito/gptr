@@ -255,7 +255,7 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `rewind_range` | - | `turn`, `turns` | P16 | rewind target out of range |
 | `missing_package` | - | `package`, `feature` | any Suggests use (all) | a Suggests package is needed and absent |
 | `no_key` | - | `provider`, `variables` | P05 | no credential found for a provider |
-| `egress` | - | `provider`, `how_to_ack` | P08 (`egress_check()`) | first non-interactive use without an acknowledgement |
+| `egress` | - | `provider`, `how_to_ack`, `declined` | P08 (`egress_check()`) | first non-interactive use without an acknowledgement; after the person's no to the question, `declined = TRUE` and a short `Not sent: ...` message saying how to go on (the console prints it as a dim notice, not an error; D-307) |
 | `untrusted` | - | `what`, `path`, `origin` | P03, P08, P17, P18, P29 | handle for a wrong origin; project resource used without trust; a coaching child's result that is not plain data of the fixed shape (`what = "coaching result"`, `plain_bad()`, IC-86) |
 | `unknown_model` | - | `ref`, `suggestions` | P05 | a model reference cannot be resolved |
 | `invalid_identifier` | `invalid_argument` | `arg`, `class` | P08 | an identifier argument bound to a non-character, non-spec value |

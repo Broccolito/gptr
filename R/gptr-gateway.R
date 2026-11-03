@@ -944,7 +944,7 @@ gateway_prompt_secrets = function(prompt) {
                    paste0("Load keys with gptr_env() and refer to them by name; model code ",
                           "reads them with Sys.getenv(\"NAME\").")),
                  "invalid_argument", arg = "prompt",
-                 expected = "a prompt without secret values")
+                 expected = "a prompt without secret values", declined = TRUE)
     }
     return(red)
   }

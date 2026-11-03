@@ -1071,10 +1071,13 @@ repl_waiting_notice = function(rs) {
   invisible(NULL)
 }
 
-#' Print an error on stderr: escaped, its line feeds kept
+#' Print an error on stderr: escaped, its line feeds kept; a prompt the person declined to send
+#' (`declined`: a question's no, D-307) is a dim notice on stdout, as no error happened
 #' @noRd
 repl_error = function(e) {
-  console_notice("Error: ", console_escape(conditionMessage(e)), .error = TRUE)
+  text = console_escape(conditionMessage(e))
+  if (isTRUE(e$declined)) return(console_notice(console_style()$dim(text)))
+  console_notice("Error: ", text, .error = TRUE)
 }
 
 #' The line under a sent prompt that names what its @mentions resolved to (D-244): dim, the
