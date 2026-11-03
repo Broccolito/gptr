@@ -4265,8 +4265,8 @@ not used (`mcp.json`, not `.mcp.json`). `.claude-plugin/plugin.json` bundles are
 
 A directory containing only `.claude-plugin/marketplace.json` is a marketplace, not a plugin;
 resolving its path explains that the user must select an individual plugin directory (a bare name
-that is not a path falls through to the other places, and an installed Claude Code plugin always
-resolves by its name, D-331). A marketplace may
+that is not a path falls through to the other places first and gets the same explanation only when
+none resolves it, and an installed Claude Code plugin always resolves by its name, D-331). A marketplace may
 also be a plugin when it has its own plugin manifest or supported resource directories. Activation
 fails with a plugin diagnostic when no supported declarative resources or R extension code are
 found. A valid R factory may intentionally register nothing. Passive plugin listing does not

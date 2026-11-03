@@ -791,39 +791,41 @@ plugin_resolve = function(name) {
     p = plugin_from_dir(full)
     if (!is.null(p)) return(p)
   }
-  if (looks_path) {
-    if (file.exists(file.path(full, ".claude-plugin", "marketplace.json"))) {
-      gptr_abort(paste0("This path is a plugin marketplace, not a plugin directory. ",
-                        "Choose an individual plugin directory from its marketplace.json ",
-                        "and name that path in `plugins`."),
-                 "invalid_argument", arg = "name", expected = "an individual plugin directory")
+  if (!looks_path) {
+    ws = workspace_dir()
+    if (!is.null(ws)) {
+      dirs = list.dirs(file.path(ws, "plugins"), recursive = FALSE)
+      hit = res_match(name, basename(dirs), "plugin")
+      if (length(hit)) {
+        p = plugin_from_dir(dirs[basename(dirs) == hit][1L])
+        if (!is.null(p)) return(p)
+      }
     }
+    p = plugin_from_package(name)
+    if (!is.null(p)) return(p)
+    if (!grepl("^[A-Za-z][A-Za-z0-9.]*$", name) || !length(find.package(name, quiet = TRUE))) {
+      pk = unique(basename(list.dirs(.libPaths(), recursive = FALSE)))
+      hit = res_match(name, pk, "plugin")
+      if (length(hit)) {
+        p = plugin_from_package(hit)
+        if (!is.null(p)) return(p)
+      }
+    }
+    cl = plugin_claude_installed()
+    hit = res_match(name, names(cl), "plugin")
+    if (length(hit)) return(plugin_from_dir(cl[[hit]], hit, "claude-plugin"))
+  }
+  if (file.exists(file.path(full, ".claude-plugin", "marketplace.json"))) {
+    gptr_abort(paste0("This path is a plugin marketplace, not a plugin directory. ",
+                      "Choose an individual plugin directory from its marketplace.json ",
+                      "and name that path in `plugins`."),
+               "invalid_argument", arg = "name", expected = "an individual plugin directory")
+  }
+  if (looks_path) {
     gptr_abort(paste0("This path is not a plugin directory (no plugin.json, .claude-plugin/ ",
                       "or resource directories)."), "invalid_argument", arg = "name",
                expected = "a plugin directory")
   }
-  ws = workspace_dir()
-  if (!is.null(ws)) {
-    dirs = list.dirs(file.path(ws, "plugins"), recursive = FALSE)
-    hit = res_match(name, basename(dirs), "plugin")
-    if (length(hit)) {
-      p = plugin_from_dir(dirs[basename(dirs) == hit][1L])
-      if (!is.null(p)) return(p)
-    }
-  }
-  p = plugin_from_package(name)
-  if (!is.null(p)) return(p)
-  if (!grepl("^[A-Za-z][A-Za-z0-9.]*$", name) || !length(find.package(name, quiet = TRUE))) {
-    pk = unique(basename(list.dirs(.libPaths(), recursive = FALSE)))
-    hit = res_match(name, pk, "plugin")
-    if (length(hit)) {
-      p = plugin_from_package(hit)
-      if (!is.null(p)) return(p)
-    }
-  }
-  cl = plugin_claude_installed()
-  hit = res_match(name, names(cl), "plugin")
-  if (length(hit)) return(plugin_from_dir(cl[[hit]], hit, "claude-plugin"))
   gptr_abort(paste0("No plugin with this name was found: install a package with inst/gptr/, ",
                     "or use a directory with plugin.json or .claude-plugin/, or ",
                     ".gptr/plugins/<name>/."), "invalid_argument", arg = "name",

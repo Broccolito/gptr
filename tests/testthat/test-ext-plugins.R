@@ -437,6 +437,13 @@ test_that("a bare plugin name is not blocked by a same-named folder in the worki
   expect_error(plugin_resolve("./docs9"), "not a plugin directory")
   unlink(file.path(root, ".gptr", "plugins"), recursive = TRUE)
   expect_error(plugin_resolve("docs9"), "No plugin with this name")
+  # A same-named marketplace clone is explained only when nothing else resolves the name.
+  write_file(file.path(root, "docs9", ".claude-plugin", "marketplace.json"), '{"name": "docs9"}')
+  expect_error(plugin_resolve("docs9"), "plugin marketplace")
+  write_file(file.path(root, ".gptr", "plugins", "docs9", "skills", "a", "SKILL.md"),
+             "---\nname: a\ndescription: A.\n---\nx")
+  expect_identical(plugin_resolve("docs9")$path,
+                   path_norm(file.path(root, ".gptr", "plugins", "docs9")))
 })
 
 test_that("an installed Claude plugin whose install root is a marketplace resolves by its name", {

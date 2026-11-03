@@ -9584,11 +9584,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 
 ## D-331 - Lane E Plugin resolution: a bare name falls through, an installed Claude plugin always resolves (2026-11-02)
 - Rule (review #101; regression from 1.0.0): only a name that contains `/` or `\`, or starts with `.`
-  or `~`, is a path that must be a plugin directory (P17, contract 7.17); the marketplace explanation
-  and "This path is not a plugin directory" end resolution for such names only. A bare name that
-  happens to match a folder of the working directory (`docs/`, or a package author's source
-  folder) still falls through to `.gptr/plugins/<name>/`, installed packages and installed Claude
-  Code plugins, as in 1.0.0; 1.0.1 had made the same-named folder end resolution.
+  or `~`, is a path that must be a plugin directory (P17, contract 7.17), and "This path is not a
+  plugin directory" ends resolution for such names only. A bare name that happens to match a
+  folder of the working directory (`docs/`, or a package author's source folder) still falls
+  through to `.gptr/plugins/<name>/`, installed packages and installed Claude Code plugins, as in
+  1.0.0; 1.0.1 had made the same-named folder end resolution. The marketplace explanation is chosen
+  last: a path or a bare name whose folder is a marketplace root gets it when nothing else resolves
+  the name, so `plugins = "my-marketplace-clone"` run from its parent still learns why.
 - Rule (review #101; D-088): the marketplace-only exclusion of `plugin_from_dir()` applies only when
   no `kind` is given, so "a given `kind` always resolves" holds again: an installed Claude Code
   plugin whose install root holds only `.claude-plugin/marketplace.json` (a `strict: false` entry
@@ -9596,10 +9598,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   empty bundle if nothing is usable. A path to a marketplace root is still refused. The marketplace
   message ends "and name that path in `plugins`", which fits both `peter(plugins =)` and the
   setting.
-- Contract-visible: 04 section 11.12 (unchanged: a marketplace-only root is refused as a path).
+- Contract-visible: 04 section 11.12, amended in place.
 - Tests: test-ext-plugins.R "a bare plugin name is not blocked by a same-named folder in the working
-  directory", "an installed Claude plugin whose install root is a marketplace resolves by its
-  name", and the marketplace-root test, which now also covers `.mcp.json` and `skills/`.
+  directory" (also with a same-named marketplace clone), "an installed Claude plugin whose install
+  root is a marketplace resolves by its name", and the marketplace-root test, which now also covers
+  `.mcp.json` and `skills/`.
 
 ## D-332 - Lane E A configured plugin entry that fails is recorded once, with its path (2026-11-02)
 - Rule (review #101; live finding): `gptr_plugins()` and the session-start sync (`plugins_sync()`,
