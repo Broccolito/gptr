@@ -164,6 +164,15 @@ test_that("a remembered login names the one store it uses and keeps an existing 
   expect_identical(captured[["mcp:demo"]], key)
 })
 
+test_that("keyring storage without the keyring package says how to install it", {
+  need = auth_need_keyring
+  environment(need) = list2env(list(requireNamespace = function(...) FALSE),
+                               parent = asNamespace("gptr"))
+  err = expect_error(need(), "install.packages(\"keyring\")", fixed = TRUE,
+                     class = "gptr_error_missing_package")
+  expect_identical(err$package, "keyring")
+})
+
 test_that("explicit OS keyring storage refuses an environment fallback before input", {
   skip_if_not_installed("keyring")
   local_user_dirs()

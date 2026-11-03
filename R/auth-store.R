@@ -144,8 +144,9 @@ auth_keyring_field = function(rec) {
 #' @noRd
 auth_need_keyring = function() {
   if (!requireNamespace("keyring", quietly = TRUE)) {
-    gptr_abort("A keyring reference in auth.json needs the keyring package.", "missing_package",
-               package = "keyring", feature = "credential-store keyring references")
+    gptr_abort(paste0("Keyring credential storage needs the 'keyring' package; install it ",
+                      "with install.packages(\"keyring\")."), "missing_package",
+               package = "keyring", feature = "keyring credential storage")
   }
   invisible(TRUE)
 }
