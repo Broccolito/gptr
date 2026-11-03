@@ -1517,7 +1517,7 @@ it (IC-79). Needs httpuv, later and openssl (`gptr_error_missing_package`). Retu
 placed in `$config` snippets marked as secret), `$config` (client snippets for Codex,
 Claude Code, Claude Desktop, Cursor with a tool timeout of at least 3,600 s), `$stop()`. One server per process:
 calling again returns the running handle; `stop = TRUE` stops it and returns `invisible(NULL)`. Requests are served
-while the outermost reactor pump runs (`later::run_now(0)` at depth 1, IC-57) or at an idle console, where a
+while the outermost reactor pump runs (`later::run_now(0)` at depth 1, IC-57) or at R's top-level idle prompt, where a
 request that needs approval is denied with how to allow it (never a prompt from a callback). Copy-safety: [R2] (`envir` is held
 only while the server runs, in an environment binding reset by `$stop()`). Emits `mcp_serve_start`,
 `mcp_serve_stop` (notify).
@@ -2586,7 +2586,7 @@ The reactor API is specified in §8.2. Process engine (`proc-spawn.R`, `proc-sup
 | Function | Contract | Consumers |
 |---|---|---|
 | `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "\|", stderr = "\|", cleanup_tree = TRUE, supervise = supervise_default())` | a `processx::process` created with `encoding = "UTF-8"` (IC-60) and a tree marker under `R_user_dir("gptr", "cache")/procs/` for the orphan sweep (`proc_dir()`; under `tempdir()/gptr-procs` while R CMD check runs examples, `check_running()` and not testthat, D-285); `command` resolved with `Sys.which()` (R itself only through `rscript_path()`); `.cmd`/`.bat` run as `cmd.exe /d /c call <shim> args` refusing `% ^ & \| < > " !` CR LF in any argument (`gptr_error_invalid_argument`); argv, wd and env through `os_bytes()`; `stdin = NULL` is the null device, `"\|"` a pipe | P18, P19, P20, P22 |
-| `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` | runs to completion with stdout/stderr redirected to temp files (never `processx::run()`), a `p$wait(200)` loop, `on.exit(kill_all(p))`; returns `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))` decoded as UTF-8 with the code-page fallback | P20, P22 |
+| `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` | runs to completion with stdout/stderr redirected to temp files (never `processx::run()`), bounded reactor waits (IC-57), `on.exit(kill_all(p))`; returns `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))` decoded as UTF-8 with the code-page fallback | P20, P22 |
 | `shell_resolve(cmd)` | `list(command, args)` for a string command: Unix `/bin/sh -c`; Windows Git Bash, else PowerShell `-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand <base64 UTF-16LE>` (`shell_ps_encode()`: exit 0 when the line's last command succeeded, else `$LASTEXITCODE` if nonzero, else 1; on Windows a `PostCommandLookupAction` gives a bare name that resolves to an extensionless file the first program of that name with an extension, or none, so the name is not found, as in cmd), else `list(command, args, env)`: `cmd /d /v:on /s /c "chcp 65001 >nul & "<COMSPEC>" /d /s /c !GPTR_SHELL_CMD!"` (verbatim args) with `env = c(GPTR_SHELL_CMD = "\"<line>\"")`, which the child environment must set; a caller may not set `GPTR_SHELL_CMD` [G5; D-229; D-235] | P22 |
 | `write_all(p, data)` | queues chr (as `charToRaw(as_utf8(x))`) or raw for the child's stdin; the reactor drains the buffer non-blockingly with `write_input()` (which writes at most about 8 KB per call), reading stdout/stderr between attempts, within `gptr.stdin_timeout` (`gptr_error_timeout` otherwise); outside the reactor it loops the same way (IC-60) | P18, P19, P20 |
 | `line_reader(p, stream = "stdout", max_line = 16 * 1024^2)` | environment with `read()` -> chr of complete lines (at most 512 chunks per call), `partial()` | P04, P18, P19, P20 |
@@ -3311,7 +3311,7 @@ reactor_run_remove(run)
 | `reactor_timer(at, fn)` | calls `fn()` once at `reactor_now() >= at`; returns an id |
 | `reactor_task(fn)` | calls `fn()` once per iteration until it returns `FALSE` (used by `inprocess` adapters and the background pump) |
 | `reactor_enqueue_tool(run, fn)` | appends `fn` (a zero-argument function executing one R-evaluating tool) to the FIFO; at most one runs per iteration, only for runs in `allow_runs` of the innermost pump |
-| `reactor_pump(...)` | the only blocking wait in gptr; it tracks its depth (IC-57). One iteration: admit queued transfers; `processx::poll(c(processx::curl_fds(curl::multi_fdset(pool)), <pipes>), ms = min(next timer, slice_ms))`; `curl::multi_run(timeout = 0)`; read ready pipes and drain pending stdin buffers (IC-60); fire due timers; run tasks; `later::run_now(0)` only at depth 1 (IC-79); run at most one FIFO tool whose run is in `allow_runs`. `allow_runs` defaults to `NULL` (all runs) only when `run_current()` is `NULL`, else to `character()`; a nested pump (a sub-agent, System 1 or MCP call made inside an `r` evaluation) passes the ids it waits for. Loops until `until()` is `TRUE` (returns `TRUE`) or `timeout` seconds (returns `FALSE`). R interrupts propagate out of the pump to the caller's interrupt policy |
+| `reactor_pump(...)` | the only blocking wait in gptr; it tracks its depth (IC-57). One iteration: admit queued transfers; `processx::poll(c(processx::curl_fds(curl::multi_fdset(pool)), <pipes>), ms = min(next timer, slice_ms))`; `curl::multi_run(timeout = 0)`; read ready pipes and drain pending stdin buffers (IC-60); fire due timers; run tasks; `later::run_now(0)` only at depth 1 with no served tool executing (IC-79); run at most one FIFO tool whose run is in `allow_runs`. `allow_runs` defaults to `NULL` (all runs) only outside all pumps and served tools, else to `character()`; a nested pump (a sub-agent, System 1 or MCP call made inside an `r` evaluation) passes the ids it waits for. Loops until `until()` is `TRUE` (returns `TRUE`) or `timeout` seconds (returns `FALSE`). R interrupts propagate out of the pump to the caller's interrupt policy |
 | `reactor_cancel(ids)` | `curl::multi_cancel()` for transfers, removal of timers/tasks/FIFO items; for process watchers: interrupt, grace, `kill_all()`; `invisible(<n cancelled>)` |
 | `reactor_run_add(run)`, `reactor_run_remove(run)` | strong references to active runs (INFRA-15: the only run state the reactor holds) |
 
@@ -5087,10 +5087,18 @@ step list before its first action.
 **IC-57 Re-entrancy.** (req-17, safe-8)
 
 - The reactor tracks its pump depth. A nested pump (depth > 1) runs FIFO tools only of the runs it was given in
-  `allow_runs`; its default is `if (is.null(run_current())) NULL else character()`, so System 1 and MCP HTTP calls
-  made from inside an `r` evaluation never run a sibling's R tool.
+  `allow_runs`; its default is `NULL` only outside all pumps and served tools, else `character()`, so System 1
+  and MCP HTTP calls made from inside an `r` evaluation never run a sibling's R tool.
 - `later::run_now(0)` is called only at depth 1, so an HTTP request to `gptr_mcp_serve()` is answered only by the
-  outermost pump or at an idle console. (P26 IC-79: the served-run mark, the `-32002` busy error and the reader of
+  outermost pump or at R's top-level idle prompt. A nested console `readline()` and ordinary blocking R code
+  can suspend serving; `/mcp serve` starts or reuses the server and leaves Peter's reader for R's prompt.
+  A new server uses the chat's workspace and mode, and the chat is retained as `gptr_last()` for
+  `gptr_last() |> peter()` to resume it. A running server retains its original workspace and mode.
+  Child waits cooperate with the reactor, but a nested tool wait cannot serve a synchronous same-process
+  MCP client by running HTTP callbacks or sibling R tools re-entrantly.
+  Served tools hold the same restriction when entered at R's idle prompt; their execution guard is set
+  after the permission gate and restored on exit without changing the pump depth used by that gate.
+  (P26 IC-79: the served-run mark, the `-32002` busy error and the reader of
   the innermost `allow_runs` are gone; both CLI routes queue served `tools/call`s on the run's tool FIFO.)
 - The background pump is a no-op while the reactor is on the stack (depth > 0).
 - Asks raised outside a blocking gptr call (background runs, `gptr_mcp_serve()` at an idle console) never

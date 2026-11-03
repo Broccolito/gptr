@@ -29,7 +29,7 @@ console_commands = function() {
     gptr_command("doc", cmd_doc, "Show or bind the history document: /doc [path]"),
     gptr_command("skills", cmd_skills, "List the skills"),
     gptr_command("skill", cmd_skill, "Use a skill for the next prompt: /skill:<name> [request]"),
-    gptr_command("mcp", cmd_mcp, "List the MCP servers"),
+    gptr_command("mcp", cmd_mcp, "List MCP servers, or return to R to serve: /mcp [serve]"),
     gptr_command("permissions", cmd_permissions,
                  paste("Show or change the rules of this R session:",
                        "/permissions [<verb> <rule>] (allow, ask, deny or remove)")),
@@ -538,6 +538,26 @@ cmd_skill = function(args, ctx) {
 
 #' @noRd
 cmd_mcp = function(args, ctx) {
+  if (identical(args, "serve")) {
+    rs = console_repl_find()
+    if (is.null(rs) || isTRUE(rs$stdin)) {
+      return("/mcp serve returns to an interactive R prompt; it cannot serve after piped R exits.")
+    }
+    f = ns_fun("gptr_mcp_serve")
+    if (is.null(f)) return("MCP is not available.")
+    old = options(gptr.mode = repl_mode(rs))
+    on.exit(options(old), add = TRUE)
+    handle = f(envir = repl_eval_env(rs))
+    if (!is.null(rs$session)) last_set(rs$session)
+    rs$exit = TRUE
+    return(c(print_lines(handle),
+             "Leave R at its top-level prompt while MCP clients work.",
+             if (is.null(rs$session)) "Open Peter again with peter()." else
+               "Resume this chat with gptr_last() |> peter().",
+             "Client configuration: h = gptr_mcp_serve(); h$config.",
+             "A running server keeps its workspace and mode; stop it before changing them."))
+  }
+  if (nzchar(args)) return("Use /mcp to list servers, or /mcp serve to serve from R's prompt.")
   f = ns_fun("gptr_mcp")
   if (is.null(f)) return("MCP is not available.")
   print_lines(f())

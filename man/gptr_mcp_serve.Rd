@@ -29,12 +29,17 @@ Starts an MCP server inside this R session that offers \code{r}, \code{read}, \c
 agents such as Codex, Claude Code, Claude Desktop or Cursor. It listens only on 127.0.0.1,
 requires a 192-bit bearer token, rejects foreign browser origins, and runs every call through
 your permission settings; R code evaluates in \code{envir}, where its objects persist. The calls
-belong to a dedicated gptr session whose permission mode is the one in effect when the server
-starts (stop and start the server to change it); like any new session, it becomes
-\code{\link[=gptr_last]{gptr_last()}}. Requests are answered while R waits at the console or inside a gptr call; one
-that needs your approval is refused with a note on how to allow it, because gptr never asks
-from a background callback. The token appears only in the snippets of \verb{$config} (printed
-redacted; \code{as.character()} gives the text to paste; \verb{$config$codex} holds the \code{codex} options
+belong to a dedicated gptr session whose permission mode is the configured default when the
+server starts, independently of a chat's explicit mode; like any new session, it becomes
+\code{\link[=gptr_last]{gptr_last()}}. A running server keeps its original workspace and mode until stopped.
+Requests are answered at R's top-level idle prompt or during an outermost reactor wait.
+A nested console \code{readline()} (including Peter's prompt in R.app), ordinary blocking R code,
+or a nested tool wait can pause serving. In Peter, \verb{/mcp serve} starts or reuses the server
+and returns to R's prompt; a new server uses that chat's workspace and mode. Resume the chat
+with \code{gptr_last() |> peter()}. Calls that need approval are refused with a note on how to allow
+them, because gptr never asks from a background callback. The token appears only in the
+snippets of \verb{$config} (printed redacted; \code{as.character()} gives the text to paste;
+\verb{$config$codex} holds the \code{codex} options
 in \verb{$args} and the environment to start Codex with in \verb{$env}). One server runs per R process.
 Needs 'httpuv', 'later' and 'openssl'; gptr's own codex route does not use this server.
 }

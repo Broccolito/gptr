@@ -201,7 +201,7 @@ bridge_run = function(target, input, wd, timeout, env, merge) {
   on.exit(kill_all(p, grace = 0), add = TRUE, after = FALSE)
   timed_out = FALSE
   repeat {
-    p$wait(200L)
+    reactor_pump(until = function() !p$is_alive(), slice_ms = 200L, timeout = 0.2)
     if (isTRUE(file.size(out_f) > proc_output_cap)) {
       kill_all(p, grace = 0)
       break

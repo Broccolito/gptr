@@ -1449,7 +1449,7 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 - One process engine (`proc-spawn.R`) for bridges, MCP stdio servers and CLI providers:
   `processx::process$new()` with stdout/stderr redirected to temp files, never `processx::run()` (its
   `cat()`-based buffer corrupts non-ASCII output in a C locale and its interrupt handler calls
-  `invokeRestart("abort")` [G5, J-impl prun.R]); a `p$wait(200)` loop with a hard timeout and
+  `invokeRestart("abort")` [G5, J-impl prun.R]); bounded reactor waits with a hard timeout and
   `on.exit(kill_all(p))`; stdin is the null device unless `input =` is given (large inputs always on stdin:
   32,767-character command-line limit); `write_all()` queues raw bytes that the reactor drains non-blockingly with
   `write_input()` (which writes at most about 8 KB per call [08 fact-check]), reading the child's stdout and stderr
