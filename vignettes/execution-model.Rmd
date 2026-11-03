@@ -144,14 +144,14 @@ than assuming every object is a fully resident data frame.
 
 ``` r
 session$id
-#> [1] "s6f7bcf1dca"
+#> [1] "s056c128eee"
 session$model
 #> [1] "fake/fake-1"
 session$turns
 #> [1] 1
 gptr_usage(session)
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 s6f7bcf1dca  2         3435   20      0           0            0
+#> 1 s056c128eee  2         3435   20      0           0            0
 #>
 #> # 1 row
 #> 2 requests, 3.4k tokens in, $0.0000
@@ -181,7 +181,7 @@ session$history
 #> 4 1     tool_result  + fit <lm length 12>      r      5
 #> 5 1     assistant    The regression is ready.         1726
 #> # 5 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.5k tokens . $0.0000 . s6f7bcf1dca
+#> idle . fake/fake-1 . 1 turn . 3.5k tokens . $0.0000 . s056c128eee
 as.data.frame(session$history)
 #>   turn        role                          preview tools tokens
 #> 1    1        user Fit fuel economy against weight.            8
@@ -198,7 +198,10 @@ see [Record, replay and export](script-as-history.html).
 A history document records executed code, decisions and bounded output. It does not
 automatically archive the full input dataset. Replay runs the recorded R procedure again;
 provide its input objects, packages and required files in a fresh session. Answer caches,
-checkpoints and artifact data snapshots are separate storage mechanisms.
+checkpoints and artifact data snapshots are separate storage mechanisms. File checkpoints back
+up the files Peter's tools name before they run, plus what a bounded scan of the working
+directory finds; other changed files have no automatic backup. See
+[Teams and background work](teams-and-background.html) for the limits and for rewinding.
 
 ## Permissions and concurrency
 

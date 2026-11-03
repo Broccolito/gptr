@@ -156,7 +156,10 @@ see [Record, replay and export](script-as-history.html).
 A history document records executed code, decisions and bounded output. It does not
 automatically archive the full input dataset. Replay runs the recorded R procedure again;
 provide its input objects, packages and required files in a fresh session. Answer caches,
-checkpoints and artifact data snapshots are separate storage mechanisms.
+checkpoints and artifact data snapshots are separate storage mechanisms. File checkpoints back
+up the files Peter's tools name before they run, plus what a bounded scan of the working
+directory finds; other changed files have no automatic backup. See
+[Teams and background work](teams-and-background.html) for the limits and for rewinding.
 
 ## Permissions and concurrency
 
