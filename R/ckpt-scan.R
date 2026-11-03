@@ -20,8 +20,8 @@ ckpt_entry_max = 2000L
 #' gptr.checkpoint_track_total in all. It stops after gptr.checkpoint_scan_timeout seconds, checked
 #' between entries and before each capture, or at an interrupt the person continues from, and keeps
 #' what it completed; a filesystem call that blocks is not cut short.
-#' @return `list(walk, hash, mode, absent, not_files, uncaptured, complete, capture_capped, reason,
-#'   seconds)`.
+#' @return `list(walk, hash, mode, absent, not_files, uncaptured, complete, reason, seconds)`:
+#'   `complete` when it reached every entry, else `reason` says why it stopped or what it missed.
 #' @noRd
 ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE) {
   started = proc.time()[["elapsed"]]
@@ -45,8 +45,6 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
   st$captured = 0L
   st$bytes = 0
   st$halt = FALSE
-  st$capture_capped = FALSE
-  st$unreadable = FALSE
   st$interrupted = FALSE
   st$reason = if (nrow(old) > ckpt_entry_max) "entry limit" else ""
   # paths as vectors, not environment names: those are translated to the native encoding
@@ -132,13 +130,10 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
     } else if (class %in% c("protected", "control")) {
       "protected or control path"
     } else if (file.access(full, 4L) != 0L) {
-      st$capture_capped = st$unreadable = TRUE
       "unreadable file"
     } else if (size > file_max) {
-      st$capture_capped = TRUE
       "file size limit"
     } else if (st$captured >= 256L || st$bytes + size > total_max) {
-      st$capture_capped = TRUE
       "capture limit"
     } else if (halted()) {
       "time limit"
@@ -210,12 +205,8 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
   }
   tryCatch(withCallingHandlers(scan(), interrupt = function(cnd) st$interrupted = TRUE),
            error = function(e) incomplete("scan error"))
-  complete = !nzchar(st$reason)
-  if (complete && st$capture_capped) {
-    st$reason = if (st$unreadable) "unreadable file" else "capture limit"
-  }
   list(walk = data.frame(path = st$path, size = st$size, mtime = st$mtime, link = st$link),
        hash = st$hash, mode = st$mode, absent = st$absent, not_files = st$not_files,
-       uncaptured = st$uncaptured, complete = complete, capture_capped = st$capture_capped,
-       reason = st$reason, seconds = proc.time()[["elapsed"]] - started)
+       uncaptured = st$uncaptured, complete = !nzchar(st$reason), reason = st$reason,
+       seconds = proc.time()[["elapsed"]] - started)
 }

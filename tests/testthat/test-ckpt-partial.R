@@ -6,8 +6,7 @@ partial_scan = function(paths = character(), hashes = character(), absent = char
                          link = rep(FALSE, length(paths))),
        hash = hashes, mode = stats::setNames(rep(420L, length(hashes)), names(hashes)),
        absent = absent, not_files = not_files, complete = complete,
-       reason = if (complete) "" else "entry limit", capture_capped = FALSE,
-       uncaptured = character(), seconds = 0)
+       reason = if (complete) "" else "entry limit", uncaptured = character(), seconds = 0)
 }
 
 test_that("partial discovery never calls an unvisited existing file created", {
@@ -111,31 +110,25 @@ test_that("a complete later inventory does not repair earlier partial undo cover
   expect_identical(frag$coverage, "partial")
   expect_identical(frag$files[[1L]]$path, "a.R")
   expect_true(tr$complete)
-  expect_true(tr$coverage)
 })
 
-test_that("missing follow-up captures cannot certify unchanged contents from metadata alone", {
+test_that("a complete scan that cannot back up a file keeps coverage and lists its edits", {
   for (reason in c("capture limit", "unreadable file")) {
     local_project(files = list("known.R" = "AAAA"))
-    stamp = as.POSIXct(1e9, origin = "1970-01-01", tz = "UTC")
-    Sys.setFileTime("known.R", stamp)
     next_scan = partial_scan("known.R", c(known.R = ckpt_store_put("known.R")), complete = TRUE)
     local_mocked_bindings(ckpt_scan_run = function(...) next_scan)
     ck = ckpt_ck_new("s0000000210")
     ckpt_files_sync(ckpt_files_tr(ck))
-    writeBin(charToRaw("BBBB\n"), "known.R")
-    Sys.setFileTime("known.R", stamp)
     next_scan = partial_scan("known.R", complete = TRUE)
-    next_scan$capture_capped = TRUE
     next_scan$uncaptured = c(known.R = reason)
-    next_scan$reason = reason
-    fragment = ckpt_files_turn_scan(ck, 1L, force = TRUE)
-    expect_length(fragment$files, 0L)
-    expect_identical(fragment$coverage, "partial")
-    report = ckpt_files_undo(ck, fragment)
-    expect_identical(report$item, "file coverage")
-    expect_false(report$ok)
-    expect_identical(readLines("known.R"), "BBBB")
+    expect_null(ckpt_files_turn_scan(ck, 1L, force = TRUE))
+    writeLines("a longer edit", "known.R")
+    next_scan = partial_scan("known.R", complete = TRUE)
+    next_scan$uncaptured = c(known.R = reason)
+    fragment = ckpt_files_turn_scan(ck, 2L, force = TRUE)
+    expect_identical(fragment$coverage, "complete")
+    expect_false(fragment$files[[1L]]$restorable)
+    expect_match(fragment$files[[1L]]$reason, "no pre-image")
   }
 })
 

@@ -2118,8 +2118,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   unlimited catch-up scan. A recording scan keeps the unvisited observations of the turn's sync
   and never infers creation or deletion from an unobserved path; a sync's observations replace the
   tracker's, so a path it did not reach has no pre-image or proven absence from before it
-  [D-311]. Automatic file undo covers only changes with
-  sufficient observations and valid pre-images; coverage limitations are reported. Predicted
+  [D-311]. Automatic file undo covers only changes with sufficient observations and valid
+  pre-images; coverage is partial only where a scan stopped early, and R code that can write no
+  file and turns without a file-capable call get no file record [D-312]. Predicted
   literal targets of gptr-controlled calls are captured immediately before mutation, independently
   of automatic coverage. A CLI-served call without synchronization cannot treat content first
   seen after the child started as a turn-start pre-image. Arbitrary native CLI/shell writes

@@ -40,13 +40,23 @@ ckpt_pure_read = function(call) {
     !length(unlist(ckpt_predict(code)))
 }
 
+#' Can a call write no file: R code whose classified effects are only reads and object writes
+#' (`x = 1`, `lm()`; an unlisted function, a session change or a file write is not)? (D-312)
+#' @noRd
+ckpt_file_free = function(call) {
+  rlang::is_string(call$input$code) && !is.null(call$risk) &&
+    all(call$risk$categories %in% c("read", "object_write"))
+}
+
 #' Does checkpointer `name` record this call? Not with the setting `checkpoint = "off"`, only
-#' files with `"files"`, nothing in plan mode (G7 4.5), nothing for a pure read
+#' files with `"files"`, nothing in plan mode (G7 4.5), nothing for a pure read, and no files for
+#' a call that can write none
 #' @noRd
 ckpt_enabled = function(name, ctx, call) {
   mode = setting_get("checkpoint", default = "on")
   !identical(mode, "off") && (name == "files" || !identical(mode, "files")) &&
-    !identical(ctx$mode(), "plan") && !ckpt_pure_read(call)
+    !identical(ctx$mode(), "plan") && !ckpt_pure_read(call) &&
+    !(name == "files" && ckpt_file_free(call))
 }
 
 #' Does the session run on a subscription-CLI route whose child edits files itself (a provider
@@ -580,7 +590,9 @@ ckpt_ext_state = function(s = NULL) {
 #' so a turn's edit or deletion of one is not undone. Directories are not tracked: an empty
 #' directory a turn created stays. Files outside the project and `tempdir()` are restored only
 #' after you confirm each path. Automatic file scans are bounded by time, entry and capture
-#' limits (see [gptr_options]); incomplete coverage is reported. Predicted write targets are
+#' limits (see [gptr_options]); a scan that stops early is reported as incomplete coverage of the
+#' calls and turns that could write files (R code that only reads and assigns objects cannot).
+#' Predicted write targets are
 #' backed up separately before gptr's tools, but native CLI edits to unvisited files have no
 #' automatic backup. After a full restore the model is told nothing (the next
 #' request's prefix is byte-identical to the earlier request at the target); after a partial one

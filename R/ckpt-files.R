@@ -277,12 +277,11 @@ ckpt_files_observe = function(tr, s) {
                           ckpt_entry_max)
   tr$stat = w
   tr$complete = isTRUE(s$complete) && fits
-  tr$coverage = tr$complete && !isTRUE(s$capture_capped)
-  tr$last_coverage = s$coverage %||% tr$coverage
+  tr$last_coverage = s$coverage %||% tr$complete
   tr$walk_secs = s$seconds
   tr$walk_time = s$time
   if (!isTRUE(s$complete)) tr$per_turn = TRUE
-  if (!isTRUE(s$complete) || isTRUE(s$capture_capped)) {
+  if (!isTRUE(s$complete)) {
     gptr_inform(paste0("Automatic file checkpoint coverage is incomplete (", s$reason,
                        "). Unvisited native CLI edits have no automatic undo backup; Peter ",
                        "backs up predicted targets before its own tools. Use ls/find/read ",
@@ -297,8 +296,8 @@ ckpt_files_observe = function(tr, s) {
 #' @noRd
 ckpt_files_scan = function(tr) {
   s = ckpt_scan_run(tr$root, tr$prune, old = tr$stat)
-  # Missing captures can hide same-metadata changes; retain known pre-images for observed edits.
-  s$coverage = isTRUE(tr$coverage) && isTRUE(s$complete) && !isTRUE(s$capture_capped)
+  # an interval is covered when the scans at both ends reached every entry
+  s$coverage = isTRUE(tr$complete) && isTRUE(s$complete)
   s$time = as.numeric(Sys.time())
   old = tr$stat
   w = s$walk
@@ -373,6 +372,7 @@ ckpt_files_sync = function(tr) {
   tr$hash = character()
   tr$mode = integer()
   tr$absent = character()
+  tr$synced = TRUE
   ckpt_files_observe(tr, s)
   invisible(tr)
 }
@@ -457,7 +457,7 @@ ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
   }
   exact = length(paths) > 0L && all(tr$explicit[paths] != "?")
   list(frag = ckpt_frag_id(), turn = turn, paths = paths, exact = exact,
-       coverage = isTRUE(tr$coverage))
+       coverage = isTRUE(tr$complete))
 }
 
 #' Rows for the explicit paths of a call that changed: relative when the walk covers them (per-turn
@@ -520,13 +520,15 @@ ckpt_files_after = function(ck, call, token) {
        coverage = if (coverage) "complete" else "partial")
 }
 
-#' One scan recorded as its own fragment: at the end of a turn in per-turn mode, and (`force`) after
-#' each turn of a CLI route whose child edits files itself (IC-65)
+#' One scan recorded as its own fragment: at the end of a turn in per-turn mode whose calls could
+#' write files (they synced the tracker), and (`force`) after each turn of a CLI route whose child
+#' edits files itself (IC-65)
 #' @return A fragment, or NULL when nothing changed.
 #' @noRd
 ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
   tr = ckpt_files_tr(ck)
-  if (is.null(tr$stat) || !(isTRUE(tr$per_turn) || force)) return(NULL)
+  if (is.null(tr$stat) || !(isTRUE(tr$per_turn) && isTRUE(tr$synced) || force)) return(NULL)
+  tr$synced = FALSE
   rows = ckpt_files_step(tr)
   if (!length(rows) && isTRUE(tr$last_coverage)) return(NULL)
   list(id = ckpt_frag_id(), turn = as.integer(turn), root = tr$root, files = rows,

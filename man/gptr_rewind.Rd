@@ -70,7 +70,9 @@ Protected files and files that configure R or gptr (\code{.env}, \code{.Renviron
 so a turn's edit or deletion of one is not undone. Directories are not tracked: an empty
 directory a turn created stays. Files outside the project and \code{tempdir()} are restored only
 after you confirm each path. Automatic file scans are bounded by time, entry and capture
-limits (see \link{gptr_options}); incomplete coverage is reported. Predicted write targets are
+limits (see \link{gptr_options}); a scan that stops early is reported as incomplete coverage of the
+calls and turns that could write files (R code that only reads and assigns objects cannot).
+Predicted write targets are
 backed up separately before gptr's tools, but native CLI edits to unvisited files have no
 automatic backup. After a full restore the model is told nothing (the next
 request's prefix is byte-identical to the earlier request at the target); after a partial one

@@ -3053,6 +3053,12 @@ nothing) replaces the tracker's observations, so only what it observed gives a p
 proves an absence (D-311). A partial inventory is never evidence that an unseen file was created
 or deleted. Discovered changes without valid pre-images are not
 restorable, and coverage notices explain that other changes may not be listed or undoable.
+A fragment's coverage is `"partial"` only when a scan of its interval stopped early (time,
+entries, an interrupt, an unreadable directory or path); a capture limit leaves it complete and
+its uncaptured changes are rows without a pre-image. The files checkpointer skips R code whose
+classified effects are only reads and object writes, and a per-turn scan follows only a turn
+that synced the tracker (a file-capable call), so R-only and text-only turns carry no coverage
+item (D-312).
 
 Predicted targets of gptr-controlled writes are backed up immediately before the call,
 independently of automatic coverage, with the existing protected/control/link/type and byte

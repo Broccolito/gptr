@@ -637,11 +637,8 @@ test_that("undo restores mode bits; old rows, later edits and missing copies are
   writeLines("a longer new file", file.path(proj, "new.txt"))
   file.remove(file.path(proj, "run.sh"))
   frag = ckpt_files_after(ck, call, tok)
-  old = ckpt_files_undo(ck, frag, turn_now = 101L)
-  expect_match(old$action[old$item != "file coverage"], "older than", all = TRUE)
-  restored = ckpt_files_undo(ck, frag)
-  expect_false(restored$ok[restored$item == "file coverage"])
-  expect_true(all(restored$ok[restored$item != "file coverage"]))
+  expect_match(ckpt_files_undo(ck, frag, turn_now = 101L)$action, "older than", all = TRUE)
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
   expect_identical(format(file.mode(file.path(proj, c("run.sh", "a.R")))), c("750", "700"))
   writeLines("a = 3", file.path(proj, "a.R"))
   r = ckpt_files_undo(ck, frag, redo = TRUE)
@@ -776,9 +773,7 @@ test_that("slow walks switch the session to one scan per turn plus predicted pat
   writeLines(strrep("y", 100), file.path(proj, "R", "a.R"))
   frag3 = ckpt_files_after(ck, call3, tok3)
   expect_identical(frag3$files[[1L]]$status, "modified")
-  coverage = ckpt_files_turn_scan(ck, 2L)
-  expect_length(coverage$files, 0L)
-  expect_identical(coverage$coverage, "partial")
+  expect_null(ckpt_files_turn_scan(ck, 2L))
   expect_true(ckpt_files_undo(ck, frag3)$ok)
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 2")
   # a predicted path that unpredicted code changed earlier in the turn is left to the turn scan
@@ -861,10 +856,8 @@ test_that("files that cannot be read are listed, never captured and stop nothing
   Sys.chmod(file.path(proj, "key.pem"), "0000", use_umask = FALSE)
   frag = ckpt_files_after(ck, call, tok)
   expect_identical(paths_status(frag), c(key.pem = "created", `R/a.R` = "modified"))
-  expect_identical(frag$coverage, "partial")
-  report = ckpt_files_undo(ck, frag)
-  expect_false(report$ok[report$item == "file coverage"])
-  expect_true(all(report$ok[report$item != "file coverage"]))
+  expect_identical(frag$coverage, "complete")
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
   expect_false(file.exists(file.path(proj, "key.pem")))
   expect_identical(readLines(file.path(proj, "secret.txt")), "s")
@@ -1056,7 +1049,7 @@ test_that("checkpoint racy scans reject a tracked regular file replaced by a FIF
   local_mocked_bindings(ckpt_scan_run = function(...) {
     list(walk = observed, hash = character(), mode = integer(), absent = character(),
          not_files = character(), uncaptured = c(empty.txt = "not a regular file"),
-         complete = TRUE, capture_capped = FALSE, reason = "", seconds = 0)
+         complete = TRUE, reason = "", seconds = 0)
   }, hash_file = function(path) {
     if (any(path == pipe)) {
       stop(structure(list(message = "FIFO hash refused", call = NULL),

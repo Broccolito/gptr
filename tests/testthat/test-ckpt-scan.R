@@ -8,7 +8,6 @@ test_that("scans keep the caller store and inspect known absences", {
   expect_identical(result$absent, "gone.R")
   expect_setequal(names(result$hash), result$walk$path)
   expect_true(all(vapply(result$hash, function(h) !is.null(ckpt_blob_find(h)), logical(1))))
-  expect_false(result$capture_capped)
 })
 
 test_that("capture limits preserve complete inventory and source files get priority", {
@@ -20,7 +19,6 @@ test_that("capture limits preserve complete inventory and source files get prior
   local_gptr_options(checkpoint_scan_timeout = 20)
   result = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
   expect_true(result$complete)
-  expect_true(result$capture_capped)
   expect_length(result$hash, 256L)
   expect_equal(nrow(result$walk), 271L)
   expect_true("z.R" %in% names(result$hash))
@@ -37,7 +35,6 @@ test_that("captures respect the aggregate byte cap, including empty files", {
                      checkpoint_track_total = 16)
   result = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
   expect_true(result$complete)
-  expect_true(result$capture_capped)
   expect_setequal(result$walk$path, c("a.R", "b.R", "c.R", "empty.R"))
   expect_setequal(names(result$hash), c("a.R", "b.R", "empty.R"))
   expect_identical(unname(result$uncaptured[["c.R"]]), "capture limit")

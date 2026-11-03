@@ -9616,3 +9616,27 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-ckpt-partial.R "a partial sync gives no pre-image to an edit or deletion made outside
   gptr", "a file recreated outside gptr after a proven absence is not undone as created".
   Evidence: progress/fixes-1.0.1/lane-A.md.
+
+## D-312 - P16 File coverage is partial only where a scan stopped early (2026-11-02)
+- Rule (review of #98): a files fragment's coverage is `"partial"` only when a scan of its interval
+  stopped early (time, entry limit, interrupt, an unreadable directory or an unavailable path). A
+  complete scan that hit a capture limit, a size limit or an unreadable file keeps coverage
+  complete; those files' later changes are rows without a pre-image, as in 1.0.0, and a
+  same-size, same-time edit of a file without a backup goes unseen, as in 1.0.0 (the
+  39b553a4 rule that made such scans partial is withdrawn).
+- Rule: the files checkpointer skips R code whose classified effects are only reads and object
+  writes (`ckpt_file_free()`: `gptr_risk()` categories within `read` and `object_write`; an
+  unlisted function, a session change, a file write or code without a risk is file-capable); the
+  objects checkpointer still records it. A per-turn scan at `agent_end` follows only a turn that
+  synced the tracker, which a file-capable call does; CLI routes scan every turn (IC-65).
+- Why: any project over 256 capturable files was capture-capped, and any over 2,000 entries
+  partial, so every rewind there warned `gptr_warning_rewind_partial`, put a `<rewind>` block in
+  the next request and made `/undo` ask "Undo anyway?", also for turns that only assigned objects
+  or only answered in text. `?gptr_rewind` promises that a full restore tells the model nothing.
+- Contract-visible: 04 section 7.16; 03 section 6.16 Files; `?gptr_rewind`.
+- Tests: test-ckpt-scan-integration.R "R-only and text-only turns rewind fully in capped and
+  partially scanned projects", "a complete scan with capped captures leaves undo coverage
+  complete", "a real unreadable file is listed without a backup until it can be read";
+  test-ckpt-partial.R "a complete scan that cannot back up a file keeps coverage and lists its
+  edits"; test-ckpt-rewind.R "R code that can write no file skips only the files checkpointer".
+  Evidence: progress/fixes-1.0.1/lane-A.md.
