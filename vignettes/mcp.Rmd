@@ -215,9 +215,9 @@ default mode, independently of a chat's explicit mode. Calls use a dedicated gpt
 an action that needs a new approval is refused in a background callback. Approve a specific
 needed action interactively through your permission settings before retrying.
 
-Child-process waits cooperate with the reactor. Inside an R tool, they still cannot run
-HTTP callbacks or sibling R tools re-entrantly. If a child needs this same R session's MCP
-server, start it with `peter$bg()` and let the current R tool return before waiting for it.
+Child-process waits cooperate with the reactor. Inside an R tool, they still run neither
+HTTP callbacks nor sibling R tools. If a child needs this same R session's MCP server, start
+it with `peter$bg()` and let the current R tool return before waiting for it.
 
 Serving `r` permits code execution in the supplied environment; a separate environment helps
 organize objects but is not an operating-system sandbox. The R tool can use its already-loaded
