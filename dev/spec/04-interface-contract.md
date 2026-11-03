@@ -1348,8 +1348,9 @@ fallbacks. Hidden input is not encryption. Access tokens stay in memory. `slot` 
 environment entry for a stdio MCP server; its credential is injected only in the owned child environment
 and bound to the reviewed configuration and resolved executable. Provider endpoint edits and MCP
 destination/configuration edits invalidate stored authorization. Needs a human
-(`gptr_error_noninteractive`). `gptr_login()` returns `invisible(TRUE)` on success; blank input returns
-`invisible(FALSE)` with `status = "skipped"`, while dismissal/interrupt gives `status = "cancelled"`.
+(`gptr_error_noninteractive`). `gptr_login()` returns `invisible(TRUE)` on success; blank input or
+`/skip` returns `invisible(FALSE)` with `status = "skipped"`, while `/cancel`, dismissal or interrupt
+gives `status = "cancelled"`; neither command is ever stored as a credential.
 No credential value is returned to model/tool results, UI logs, transcript or history.
 `gptr_logout()` removes stored and in-memory credentials and returns `invisible(<lgl: something removed>)`.
 Conditions: `noninteractive`, `not_available` (hidden input or OS keyring unavailable),

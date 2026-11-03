@@ -641,6 +641,8 @@ oauth_ask = function(what, optional = FALSE) {
                member = "hidden credential input", provided_by = "UI backend")
   },
                 interrupt = function(e) NA_character_)
+  # the questions' commands; an answer is never stored as a credential
+  if (rlang::is_string(v) && !is.na(v)) v = switch(trimws(v), `/skip` = "", `/cancel` = NA, v)
   if (optional && (!rlang::is_string(v) || !nzchar(trimws(v)))) {
     return(if (rlang::is_string(v) && !is.na(v)) "" else NA_character_)
   }
@@ -661,7 +663,8 @@ oauth_login_prompt = function(what, destination, scope, entry = TRUE) {
                   user = paste0("remember on this computer in auth.json or its existing ",
                                  "keyring reference.")),
           if (entry) paste0("\nEntering the credential authorizes this destination and storage. ",
-                            "Leave blank to skip; dismiss or interrupt to cancel.") else
+                            "Leave blank or type /skip to skip; type /cancel, dismiss or ",
+                            "interrupt to cancel.") else
             "\nContinuing authorizes this destination and storage.")
 }
 
@@ -704,7 +707,8 @@ oauth_login_store = function(key, rec, scope) {
 #' on. A login inside a tool also uses hidden paste entry because loopback callbacks cannot run
 #' recursively. Key entry requires a UI with hidden input; it never falls back to visible typing.
 #' The host prompt shows the destination and storage before entry. For key entry, leave it blank
-#' to skip, or dismiss or interrupt it to cancel. The initial OAuth review offers Skip and Cancel.
+#' or type `/skip` to skip; type `/cancel`, dismiss or interrupt it to cancel. The initial OAuth
+#' review offers Skip and Cancel.
 #' Secret answers are not returned to the model.
 #' `scope = "session"` keeps credentials in this R process until logout or exit; it does not
 #' export an environment variable or create a credential file. For assisted setup, use this scope.

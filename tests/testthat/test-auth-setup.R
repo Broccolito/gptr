@@ -31,6 +31,19 @@ test_that("empty and cancelled credential entry have safe distinct results", {
   expect_identical(ui$log$answer, c("[hidden]", "[hidden]"))
 })
 
+test_that("/skip and /cancel at the hidden prompt skip and cancel instead of storing a key", {
+  local_user_dirs()
+  key = paste0("kept-canary-", strrep("k", 24))
+  auth_store_set("openrouter", list(type = "api_key", key = key))
+  ui = local_scripted_ui(list("/skip", "/cancel", " /cancel "))
+  status = vapply(1:3, function(i) {
+    attr(gptr_login("openrouter", method = "key"), "status")
+  }, "")
+  expect_identical(status, c("skipped", "cancelled", "cancelled"))
+  expect_identical(auth_store_read()$openrouter$key, key)
+  expect_match(ui$log$prompt, "type /skip to skip; type /cancel", fixed = TRUE)
+})
+
 test_that("login refuses unsupported hidden input and missing humans before reading", {
   local_user_dirs()
   ui = ui_scripted_spec(ui_scripted_state(list("never-consumed")))
