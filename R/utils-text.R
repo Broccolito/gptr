@@ -333,8 +333,7 @@ print.gptr_listing = function(x, ...) {
 }
 
 #' A width-bounded display copy: provenance/state first, at most two column groups, no row loss;
-#' identifiers and every column whose values fit in 24 columns (state, dates, numbers) are never
-#' shortened, so only longer free text gives way
+#' identifier, provenance, state and date columns are never shortened, so free text gives way first
 #' @noRd
 listing_print_lines = function(x, width = cli::console_width()) {
   if (!ncol(x)) return(character())
@@ -359,12 +358,11 @@ listing_print_lines = function(x, width = cli::console_width()) {
   caps = ifelse(names(x) == "description", 40L, ifelse(names(x) == "path", 28L, 24L))
   identifiers = names(x) %in% c("id", "ref", "name", "rule")
   caps[identifiers] = budget
-  full = vapply(seq_along(x), function(j) {
-    max(nchar(c(headers[[j]], values[[j]]), type = "width"))
+  wanted = vapply(seq_along(x), function(j) {
+    min(budget, caps[[j]], max(nchar(c(headers[[j]], values[[j]]), type = "width")))
   }, 0)
-  wanted = pmin(budget, caps, full)
   minimum = pmax(nchar(headers, type = "width"), pmin(wanted, 8L))
-  whole = identifiers | full <= 24L
+  whole = names(x) %in% c(priority, "date", "created", "updated")
   minimum[whole] = wanted[whole]
   groups = list()
   group = integer()

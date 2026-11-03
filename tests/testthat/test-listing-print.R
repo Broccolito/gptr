@@ -160,3 +160,34 @@ test_that("model listings keep provider, availability and checked_at whole and s
     expect_false(any(grepl("provider|availability|checked_at", other)), info = info)
   }
 })
+
+test_that("at 80 columns free text gives way before a long source and model refs (D-355)", {
+  providers = data.frame(id = c("anthropic", "azure", "google", "openrouter-jev", "typesafe"),
+                         type = c("chat", "chat", "chat", "classifier", "classifier"),
+                         api = c("anthropic-messages", "openai-completions",
+                                 "google-generative-ai", "typesafe-system-one",
+                                 "typesafe-system-one"),
+                         credential = c("ANTHROPIC_API_KEY #f1a2b3c4", NA, NA, NA, NA),
+                         source = c("builtin:providers", "builtin:providers", "builtin:providers",
+                                    "builtin:system1", "builtin:system1"),
+                         status = c("ready", "no base url", "no key", "no key", "no key"),
+                         default_model = c("anthropic/claude-sonnet-4-8", NA,
+                                           "google/gemini-3.8-flash", NA, "typesafe/jev-latest"),
+                         egress = "needed", version = NA_character_)
+  servers = data.frame(name = c("learn", "files"),
+                       source = c("user ~/.codex/config.toml", "project .mcp.json"),
+                       transport = c("http", "stdio"), era = "modern",
+                       status = c("configured", "connected"), tools = c(12L, NA_integer_),
+                       exposure = "deferred", tokens = c(180L, 0L), trusted = c(TRUE, FALSE))
+  shown = function(df) {
+    out = withr::with_options(list(cli.width = 80L),
+                              utils::capture.output(print(new_listing(df, "listing"))))
+    expect_true(all(nchar(out, type = "width") <= 80L))
+    paste(out, collapse = "\n")
+  }
+  out = shown(providers[rep(seq_len(5L), 2L), ])
+  for (v in c("google/gemini-3.8-flash", "typesafe/jev-latest", "ANTHROPIC_API_KEY #f1...")) {
+    expect_true(grepl(v, out, fixed = TRUE), info = v)
+  }
+  expect_true(grepl("user ~/.codex/config....", shown(servers), fixed = TRUE))
+})
