@@ -1082,7 +1082,7 @@ run_wait = function(runs, timeout = Inf, background = FALSE) {
                NA))
   }
   if (done()) return(invisible(TRUE))
-  allow = if (reactor_depth() == 0L) NULL else vapply(runs, function(r) r$id, "")
+  allow = if (reactor_nested()) vapply(runs, function(r) r$id, "")
   ok = reactor_pump(until = done, slice_ms = 100L, allow_runs = allow, timeout = timeout)
   invisible(isTRUE(ok) || done())
 }

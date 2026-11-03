@@ -27,7 +27,7 @@ test_that("child waits serve an independent MCP client without another input or 
     list(name = "r", arguments = list(code = "value + 1"))))
   withr::local_seed(17)
   seed = get(".Random.seed", globalenv())
-  # proc_run() and the merged bridge have separate redirected-output wait paths.
+  # proc_run() alone and through the merged bridge (stderr in the stdout file)
   for (merge in c(FALSE, TRUE)) {
     result = if (!merge) {
       do.call(proc_run, c(client, list(timeout = 5)))
@@ -128,12 +128,32 @@ test_that("idle served tools do not reenter later callbacks or sibling tools dur
     seen$order = c(seen$order, "end")
     expect_false(isTRUE(response$result$isError))
     expect_identical(seen$inside, "start")
-    expect_identical(reactor_depth(), 0L)
-    expect_identical(reactor_get()$tool_depth, 0L)
+    expect_false(reactor_nested())
     expect_true(reactor_pump(until = function() all(c("later", "sibling") %in% seen$order),
                              timeout = 2))
     expect_identical(seen$order, c("start", "end", "later", "sibling"))
   }
+})
+
+test_that("a nested peter() inside an idle served tool runs no sibling R tool", {
+  skip_on_cran()
+  local_project()
+  withr::defer(reactor_shutdown())
+  home = new.env()
+  chat = peter("hello", model = gptr_fake_provider(list("ok")), envir = home, mode = "yolo",
+                .run = FALSE)
+  seen = new.env(parent = emptyenv())
+  seen$order = "start"
+  home$nested = function() {
+    peter("q", model = gptr_fake_provider(list("inner")), envir = new.env())
+    seen$inside = seen$order
+  }
+  reactor_enqueue_tool("sibling", function() seen$order = c(seen$order, "sibling"))
+  response = mcp_dispatch_local(mcp_test_msg("tools/call",
+    list(name = "r", arguments = list(code = "nested()"))), chat)
+  expect_false(isTRUE(response$result$isError))
+  expect_identical(seen$inside, "start")
+  expect_true(reactor_pump(until = function() "sibling" %in% seen$order, timeout = 2))
 })
 
 test_that("an idle served-tool guard is released after evaluation errors and interrupts", {
@@ -153,8 +173,7 @@ test_that("an idle served-tool guard is released after evaluation errors and int
     response = mcp_dispatch_local(mcp_test_msg("tools/call",
       list(name = "r", arguments = list(code = code))), chat)
     expect_true(isTRUE(response$result$isError))
-    expect_identical(reactor_get()$tool_depth, 0L)
-    expect_identical(reactor_depth(), 0L)
+    expect_false(reactor_nested())
   }
 })
 
@@ -187,33 +206,38 @@ mcp_serve_command = function(rs) {
   cmd_mcp("serve", ctx_new(rs$session))
 }
 
-test_that("MCP serving hands the current workspace and mode to R and retains the chat to resume", {
-  local_project()
+test_that("MCP serving hands the chat's workspace and mode to R, never a looser session mode", {
+  skip_on_cran()
+  for (package in c("httpuv", "later", "openssl")) skip_if_not_installed(package)
+  local_gw()
   local_gptr_options(mode = "auto")
+  gptr_config(mode = "yolo", .scope = "session")
+  withr::defer(gptr_mcp_serve(stop = TRUE))
   home = new.env()
   chat = peter("hello", model = gptr_fake_provider(list("ok")), envir = home, mode = "plan",
                 .run = FALSE)
-  other = peter("server", model = gptr_fake_provider(list("ok")), envir = new.env(), .run = FALSE)
   rs = repl_state(chat, new.env())
-  seen = new.env(parent = emptyenv())
-  original = ns_fun
-  local_mocked_bindings(ns_fun = function(name) {
-    if (!identical(name, "gptr_mcp_serve")) return(original(name))
-    function(envir) {
-      seen$home = envir
-      seen$mode = setting_get("mode")
-      last_set(other)
-      "server started"
-    }
-  })
   output = mcp_serve_command(rs)
   expect_true(rs$exit)
-  expect_identical(seen$home, home)
-  expect_identical(seen$mode, "plan")
-  expect_identical(getOption("gptr.mode"), "auto")
-  gc()
+  expect_identical(the$mcp_server$envir, home)
+  expect_identical(the$mcp_server$user$session$mode, "plan")
   expect_identical(gptr_last(), chat)
+  expect_match(paste(output, collapse = " "), "mode: plan;", fixed = TRUE)
   expect_match(paste(output, collapse = " "), "gptr_last() |> peter()", fixed = TRUE)
+  expect_identical(getOption("gptr.mode"), "auto")
+  # a running server keeps its workspace and mode for another chat's /mcp serve
+  other = peter("again", model = gptr_fake_provider(list("ok")), envir = new.env(),
+                mode = "yolo", .run = FALSE)
+  output = mcp_serve_command(repl_state(other, new.env()))
+  expect_identical(the$mcp_server$envir, home)
+  expect_identical(the$mcp_server$user$session$mode, "plan")
+  expect_match(paste(output, collapse = " "), "keeps its workspace and mode", fixed = TRUE)
+  # a new chat with no session yet serves in the configured default
+  gptr_mcp_serve(stop = TRUE)
+  rs = repl_state(NULL, new.env())
+  mcp_serve_command(rs)
+  expect_identical(the$mcp_server$user$session$mode, "yolo")
+  expect_null(rs$session)
 })
 
 test_that("a failed or piped serving handoff does not leave the console or read another line", {
@@ -227,6 +251,7 @@ test_that("a failed or piped serving handoff does not leave the console or read 
   rs$stdin = TRUE
   expect_match(paste(mcp_serve_command(rs), collapse = " "), "interactive R prompt", fixed = TRUE)
   expect_false(rs$exit)
+  expect_match(cmd_mcp("serv", ctx_new(chat)), "/mcp serve to serve from R's prompt", fixed = TRUE)
 })
 
 test_that("the serving handoff closes the reader, preserves typeahead and keeps the server", {

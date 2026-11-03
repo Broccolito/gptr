@@ -234,16 +234,15 @@ test_that("a stopping MCP listener refuses new serving tokens and HTTP dispatch"
   expect_error(start(), class = "gptr_error_not_available")
   expect_error(token(new.env(parent = emptyenv())), class = "gptr_error_not_available")
   expect_identical(handle(x$state$server, list())$status, 503L)
-  public = gptr_mcp_serve
-  environment(public) = list2env(list(the = x$state$the,
+  open = mcp_serve_open
+  environment(open) = list2env(list(the = x$state$the,
     ext_control_guard = function(...) invisible(NULL),
     mcp_serve_start = function(...) {
       calls$loads = calls$loads + 1L
       x$state$server
-    }), parent = environment(gptr_mcp_serve))
+    }), parent = environment(mcp_serve_open))
   x$state$server$handle = x$state$shared
-  expect_error(public(envir = new.env(parent = emptyenv())),
-               class = "gptr_error_not_available")
+  expect_error(open(new.env(parent = emptyenv()), "manual"), class = "gptr_error_not_available")
   expect_identical(calls$loads, 0L)
   expect_identical(calls$sessions, 0L)
   expect_identical(calls$routes, 0L)

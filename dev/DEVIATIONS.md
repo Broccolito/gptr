@@ -9848,3 +9848,119 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-auth-setup.R "a malformed credential store does not stop stdio servers; session slots
   still work", "HTTP MCP path and authentication configuration edits invalidate login", "logout
   resolves a configured name before a cached alias".
+
+## D-335 - FIX-1.0.1 lane F: `/mcp serve` and a resumed console use the chat's mode (2026-11-02)
+- Rule (serve mode; review #103, two medium reports): `/mcp serve` passes the chat's mode
+  (`repl_mode()`) straight to the server start, the internal `mcp_serve_open(envir, mode)`. It no
+  longer goes through `options(gptr.mode)`, which a session-scope `gptr_config(mode =)` overrides
+  (contract 11.2 ranks the session layer above options), so a plan chat could start a yolo server.
+  `gptr_mcp_serve()` keeps its signature and serves in the configured default; a running server
+  keeps its workspace and mode. Rejected: an exported `gptr_mcp_serve(mode =)`, a new argument for
+  one handoff.
+- Rule (resumed console; live #103, medium): an explicit `mode =` on a continued session
+  (`s |> peter(mode = "plan")`) switches the session when its console opens (`repl_state()` calls
+  `session_set_mode(source = "user")`, as `/mode` does), so the banner, the prompt, `/status` and
+  `/mcp serve` use it before the first prompt. Leaving the console without a prompt keeps the new
+  mode, as `/mode` would. An inherited mode leaves the session's own. The switch leaves the yolo
+  notice to the front end (`session_set_mode(notice = FALSE)`): the console says it after its
+  banner, as for a new yolo console, and the jsonl front end on stderr when it opens.
+- Contract-visible: 04 section 15.5 IC-57 (the mode is passed directly).
+- Tests: test-mcp-waits.R "MCP serving hands the chat's workspace and mode to R, never a looser
+  session mode" (replaces the test that mocked `ns_fun()` and set the mode as an option; it also
+  covers reuse of a running server and a console with no session yet); test-console-repl.R "an
+  explicit mode = on a continued session applies when its console opens", "a continued console
+  opened with mode = "yolo" says so after its banner"; test-console-jsonl.R "a jsonl frontend
+  continued with mode = "yolo" gives the yolo notice on stderr".
+
+## D-336 - FIX-1.0.1 lane F: MCP client snippets are redacted in every print path (2026-11-02)
+- Rule (live, high): IRkernel showed `h$config` and each snippet as text/html, text/markdown and
+  text/latex, which repr builds from the raw value, so the bearer token reached the screen and the
+  saved notebook. Snippets now return `NULL` from `repr_html`, `repr_markdown` and `repr_latex`
+  (registered when repr loads), so Jupyter shows a snippet only as the redacted text/plain of
+  `print()`. repr's list method returns `NULL` when an element does, so `$config` is covered too.
+  `format()` gives the redacted text that `print()` shows, and `str()` shows the redacted value.
+  knitr and Quarto print through `print()`.
+- Rule (verification of the fix, low): the codex `$env` is a snippet too, a named character vector
+  that processx and withr still take as the child's environment (`c()` and `[[` give plain
+  values), and `$config` has class `c("gptr_mcp_config", "list")` with `format()` and `print()`
+  methods. `format()` of a list unlists each element, which dropped the snippet class. Printing,
+  formatting, `str()`, knitr and Jupyter's repr of `$config`, of a snippet and of `$env` now all
+  redact.
+- Residual: by contract the token stays in the snippet values, since `as.character()` is the paste
+  path. Code that reads raw values (`as.character()`, `c()`, `unlist()`, `toString()`, `dput()`,
+  an IDE's variable pane) shows it. Rejected: storing only redacted text and restoring the token
+  in `as.character()`, `$` and `[[` methods, which changes `$env` and adds a method for every
+  accessor.
+- Contract-visible: `?gptr_mcp_serve` (snippets are redacted in notebooks and documents too); 04
+  section 5.11 (`config` is a `gptr_mcp_config`).
+- Tests: test-mcp-server.R "snippets keep the token out of format(), str(), knitr and Jupyter's
+  rich output" (the repr part runs where repr is installed; it failed for text/html, text/markdown
+  and text/latex before the change, and for `format()` of `$config` and every path of `$env`
+  before the follow-up).
+
+## D-337 - FIX-1.0.1 lane F: when the MCP server answers, and where its notices go (2026-11-02)
+- Rule (live and review #103, one medium and two low reports): serving pauses at Peter's own prompt
+  in every console, not only in R.app, because every non-piped console reads with `readline()`.
+  Rscript, knitr, Quarto and a Jupyter kernel have no idle prompt, so a request waits for the next
+  gptr wait (none comes between Jupyter cells) and a client may time out. `?gptr_mcp_serve`, both
+  vignettes and IC-57 say so. A new server started where `interactive()` is `FALSE` says so in one
+  notice. `interactive()` was chosen over a list of front ends: IRkernel runs R with `-e`, and a
+  document rendered from an interactive session gets no notice, since R is idle again afterwards.
+- Rule (live #103, low): a refusal notice at R's idle prompt starts a row of its own instead of
+  continuing the prompt row. Background notices already did this; both now use one helper,
+  `message_row()`. Not done: redrawing the prompt (readline owns that row, and writing
+  `getOption("prompt")` would desynchronise its display, so background notices do not either),
+  dimming it (a refusal asks the person to act, unlike the dim status line a settled background
+  session leaves) and naming a suggested rule (beyond the defect; the client's result keeps its
+  generic text).
+- Rule (review #103, low): the cheat sheet's serve row says to keep R idle and names `/mcp serve`.
+  Its slash-command row stays `/skills /mcp`: a wider first column wrapped page 1 past its end. The
+  architecture's command list names `/mcp [serve]`.
+- Contract-visible: 04 section 15.5 IC-57; 03 section 6.17; `?gptr_mcp_serve`; mcp and
+  interactive-console vignettes; the cheat sheet and its PDF.
+- Tests: test-mcp-server.R "a server started where R has no idle prompt says when it answers" (it
+  mocks `gptr_is_interactive()`, which the server reads, so it also holds in an interactive R), "an
+  idle refusal's notice starts a row of its own below R's prompt"; test-agent-background.R "a notice
+  at an idle tick starts a row of its own below R's prompt" (unchanged, now through the helper).
+
+## D-338 - FIX-1.0.1 lane F: child waits wake promptly; one test of a nested pump (2026-11-02)
+- Rule (review and live #103, three low reports): `proc_run()` pumps in 20 ms slices. The output
+  cap, the timeout and the echo are still checked every 200 ms. A child writing to files is no wake
+  source, so the 200 ms slice made every top-level child wait last at least 200 ms, and a served
+  request during a wait waited up to one slice per message. Rejected: waking on the child's processx
+  poll connection, which adds a pump argument and leaves HTTP requests waiting a slice.
+- Rule (review #103, low): `proc_run(merge = TRUE)` sends stderr into the stdout file and returns
+  `stderr = ""`; `bridge_run()`, a copy of the wait loop, is gone. D-298's mention of it is history.
+- Rule (review #103, two low reports): `reactor_nested()` (a pump on the stack or a served tool
+  executing) is the one test of nesting. It decides `reactor_pump()`'s default `allow_runs`, and the
+  ids that `run_wait()`, `sdk_work()` and `subagent_schedule()` pass, which keyed on pump depth or
+  `run_current()` alone, and whether `oauth_redirect_setup()` falls back to a paste prompt (it kept
+  an inline copy of the test). A nested `peter()` or `gptr_wait()` inside an `r` call served at
+  R's idle prompt therefore runs only its own runs' tools. `s1_pump()` keeps only the default.
+- Not done: `kill_all()`'s process-tree sweep after each child (about 150 ms at load 20) predates
+  #103 and keeps orphaned grandchildren from surviving.
+- Contract-visible: 04 sections 7.4 (`proc_run()`'s `merge` and the 20 ms exit wake) and 15.5
+  IC-57.
+- Tests: test-proc-spawn.R "a child's exit ends a wait outside a pump within a short slice" (0.204 s
+  after the spawn before the change; its `proc_run()` child sleeps 50 ms, since one that exits
+  before the first check passed with the 200 ms slice), "proc_run(merge = TRUE) sends stderr into
+  the stdout file";
+  test-mcp-waits.R "a nested peter() inside an idle served tool runs no sibling R tool".
+
+## D-339 - FIX-1.0.1 lane F: findings left to other lanes or deferred (2026-11-02)
+- Rule (live, low; `peter$search` ranking): left open for a follow-up on top of lane E. Lane E
+  ranks `api` documents after the other kinds (D-330) and adds no name rule, so on its branch
+  `member_search("mcp")` still ranks `gptr_mcp_remove`, `gptr_trust`, `gptr_mcp_add`,
+  `gptr_logout` and `gptr_login` ahead of `gptr_mcp`, and `"register provider"` misses
+  `gptr_provider`. The fix the finding gives (order hits by the share of the query's tokens in the
+  hit's name, then by BM25) edits the lines lane E rewrote, so making it here would conflict.
+- Rule (live, low; long tool output in the console): IC-82 and D-245's visual review say the margin
+  shows each printed line. Capping it is a console design decision for the maintainer, not a small
+  fix.
+- Rule (live, low; checkpoint notice reason): lane A replaced the scan worker and fixed the
+  misleading time-limit notice (D-310 to D-314).
+- Rule (review #103, low; test coverage): the handoff, reuse, session-scope mode, nested-run and
+  child-exit cases are tested (D-335, D-338). The `peter$bg()` workaround for a child that calls
+  this R's server is documented but not tested, since the test needs a background run whose child
+  is an MCP client of the same process.
+- Tests: none (no code change).

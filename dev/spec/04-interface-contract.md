@@ -992,7 +992,7 @@ contain no value.
 | `gptr_prompt_view` | P07 | list(system = list(t0, t1), tools_json, first_message (chr), sections df(name, tier, tokens), total_tokens); `print` shows each part with its token estimate |
 | `gptr_check` | P02 | `c("gptr_check", "data.frame")`: `target`, `check`, `ok` (lgl), `message` |
 | `gptr_api` | P02 | list(version = package_version, features = chr) |
-| `gptr_mcp_handle` | P18 | environment: `url`, `port`, `token_env` (chr(1): the variable name, never the token), `config` (named list of client snippets), `stop()` |
+| `gptr_mcp_handle` | P18 | environment: `url`, `port`, `token_env` (chr(1): the variable name, never the token), `config` (`c("gptr_mcp_config", "list")` of client snippets; it, each snippet and the codex `$env` print, format and show in notebooks redacted), `stop()` |
 
 ### 5.12 Listing data frames
 
@@ -2607,7 +2607,7 @@ The reactor API is specified in §8.2. Process engine (`proc-spawn.R`, `proc-sup
 | Function | Contract | Consumers |
 |---|---|---|
 | `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "\|", stderr = "\|", cleanup_tree = TRUE, supervise = supervise_default())` | a `processx::process` created with `encoding = "UTF-8"` (IC-60) and a tree marker under `R_user_dir("gptr", "cache")/procs/` for the orphan sweep (`proc_dir()`; under `tempdir()/gptr-procs` while R CMD check runs examples, `check_running()` and not testthat, D-285); `command` resolved with `Sys.which()` (R itself only through `rscript_path()`); `.cmd`/`.bat` run as `cmd.exe /d /c call <shim> args` refusing `% ^ & \| < > " !` CR LF in any argument (`gptr_error_invalid_argument`); argv, wd and env through `os_bytes()`; `stdin = NULL` is the null device, `"\|"` a pipe | P18, P19, P20, P22 |
-| `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` | runs to completion with stdout/stderr redirected to temp files (never `processx::run()`), bounded reactor waits (IC-57), `on.exit(kill_all(p))`; returns `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))` decoded as UTF-8 with the code-page fallback | P20, P22 |
+| `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE, merge = FALSE)` | runs to completion with stdout/stderr redirected to temp files (`merge = TRUE`: stderr into the stdout file, `stderr = ""`; never `processx::run()`), bounded reactor waits (IC-57) that end within 20 ms of the child's exit, `on.exit(kill_all(p))`; returns `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))` decoded as UTF-8 with the code-page fallback | P20, P22 |
 | `shell_resolve(cmd)` | `list(command, args)` for a string command: Unix `/bin/sh -c`; Windows Git Bash, else PowerShell `-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand <base64 UTF-16LE>` (`shell_ps_encode()`: exit 0 when the line's last command succeeded, else `$LASTEXITCODE` if nonzero, else 1; on Windows a `PostCommandLookupAction` gives a bare name that resolves to an extensionless file the first program of that name with an extension, or none, so the name is not found, as in cmd), else `list(command, args, env)`: `cmd /d /v:on /s /c "chcp 65001 >nul & "<COMSPEC>" /d /s /c !GPTR_SHELL_CMD!"` (verbatim args) with `env = c(GPTR_SHELL_CMD = "\"<line>\"")`, which the child environment must set; a caller may not set `GPTR_SHELL_CMD` [G5; D-229; D-235] | P22 |
 | `write_all(p, data)` | queues chr (as `charToRaw(as_utf8(x))`) or raw for the child's stdin; the reactor drains the buffer non-blockingly with `write_input()` (which writes at most about 8 KB per call), reading stdout/stderr between attempts, within `gptr.stdin_timeout` (`gptr_error_timeout` otherwise); outside the reactor it loops the same way (IC-60) | P18, P19, P20 |
 | `line_reader(p, stream = "stdout", max_line = 16 * 1024^2)` | environment with `read()` -> chr of complete lines (at most 512 chunks per call), `partial()` | P04, P18, P19, P20 |
@@ -5136,11 +5136,17 @@ step list before its first action.
 
 - The reactor tracks its pump depth. A nested pump (depth > 1) runs FIFO tools only of the runs it was given in
   `allow_runs`; its default is `NULL` only outside all pumps and served tools, else `character()`, so System 1
-  and MCP HTTP calls made from inside an `r` evaluation never run a sibling's R tool.
+  and MCP HTTP calls made from inside an `r` evaluation never run a sibling's R tool. Waits that name their runs
+  (`run_wait()`, a nested `peter()` or `gptr_wait()`, sub-agent teams) decide nesting by the same test, so one
+  inside a served tool entered at R's idle prompt runs only its own runs' tools (D-338).
 - `later::run_now(0)` is called only at depth 1, so an HTTP request to `gptr_mcp_serve()` is answered only by the
-  outermost pump or at R's top-level idle prompt. A nested console `readline()` and ordinary blocking R code
-  can suspend serving; `/mcp serve` starts or reuses the server and leaves Peter's reader for R's prompt.
-  A new server uses the chat's workspace and mode, and the chat is retained as `gptr_last()` for
+  outermost pump or at R's top-level idle prompt. Serving pauses while Peter's own prompt waits (in every
+  console), while other R code runs and during a nested tool wait. Rscript, knitr, Quarto and a Jupyter kernel
+  have no idle prompt: there a request waits for the next gptr wait (none between Jupyter cells), and a server
+  started where `interactive()` is `FALSE` says so in a notice (D-337). `/mcp serve` starts or reuses the
+  server and leaves Peter's reader for R's prompt.
+  A new server uses the chat's workspace and effective mode, passed to it directly so a session-scope `mode`
+  setting cannot loosen it (D-335), and the chat is retained as `gptr_last()` for
   `gptr_last() |> peter()` to resume it. A running server retains its original workspace and mode.
   Child waits cooperate with the reactor, but a nested tool wait cannot serve a synchronous same-process
   MCP client by running HTTP callbacks or sibling R tools re-entrantly.

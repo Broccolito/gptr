@@ -857,9 +857,10 @@ session_set_model = function(s, ref, reason = "user") {
 }
 
 #' Switch the session's permission mode (`gptr.mode_change`); a running run changes mode at once
-#' and gets an operator `<mode>` message after the current tool results
+#' and gets an operator `<mode>` message after the current tool results. `notice = FALSE` leaves
+#' the yolo notice to the caller (a console says it after its banner)
 #' @noRd
-session_set_mode = function(s, mode, source = "user") {
+session_set_mode = function(s, mode, source = "user", notice = TRUE) {
   check_class(s, "gptr_session", "s")
   mode = check_choice(mode, session_modes, "mode")
   check_string(source, "source")
@@ -868,7 +869,7 @@ session_set_mode = function(s, mode, source = "user") {
   if (identical(from, mode)) return(invisible(s))
   session_append(s, entry_custom("gptr.mode_change", list(from = from, to = mode, source = source)))
   d$mode = mode
-  mode_notice(mode)
+  if (notice) mode_notice(mode)
   live = session_live(s)
   run = if (is.null(live)) NULL else live$run
   if (!is.null(run)) mode_apply_run(s, run, mode)

@@ -457,15 +457,14 @@ test_that("nested and served-tool OAuth redirects use hidden paste without a lis
   redirect = "http://127.0.0.1:50111/callback?code=example-code"
   ui = local_scripted_ui(rep(list(redirect), 3L))
   reactor = reactor_get()
-  old_tool_depth = reactor$tool_depth
+  old = c(reactor$depth, reactor$tool_depth)
   withr::defer({
-    reactor$tool_depth = old_tool_depth
+    reactor$depth = old[[1L]]
+    reactor$tool_depth = old[[2L]]
   })
-  depth = 0L
-  local_mocked_bindings(reactor_depth = function() depth,
-                        oauth_loopback_ok = function() stop("must not start a nested listener"))
+  local_mocked_bindings(oauth_loopback_ok = function() stop("must not start a nested listener"))
   for (state in list(c(1L, 0L), c(0L, 1L), c(1L, 1L))) {
-    depth = state[[1L]]
+    reactor$depth = state[[1L]]
     reactor$tool_depth = state[[2L]]
     cb = oauth_redirect_setup(port = 50111L)
     expect_identical(cb$wait(), redirect)
