@@ -66,8 +66,9 @@
 #' so a turn that selects none keeps it. Agent-created objects remain in `envir`.
 #'
 #' @section Finding APIs:
-#' Inside agent R code, `peter$search("provider setup")` searches callable members and gptr's
-#' public APIs and help topics. `peter$help("gptr")` lists the functions and topics;
+#' Inside agent R code, `peter$search("provider setup")` searches callable members, skills, tools
+#' and gptr's public APIs and help topics; API rows follow the members, skills and tools it finds
+#' and fill the rows they leave free. `peter$help("gptr")` lists the functions and topics;
 #' `peter$help("gptr::gptr_mcp_add")` reads installed help. Add `source = TRUE` for bounded
 #' function-definition text, without executing it. Private source requires an explicit name
 #' such as `peter$help("gptr:::member_help", source = TRUE)`; private functions are not supported

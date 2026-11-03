@@ -9573,6 +9573,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `api` documents apart from every other kind: the other kinds rank as they did in 1.0.0, and `api`
   rows fill only the slots they leave free. A query only the API answers (`login credentials`)
   still returns api rows, and `peter$help("gptr")` lists the whole API whatever a search showed.
+- Rule (review #100): the api documents are ordered by bytes (`sort(method = "radix")`), since
+  equal scores keep document order and every S3 alias of a page has the same text, so the rows
+  returned differed between the C and a UTF-8 collation; `peter$help("gptr::", source = TRUE)`
+  answers "No function found" instead of a base error; `ns_gptr_exports()` reads NAMESPACE for an
+  installed package and a source tree alike, and one `ns_rd_aliases()` serves search and help.
 - Contract-visible: 04 section 9.4 (`search`).
 - Tests: test-tool-namespace.R "peter$search() lists api documents only after the members, tools and
   skills it found"; the 1.0.0 assertion that a skill ranks first for "shiny apps" is restored.
