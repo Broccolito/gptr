@@ -935,9 +935,11 @@ typed_code_open = function(held) {
 #' a T console's keys, a D console's lines without echo; IC-76, D-243); the end of its run settles
 #' what it held (console_queue_left()), and keys read with a Ctrl-C that no question took
 #' (console_ahead()) are the composer's draft at the next prompt. `men`: the prompt's @mentions.
+#' `rs$started`, the time it was sent, is its run's live row's clock (console_on_agent_start()).
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
 console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) {
+  rs$started = as.numeric(Sys.time())
   .gptr_repl = rs
   .gptr_interrupt_barrier = TRUE
   force(.gptr_repl)

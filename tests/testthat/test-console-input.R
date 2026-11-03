@@ -426,6 +426,34 @@ test_that("a question clears the live row first; none is drawn before its answer
   expect_false(row$shown)
 })
 
+test_that("the live row shows from the run's start, its clock from the prompt's Enter (#98)", {
+  local_project()
+  local_live_console("T")
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 1L, cli.width = 60L)
+  local_fake_provider(list("ok"))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  run = run_new(s, list(), NULL)
+  live = session_live(s)
+  live$run = run
+  withr::defer({
+    console_drop(run$id)
+    live$run = NULL
+  })
+  # the console's send of a prompt: Enter was 5 s ago (provider checks, a CLI's model listing)
+  rs = list2env(list(started = as.numeric(Sys.time()) - 5))
+  send = function() {
+    .gptr_repl = rs
+    force(.gptr_repl)
+    console_on_agent_start(ev_new("agent_start", run = run$id), live$ctx)
+  }
+  out = written(send)
+  rec = console_record(list(run = run$id))
+  expect_identical(the$live_row$rec, rec)
+  expect_match(out, "thinking 5s", fixed = TRUE)
+  expect_null(rs$started)
+})
+
 test_that("a launch clears a sub-agent group's row, which no foreground record owns (#99 review)", {
   local_live_console("T")
   withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 60L)

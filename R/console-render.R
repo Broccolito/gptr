@@ -1120,12 +1120,21 @@ console_render_custom = function(s, n0) {
 }
 
 #' agent_start: track the run; a sub-agent of a foreground call says that it started with the
-#' model it calls (a worker proxy's session model is `worker/worker`, D-188)
+#' model it calls (a worker proxy's session model is `worker/worker`, D-188). A foreground run's
+#' live row shows from here at verbosity 2+, before its model is prepared (a CLI's model listing,
+#' checkpoints), its clock from the console prompt's Enter (`rs$started`, console_send()), as the
+#' person waits from then (#98 review: nothing on screen for 10 s, then `thinking 0s`)
 #' @noRd
 console_on_agent_start = function(event, ctx) {
   s = ctx$session
   if (!inherits(s, "gptr_session") || !rlang::is_string(event$run)) return(NULL)
   rec = console_track(event$run, s)
+  if (console_foreground(rec)) {
+    rs = console_repl_find()
+    rec$t0 = rs$started %||% rec$t0
+    if (!is.null(rs)) rs$started = NULL
+    if (verbosity() >= 2L) console_live_start(rec)
+  }
   live = session_live(s)
   run = live$run
   if (console_child_shown(run)) {
