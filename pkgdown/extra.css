@@ -253,4 +253,8 @@ pre code a:any-link:hover {
   .template-home .gptr-points {
     grid-template-columns: minmax(0, 1fr);
   }
+  .gptr-points img {
+    margin-left: auto;
+    margin-right: auto;
+  }
 }

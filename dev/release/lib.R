@@ -501,7 +501,7 @@ vig_brand_block = function(root) {
     "@media (max-width: 600px) {",
     "  .gptr-vignette-brand { float: none; width: 72px; margin: 0 0 1rem; }",
     "}",
-    "figure, .float { width: fit-content; max-width: 100%; margin: 1.5rem 0; }",
+    "figure, .float { width: fit-content; max-width: 100%; margin: 1.5rem auto; }",
     paste("figure img, .float img { display: block; width: 100%; height: auto; margin: 0;",
           "padding: 0; border: 0; background: none; }"),
     paste("figcaption, .figcaption { contain: inline-size; margin-top: 0.5rem; font-size: 0.875em;",

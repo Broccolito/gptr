@@ -36,7 +36,7 @@ bar, the blue System 2 block and the `>` chevron, with no decoration.
    precompute. pandoc turns an image alone in its paragraph into a figure with the text as its
    caption; a short `alt` attribute names the drawing, so a screen reader does not read the
    caption twice. pkgdown copies the file to `articles/figures/`. The figure is as wide as its
-   image and the caption wraps at that width.
+   image, centred, and the caption wraps at that width.
 5. **Animation is CSS only, plays once and holds.** Up to seven steps draw 0.8 s apart from 0.2 s,
    each in 0.7 s, so a figure is complete within 6 s and then stays complete, which is also the
    frame shown with `prefers-reduced-motion: reduce`. The actors (boxes, blocks, lifelines) are
