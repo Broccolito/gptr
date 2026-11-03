@@ -482,7 +482,8 @@ escaped with `&quot;`; the rendered string is what is stored). All mark strings 
 `project_instructions` (attrs `path`), `environment`, `mode` (attrs `name`), `plan` (attrs `from`), `workspace`
 (attrs `env`, `objects`), `workspace_changes` (attrs `since`, `reason`, optional), `attached` (attrs `name`),
 `skill_content` (attrs `name`), `agent_reports`, `checkpoint` (attrs `n`, `turns`, `tokens_before`),
-`project_instructions_update` (attrs `path`), `agent_notification`. Plugins add kinds through `context_block`
+`project_instructions_update` (attrs `path`), `agent_notification`, `gptr_runtime` (no attrs; the operator note
+of the current request's route, §7.6). Plugins add kinds through `context_block`
 specs (§10.2); the kind name is the spec name.
 
 ### 4.2 Messages
@@ -2726,6 +2727,14 @@ blocked hint of `perm_check()`).
 `streaming`, `tools`, `boundary`, then a terminal status), `turn`, `mode`, `model` (record), `depth`,
 `parent_run`, `opts`, `signal` (environment: `aborted`, `reason`), `started`, `children` (chr session ids).
 
+Before a request to any provider, a changed small `gptr_runtime` operator context block is appended describing the
+current requested/resolved route, transport, CLI model argument where applicable, and the
+last matching response's reported model or its absence. It points at the R session's
+`gptr_models()`/`gptr_providers()` rather than the enclosing CLI's helper/delegate catalog.
+Past blocks describe historical requests. Unchanged text is not appended again; ordinary
+transcript assembly includes the blocks in token estimates, request views and cache prefixes.
+`$history` previews and estimates the block's text (D-328).
+
 **`agent-dispatch.R`**
 
 | Function | Contract | Consumers |
@@ -3165,12 +3174,7 @@ selection from a reported difference using metadata matched to the last request 
 footers show both names when the response reports a model different from the selected name;
 matching names retain the compact footer.
 
-Before a request, a changed small `gptr_runtime` operator context block is appended describing the
-current requested/resolved route, transport, CLI model argument where applicable, and the
-last matching response's reported model or its absence. It points at the R session's
-`gptr_models()`/`gptr_providers()` rather than the enclosing CLI's helper/delegate catalog.
-Past blocks describe historical requests. Unchanged text is not appended again; ordinary
-transcript assembly includes the blocks in token estimates, request views and cache prefixes.
+The `gptr_runtime` operator note of §7.6 carries the CLI model argument.
 
 Example calls:
 

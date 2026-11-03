@@ -471,9 +471,11 @@ run_target = function(run) {
   run$model
 }
 
-#' The model record of `ref` for the run's next request: a selected Ollama model is prepared
-#' (discovered when its evidence is missing or stale, then resolved again; 07 section 2), as System
-#' 1 does; a provider registered for the session only is left to provider_stream()'s preflight
+#' The model record of `ref` for the run's next request, after the consent and replay checks: a
+#' selected Ollama model is prepared (discovered when its evidence is missing or stale, then
+#' resolved again; 07 section 2), as System 1 does; another globally registered provider is
+#' inventoried through provider_ready(prepare = TRUE); a provider registered for the session only
+#' is left to provider_stream()'s preflight
 #' @noRd
 run_model_ready = function(run, ref) {
   sid = session_data(run$shell)$id

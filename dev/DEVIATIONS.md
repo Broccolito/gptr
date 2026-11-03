@@ -9611,3 +9611,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: `?gptr_egress`, `?gptr_security`.
 - Tests: test-provider-model-discovery.R ("the egress question of a listing says no prompt is
   sent and what consent covers").
+
+## D-328 - 1.0.1 lane D The `gptr_runtime` note is a P06 rule and shows in `$history` (2026-11-02)
+- Rule: the `gptr_runtime` operator note (#106) stays in the path and in `$messages`, because it
+  is part of what the model is sent. `session_history()` previews and estimates a message
+  without text blocks by its blocks' text. Formerly the note showed as a blank `operator` row of
+  0 tokens in `$history`, `summary()` and `print()`, and so did context-only `agent_report`
+  messages.
+- Rule (contract placement): the note's rule moves from 04 section 7.20 (CLI providers) to
+  section 7.6 (`agent-run.R`), since `run_build()` appends it for every provider, and
+  `gptr_runtime` joins the context kinds of section 4.1.1.
+- Tests: test-session-history-display.R ("a context-only message previews and estimates its
+  context text").
