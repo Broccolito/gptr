@@ -135,9 +135,10 @@ test_that("commands pass the input event (source repl): recorded, handled or tra
   expect_identical(got$recorded, c("/mode auto", "/mode plan", "/model opus"))
 })
 
-# /help's text in console class `cls` of front end `fe`, its reader completing or not
+# /help's text in console class `cls` of front end `fe`, its reader completing or not, off Windows
 help_text = function(cls = "T", fe = "terminal", complete = TRUE) {
-  local_mocked_bindings(console_class = function() cls, front_end = function() fe)
+  local_mocked_bindings(console_class = function() cls, front_end = function() fe,
+                        is_windows = function() FALSE)
   rs = repl_state(NULL, new.env())
   rs$reader = list(complete = complete)
   run_command(rs, "/help")$out
