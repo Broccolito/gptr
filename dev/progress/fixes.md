@@ -11381,3 +11381,42 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   stays a release step); the F-58 row names FIX-51 and the residual. Deviations: D-297 edited in
   place. Open: F-58's residual (documented, a design change for the maintainer: each row's path
   position) and the rest of FIX-49's Open.
+
+## CI-108 - Shards split the suite by measured time, macOS in one wave (2026-11-03)
+
+- Problem: a push's CI took about 25 minutes, and 35 to 44 when two runs overlapped. Test files
+  were dealt to shards round-robin by name, so a lane's shards ran 2.3 to 8.4 minutes of tests on
+  macOS, 2.6 to 9.5 on Windows and 4.0 to 11.7 on the connection gate. `cb7cab66` had raised macOS
+  to 8 shards, but GitHub runs five macOS jobs at a time, so three waited for a second wave (about
+  24 minutes on the critical path). On 2026-11-03 a slow macOS runner pushed one shard past the
+  20-minute limit.
+- Fix (`tests/testthat/ci-shard.R`, `.github/workflows/R-CMD-check.yaml`, `test-zzz.R`):
+  `ci_shard_files()` gives the slowest file first to the shard with the least time so far, by a
+  table of each file's median seconds per OS from four runs (Linux from the connection gate, macOS,
+  Windows); a file not in the table counts 1 s, so files of equal time still take turns in name
+  order. The OS comes from `Sys.info()`. Shard 1 starts with a head start for the work only it
+  does: 115 s on macOS (vignettes and examples) and 170 s on Windows (the native fixtures). Names
+  are matched exactly (a data frame's row names match partially).
+- Measured on the PR's first head (no head start yet): every check green; R-CMD-check.yaml took
+  16.5 minutes of wall clock (24.4 to 25.3 before) and Windows-check.yaml 14.6. Windows shards 2
+  to 12 took 10.3 to 11.7 minutes (up to 16.8 before), connection shards 6.7 to 10.5 (up to 15.7)
+  and macOS shards 8.8 to 16.3, all five at once. Each macOS shard's tests were predicted at 529 to
+  541 s; they took 0.67 to 1.13 times that, the same ratio for every file in a shard, so the rest
+  of the spread is the runner's speed. Shard 1 was the slowest on macOS (16.3) and Windows (13.9),
+  which the head start corrects.
+- The PR's second run took 16.1 minutes; macOS shards 14.3 to 15.6 (shard 1 14.4). Two Linux jobs
+  ran long only because the Ubuntu mirror was slow: the system libraries took 5.2 and 7.5 minutes
+  (70 MB at 165 kB/s), which pushed a connection shard with 7.9 minutes of tests to 20.0. `main`'s
+  runs show the same (3.7 and 7.7 minutes). `.github/actions/system-libraries` now keeps apt's
+  downloads in GitHub's cache, keyed by the runner image and its package list, so only the first
+  job of an image fetches them; dropping recommended packages would save only 8 % (136 to 125 MB).
+- Five macOS shards gave 15 to 16 minutes of wall clock, but runners differ: across 25 macOS jobs a
+  shard's tests ran 0.67 to 1.26 times their prediction, and the slowest check step took 14.8 of
+  its 16 minutes. A simulation with those speeds put 7 % of runs over the step limit with 5 shards
+  and none with 10, at 20 minutes of wall clock (two full waves of the five runners). macOS runs 10
+  shards.
+- Tests: test-zzz.R "CI shards run each test file once, Windows native ones in shard 1 (D-239)"
+  adds that a file's time decides its shard, that names match exactly, that shard 1's head start
+  leaves its share to the others, and that the table names only existing test files with a column
+  per OS; "each sharded lane's required context gates the latest attempt of its shards (CI-107)"
+  covers the new macOS matrix.

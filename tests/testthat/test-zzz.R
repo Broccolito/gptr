@@ -297,7 +297,7 @@ test_that("CI shards run each test file once, Windows native ones in shard 1 (D-
   shard = new.env(parent = baseenv())
   sys.source(test_path("ci-shard.R"), envir = shard)
   files = paste0("test-", letters[1:9], ".R")
-  groups = lapply(1:4, function(i) shard$ci_shard_files(rev(files), c(i, 4L)))
+  groups = lapply(1:4, function(i) shard$ci_shard_files(rev(files), c(i, 4L), "linux"))
   expect_identical(groups[[1L]], files[c(1L, 5L, 9L)])
   expect_identical(sort(unlist(groups)), files)
   expect_identical(shard$ci_shard("3/4"), c(3L, 4L))
@@ -305,6 +305,23 @@ test_that("CI shards run each test file once, Windows native ones in shard 1 (D-
     expect_error(shard$ci_shard(selector), label = selector)
   }
   expect_error(shard$ci_shard_files(files[1:3], c(1L, 4L)))
+  # names match exactly, so test-injection.R does not take the time of injection-e2e
+  expect_identical(shard$ci_shard_files(c(files[1:4], "test-injection.R"), c(1L, 5L), "linux"),
+                   "test-a.R")
+  # shard 1's head start (Windows' native fixtures) leaves its share to the other shards
+  expect_length(shard$ci_shard_files(files, c(1L, 4L), "windows"), 0L)
+  # a file's time decides its shard: the slowest file has a shard to itself
+  timed = new.env(parent = shard)
+  sys.source(test_path("ci-shard.R"), envir = timed)
+  timed$ci_shard_seconds = data.frame(linux = 30, row.names = "b")
+  expect_identical(timed$ci_shard_files(files, c(1L, 4L), "linux"), "test-b.R")
+  expect_identical(sort(unlist(lapply(1:4, function(i) {
+    timed$ci_shard_files(files, c(i, 4L), "linux")
+  }))), files)
+  # the table names only test files that exist, with a column for each OS's shards
+  seconds = shard$ci_shard_seconds
+  expect_identical(names(seconds), c("linux", "macos", "windows"))
+  expect_true(all(file.exists(test_path(paste0("test-", rownames(seconds), ".R")))))
   expect_identical(shard$ci_shard_filter(c("test-a.R", "test-b_2-c.r")), "^(a|b_2-c)$")
   expect_error(shard$ci_shard_filter("test-a b.R"))
   expect_error(shard$ci_shard_filter(c("test-a.R", "test-a.r")))
