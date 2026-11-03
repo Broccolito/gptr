@@ -49,6 +49,8 @@ gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version insta
   too and adds `typed lines run after this answer`.
 * A question asked while the bottom row is shown, such as a provider consent, no longer leaves
   copies of that row in RStudio's console or draws it between the question and its answer.
+* A Ctrl-C pressed just as an answer ends no longer leaves `peter()` or turns the terminal's echo
+  off (seen with `TERM=dumb`); the console stays and keeps its session.
 * MCP clients no longer stall while gptr waits for a child process, and a served tool cannot run
   inside another served tool's wait.
 * Plugin setup rejects a marketplace root, and a bundle without usable resources, with a
