@@ -549,6 +549,34 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
 
+#' Console confirm() (gptr_confirm() through the UI, D-306): `? <question>`, its keys row (`y yes ·
+#' n no · enter no`, Enter's the `default`) and the answer's prompt (ui_answer_prompt()), read as
+#' every console question (ui_console_read(): what was typed before it is routed or kept as the
+#' draft, never its answer; the live row is off until the answer); TRUE for y or yes, `default` for
+#' an empty answer, FALSE for any other and when cancelled; a console command typed there waits for
+#' the next prompt (ui_console_command())
+#' @noRd
+ui_console_confirm = function(question, default = FALSE, read = ui_console_read) {
+  rlang::local_options(cli.num_colors = console_colors())
+  # outside a run in the console margin it opens its own block, as a select does
+  run = console_before_message(kind = "prompt", tools = TRUE)
+  on.exit(console_asked(), add = TRUE)
+  pad = console_pad()
+  width = ui_width() - nchar(pad)
+  console_write(c(if (!run || !nzchar(pad)) "", paste0(pad, c(
+    ui_question(question, width),
+    ui_keys(c("y", "n", "enter"), c("yes", "no", if (default) "yes" else "no"), width)
+  ))))
+  answers = function(x) tolower(trimws(x)) %in% c("y", "yes", "n", "no")
+  repeat {
+    ans = read(ui_answer_prompt(), accept = answers)
+    if (is.na(ans) || !ui_console_command(ans)) break
+    console_typed_ahead(ans)
+  }
+  ans = tolower(trimws(ans))
+  if (is.na(ans)) FALSE else if (nzchar(ans)) ans %in% c("y", "yes") else default
+}
+
 #' Console permission(): the approval of NS-1 under the call it gates, read at the answer's prompt
 #' (ui_answer_prompt(), D-243, D-301), `?` for the detail view; every console prompt first ends
 #' partial answer lines and clears the live row (D-186), in a T console once typing pauses, and
@@ -673,6 +701,9 @@ ui_console_spec = function(read = ui_console_read, name = "console") {
             has_secret_input = function() ui_rstudio() || !is.null(tty_secret()),
             select = select,
             input = input,
+            confirm = function(question, default = FALSE) {
+              ui_console_confirm(question, default, read)
+            },
             questions = function(qs) ui_questions_via(select, input, qs),
             notify = function(text, level = "info") {
               console_notice("[", level, "] ", ui_escape(text), .error = identical(level, "error"))

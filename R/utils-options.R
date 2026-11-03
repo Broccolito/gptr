@@ -399,12 +399,18 @@ gptr_can_prompt = function() {
   asks && !is_knitting() && !is_testthat() && !check_running()
 }
 
-#' Yes/no question; `default` when nobody can answer. Never askYesNo().
+#' Yes/no question; `default` when nobody can answer. Never askYesNo(). It is the UI's question
+#' where the UI asks one (the ui.get service's `confirm`: the console's, under it, D-306), else
+#' `<question> [y/N] ` at readline
 #' @noRd
 gptr_confirm = function(question, default = FALSE) {
   check_string(question, "question")
   check_flag(default, "default")
   if (!gptr_can_prompt()) return(default)
+  ui = if (ext_service_has("ui.get")) {
+    tryCatch(ext_service_get("ui.get")(NULL), error = function(e) NULL)
+  }
+  if (is.function(ui$confirm)) return(isTRUE(ui$confirm(question, default)))
   hint = if (default) " [Y/n] " else " [y/N] "
   answer = tolower(trimws(readline_answer(paste0(question, hint))))
   if (!nzchar(answer)) return(default)

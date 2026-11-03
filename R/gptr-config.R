@@ -1172,8 +1172,8 @@ egress_can_ask = function(safety = egress_safety()) {
 }
 
 #' The question shown before the first automatic context or System 1 input goes to a provider
-#' (gptr_confirm() appends the ` [y/N] ` hint itself); it names the effective endpoint when there
-#' is one, and the model `asker` of a sub-agent that model code starts
+#' (gptr_confirm() adds how to answer); it names the effective endpoint when there is one, and the
+#' model `asker` of a sub-agent that model code starts
 #' @noRd
 egress_question = function(id, origin = NULL, asker = NULL, context = NULL) {
   to = if (is.null(origin)) id else paste0(id, " (", origin, ")")
@@ -1559,7 +1559,6 @@ init_rbuildignore = function(dir) {
   lines = if (file.exists(rb)) readLines(rb, warn = FALSE, encoding = "UTF-8") else character()
   line = "^\\.gptr$"
   if (line %in% trimws(lines)) return(invisible(FALSE))
-  # gptr_confirm() appends the " [y/N] " hint
   ask = paste0("Add ", line, " to .Rbuildignore?")
   if (gptr_can_prompt() && isTRUE(gptr_confirm(ask))) {
     write_atomic(rb, c(lines, line))
@@ -1575,7 +1574,7 @@ init_rbuildignore = function(dir) {
 #' Creates `.gptr/` with `settings.json`, `skills/`, `agents/`, `prompts/`, and (by default) the
 #' project-instructions file `vignette.Rmd` and `.gitignore`. Existing files are never
 #' overwritten, so calling it again is safe. There is no default path: without `path` gptr asks
-#' `Create .gptr/ in <project>? [y/N]` when you can answer, and signals an error otherwise.
+#' whether to create `.gptr/` in the project when you can answer, and signals an error otherwise.
 #' Creating the workspace is consent to write there; it is not trust: gptr then asks separately
 #' whether to trust the project, unless it is trusted already (see [gptr_trust()]). In a package
 #' source it offers the `^\.gptr$` line for `.Rbuildignore` and never writes it silently.

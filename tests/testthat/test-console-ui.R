@@ -52,6 +52,31 @@ test_that("a console select outside a run opens its own block in the margin (D-1
   expect_identical(out$shown, c("", "  ? Rewind to", "    1  a", "    2  b", "    Choose a number"))
 })
 
+test_that("gptr_confirm() asks as a console question: keys under it, the chevron (D-306)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  local_console_test()
+  local_gptr_options(verbose = 2L, interactive = TRUE)
+  withr::local_options(cli.dynamic = TRUE)
+  answers = c("/help", "y", "", "no", "")
+  prompts = character()
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
+    prompts <<- c(prompts, prompt)
+    answers[[length(prompts)]]
+  })
+  out = utils::capture.output(yes <- gptr_confirm("Trust this project?"))
+  # the question, then the keys row: no `[y/N]` and no `> ` of a plain readline prompt
+  expect_identical(out, c("", "  ? Trust this project?",
+                          "      y yes \u00b7 n no \u00b7 enter no"))
+  # a console command typed there waits for the next prompt, and the question reads again
+  expect_true(yes)
+  expect_identical(prompts, rep(ui_answer_prompt(), 2L))
+  utils::capture.output(expect_false(gptr_confirm("Trust this project?")))
+  utils::capture.output(expect_false(gptr_confirm("Trust this project?")))
+  # Enter takes the default, which the keys row names
+  out = utils::capture.output(expect_true(gptr_confirm("Send it?", default = TRUE)))
+  expect_identical(out[[3L]], "      y yes \u00b7 n no \u00b7 enter yes")
+})
+
 test_that("questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", {
   # every row under the title is at column 4, under its text (visual review: the hint was at 2)
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
@@ -836,6 +861,29 @@ test_that("a question drawn over the composer's draft says where it went (steeri
   # D consoles hold no draft
   the$tty = list2env(list(keys = FALSE))
   expect_identical(read("half"), character())
+})
+
+test_that("what was typed before a run starts is never a question's answer (D-306)", {
+  local_console_test()
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, width = 80L)
+  withr::defer(assign("tty", NULL, envir = the))
+  # the egress question comes before the first request: no run of the call is on record yet
+  rd = new.env(parent = emptyenv())
+  typed = "draft\twords\r\033[A"
+  shown = character()
+  local_mocked_bindings(console_repl_find = function() list(reader = rd),
+                        repl_terminal = function(rs) TRUE, policy_find = function() NULL,
+                        console_typed_chars = function(rd, ...) typed,
+                        console_write = function(lines) shown <<- c(shown, lines))
+  # a T console: the composer's draft, back after the answer; its line end and Up act on nothing
+  the$tty = list2env(list(keys = TRUE))
+  expect_false(console_typed(drain = TRUE, accept = function(x) TRUE))
+  expect_identical(rd$compose$draft, "draft words ")
+  # a D console: its lines are kept in the history, said once
+  the$tty = list2env(list(keys = FALSE))
+  typed = "use base R\nhalf"
+  utils::capture.output(expect_false(console_typed(drain = TRUE, accept = function(x) TRUE)))
+  expect_match(shown, "not kept (gptr.history is off) \u00b7 use base R \u00b7 half", fixed = TRUE)
 })
 
 test_that("during a run a line typed before the approval prompt is queued, then it asks again", {

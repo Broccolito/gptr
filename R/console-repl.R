@@ -748,7 +748,11 @@ console_call_release = function(rs) {
 #' a question) a D console reads fd 0 in tty_drain_mode(), so the partial line the question would
 #' take as its answer is read too; it goes to the console history, its echoed row erased first.
 #' With `accept` (a question's drain, after its rows) the first whole line that `accept(line)` takes
-#' (typed_answer()) is not routed but returned: typed once the question showed, it answers it.
+#' (typed_answer()) is not routed but returned: typed once the question showed, it answers it. What
+#' was typed before the run starts, which a question drains (the egress question before the first
+#' request), no run takes yet: a T console's keys are its composer's draft (line ends and Tab as
+#' blanks, cursor keys and Ctrl-C dropped), a D console's lines go to the history (console_keep());
+#' never the question's answer (D-306).
 #' @return The reactor task's next interval, or FALSE to end; with `accept`, the answer it read,
 #'   else TRUE where it read fd 0, FALSE where it did not
 #' @noRd
@@ -758,7 +762,26 @@ console_typed = function(drain = FALSE, accept = NULL) {
   if (is.null(rd) || !repl_terminal(rs)) return(FALSE)
   pol = policy_find()
   target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
-  if (is.null(target)) return(if (is.null(accept)) 0.05 else FALSE)
+  if (is.null(target)) {
+    if (!drain) return(if (is.null(accept)) 0.05 else FALSE)
+    # read in tty_drain_mode(), as a D console's drain always is: the question reads in the saved
+    # modes, where a partial line waits for a line end
+    modes = tty_drain_mode()
+    if (length(modes) == 1L) on.exit(tty_modes(modes), add = TRUE)
+    if (isTRUE(the$tty$keys)) {
+      keys = gsub("\033(\\[[0-?]*[ -/]*[@-~]|O.)|\003", "", console_typed_chars(rd, 0L),
+                  perl = TRUE)
+      rd$compose = console_compose(rd$compose, gsub("[\r\n\t]", " ", keys), reactor_now(),
+                                   "steer", console_complete)$state
+    } else {
+      lines = tty_line_edit(typed_join(rd, console_typed_lines(rd, 0L)))
+      if (isTRUE(attr(lines, "partial"))) {
+        console_cat(paste0("\r", strrep(" ", max(0L, cli::console_width() - 1L)), "\r"))
+      }
+      console_keep(lines[nzchar(trimws(lines))])
+    }
+    return(if (is.null(accept)) 0.05 else FALSE)
+  }
   read = if (is.null(accept)) 0.05 else TRUE
   s = target$session
   if (isTRUE(the$tty$keys)) {
