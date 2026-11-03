@@ -68,7 +68,7 @@ bar, the blue System 2 block and the `>` chevron, with no decoration.
 - **Steps.** Give each element of step k the class `ak` (`a1` to `a7`), and `pathLength="1"` to a
   solid stroke that should draw itself (never to a `dash`). Text and fills fade in. Group an
   element and its label with `<g class="ak">`. An element with `ak x` is there from the start and
-  fades out at step k, so it can give way to its replacement. One idea per figure; five to seven
+  fades out at step k, so it can give way to its replacement. One idea per figure; four to seven
   steps. A mark that is not self-evident gets a one-line legend in the figure.
 - **Captions.** One or two plain sentences, present tense, ASCII, saying what the drawing shows
   and what to notice; the first words name the mechanism ("One turn, read from the top."). No
