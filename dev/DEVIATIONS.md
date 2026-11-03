@@ -9678,6 +9678,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   System 1 request failed with HTTP 400: ...); see attr(x, "meta")$errors."). Was the count
   alone, so a model-level failure (Ollama's legacy-format 400, a bad key) read as noise while a
   one-element call showed the reason. The NA results and the one warning stay (contract 2.2).
+- Rule (launch notice): the cache-miss notice counts both nouns ("1 uncached input (1 request).");
+  was "1 uncached inputs".
 - Contract-visible: 04 section 2.2 (`s1_errors`).
 - Tests: s1-route "a vector call's warning quotes its most common failure", "INFRA-18: choices
-  give a classed character ...". Evidence: progress/fixes-1.0.1/lane-C.md.
+  give a classed character ..."; s1-composition "decision launch notices identify real cache
+  misses ...". Evidence: progress/fixes-1.0.1/lane-C.md.

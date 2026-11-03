@@ -929,7 +929,8 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
     requests = length(unique(vapply(states[miss], canonical_json, "")))
     if (verbosity() >= 1L) {
       gptr_inform(ui_escape(paste0("System 1 ", target$ref, ": ", length(miss),
-                                   " uncached inputs (", requests,
+                                   if (length(miss) == 1L) " uncached input (" else
+                                     " uncached inputs (", requests,
                                    if (requests == 1L) " request)." else " requests).")),
                    "progress")
     }

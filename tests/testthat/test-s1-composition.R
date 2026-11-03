@@ -320,8 +320,11 @@ test_that("decision launch notices identify real cache misses and respect quiet 
   }
   collect(peter("Pass?", c("a", "a", "b"), model = judge))
   expect_true(any(grepl("visiblejudge/visiblejudge-s1", messages, fixed = TRUE)))
-  expect_true(any(grepl("2 requests", messages, fixed = TRUE)))
+  expect_true(any(grepl("3 uncached inputs (2 requests)", messages, fixed = TRUE)))
   expect_true(any(grepl("3 TRUE", messages, fixed = TRUE)))
+  messages = character()
+  collect(peter("Pass?", item = "single", model = judge))
+  expect_true(any(grepl("1 uncached input (1 request)", messages, fixed = TRUE)))
   messages = character()
   collect(peter("Pass?", c("a", "a", "b"), model = judge))
   expect_false(any(grepl("requests", messages, fixed = TRUE)))
