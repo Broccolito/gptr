@@ -21,6 +21,9 @@ independent verifier or a live tester. Decisions: D-340..D-343. One fix per comm
 | `gptr_source()` on an existing .Rmd says "Not an existing .R file" (low) | `113b9fa3` | test-doc-replay.R (the `gptr_source()` argument checks, extended) |
 | `gptr_blocks()` listing cuts the date at width 80 (low) | `7f53fdfb` | test-listing-print.R "a block listing at width 80 keeps its date whole and shortens free text first" |
 | Export keeps the transcript's replay note (low 16 part a) | `879abfe7` | test-doc-export.R "a console transcript exports like a script, its later turns piping the handle" (extended) |
+| Verifier: the replay-time D-343 notice is lost when the render fails (`rmarkdown::render()`, Quarto: `error = FALSE`) (low) | `88eef3ad` (D-343) | test-doc-knitr.R "a calling chunk that uses the block's objects after the call is told so, once" (extended: `error = FALSE`) |
+| Verifier: a transcript chunk appended after an unterminated last chunk of an .Rmd/.qmd joins its body (low) | `a2d02cc8` (D-342) | test-doc-io.R "transcript lines are appended raw to an .R transcript, as a chunk to Rmd and qmd" (extended) |
+| Verifier: the D-341 lookup decodes and parses every notebook in the folder on each call (low) | `9027f891` (D-341) | test-doc-locate.R "a kernel without JPY_SESSION_NAME picks the bound notebook, else the one match" (extended) |
 
 Notes on the fixes:
 
@@ -33,12 +36,27 @@ Notes on the fixes:
 - D-342: direct R lines, slash commands and rewind notes become R chunks; `#>` output is left out,
   as agent chunks leave theirs.
 - D-343 keeps IC-46 (replay never runs recorded code); the notice names the objects when the block
-  is recorded (in the first report) and when it replays (right before the error).
+  is recorded (in the first report) and when it replays. knitr drops a failing chunk's messages
+  unless the chunk has `error = TRUE`, so while knitting the replay's notice also goes to stderr,
+  where the render's console shows it before "Quitting from ...".
+- D-342: a document whose last chunk is unterminated takes no transcript chunk (one notice), as a
+  console block's upsert already refused it.
+- D-341: a notebook whose bytes lack an ASCII word of the call's strings is skipped before
+  `doc_read()` and `nb_parse()`. With twenty 4 MB notebooks (the call in the first), three
+  locates took 72 s on `5493f06e` and 4.2 s after (the matching notebook's own decode and parse
+  are most of it).
 - The `doc.s1_block` service now returns whether it showed the block (contract 7 services row).
 
 ## Tests
 
-Focused filters, all green on the final head: `^utils-options$`, `^doc-` (all document files),
+Follow-up head (after the verifier's three problems): `^(doc-|utils-options$|s1-client$|s1-route$|
+gptr-config$|listing-print$|console-commands$|arch-layers$)`: FAIL 0, WARN 2, SKIP 3, PASS 5063 (the
+two rewind warnings as before). `^(console-jupyter|console-repl|session-object|s1-|utils-|arch|perm|
+trust|egress|gptr-gateway|ui-|knitr|sources)`: FAIL 1, WARN 0, SKIP 1, PASS 5910 (the one failure is
+test-utils-paths.R:461, the same on `04dca16a`). Lint clean on the changed files; `document` leaves
+no diff.
+
+First pass. Focused filters, all green on the final head: `^utils-options$`, `^doc-` (all document files),
 `^(s1-client|s1-route)$`, `^gptr-config$`, `^listing-print$`, `^console-commands$`,
 `^arch-layers$`, `^doc-history-display$` (also with `repr` on the library path, which the dev library
 lacks: 0 skips). A broad run of `^(doc-|s1-|utils-|listing|arch|gptr-config|console-commands|
