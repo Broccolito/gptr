@@ -83,3 +83,22 @@ Load average 14 to 30 on 16 cores during the runs.
 - Every changed R and test file lints clean. `isolated-check.R document` leaves no stray diff.
   `dev/release/check-docs.R`: 0 problems. `dev/release/precompute.R` regenerated `mcp` and
   `interactive-console`, and `--check` gives 0 problems.
+
+Follow-up validation (head after the follow-up commits, load average 9 to 23):
+
+- `isolated-check.R test '^(mcp-.*|console-.*|proc-.*|bridge-.*|auth-.*|session-object|agent-background|agent-run|agent-dispatch|gptr-gateway|gptr-sdk|http-reactor.*|s1-.*|subagent-.*|arch-.*|lint-.*|perm-.*|injection-e2e|cli-common)$'`
+  with repr 1.1.7 on the library path: FAIL 4 | WARN 1 | SKIP 31 | PASS 17934. The failures and
+  the warning are the same checkpoint-scan cases as before (test-mcp-server.R:284-289 and
+  test-console-ui.R:353), which fail the same way on `04dca16a`.
+- Each new or changed test was seen failing first: the redaction test (10 expectations), the
+  yolo banner order (2 >= 1), the jsonl notice (without its line), the child-exit test (both
+  halves with a 200 ms slice) and the idle-prompt notice (mocked interactive R).
+- A probe with IRdisplay over `$config`, the codex snippet, `$env` and a JSON snippet gives
+  text/plain only, without the token. `processx::run(env = c("current", h$config$codex$env))` and
+  `withr::with_envvar(h$config$codex$env, ...)` still hand the token to the child.
+- Every changed R and test file lints clean. `document` leaves no stray diff. `check-docs`: 0
+  problems. `precompute.R mcp` regenerated the article, and `--check mcp interactive-console`
+  gives 0 problems. Release self-tests test-docs, test-precompute, test-vignette-brand and
+  test-examples pass. The spelling gate in test-gptr-release.R now lists only words outside this
+  lane's files (NEWS.md, gptr_tool_result.Rd, gptr_plugins.Rd, gptr_options.Rd, gptr_rewind.Rd,
+  teams-and-background.Rmd).
