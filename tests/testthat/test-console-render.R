@@ -812,6 +812,15 @@ test_that("a call's path is project-relative, cut in its middle to keep its file
   expect_identical(console_cut_middle(paste(letters, collapse = ""), 11L), "abcde\u2026vwxyz")
 })
 
+test_that("a call's code split on CRLF and CR shows no <U+000D> (P30 follow-up)", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE)
+  expect_identical(console_preview(list(code = "a = 1\r\nb = 2\rc = 3")),
+                   c("a = 1", "b = 2", "c = 3"))
+  rows = console_call_line(list(name = "r", input = list(code = "a = 1\r\nb = 2\r\n")), 80L)
+  expect_false(any(grepl("<U+000D>", rows, fixed = TRUE)))
+  expect_identical(trimws(rows[-1L]), c("a = 1", "b = 2"))
+})
+
 test_that("a diff row wider than the console is cut, its spaces and sign kept (visual review)", {
   withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE)
   row = "+     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"

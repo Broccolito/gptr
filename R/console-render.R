@@ -806,8 +806,9 @@ console_msg_text = function(msg) {
   paste(text[!is.na(text)], collapse = "\n")
 }
 
-#' The preview lines of a tool input: its code, its one-line command, its path (inside the project
-#' relative to it, as the approval's rows show it), its questions, else compact JSON
+#' The preview lines of a tool input (split on CRLF, CR and LF): its code, its one-line command, its
+#' path (inside the project relative to it, as the approval's rows show it), its questions, else
+#' compact JSON
 #' @noRd
 console_preview = function(input) {
   text = if (is.character(input$code) && length(input$code)) {
@@ -825,7 +826,7 @@ console_preview = function(input) {
   } else {
     ""
   }
-  strsplit(text, "\n", fixed = TRUE)[[1L]]
+  strsplit(text, "\r\n|\r|\n", perl = TRUE)[[1L]]
 }
 
 #' The term after a call's first line that counts its other lines (D-187): `  (+N more lines)`

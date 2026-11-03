@@ -94,14 +94,14 @@ ui_no_rule = function(request) {
   "no rule covers these calls"
 }
 
-#' The escaped lines a request shows: its code, else its path (an absolute one normalised, relative
-#' inside the project), else P06's summary
+#' The escaped lines a request shows (console_lines(): split on CRLF, CR and LF): its code, else its
+#' path (an absolute one normalised, relative inside the project), else P06's summary
 #' @noRd
 ui_request_lines = function(request) {
   input = request$input
   path = input[["path"]]
   if (rlang::is_string(path) && is_abs_path(path)) path = path_rel(path)
-  ui_escape(text_lines(input[["code"]] %||% path %||% request$summary))
+  console_lines(input[["code"]] %||% path %||% request$summary)
 }
 
 #' The change a request with a path and no code makes, as escaped diff rows from its input alone

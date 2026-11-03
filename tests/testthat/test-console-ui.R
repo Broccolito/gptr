@@ -87,6 +87,12 @@ test_that("an approval's own path row keeps its file name, cut in its middle (P3
   expect_lte(cli::ansi_nchar(row, type = "width"), 50L)
 })
 
+test_that("an approval splits its code on CRLF and CR, no <U+000D> (P30 follow-up)", {
+  expect_identical(ui_request_lines(list(input = list(code = "a = 1\r\nb = 2\rc = 3"))),
+                   c("a = 1", "b = 2", "c = 3"))
+  expect_identical(ui_request_lines(list(input = list(code = "x\033[2J"))), "x<U+001B>[2J")
+})
+
 test_that("questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", {
   # every row under the title is at column 4, under its text (visual review: the hint was at 2)
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
