@@ -1559,7 +1559,8 @@ test_that("a terminal: a paste during a run is one draft; Enter sends it as one 
   person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
   expect_true(pty$wait("peter[auto]> ", timeout = 120))
   pty$send("ONE\r")
-  expect_true(pty$wait("thinking"))
+  # the row shows from Enter, before the run starts to read keys (D-309): 2 s in, it reads them
+  expect_true(pty$wait("thinking 2s"))
   # on the polling beat, as the run goes; more keys than a person types in 0.2 s, so only the
   # beat's bound decides; pty$send is a terminal that ignores bracketed paste: the timing rule
   # decides (FIX-28's fallback)
