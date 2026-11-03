@@ -42,6 +42,10 @@ test_that("source help returns bounded definitions without exposing namespace ob
                "No function", fixed = TRUE)
   expect_match(paste(peter$help("gptr:::no_such_function", source = TRUE), collapse = "\n"),
                "No function", fixed = TRUE)
+  for (empty in c("gptr::", "gptr:::")) {
+    expect_match(paste(peter$help(empty, source = TRUE), collapse = "\n"), "No function",
+                 fixed = TRUE)
+  }
   expect_error(peter$help("gptr_api", source = 1), class = "gptr_error_invalid_argument")
 })
 

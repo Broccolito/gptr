@@ -934,7 +934,9 @@ ns_gptr_exports = function() {
 #' @noRd
 ns_gptr_fun = function(name) {
   ns = topenv(environment(ns_gptr_fun))
-  if (!exists(name, envir = ns, inherits = FALSE) || bindingIsActive(name, ns)) return(NULL)
+  if (!nzchar(name) || !exists(name, envir = ns, inherits = FALSE) || bindingIsActive(name, ns)) {
+    return(NULL)
+  }
   get0(name, envir = ns, mode = "function", inherits = FALSE)
 }
 
