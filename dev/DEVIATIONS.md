@@ -9625,8 +9625,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (live #103, low): a refusal notice at R's idle prompt starts a row of its own instead of
   continuing the prompt row. Background notices already did this; both now use one helper,
   `message_row()`. Not done: redrawing the prompt (readline owns that row, and writing
-  `getOption("prompt")` would desynchronise its display, so background notices do not either) and
-  naming a suggested rule (beyond the defect; the client's result keeps its generic text).
+  `getOption("prompt")` would desynchronise its display, so background notices do not either),
+  dimming it (a refusal asks the person to act, unlike the dim status line a settled background
+  session leaves) and naming a suggested rule (beyond the defect; the client's result keeps its
+  generic text).
 - Rule (review #103, low): the cheat sheet's serve row says to keep R idle and names `/mcp serve`.
   Its slash-command row stays `/skills /mcp`: a wider first column wrapped page 1 past its end. The
   architecture's command list names `/mcp [serve]`.
@@ -9662,8 +9664,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-mcp-waits.R "a nested peter() inside an idle served tool runs no sibling R tool".
 
 ## D-339 - FIX-1.0.1 lane F: findings left to other lanes or deferred (2026-11-02)
-- Rule (live, low; `peter$search` ranking): lane E changes `member_search()`'s ranking for its own
-  two findings; a second ranking rule here would conflict with that change.
+- Rule (live, low; `peter$search` ranking): left open for a follow-up on top of lane E. Lane E
+  ranks `api` documents after the other kinds (D-330) and adds no name rule, so on its branch
+  `member_search("mcp")` still ranks `gptr_mcp_remove`, `gptr_trust`, `gptr_mcp_add`,
+  `gptr_logout` and `gptr_login` ahead of `gptr_mcp`, and `"register provider"` misses
+  `gptr_provider`. The fix the finding gives (order hits by the share of the query's tokens in the
+  hit's name, then by BM25) edits the lines lane E rewrote, so making it here would conflict.
 - Rule (live, low; long tool output in the console): IC-82 and D-245's visual review say the margin
   shows each printed line. Capping it is a console design decision for the maintainer, not a small
   fix.

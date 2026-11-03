@@ -21,10 +21,35 @@ other lanes or deferred (D-339).
 | `0655121a` | `reactor_nested()` decides nesting for `reactor_pump()`'s default and for `run_wait()`, `sdk_work()` and `subagent_schedule()`. `s1_pump()` keeps only the default (D-338). | review #103: nested `peter()` or `gptr_wait()` inside an idle served tool runs sibling R tools (correctness and design, two low). | test-mcp-waits.R "a nested peter() inside an idle served tool runs no sibling R tool". |
 | `24ef5e90` | The waits tests check `reactor_nested()` rather than the `tool_depth` counter, and cover the usage text of an unknown `/mcp` argument. | review #103 tests (low): pinned internal counters, untested `/mcp <other>`. | test-mcp-waits.R. |
 
+## Follow-up after verification
+
+An independent verifier re-ran the lane on `418f3a8f` and reported nine low problems. Six are
+fixed below, D-337 now explains the undimmed refusal notice, one stays deferred with a corrected
+reason and one is the coordinator's.
+
+| Commit | Fix | Problem | Tests |
+| --- | --- | --- | --- |
+| `47e489b1` | The codex `$env` is a snippet too (still a named character vector that processx and withr take), and `$config` has class `c("gptr_mcp_config", "list")` with `format()` and `print()` methods. `format()` of a plain list unlisted the codex snippet and dropped its class (D-336, 04 section 5.11). | The token still showed in every print, format, str, knitr and repr path of `h$config$codex$env`, and in `format(h$config)`. | test-mcp-server.R "snippets keep the token out of ..." now covers `$config`, each snippet and `$env` through `format()`, `print()`, `str()`, knitr and every repr mimetype. It failed in 10 expectations before the change. |
+| `f6b625d7` | `oauth_redirect_setup()` calls `reactor_nested()` instead of an inline copy (D-338). | `R/auth-oauth.R:517` kept the nesting test inline. | test-auth-setup.R sets the reactor's depth instead of mocking `reactor_depth()`. |
+| `93b210ac` | The child-exit test's `proc_run()` child sleeps 50 ms. | `proc_run("true")` passed with the 200 ms slice, because the child exits before the first check. | Both halves now fail with `slice_ms = 200L` and pass with 20 ms. |
+| `35d571c3` | The server reads `gptr_is_interactive()`, and the test mocks it both ways. | The notice test needed `interactive()` to be `FALSE`. | test-mcp-server.R "a server started where R has no idle prompt says when it answers". |
+| `4ef9a1c3` | `session_set_mode(notice = FALSE)` when a console opens: the console gives the yolo notice after its banner, and the jsonl front end on stderr (D-335). | An explicit `mode = "yolo"` on a resumed console printed the notice before the banner. | test-console-repl.R "a continued console opened with mode = "yolo" says so after its banner" (failed 2 >= 1 before); test-console-jsonl.R "a jsonl frontend continued with mode = "yolo" gives the yolo notice on stderr" (fails without the jsonl line). |
+| `8f94e42d` | The MCP article no longer says "re-entrantly"; precomputed. | The release spelling gate listed `entrantly (mcp.Rmd:218)`. | The spelling gate lists only words in files outside this lane. |
+| records | D-337 says why the refusal notice is not dimmed: it asks the person to act, unlike the dim status line of a settled background session. | D-337 did not mention dimming. | none |
+
+- Deferred, reason corrected: `peter$search` ranking. Lane E's branch does not fix it (it only
+  ranks `api` rows after the others, D-330). The name-coverage rule edits the lines lane E rewrote,
+  so it belongs in a follow-up on top of lane E's merge (D-339).
+- Coordinator's: NEWS.md. This lane does not edit it. Suggested 1.0.1 bullets:
+  "Client snippets of `gptr_mcp_serve()`, `$config` and the Codex `$env` no longer show the bearer
+  token in Jupyter (IRkernel) or knitr output, or in `format()` and `str()`." and "An explicit
+  `mode =` on a resumed chat (`s |> peter(mode = "plan")`) now applies when the console opens, so
+  the banner, the prompt and `/mcp serve` use it."
+
 ## Deferred or left to other lanes (D-339)
 
-- `peter$search` ranking for obvious queries (live, low): lane E changes `member_search()`'s ranking
-  for its own two findings, and a second rule here would conflict.
+- `peter$search` ranking for obvious queries (live, low): lane E's change does not fix it, and the
+  name rule edits the lines lane E rewrote; a follow-up on top of lane E's merge.
 - Long tool output in the console transcript (live, low): IC-82 and D-245 say the margin shows each
   printed line. A cap is a console design decision.
 - Checkpoint notice reason for an empty project (live, low): lane A replaced the scan worker and
@@ -32,7 +57,7 @@ other lanes or deferred (D-339).
   edited the worker code that lane A deletes.
 - The documented `peter$bg()` workaround (review tests, low) has no test.
 - Refusal notice extras (live, low, parts 2 to 4): no prompt redraw (readline owns that row), no
-  dimming, and no suggested rule in the text.
+  dimming (a refusal asks the person to act), and no suggested rule in the text.
 - `kill_all()`'s tree sweep (about 150 ms per child at load 20) predates #103 and is kept.
 
 ## Validation
