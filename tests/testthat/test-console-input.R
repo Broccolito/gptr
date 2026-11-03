@@ -105,7 +105,8 @@ test_that("Up on an empty draft takes back; as a batch of its own or its end (re
     list("\033[A", "abc", "abc", NULL),
     list("\033[Ax", "", "x", NULL),
     list("\033[A\033[A", "", "", back),
-    # keys read as one batch after an in-process tool: Ctrl-U, then Up
+    # a batch ending in Up, as console_keys() cuts typed keys: Ctrl-U, then Up; after a newline
+    # it is dropped, as console_keys() cuts it off first
     list("\025\033[A", "x", "", back),
     list("x\n\033[A", "", "", sent("steer", "x"))
   ))
@@ -297,7 +298,8 @@ test_that("Tab completes a trigger word and never queues it; other drafts go as 
     list("\t", "x$y", "", sent("follow_up", "x$y")),
     list("\t", "wow! x", "", sent("follow_up", "wow! x")),
     list("\t", "", "", NULL),
-    # keys read as one batch after an in-process tool: a Tab at its end is the key, one inside text
+    # a Tab ending a batch, as console_keys() cuts typed keys, is the key; one inside a batch is
+    # text, as in a paste
     list("then plot\t", "", "", sent("follow_up", "then plot")),
     list("use @mtc\t", "", "use @mtcars", NULL),
     list("a\tb", "", "a\tb", NULL)

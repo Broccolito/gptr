@@ -6104,10 +6104,17 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     TRUE for a batch read on the polling beat, at most 0.2 s after the reader's last read
     (`rd$polled`, empty reads included), that holds more keys than a person types since that read,
     one in 30 ms plus one (P28 Task 32: a read late under load held Enter and the next key, and the
-    steer stayed in the draft); the idle editor always; the background probe never. A run's first
-    read and the keys piled up during an in-process tool keep the rule above (during a run a paste
-    without a final newline was split: its head went at once as a steer, its last line stayed the
-    draft). A message starting with `/` or `!` is always a follow-up, and a blank one is not sent.
+    steer stayed in the draft); the idle editor always; the background probe never. A batch read
+    off the beat (a run's first read, the keys piled up while an in-process tool held the reactor)
+    without markers, outside a paste, where the call turned bracketed paste on (`the$tty$set`, so a
+    paste comes marked), is typed keys: `console_keys()` cuts it after each Enter, Up and Tab and
+    gives the pieces to the composer in turn, acting on each result before the next, so each Enter
+    sends its own message, a Tab sends the text before it, and an Up takes back what an Enter before
+    it sent (D-306; the live steering test: three messages typed during a 20 s `r` call went as one
+    three-line steer, and an Up after Enter was dropped). Elsewhere a batch off the beat keeps the
+    rule above (during a run a paste without a final newline was split: its head went at once as a
+    steer, its last line stayed the draft). A message starting with `/` or `!` is always a
+    follow-up, and a blank one is not sent.
     Two keys act only outside an open bracketed paste, as a batch of their own, or at the end of a
     batch without a newline outside its pastes, after its text (review of Tasks 16-21: keys typed
     during an in-process tool arrive as one batch; FIX-34: a pasted newline is text, so a Tab after

@@ -59,7 +59,7 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   if (length(marks) && marks[[1L]] == "\033[201~") bracket = TRUE
   open = if (length(marks)) marks[[length(marks)]] == "\033[200~" else bracket
   # a Tab or Up that ends a batch without a newline outside a paste is the key after the batch's
-  # text, as keys typed during an in-process tool arrive as one batch
+  # text, as console_keys() cuts typed keys after each one
   key = regmatches(x, regexpr("(\t|\033\\[A|\033OA)$", x))
   if (!open && length(key) && nchar(key) < nchar(x) &&
         !grepl("\n", console_unpasted(x, bracket), fixed = TRUE)) {
@@ -176,9 +176,13 @@ console_trigger = function(line) {
 #' one there holding more keys than a person types since that read (one in 30 ms, plus one) is a
 #' paste to console_compose(); fewer were typed, as when a late read under load holds Enter and the
 #' next key. Bracketed-paste markers decide first: this rule decides only a batch without them read
-#' while no paste they opened is open (console_compose(), D-263). A Tab or Up that ends a batch
-#' right after a newline is a key of its own, after the message the newline sent (console_compose()
-#' acts once a batch), as when Enter and Up share a late read. Ctrl-C, a key in character mode
+#' while no paste they opened is open (console_compose(), D-263). console_compose() acts once a
+#' batch, so the batch is cut into pieces it takes in turn: one off the beat without markers,
+#' outside a paste, where gptr turned bracketed paste on (tty_call(), so a paste comes marked), is
+#' typed keys, as those piled up while an in-process tool held the reactor, cut after each Enter,
+#' Up and Tab, so each acts after the text before it and Up takes back what an Enter before it sent
+#' (D-306); any other batch only before a Tab or Up that ends it right after a newline, after the
+#' message the newline sent, as when Enter and Up share a late read. Ctrl-C, a key in character mode
 #' (tty_call()), interrupts as SIGINT would, after the keys before it (in a batch holding a
 #' bracketed-paste marker, read while a paste is open up to 2 s after its last read, or read on the
 #' beat right after such a batch with no empty read between, `rd$compose$pasted`, it is pasted
@@ -208,27 +212,26 @@ console_keys = function(rd, s, chars) {
     rd$after_interrupt = paste0(rd$after_interrupt, after)
     chars = substr(chars, 1L, ctrl_c - 1L)
   }
+  typed = !paste && !pasted && !isTRUE(rd$compose$bracket) && "paste" %in% the$tty$set
+  cut = if (typed) "\r\n?|\n|\t|\033\\[A|\033OA" else "[\r\n](?=(?:\t|\033\\[A|\033OA)\\z)"
   compose = function(chars) {
-    if (!nzchar(chars)) return()
-    key = regmatches(chars, regexpr("[\r\n](\t|\033\\[A|\033OA)$", chars))
-    if (length(key)) {
-      compose(substr(chars, 1L, nchar(chars) - nchar(key) + 1L))
-      return(compose(substring(key, 2L)))
+    pieces = regmatches(chars, gregexpr(paste0("(?s).*?(?:", cut, "|\\z)"), chars, perl = TRUE))
+    for (piece in Filter(nzchar, pieces[[1L]])) {
+      res = console_compose(rd$compose, piece, now, setting_get("type_ahead", s),
+                            console_complete, paste)
+      rd$compose = res$state
+      act = res$action
+      if (identical(act$type, "send")) {
+        policy_enqueue(s, act$text, act$kind, source = "repl")
+      } else if (identical(act$type, "take_back")) {
+        it = console_newest(s, rd, take = TRUE)
+        rd$compose$draft = it$text %||% ""
+        if (!is.null(it)) console_taken_back(s, it)
+      } else if (identical(act$type, "complete")) {
+        rd$compose$candidates = act$candidates
+      }
+      if (isTRUE(the$live_row$shown)) the$live_row$draw()
     }
-    res = console_compose(rd$compose, chars, now, setting_get("type_ahead", s), console_complete,
-                          paste)
-    rd$compose = res$state
-    act = res$action
-    if (identical(act$type, "send")) {
-      policy_enqueue(s, act$text, act$kind, source = "repl")
-    } else if (identical(act$type, "take_back")) {
-      it = console_newest(s, rd, take = TRUE)
-      rd$compose$draft = it$text %||% ""
-      if (!is.null(it)) console_taken_back(s, it)
-    } else if (identical(act$type, "complete")) {
-      rd$compose$candidates = act$candidates
-    }
-    if (isTRUE(the$live_row$shown)) the$live_row$draw()
   }
   compose(chars)
   if (pasted || isTRUE(rd$compose$pasted)) rd$compose$pasted = pasted

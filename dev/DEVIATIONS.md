@@ -9740,14 +9740,26 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   none of 20 (follow-up review: the first record said some 60 ms, too narrow). Since D-301 it is
   two rows (the raw echo and its receipt), no longer three; narrowing the window means caching the
   prompt's modes across calls, which a `!system("stty ...")` could make stale.
+- Rule (amendment, typed while an in-process call runs; live steering test of PR #108: `AAA`
+  Enter, `BBB` Enter, `CCC` Up ` tail` Enter typed during a 20 s `r` call went as one three-line
+  steer under one receipt, and an Up after an Enter never took its message back): what piles up
+  while an in-process tool holds the reactor arrives as one batch, off the polling beat. Without
+  bracketed-paste markers, outside a paste, in a call that turned bracketed paste on (where a paste
+  comes marked), `console_keys()` now cuts it after each Enter, Up and Tab and composes the pieces
+  in turn, acting on each before the next: each Enter sends its own message with its receipt, a Tab
+  sends the text before it as the other kind, and an Up takes back what an Enter before it sent.
+  Marked batches, batches on the beat (`paste`) and calls without the mode keep IC-76's paste rule.
+  Accepted: a multi-line paste off the beat in a terminal that ignores the mode is one message per
+  line.
 - Contract-visible: section 10.2 row 22 (`confirm`), the `gptr_confirm()` row, `gptr_init(path)`,
-  IC-76's drain passage, the `tty_query()` and `tty_unreply()` rows and section 15.10's background
-  probe (the cursor query); `?gptr_init`.
+  IC-76's drain passage and its batch off the beat, the `tty_query()` and `tty_unreply()` rows and
+  section 15.10's background probe (the cursor query); `?gptr_init`.
 - Tests: test-console-ui.R "gptr_confirm() asks as a console question: keys under it, the chevron
   (D-306)", "what was typed before a run starts is never a question's answer (D-306)";
   test-console-repl.R "keys the terminal echoed before the probe are erased before the banner
-  (follow-up)"; tmux captures `before-egress-y`, `after-egress-y`, `dumb-egress`, `before-startup`,
-  `after-startup`, `after-startup-wrap`.
+  (follow-up)"; test-console-typing.R "keys piled up off the beat are typed: each Enter, Up and Tab
+  acts in turn (D-306)"; tmux captures `before-egress-y`, `after-egress-y`, `dumb-egress`,
+  `before-startup`, `after-startup`, `after-startup-wrap`, `steer-fix3/` (the amendment).
 
 ## D-307 - P30 follow-up: the person's no to a send is a notice, not an error (2026-11-02)
 - Rule (lane H, seen live: `> n` gave `Error: gptr has not been told that it may send session

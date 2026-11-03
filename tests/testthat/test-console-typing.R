@@ -1122,6 +1122,54 @@ test_that("keys read on the polling beat are a paste; after a stall they are typ
   })
 })
 
+test_that("keys piled up off the beat are typed: each Enter, Up and Tab acts in turn (D-306)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$reader = console_reader()
+  rs$sending = quote(peter())
+  withr::defer(assign("tty", NULL, envir = the))
+  # a T console's call, bracketed paste on (tty_call())
+  the$tty = list(set = char_mode, keys = TRUE)
+  clock = 0
+  local_mocked_bindings(reactor_now = function() clock)
+  read = function(t, chars) {
+    clock <<- t
+    .gptr_repl = rs
+    console_keys(rs$reader, s, chars)
+  }
+  steers = function() vapply(session_data(s)$queue$steer, function(it) it$text, "")
+  out = utils::capture.output({
+    # what was typed during a 20 s r call, read as it returns (live steering test): three
+    # messages, the last edited by an Up on its draft, which takes nothing back
+    read(0, "")
+    read(20, "first AAA\rsecond BBB\rthird CCC\033[A tail\r")
+    expect_identical(steers(), c("first AAA", "second BBB", "third CCC tail"))
+    # Enter, then Up takes back what it sent, and the rest is added before Enter sends again
+    read(40, "one risk\r\033[A of overfitting\r")
+    expect_identical(steers(), c("first AAA", "second BBB", "third CCC tail",
+                                 "one risk of overfitting"))
+    # a Tab sends the text before it as a follow-up
+    read(60, "then plot\tuse log\r")
+    expect_identical(rs$reader$typed, "then plot")
+    expect_identical(steers()[[5L]], "use log")
+    # a marked paste off the beat stays one draft, as a batch on the beat does
+    read(80, "\033[200~a\rb\033[201~")
+    expect_identical(rs$reader$compose$draft, "a\nb")
+    read(80.05, "\r")
+    read(80.1, "")
+    read(80.15, "\rc\rd")
+    expect_identical(rs$reader$compose$draft, "c\nd")
+  })
+  expect_identical(steers()[[6L]], "a\nb")
+  expect_identical(sum(grepl("steer taken back", out, fixed = TRUE)), 1L)
+  # where gptr did not turn bracketed paste on, a batch off the beat is one message, as before
+  the$tty = NULL
+  rs$reader$compose = NULL
+  utils::capture.output(read(100, "x\ry\r"))
+  expect_identical(steers()[[7L]], "x\ny")
+})
+
 test_that("a batch is timed by its last key read, not the reader's wait after it (CI-94)", {
   # the real reader, which local_console_test() replaces
   typed_chars = console_typed_chars
