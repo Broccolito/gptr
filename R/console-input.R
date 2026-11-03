@@ -645,9 +645,17 @@ console_live = function() {
 #' and the console's interrupt key and what it does (in RStudio, also that a typed line is the next
 #' prompt); where a T console's composer reads keys (tty_call()), its draft, the newest message
 #' waiting (console_newest()), the completion candidates its last key listed and the kind Enter
-#' sends
+#' sends. A prompt's record before its run starts (`rec$sent`, console_send()): its word, its
+#' seconds and the keys, a T console's composer's, which it reads once the run starts, so they steer
+#' and pause it then; elsewhere the interrupt key stops the call
 #' @noRd
 console_live_state = function(rec) {
+  if (isTRUE(rec$sent)) {
+    keys = isTRUE(the$tty$keys)
+    return(list(what = rec$what, secs = as.numeric(Sys.time()) - rec$t0,
+                key = console_interrupt_key(), pause = keys, draft = if (keys) "",
+                enter = setting_get("type_ahead")))
+  }
   kids = console_kids()
   frozen = if (length(kids)) {
     any(vapply(kids, function(r) !is.null(r$frozen), NA))
@@ -702,7 +710,8 @@ console_queued = function(s) {
 
 #' Show the live row for the record `rec` of a foreground run while it waits for its model (a root
 #' run's `what` thinking; a child's phase is set by the hooks): drawn now and once a second by a
-#' reactor task while the record renders (console_render_on()) or a sub-agent it shows runs, whose
+#' reactor task while the record renders (console_render_on()), is a prompt's before its run starts
+#' (`rec$sent`, console_send()) or a sub-agent it shows runs, whose
 #' run pumps the reactor inside the parent's r call, on a dynamic console of an interactive R (not
 #' class P), but not in R.app, whose console gives everything after a carriage return the input's
 #' colour
@@ -723,7 +732,9 @@ console_live_start = function(rec) {
     the$live_row = row
     row$task = reactor_task(function() {
       if (!identical(the$live_row, row)) return(FALSE)
-      if (row$on && (console_render_on(rec) || length(console_kids()))) row$draw()
+      if (row$on && (isTRUE(rec$sent) || console_render_on(rec) || length(console_kids()))) {
+        row$draw()
+      }
       1
     })
   }

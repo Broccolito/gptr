@@ -6526,7 +6526,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     `cli::num_ansi_colors()`), as `console_pad()` reads the margin.
   - The live row (Task 17; `console_live()` and `console_live_row()` in `console-input.R` replace
     `console_spinner()`): while a foreground run works, one row at the bottom, at column 0 under the transcript's
-    last row. It is no block (`console_gap()` has no waiting kind), so it takes no blank line before it, and the
+    last row; at verbosity 2+ from a console prompt's Enter, before its run starts (its checks, a CLI's model
+    listing, a question, which clears it), as the prompt's own row (`console_send()`), its keys a T console's,
+    which the composer reads once the run starts, elsewhere ` · <key> stop`; the run's record takes it over at
+    `agent_start`, its clock from the same Enter (D-309; #98 review: nothing showed for 10 s with codex). It is no block (`console_gap()` has no waiting kind), so it takes no blank line before it, and the
     next block writes the blank it owes on the cleared row.
     - Text: `▌ <state> <elapsed>[ · <queue>][ · question waiting]`, the queue counted, its kind named where one
       waits, `1 steer queued`, `1 follow-up queued`, else `<n> queued` (P30, D-301: its text is in the receipts), then, where a composer reads keys (T,

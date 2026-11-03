@@ -9776,11 +9776,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   #99 review: `1 queued 3s · 1 queued`). NEWS keeps its `queued counts` wording (not edited here).
 - Rule (live row clock and start): a direct group's row counts from the group's start
   (`group$t0`, subagent_schedule()), as the row passes between its children (it went back from 1.2 s
-  to 0.9 s); a foreground run's row shows from agent_start at verbosity 2+, before its model is
-  prepared (a CLI's model listing, checkpoints), its clock from the console prompt's Enter
-  (`rs$started`, console_send()) (#98 review: nothing on screen for 10 s with codex, then
-  `thinking 0s`). Not changed (deferred): the CLI model listing provider_ready() runs on a first
-  prompt stays where it is (the catalog area, PR #106); the row now shows while it runs.
+  to 0.9 s); a console prompt's row shows from its Enter at verbosity 2+ (#98 review: nothing on
+  screen for 10 s with codex, then `thinking 0s`). Before the run starts, through the checks before
+  it (gateway_guards()'s model preparation, where a CLI's model listing runs, and its questions,
+  which clear it), it is the row of the prompt's own record (`sent`, console_send()): `thinking
+  <secs>` and the keys of a T console's composer, which reads them once the run starts, elsewhere
+  `<key> stop`, as no pause menu is offered before the run. At agent_start the run's record takes
+  it over, its clock from the same Enter (`rs$started`), before its model is prepared
+  (checkpoints). The CLI model listing stays where it is (the catalog area, PR #106); the row shows
+  while it runs (follow-up review: the first version drew it only from agent_start, after the
+  listing).
 - Rule (a call's header): the call row shows a path inside the project relative to it, as the
   approval's own row and the result row do, and a path, command or other argument too wide is cut
   in its middle (console_cut_middle()), its start and its file name kept, in the call row and the
@@ -9795,4 +9800,5 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   approval's own path row keeps its file name, cut in its middle (P30 follow-up)", "an approval
   splits its code on CRLF and CR, no <U+000D> (P30 follow-up)"; test-console-input.R "the live row
   counts its group and shows active phases without hiding pending work", "the live row shows from
-  the run's start, its clock from the prompt's Enter (#98)".
+  the run's start, its clock from the prompt's Enter (#98)", "a prompt's live row shows from Enter,
+  before its run starts; a refusal ends it (#98)"; tmux capture `prerun-row`.

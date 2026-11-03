@@ -935,7 +935,9 @@ typed_code_open = function(held) {
 #' a T console's keys, a D console's lines without echo; IC-76, D-243); the end of its run settles
 #' what it held (console_queue_left()), and keys read with a Ctrl-C that no question took
 #' (console_ahead()) are the composer's draft at the next prompt. `men`: the prompt's @mentions.
-#' `rs$started`, the time it was sent, is its run's live row's clock (console_on_agent_start()).
+#' `rs$started`, the time it was sent, is its run's live row's clock (console_on_agent_start()); at
+#' verbosity 2+ the row shows from then, through the checks before the run (a CLI's model listing,
+#' consent questions), on a record of its own (`sent`) that the run's takes over (#98 review).
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
 console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) {
@@ -945,11 +947,14 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
   force(.gptr_repl)
   force(.gptr_interrupt_barrier)
   on.exit(console_call_release(rs), add = TRUE)
+  sent = list2env(list(t0 = rs$started, sent = TRUE))
+  on.exit(console_live_stop(sent), add = TRUE)
   cl = console_call(rs, text, men)
   rs$sending = cl
   notes = rs$notes
   before = gptr::gptr_last()
   res = console_reading(rs, function() {
+    if (verbosity() >= 2L) console_live_start(sent)
     tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
              error = function(e) list(status = "error", error = e),
              interrupt = function(e) list(status = "interrupt"))

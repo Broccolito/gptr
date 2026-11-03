@@ -454,6 +454,37 @@ test_that("the live row shows from the run's start, its clock from the prompt's 
   expect_null(rs$started)
 })
 
+test_that("a prompt's live row shows from Enter, before its run starts; a refusal ends it (#98)", {
+  local_project()
+  local_live_console("T")
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 1L, cli.unicode = TRUE,
+                       cli.width = 60L)
+  # the checks before the run: a CLI's model listing, consent; here they refuse
+  seen = new.env(parent = emptyenv())
+  local_mocked_bindings(gateway_guards = function(...) {
+    seen$shown = isTRUE(the$live_row$shown)
+    stop("refused")
+  })
+  rs = repl_state(NULL, new.env())
+  rs$model = gptr_fake_provider(list("ok"))
+  res = NULL
+  out = written(function() res <<- console_send(rs, "hello"))
+  expect_identical(res$status, "error")
+  expect_true(seen$shown)
+  # no run takes a message yet; Ctrl-C stops the call
+  expect_match(out, "▌ thinking 0s · ctrl-c stop", fixed = TRUE)
+  expect_null(the$live_row)
+  expect_identical(trimws(utils::tail(term_rows(out), 1L)), "")
+  # a T console's composer reads the keys once the run starts: they steer and pause it then
+  tty = the$tty
+  the$tty = list(keys = TRUE)
+  withr::defer(assign("tty", tty, envir = the))
+  sent = list2env(list(sent = TRUE, t0 = as.numeric(Sys.time()) - 3, what = "thinking"))
+  expect_identical(c(console_live_row(console_live_state(sent), 80L)),
+                   "▌ thinking 3s   enter steer · tab follow-up · ctrl-c pause")
+})
+
 test_that("a launch clears a sub-agent group's row, which no foreground record owns (#99 review)", {
   local_live_console("T")
   withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 60L)
