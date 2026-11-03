@@ -6548,10 +6548,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       its console keeps a line entered during the run for the next prompt, unless a question reads it, and
       hides the entered line at its next output, so the row says where it goes).
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
-      while a sub-agent it shows runs. A scheduled group shows completed/total, active and queued counts and
-      active names with their phases; the short form keeps the counts. Membership changes append rosters
-      above the single live row (eight names per active/queued list, then an explicit remainder), with their
-      models: the requested target while queued, then the resolved target when the backend reports it. A
+      while a sub-agent it shows runs. A scheduled group shows completed/total, active and pending counts
+      (`1 pending`, the members not started, only when there are some, so the row's `queued` is the person's
+      messages alone, D-309) and active names with their phases; the short form keeps the counts. Membership
+      changes append rosters above the single live row (eight names per active/pending list, then an explicit
+      remainder), with their models: the requested target while pending, then the resolved target when the
+      backend reports it. A
       built-in CLI's `default` names the full id it receives, as `/model` does. At verbosity
       2+ child tool names and retries are notices, without their input or output. Workers report `working`.
       Direct groups also draw the single live row, handing it between active children; they have no composer

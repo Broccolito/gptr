@@ -578,7 +578,7 @@ test_that("a sub-agent's long label gives way to its number before the person's 
                    "▌ 4s   › s11 during the sub-agent")
 })
 
-test_that("the live row counts its group and shows active phases without hiding queued work", {
+test_that("the live row counts its group and shows active phases without hiding pending work", {
   withr::local_options(cli.unicode = FALSE, cli.num_colors = 1L)
   local_mocked_bindings(console_queued = function(s) character(),
                         console_repl_prompt = function() list(reader = NULL))
@@ -602,9 +602,14 @@ test_that("the live row counts its group and shows active phases without hiding 
   withr::defer(rm(list = vapply(runs, function(r) r$id, ""), envir = active))
   parent = list(session = NULL, t0 = as.numeric(Sys.time()), what = "r")
   state = console_live_state(parent)
-  expect_match(state$what, "sub-agents 0/3 done - 2 active - 1 queued", fixed = TRUE)
+  expect_match(state$what, "sub-agents 0/3 done - 2 active - 1 pending", fixed = TRUE)
   expect_match(state$what, "alpha r, beta thinking", fixed = TRUE)
-  expect_identical(state$short, "sub-agents 0/3 - 2 active - 1 queued")
+  expect_identical(state$short, "sub-agents 0/3 - 2 active - 1 pending")
+  # `queued` is the person's messages only, never the members not started (#99 review)
+  row = console_live_row(utils::modifyList(state, list(queued = c("steer", "steer"), draft = "")),
+                         120L)
+  expect_identical(lengths(regmatches(row, gregexpr("queued", row))), 1L)
+  expect_match(row, "1 pending [0-9]+s - 2 queued")
   for (width in c(20L, 40L, 80L, 120L)) {
     row = console_live_row(c(state, draft = "use the median"), width)
     expect_lte(cli::ansi_nchar(row, type = "width"), width - 1L)
@@ -613,7 +618,7 @@ test_that("the live row counts its group and shows active phases without hiding 
   rm(list = runs[[1L]]$id, envir = active)
   withr::defer(assign(runs[[1L]]$id, recs[[1L]], active))
   expect_match(console_live_state(parent)$what,
-               "sub-agents 1/3 done - 1 active - 1 queued", fixed = TRUE)
+               "sub-agents 1/3 done - 1 active - 1 pending", fixed = TRUE)
   withr::local_options(cli.dynamic = TRUE)
   local_live_console()
   recs[[2L]]$what = "working"

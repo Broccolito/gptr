@@ -566,13 +566,15 @@ console_child_shown = function(run) {
     verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
 }
 
-#' A scheduled group's completed count, active phases and queued names
+#' A scheduled group's completed count, active phases and the names of the members not started
+#' yet, `pending` (counted only when there are some): the live row's `queued` is the person's
+#' messages (IC-82), so the group's word differs from it (D-309)
 #' @noRd
 console_group_state = function(group) {
   if (!is.environment(group) || is.null(group$labels)) return(NULL)
-  queued = vapply(group$runs, is.null, NA)
+  pending = vapply(group$runs, is.null, NA)
   done = vapply(group$runs, function(r) isTRUE(r$settled), NA)
-  active = which(!queued & !done)
+  active = which(!pending & !done)
   labels = console_escape(group$labels, FALSE)
   models = group$models %||% rep("", group$n)
   phases = character(length(active))
@@ -582,13 +584,13 @@ console_group_state = function(group) {
     models[[i]] = rec$child$model %||% models[[i]]
     phases[[j]] = console_escape(rec$what %||% "thinking", FALSE)
   }
-  counts = c(paste(length(active), "active"), paste(sum(queued), "queued"))
+  counts = c(paste(length(active), "active"), if (any(pending)) paste(sum(pending), "pending"))
   short = paste(c(paste0("sub-agents ", sum(done), "/", group$n), counts),
                 collapse = console_style()$sep)
   text = paste(c(paste0("sub-agents ", sum(done), "/", group$n, " done"), counts),
                collapse = console_style()$sep)
-  list(active = stats::setNames(phases, labels[active]), queued = labels[queued],
-       models = list(active = models[active], queued = models[queued]),
+  list(active = stats::setNames(phases, labels[active]), pending = labels[pending],
+       models = list(active = models[active], pending = models[pending]),
        text = text, short = short)
 }
 
@@ -599,7 +601,7 @@ console_group_notice = function(rec) {
   group = rec$child$run$group
   state = console_group_state(group)
   if (is.null(state) || !length(state$active)) return(NULL)
-  members = list(active = names(state$active), queued = state$queued)
+  members = list(active = names(state$active), pending = state$pending)
   shown = list(members = members, models = state$models)
   if (identical(group$shown, shown)) return(NULL)
   group$shown = shown
@@ -620,8 +622,8 @@ console_group_notice = function(rec) {
       labels[[i]] = paste0(labels[[i]], " (", console_escape(model, FALSE), ")")
     }
     more = if (n > 8L) paste0("+", n - 8L, " more")
-    lines = console_terms(c(labels, more), width - 12L, sep = ", ")
-    lead = paste0("    ", kind, "  ")
+    lead = paste0("    ", format(kind, width = 7L), "  ")
+    lines = console_terms(c(labels, more), width - nchar(lead), sep = ", ")
     rows = c(rows, paste0(c(lead, rep(strrep(" ", nchar(lead)), length(lines) - 1L)), lines))
   }
   console_write(sym$dim(console_wrap(rows, width)))
@@ -1416,7 +1418,7 @@ console_on_agent_end = function(event, ctx) {
       console_child_line(rec, paste0("failed", k, ": ", console_escape(why, FALSE)))
     }
     state = console_group_state(g)
-    if (!is.null(state) && !length(state$queued)) console_group_notice(rec)
+    if (!is.null(state) && !length(state$pending)) console_group_notice(rec)
     kids = console_kids()
     if (owns_row && length(kids)) console_live_start(kids[[1L]])
   }

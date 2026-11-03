@@ -124,9 +124,9 @@ the agent's own R code makes without `envir =` reads your objects and keeps the 
 in `res$envir`. R code that wraps such calls in `capture.output()` or `sink()` also captures
 their prompts.
 
-Teams and fan-outs also show completed, active and queued counts. A short roster names the
-active and queued children whenever the group changes; each list shows up to eight names and
-an explicit count of any others. Names include their model: queued children show the requested
+Teams and fan-outs also show completed, active and pending counts. A short roster names the
+active and pending children whenever the group changes; each list shows up to eight names and
+an explicit count of any others. Names include their model: pending children show the requested
 target, and active children show the resolved target when their backend reports it.
 At normal interactive verbosity, child tool names and retries
 show progress without streaming child conversations. On supported terminals the single live
@@ -285,14 +285,6 @@ workspace state; `"all"` requests both. Restoration covers captured objects/file
 registered checkpointers, with conflicts and unsupported changes reported. It does not undo
 arbitrary external services or uncaptured side effects. Check the report and restored data.
 Assigning a session to another name keeps the same object; use `gptr_fork()` for a branch.
-
-Automatic file scans have a two-second wait limit, including worker startup. They inspect at
-most 2,000 entries and back up at most 256 files within the configured byte limits. Peter reports
-partial coverage rather than waiting for a large directory to finish. It backs up predicted
-write targets separately before its own tools run, but native CLI edits to unvisited files have
-no automatic backup. An incomplete inventory never makes an existing file look newly created
-or makes an unvisited file look deleted. Ask Peter to use `ls`, `find` or `read` for more detail
-about a folder; it does not need to load every filename before answering.
 
 For a top-level team (`agents =`) or fan-out (`parallel =`) call in a designated history
 document, the code of each child that exports objects or returns a value with `gptr_return()` is
