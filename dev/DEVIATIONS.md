@@ -9663,7 +9663,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   scan saw the original), as for any unscanned file; the row restores the content from just
   before Peter's call. A native edit of a file without a backup that keeps its size and
   modification time becomes the pre-image, as an unpredicted write's does on API routes (D-312,
-  as in 1.0.0); one that changes either is recorded by the turn scan without a pre-image.
+  as in 1.0.0); one that changes either is recorded by a recording scan without a pre-image.
 - Contract-visible: 04 sections 7.16, IC-65 and IC-79 (section 15, which also stops claiming a
   full walk); 03 section 6.16 Files; D-201 edited in place.
 - Tests: test-ckpt-partial.R "a CLI-served write to a target no scan observed is undone to its

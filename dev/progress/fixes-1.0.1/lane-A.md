@@ -1,7 +1,7 @@
 # 1.0.1 fixes, lane A: bounded file checkpoints (#98)
 
 Branch `claude/fix-A`, cut from `04dca16a`. Decisions D-310 to D-314. Every high and medium finding
-of the lane is fixed. Tests were written first, seen failing, then made to pass.
+of the lane is fixed, and so are the verifier's follow-up problems (the last three rows). Tests were written first, seen failing, then made to pass.
 
 ## Fixed
 
@@ -16,6 +16,9 @@ of the lane is fixed. Tests were written first, seen failing, then made to pass.
 | `540408a1` | `?gptr_rewind`, the vignette and the specs say that unpredicted writes by R code, shell commands and CLIs to unvisited files have no backup. Before, they named only native CLI edits. | review design: docs say only native CLI edits lack a backup (low). | none (documentation only). |
 | `e47c6d82` | The internal roxygen describes the tracker fields and fragment shapes. The unused `walk_time` field is dropped. | review design: internal roxygen describes old shapes (low). | the ckpt suites. |
 | `94e3c5e8` | tailor-and-coach's precomputed output shows gptr 1.0.1. | review design: version consolidation is incomplete (low). The README and cheat sheet parts were already fixed by `8556ec6d`. | none. |
+| `5706b137` | A served edit of a file that a complete scan inventoried without a backup (past the 256-capture limit) is undone on CLI routes too (D-313, amended). Every route now uses `ckpt_as_scanned()`: the target needs its content hash or, without one, its size and mtime, as API routes and 1.0.0 did. #98's content-hash-only rule for `sync = FALSE` is withdrawn. A native edit that changed the file is still recorded by the turn scan without a pre-image. The contract (7.16, IC-79), the architecture (6.16) and D-201 are amended in place. | verification: Peter's own approved edit of a scanned but capture-capped file is still not undone on CLI routes, for projects of 257 to 2,000 entries (medium). | test-ckpt-partial.R: "a CLI-served write to a scanned file without a backup is undone while it is as seen" (with and without a native edit). test-ckpt-files.R: "CLI calls back up an unhashed target only while its size and mtime match the scan". test-ckpt-scan-integration.R: "a CLI-served write to a real scanned file past the capture limit is undone" (300 files, real scan). All three failed before the change (FAIL 7, then FAIL 3 in the real case). |
+| `300c7764` | The two adjacent checks for a scan that stopped early in `ckpt_files_observe()` are one block. | verification: two adjacent ifs on the same condition (low). | the ckpt suites. |
+| `1989f1ef` | `cran-comments.md` says the checkpoint tests scan in the R session and that the CRAN list has 38 files (test-ckpt-scan-lifecycle.R was removed). | verification: release text still describes the worker and gives 39 files (low). | none. The "all but 12 of the R files" figure was measured on the 35-file list, which the 38 files contain; no R file was removed. |
 
 ## Measurements (this machine, load average 20-26)
 
@@ -26,6 +29,13 @@ of the lane is fixed. Tests were written first, seen failing, then made to pass.
 ## Validation
 
 - `isolated-check.R test '^ckpt-'`: FAIL 0 | WARN 0 | SKIP 0 | PASS 984.
+- After the follow-up (`1989f1ef`): `^ckpt-` FAIL 0 | WARN 0 | SKIP 0 | PASS 1000;
+  `^(cli-claude|cli-codex|mcp-server)` FAIL 0 | SKIP 2 | PASS 1535;
+  `^(agent-|session-|subagent-|copy-|injection)` FAIL 0 | SKIP 1 | PASS 4550;
+  `^(proc-rscript|arch-|utils-options|windows-|doc-blocks|doc-replay|gptr-capture|eval-core|tool-r|perm-gate|console|rewind|gptr-rewind)`
+  FAIL 0 | SKIP 12 | PASS 7213; CRAN mode (`NOT_CRAN=false`) over
+  `^ckpt-(scan|partial|rewind|scan-integration|files)$` FAIL 0 | SKIP 45 | PASS 459. The changed R
+  and test files lint clean.
 - `isolated-check.R test '^(ckpt-|cli-claude|cli-codex|mcp-server)'`: FAIL 0, SKIP 2, PASS 2509.
 - `isolated-check.R test '^(agent-dispatch|cli-codex|cli-claude|copy-ckpt|doc-blocks|doc-replay|injection-e2e|mcp-server|session-object|session-usage-durable)$'` (after the coverage change): FAIL 0, SKIP 2, PASS 4367.
 - `isolated-check.R test '^(ckpt-|cli-|mcp-|agent-|session-|subagent-|copy-|injection|proc-rscript|arch-|utils-options|windows-|doc-blocks|doc-replay|gptr-capture|eval-core|tool-r$|perm-gate)'` at `94e3c5e8`: FAIL 0 | WARN 0 | SKIP 15 | PASS 11415.
@@ -43,7 +53,8 @@ of the lane is fixed. Tests were written first, seen failing, then made to pass.
 
 ## For the coordinator (NEWS, not edited here)
 
-The 1.0.1 NEWS bullet still describes the worker. A suggested replacement:
+The 1.0.1 NEWS bullet (NEWS.md lines 32-35) still describes the worker and must be replaced before
+release. `cran-comments.md` is already updated. A suggested replacement:
 
 > Automatic file checkpoints no longer inventory and copy a whole working directory before the
 > first response. A scan runs for at most two seconds, inspects at most 2,000 entries and backs up
