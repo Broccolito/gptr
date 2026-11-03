@@ -49,8 +49,12 @@ keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}
 
 \item{choices, levels, threshold}{System 1 answer shape, for a decision model (\code{"jev"},
 \code{"ollama/clef-flash"}; after \code{gptr_config(system1 = "emulate:<ref>")}, \code{model = "jev"} runs
-it through a chat model). A conversational model refuses them, \code{min_confidence} and \code{uncertain}
-(\code{threshold} only when it is not 0.5) rather than ignore them. \code{choices} given as a factor, or
+it through a chat model). The default is a logical \code{gptr_decision}, TRUE when P(yes) is at
+least \code{threshold}; \code{choices} give a \code{gptr_choice} of labels; ordered \code{levels} give a
+\code{gptr_score}, the expected 0-based level (0 to k - 1), whose level probabilities
+\code{gptr_prob(x, "probabilities")} returns. A conversational model refuses them,
+\code{min_confidence} and \code{uncertain} (\code{threshold} only when it is not 0.5) rather than ignore
+them. \code{choices} given as a factor, or
 \code{.opts = list(output = "factor")}, return a plain factor with those levels and no
 probabilities or confidence.}
 

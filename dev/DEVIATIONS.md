@@ -9587,8 +9587,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   Decision: ..." in Rmd, notebook and Quarto blocks). The o200k static prefixes of standard_all
   and standard_interactive grow by one token (2966 to 2967, 3109 to 3110; within the 2% gate, no
   `--update`).
-- Contract-visible: 03 sections 4.1.5, 7.3 (`{s1}`, `documents`) and 10.3 NS-4, 04 sections 7.8
-  (`context`) and 9.3; `?peter` `...` and `choices`, `?gptr_prob`, vignette system-one.
+- Rule (scores): the `system1` section adds "levels = c("low", "high") returns an expected 0-based
+  score", and `?peter` `choices,levels,threshold` names the three result types. Was silent on
+  `levels`, so agents asked to rate or score used `choices` and hand-coded 1..3. The static
+  prefixes grow by 17 o200k tokens (standard_all 2967 to 2984, standard_interactive 3110 to 3127;
+  within the 2% gate of 2966 and 3109, no `--update`); the section stays within its 150 budget.
+- Contract-visible: 03 sections 4.1.5, 7.3 (`{s1}`, `documents`, `system1`) and 10.3 NS-4, 04
+  sections 7.8 (`context`) and 9.3; `?peter` `...` and `choices`, `?gptr_prob`, vignette
+  system-one.
 - Tests: prompt-sections "{s1} is replaced by the configured System 1 alias, quoted as an R
   string"; northstar's frozen prompt; gptr-gateway "System 1 arguments are refused on a
   conversational route (D-250)"; s1-client "a System 1 request does not depend on how its input

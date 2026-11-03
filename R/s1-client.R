@@ -801,7 +801,8 @@ s1_request = function(model, states, questions, opts = list()) {
 s1_section_body = paste0(
   "Use System 1 for typed decision leaves inside your R workflow: ",
   "peter(\"Is this an RCT?\", abstracts, model = {s1}) returns a logical vector with ",
-  "attr(, \"prob\"); choices = c(\"a\", \"b\") returns labels. Batch hundreds or thousands; ",
+  "attr(, \"prob\"); choices = c(\"a\", \"b\") returns labels; levels = c(\"low\", \"high\") ",
+  "returns an expected 0-based score. Batch hundreds or thousands; ",
   "omit agents and parallel. gptr.s1_max_active controls concurrency (default 8; 1 sequential). ",
   "Chunk inputs above gptr.s1_max_elements (10,000). Use results in if/for/while, ",
   "check uncertain answers, and keep reasoning and writing for yourself."

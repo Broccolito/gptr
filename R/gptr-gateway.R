@@ -111,8 +111,12 @@
 #'   keeps only the values it returned with [gptr_return()], so they must be self-contained.
 #' @param choices,levels,threshold System 1 answer shape, for a decision model (`"jev"`,
 #'   `"ollama/clef-flash"`; after `gptr_config(system1 = "emulate:<ref>")`, `model = "jev"` runs
-#'   it through a chat model). A conversational model refuses them, `min_confidence` and `uncertain`
-#'   (`threshold` only when it is not 0.5) rather than ignore them. `choices` given as a factor, or
+#'   it through a chat model). The default is a logical `gptr_decision`, TRUE when P(yes) is at
+#'   least `threshold`; `choices` give a `gptr_choice` of labels; ordered `levels` give a
+#'   `gptr_score`, the expected 0-based level (0 to k - 1), whose level probabilities
+#'   `gptr_prob(x, "probabilities")` returns. A conversational model refuses them,
+#'   `min_confidence` and `uncertain` (`threshold` only when it is not 0.5) rather than ignore
+#'   them. `choices` given as a factor, or
 #'   `.opts = list(output = "factor")`, return a plain factor with those levels and no
 #'   probabilities or confidence.
 #' @param min_confidence A number from 0 to 1. An answer whose confidence is below it is
