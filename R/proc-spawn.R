@@ -289,7 +289,7 @@ proc_run = function(command, args = character(), input = NULL, timeout = 120, en
   shown = 0
   echo_redactor = if (echo) redact_stream("stream") else NULL
   repeat {
-    reactor_pump(until = function() !p$is_alive(), slice_ms = 200L, timeout = 0.2)
+    reactor_pump(until = function() !p$is_alive(), slice_ms = 20L, timeout = 0.2)
     if (echo) shown = proc_echo(out_f, shown, echo_redactor)
     if (any(file.size(c(out_f, err_f)) > proc_output_cap, na.rm = TRUE)) {
       kill_all(p, grace = 0)

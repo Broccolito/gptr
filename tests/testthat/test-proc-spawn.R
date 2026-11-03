@@ -170,6 +170,24 @@ test_that("proc_run() passes a 2 MB stdin payload complete and enforces its time
   expect_lt(slow$elapsed, 10)
 })
 
+test_that("a child's exit ends a wait outside a pump within a short slice", {
+  skip_on_cran()
+  skip_on_os("windows")
+  withr::defer(reactor_shutdown())
+  seen = new.env(parent = emptyenv())
+  original = proc_spawn
+  local_mocked_bindings(proc_spawn = function(...) {
+    t0 = reactor_now()
+    p = original(...)
+    seen$spawn = reactor_now() - t0
+    p
+  })
+  # a 200 ms slice made each wait after the spawn last 200 ms; the best of three is robust to load
+  waited = function(run) min(vapply(1:3, function(i) run()$elapsed - seen$spawn, 0))
+  expect_lt(waited(function() proc_run("true")), 0.15)
+  expect_lt(waited(function() bridge_sh("true", merge = TRUE)), 0.15)
+})
+
 test_that("proc_run() output past 64 MiB keeps its head and tail and a status line", {
   skip_on_cran()
   code = "x = strrep(paste0(strrep('a', 99), '\\n'), 1e5); cat('first\\n'); for (i in 1:20) cat(x)"
