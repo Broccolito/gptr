@@ -15,6 +15,9 @@ inspect, reuse or modify.
 - **Keep a record you can rerun.** Record agent calls and their executed
   R code alongside your analysis, then replay the code with the required
   inputs and packages.
+- **Improve Peter on your own task.** Models revise Peter's instructions
+  from runs of your task, and gptr keeps a change only when a new run
+  passes its checks and yours. A coached Peter can be coached again.
 
 ## Installation
 
@@ -219,6 +222,11 @@ slope_peter("Regress mpg on hp in mtcars; store the slope as b.", mtcars)
 saveRDS(slope_peter, "slope_peter.rds")
 slope_peter = gptr_tailor(readRDS("slope_peter.rds"))  # load and check it in a later session
 ```
+
+The result is a harness too, so `gptr_coach(..., harness = slope_peter)`
+coaches it again on your next task. See [Harnesses and
+coaching](https://broccolito.github.io/gptr/articles/tailor-and-coach.html)
+for what coaching may change and how gptr decides what to keep.
 
 ## Learn more
 
