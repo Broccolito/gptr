@@ -320,7 +320,8 @@ print.gptr_listing = function(x, ...) {
   invisible(x)
 }
 
-#' A width-bounded display copy: provenance/state first, at most two column groups, no row loss
+#' A width-bounded display copy: provenance/state first, at most two column groups, no row loss;
+#' identifier, state and date columns are never shortened, so free text gives way first
 #' @noRd
 listing_print_lines = function(x, width = cli::console_width()) {
   if (!ncol(x)) return(character())
@@ -344,7 +345,8 @@ listing_print_lines = function(x, width = cli::console_width()) {
     min(budget, caps[[j]], max(nchar(c(headers[[j]], values[[j]]), type = "width")))
   }, 0)
   minimum = pmax(nchar(headers, type = "width"), pmin(wanted, 8L))
-  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status", "branch")
+  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status", "branch",
+                                        "date", "created", "updated")
   minimum[state] = wanted[state]
   groups = list()
   group = integer()
