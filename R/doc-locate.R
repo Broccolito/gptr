@@ -136,13 +136,21 @@ doc_site_knitr = function(call, ph, call0) {
 #' holds the call, else the one notebook in getwd() that does. When several do (a copy saved by
 #' JupyterLab's Duplicate or nbconvert --output), the notebook this kernel runs is unknown: a
 #' notice says so once and the site has no path, so the call is neither recorded nor replayed
-#' (doc_locate()'s nested path, not a console turn)
+#' (doc_locate()'s nested path, not a console turn). A notebook whose bytes lack an ASCII word of
+#' the strings in `call0`, which its cell would hold as written, is neither decoded nor parsed
 #' @noRd
 doc_site_jupyter = function(call, ph, call0) {
   if (!isTRUE(getOption("jupyter.in_kernel"))) return(NULL)
+  strs = function(x) if (is.character(x)) x else if (is.call(x)) unlist(lapply(as.list(x), strs))
+  s = as.character(strs(call0))
+  words = unique(unlist(regmatches(s, gregexpr("[A-Za-z0-9]+", s, perl = TRUE))))
   hit = function(p) {
-    cell = tryCatch(doc_nb_cell(nb_parse(doc_read(p)$lines), ph, call0, doc_harness_attr(call)$fn),
-                    error = function(e) NA_integer_)
+    cell = tryCatch({
+      raw = readBin(p, "raw", file.size(p))
+      held = all(vapply(words, function(w) length(grepRaw(w, raw, fixed = TRUE)) > 0L, NA))
+      if (!held) NA_integer_ else
+        doc_nb_cell(nb_parse(doc_read(p)$lines), ph, call0, doc_harness_attr(call)$fn)
+    }, error = function(e) NA_integer_)
     if (!is.na(cell)) list(kind = "jupyter", path = path_norm(p), cell = cell)
   }
   jpy = Sys.getenv("JPY_SESSION_NAME")

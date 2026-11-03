@@ -156,6 +156,20 @@ test_that("a kernel without JPY_SESSION_NAME picks the bound notebook, else the 
   expect_no_message(doc_locate(call))
   unlink(file.path(proj, c("notebook-Copy1.ipynb", "notebook.executed.ipynb")))
   expect_identical(doc_locate(call)$path, nb)
+  # a notebook whose bytes lack a word of the call's strings is not parsed
+  parse = nb_parse
+  parsed = 0L
+  testthat::local_mocked_bindings(nb_parse = function(lines) {
+    parsed <<- parsed + 1L
+    parse(lines)
+  })
+  doc_locate(call)
+  alone = parsed
+  other = gsub("summarise", "plot", readLines(fixture), fixed = TRUE)
+  for (i in 1:3) writeLines(other, file.path(proj, paste0("a", i, ".ipynb")))
+  parsed = 0L
+  expect_identical(doc_locate(call)$path, nb)
+  expect_identical(parsed, alone)
 })
 
 test_that("a call in no document says once that a bound notebook takes no console turns", {

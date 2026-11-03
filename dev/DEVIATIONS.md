@@ -9588,6 +9588,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   unknown: one notice per folder names them and says to call `gptr_doc()`, and the call goes the
   nested path (no site path: neither recorded nor replayed, and no console turn). Before, the
   first match by file name won, so a copy that sorts first took the blocks or failed the replay.
+  Every notebook is now looked at, so one whose bytes lack an ASCII word of the call's strings
+  (which its cell holds as written) is skipped before it is decoded or parsed: a folder of large
+  notebooks costs about one read each, not one JSON parse each.
 - Contract-visible: 03 section 6.9 (locate precedence); `?gptr_doc` (unchanged: a binding already
   names the document).
 - Tests: test-doc-locate.R "a kernel without JPY_SESSION_NAME picks the bound notebook, else the
