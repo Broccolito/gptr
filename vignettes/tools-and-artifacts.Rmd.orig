@@ -60,6 +60,14 @@ functions and help topics (kind `api`) follow the members, tools and skills it f
 it returns invisibly. `out()` retrieves full captured text by output id, optionally only selected
 lines. Display budgets limit what is printed, not the stored full output.
 
+An agent asked to set something up, such as an MCP server, finds gptr's own functions this way:
+
+```{r, eval = FALSE}
+peter$search("add an MCP server")
+peter$help("gptr::gptr_mcp_add")
+peter$help("gptr::gptr_mcp_add", source = TRUE)
+```
+
 The file helper signatures are:
 
 ```{r, eval = FALSE}
@@ -238,6 +246,10 @@ limit is 500 MB (`gptr.artifact_max_bytes`). Without a project workspace, artifa
 temporary workspace; use `gptr_init()` for work you want to retain.
 See [Execution model](execution-model.html) for computation on live objects without an artifact
 snapshot.
+
+![Artifact versions. Each peter$app() call copies app.R and the objects named in data into a new
+version directory, and a launch serves it from a separate R process on 127.0.0.1; a later call
+makes v002 and keeps v001.](figures/artifact-versions.svg)
 
 For HTML, write `page.html` in the same working directory and call
 `peter$app("survey-view", kind = "html", launch = FALSE)`. HTML is served through a Shiny
