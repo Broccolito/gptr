@@ -785,7 +785,9 @@ mcp_check_kv = function(x, arg) {
 #' `command` (a server started as a local process speaking stdio) and `url` (a Streamable HTTP
 #' server). Secret values in `env` and `headers` must be `${VAR}` placeholders: they are
 #' expanded from the environment when gptr connects and never stored. Adding a server does not
-#' connect to it; listing its tools with [gptr_mcp()], refreshing it or calling a tool may connect.
+#' connect to it; listing its tools with [gptr_mcp()], refreshing it or calling a tool may connect,
+#' and a server with `"direct"` exposure (also through the setting `mcp.exposure`) is connected
+#' when a session starts unless its tool list is cached.
 #'
 #' @param name Server name: 1-64 letters, digits, `_` or `-`. Its tools are reached as
 #'   `peter$mcp$<name>$<tool>()` inside the `r` tool.
