@@ -831,17 +831,18 @@ ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all", verb = "Rewou
 }
 
 #' /undo: rewind the last turn; when the preview finds items it cannot restore, asks first,
-#' listing them and then what it would restore
+#' listing at most 10 items: those, then those it leaves as is, then what it would restore
 #' @noRd
 ckpt_cmd_undo = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no session to undo.")
   plan = tryCatch(gptr_rewind(s, preview = TRUE), gptr_error = conditionMessage)
   if (is.character(plan)) return(plan)
-  bad = plan$restore %in% FALSE
-  if (any(bad) && ctx$has_ui()) {
+  if (any(plan$restore %in% FALSE) && ctx$has_ui()) {
+    rows = paste0(plan$item, ": ", plan$reason)[order(match(plan$restore, c(FALSE, NA, TRUE)))]
+    if (length(rows) > 10L) rows = c(rows[1:10], paste0("(+ ", length(rows) - 10L, " more)"))
     ans = ctx$ui()$select("Some items cannot be restored. Undo anyway?", c("Undo", "Cancel"),
-                          default = 2L, details = paste0(plan$item, ": ", plan$reason)[order(!bad)])
+                          default = 2L, details = rows)
     if (!isTRUE(ans == 1L)) return("Undo cancelled.")
   }
   ckpt_cmd_run(s)

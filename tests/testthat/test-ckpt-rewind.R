@@ -755,6 +755,32 @@ test_that("/undo's question lists what it restores after what it cannot (D-354)"
   expect_false(file.exists(file.path(proj, "b.txt")))
 })
 
+test_that("/undo's question shows ten items: unrestorable, left as is, then restored (D-354)", {
+  skip_on_cran()
+  proj = local_project()
+  withr::local_preserve_seed()
+  withr::local_options(undo_question_test = NULL)
+  code = paste("x = 2; options(undo_question_test = 1); stats::runif(1)",
+               "for (i in 1:12) writeLines('b', sprintf('f%02d.txt', i))", sep = "; ")
+  local_fake_provider(list(fake_tool("r", code = code), "done"))
+  e = new.env()
+  s = peter("change x", model = "fake/fake-1", mode = "auto", envir = e)
+  e$x = 99
+  seen = new.env()
+  ui = list(select = function(title, choices, default = NULL, details = NULL) {
+    seen$details = details
+    1L
+  })
+  ckpt_cmd_undo("", list(session = s, has_ui = function() TRUE, ui = function() ui))
+  expect_length(seen$details, 11L)
+  expect_match(seen$details[[1L]], "^object x: conflict")
+  expect_match(seen$details[[2L]], "^RNG state: .*left as is")
+  expect_match(seen$details[[3L]], "undo_question_test: would be restored", fixed = TRUE)
+  expect_identical(seen$details[4:10], sprintf("file f%02d.txt: would be removed", 1:7))
+  expect_identical(seen$details[[11L]], "(+ 6 more)")
+  expect_null(getOption("undo_question_test"))
+})
+
 test_that("/undo lists each item once, by its outcome after the whole undo (#37)", {
   skip_on_cran()
   local_project()

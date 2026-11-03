@@ -10356,9 +10356,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 
 ## D-354 - Fixes 1.0.1 round 2 lane Y Checkpoint messages name what changes, in plain words (2026-11-03)
 - Rule (`/undo`): when the preview finds items it cannot restore, the "Undo anyway?" question
-  lists every item of the plan, those it cannot restore first, then what it would restore or
-  remove. A file the undo deletes previews as "would be removed" (was "would be restored", as
-  objects already read). Was only the items it could not restore, so after Peter's approved edit
+  lists the items of the plan, those it cannot restore first, then those it leaves as is or asks
+  about (restore `NA`: the RNG state, the locale, a file outside the project), then what it would
+  restore or remove; at most 10, then "(+ <n> more)". A file the undo deletes previews as "would
+  be removed" (was "would be restored", as objects already read). Was only the items it could not restore, so after Peter's approved edit
   and new file on claude-cli in a large project the question showed the "file coverage" row alone.
 - Rule (coverage notice, amends D-314's wording): "File undo covers only part of the project
   folder <name>: the automatic scan stopped early because <reason>, so changes to files it did
@@ -10371,7 +10372,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   absolute root, which a console narrower than the path wrapped mid-word, and internal reasons.
 - Contract-visible: the `reason` of a `gptr_rewind(preview = TRUE)` file row (04 section 6.5);
   04 section 7.16 (the notice); the question and the notices are console wording.
-- Tests: ckpt-rewind "/undo's question lists what it restores after what it cannot (D-354)";
+- Tests: ckpt-rewind "/undo's question lists what it restores after what it cannot (D-354)",
+  "/undo's question shows ten items: unrestorable, left as is, then restored (D-354)";
   ckpt-files "the coverage notice is a console line for the person, once per root", "a scan
   slower than gptr.checkpoint_scan_budget switches to per-turn scans once"; ckpt-scan "the entry
   cap leaves undiscovered files unknown", the time-limit and interrupt cases. Evidence:
