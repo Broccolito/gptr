@@ -1899,9 +1899,12 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   })
   names(state) = unique(rows$provider)
   availability = vapply(seq_len(nrow(rows)), function(i) {
-    entry = state[[rows$provider[[i]]]]
+    pid = rows$provider[[i]]
+    entry = state[[pid]]
     if (is.null(entry$checked_at)) return("unknown")
-    label = if (rows$id[[i]] %in% entry$ids) "advertised" else "unlisted"
+    # an Ollama name without a tag means :latest, as preflight reads it
+    tag = if (identical(pid, "ollama")) function(x) vapply(x, catalog_ollama_tag, "") else identity
+    label = if (tag(rows$id[[i]]) %in% tag(entry$ids)) "advertised" else "unlisted"
     paste0(label, if (entry$stale) " (stale)")
   }, "")
   checked_at = vapply(rows$provider, function(pid) state[[pid]]$checked_at %||% NA_character_, "",
