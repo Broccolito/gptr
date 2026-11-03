@@ -675,8 +675,8 @@ plugin_api_req = function(manifest) {
 #' A resolved plugin from a directory, or NULL when the directory is not a plugin
 #'
 #' `plugin.json` makes a gptr directory plugin; `.claude-plugin/plugin.json` (or an empty
-#' `.claude-plugin/`) a Claude bundle; a marketplace-only root is not a plugin. A directory
-#' without a manifest counts when it has
+#' `.claude-plugin/`) a Claude bundle; a marketplace-only root is not a plugin unless `kind` is
+#' given. A directory without a manifest counts when it has
 #' `skills/`, `prompts/`, `agents/`, `extensions/`, `commands/` or `mcp.json`. Without a manifest
 #' name the plugin is named `name`. A given `kind` always resolves: an installed Claude Code plugin
 #' is `kind = "claude-plugin"` named by its key, never by its version directory (D-088).
@@ -694,7 +694,7 @@ plugin_from_dir = function(path, name = basename(path), kind = NULL) {
     kind = kind %||% "claude-plugin"
     man = plugin_manifest_read(cp) %||% list()
   } else if (dir.exists(file.path(path, ".claude-plugin"))) {
-    if (file.exists(file.path(path, ".claude-plugin", "marketplace.json")) &&
+    if (is.null(kind) && file.exists(file.path(path, ".claude-plugin", "marketplace.json")) &&
         !has_dirs && !any(file.exists(file.path(path, c("mcp.json", ".mcp.json"))))) {
       return(NULL)
     }
@@ -791,11 +791,11 @@ plugin_resolve = function(name) {
     p = plugin_from_dir(full)
     if (!is.null(p)) return(p)
   }
-  if (looks_path || dir.exists(full)) {
+  if (looks_path) {
     if (file.exists(file.path(full, ".claude-plugin", "marketplace.json"))) {
       gptr_abort(paste0("This path is a plugin marketplace, not a plugin directory. ",
                         "Choose an individual plugin directory from its marketplace.json ",
-                        "and pass that path in plugins = ."),
+                        "and name that path in `plugins`."),
                  "invalid_argument", arg = "name", expected = "an individual plugin directory")
     }
     gptr_abort(paste0("This path is not a plugin directory (no plugin.json, .claude-plugin/ ",
@@ -823,11 +823,7 @@ plugin_resolve = function(name) {
   }
   cl = plugin_claude_installed()
   hit = res_match(name, names(cl), "plugin")
-  if (length(hit)) {
-    p = plugin_from_dir(cl[[hit]], hit, "claude-plugin")
-    if (!is.null(p)) return(p)
-    return(plugin_resolve(cl[[hit]]))
-  }
+  if (length(hit)) return(plugin_from_dir(cl[[hit]], hit, "claude-plugin"))
   gptr_abort(paste0("No plugin with this name was found: install a package with inst/gptr/, ",
                     "or use a directory with plugin.json or .claude-plugin/, or ",
                     ".gptr/plugins/<name>/."), "invalid_argument", arg = "name",
