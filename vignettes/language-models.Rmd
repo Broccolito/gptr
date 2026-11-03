@@ -270,7 +270,7 @@ other = gptr_fake_provider(list("An association does not establish causation."),
 session = peter("Describe how mpg relates to wt.", mtcars, model = fake)
 session |> peter("Add a caveat.", model = other)
 #> An association does not establish causation.
-#> idle . other/other-1 . 2 turns . 3.5k tokens . $0.0000 . s3892fa59a2
+#> idle . other/other-1 . 2 turns . 3.5k tokens . $0.0000 . sccbfca7db7
 ```
 
 ## Put calls in functions and scripts
