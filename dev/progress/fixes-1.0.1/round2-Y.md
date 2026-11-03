@@ -44,3 +44,11 @@ each confirmed by a verifier. Decisions D-353..D-355.
   `listing|models|provider|skill|mcp-config|plugin|session-store|session-history|doc-blocks|
   doc-replay|subagent-defs|perm-rules|session-budget|proc-supervise|artifact|utils-text|
   console-commands` PASS 10615.
+
+## Y-5 - The models footer is short (D-355)
+- Defect: the `gptr_models()` footer was about 160 characters (229 with a failed listing): two
+  lines at 120 columns and three at 80, one split inside `gptr_models(refresh = TRUE)`.
+- Fix: "catalog <date> (<source>), <n> models; refresh = TRUE updates it; advertised does not
+  verify access" plus any failure; footers still wrap at word boundaries.
+- Red: provider-model-discovery FAIL 3. Green: `provider-model-discovery|models|catalog|listing`
+  PASS 704.

@@ -10388,7 +10388,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Trade-off: a listing with many short columns can need a second column group sooner (at 120
   columns `gptr_providers()` shows `api` whole and puts `version` in group 2; it cut `api` to
   "openai-c..." before).
+- Rule (footer): the `gptr_models()` footer reads "catalog <date> (<source>), <n> models; refresh
+  = TRUE updates it; advertised does not verify access" plus any failed listing, so it is one line
+  at 120 columns and two at 80 (`print.gptr_listing()` wraps footers at word boundaries, 41e4c1b0).
+  Was 229 characters with a failure, three lines at 80 that split `gptr_models(refresh = TRUE)`.
+  `?gptr_models` and the language-models vignette keep the full caveat (inference and billing).
 - Contract-visible: none (display copy; the returned data frames are unchanged).
 - Tests: listing-print "model listings keep provider, availability and checked_at whole and shown
-  (D-355)" (flaky, codex and versa-bedrock shapes at 80 and 120 columns). Evidence:
+  (D-355)" (flaky, codex and versa-bedrock shapes at 80 and 120 columns); provider-model-discovery
+  "the models footer is one line at 120 columns and two at 80 (D-355)". Evidence:
   progress/fixes-1.0.1/round2-Y.md.
