@@ -304,9 +304,11 @@ doc_replay_no_value = function(site, block, code, s) {
 #' Say once per block that, in R Markdown, Quarto or a notebook, the lines after its call in the
 #' calling chunk or cell use what the block makes: an object of its `created=` key or a name its
 #' top-level code assigns. The block's code is in its own chunk or cell after that one, so when the
-#' document runs again (its block replays) those lines run before it (D-343)
+#' document runs again (its block replays) those lines run before it (D-343). At `replay` while
+#' knitting the notice also goes to stderr, the console rendering the document: knitr drops the
+#' messages of a chunk that fails, as this one does, unless the chunk has `error = TRUE`
 #' @noRd
-doc_used_early = function(site, id, body, created) {
+doc_used_early = function(site, id, body, created, replay = FALSE) {
   if (!isTRUE(site$format %in% c("rmd", "qmd", "ipynb")) || isTRUE(site$console) ||
         !rlang::is_string(id)) {
     return(invisible(NULL))
@@ -326,12 +328,17 @@ doc_used_early = function(site, id, body, created) {
   }, error = function(e) character())
   if (!length(used)) return(invisible(NULL))
   where = if (identical(site$format, "ipynb")) "cell" else "chunk"
-  gptr_inform(paste0("Block ", id, " of ", doc_rel(site$path), " makes ",
-                     paste(used, collapse = ", "), ", which its calling ", where, " uses after ",
-                     "the call. The block's code is in the ", where, " after that one, so when ",
-                     "the document runs again those lines run before it: use what it makes from ",
-                     "a later ", where, "."), "notice",
-              .once = paste0("doc_used_early:", path_key(site$path), ":", id))
+  withCallingHandlers(
+    gptr_inform(paste0("Block ", id, " of ", doc_rel(site$path), " makes ",
+                       paste(used, collapse = ", "), ", which its calling ", where, " uses after ",
+                       "the call. The block's code is in the ", where, " after that one, so when ",
+                       "the document runs again those lines run before it: use what it makes ",
+                       "from a later ", where, "."), "notice",
+                .once = paste0("doc_used_early:", path_key(site$path), ":", id)),
+    gptr_message_notice = function(m) {
+      if (replay && is_knitting()) cat(conditionMessage(m), file = stderr())
+    }
+  )
 }
 
 #' Block `block_id` as the site's document holds it (doc_block_get()), with `sent`, what its
@@ -418,7 +425,7 @@ doc_replay_call = function(call, site, mode = "replay") {
   if (!is.null(h$fork)) session_replay_bind(b$id, s)
   doc_replay_no_answer(site, s)
   doc_replay_no_value(site, b, doc$code, s)
-  doc_used_early(site, b$id, doc$code, doc_created(h$created))
+  doc_used_early(site, b$id, doc$code, doc_created(h$created), replay = TRUE)
   doc_source_log(site$path, b$id, "replayed")
   assign("doc", NULL, envir = call)
   s

@@ -102,10 +102,24 @@ test_that("a calling chunk that uses the block's objects after the call is told 
   expect_false(grepl("not found", md, fixed = TRUE))
   id = doc_find_blocks(readLines(rmd))$id
   # the next knit replays: the block's chunk runs after `ask`, so `top3` is not there yet
-  for (k in grep("doc_used_early", ls(the$once), value = TRUE)) the$once[[k]] = NULL
-  knitr::knit(rmd, output = out, envir = doc_stand_in(), quiet = TRUE)
+  forget = function() {
+    for (k in grep("doc_used_early", ls(the$once), value = TRUE)) the$once[[k]] = NULL
+  }
+  forget()
+  err = utils::capture.output(invisible(knitr::knit(rmd, output = out, envir = doc_stand_in(),
+                                                    quiet = TRUE)), type = "message")
   md = paste(readLines(out), collapse = " ")
   expect_match(md, paste0("Block ", id, " of local.Rmd makes top3.*object 'top3' not found"))
+  # knitr drops a failing chunk's messages unless error = TRUE (rmarkdown::render, Quarto): the
+  # console still has it
+  expect_match(paste(err, collapse = " "), paste0("Block ", id, " of local.Rmd makes top3"))
+  forget()
+  error = knitr::opts_chunk$get("error")
+  knitr::opts_chunk$set(error = FALSE)
+  withr::defer(knitr::opts_chunk$set(error = error))
+  err = utils::capture.output(expect_error(knitr::knit(rmd, output = out, envir = doc_stand_in(),
+                                                       quiet = TRUE), "top3"), type = "message")
+  expect_match(paste(err, collapse = " "), paste0("Block ", id, " of local.Rmd makes top3"))
   # a chunk that ends with the call (or only prints the session) is not mentioned
   writeLines(c("```{r ask}", "s = peter(\"count\")", "s", "```"), rmd)
   knitr::knit(rmd, output = out, envir = doc_stand_in(code = "top3 = 3"), quiet = TRUE)

@@ -9617,10 +9617,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   them) but not on a re-render. gptr says so once per block, when the block is recorded (in the
   first report) and when it replays (just before the error), naming the objects: those of the
   `created=` key and the names the block's top-level code assigns that the rest of the chunk or
-  cell uses. Not taken: running the recorded code at the call and skipping its chunk (knitr only:
+  cell uses. While knitting, the replay's notice also goes to stderr: knitr drops the messages of
+  a chunk that fails (`rmarkdown::render()` and Quarto default to `error = FALSE`), so the
+  report would never show it. Not taken: running the recorded code at the call and skipping its chunk (knitr only:
   a notebook cannot skip a later cell, so the code would run twice there; it would also move the
   block's plots and output and override a chunk the person turned off).
 - Contract-visible: 04 section 15.3 IC-46 (Used early); `?gptr_doc`; vignette
   ("script-as-history").
 - Tests: test-doc-knitr.R "a calling chunk that uses the block's objects after the call is told
-  so, once". Evidence: progress/fixes-1.0.1/lane-G.md.
+  so, once" (also with `error = FALSE`). Evidence: progress/fixes-1.0.1/lane-G.md.

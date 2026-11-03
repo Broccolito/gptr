@@ -4764,7 +4764,8 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   calling one, so on a replay the lines after the call in the calling chunk or cell run before it. When those
   lines use a name of the block's `created=` key or a name its top-level code assigns, one `notice` per block and
   process says so, when the block is recorded and when it replays ("Block <id> of <doc> makes <names>, which its
-  calling chunk uses after the call. ..."). Replay still never runs the recorded code itself.
+  calling chunk uses after the call. ..."); while knitting, the replay's notice also goes to stderr, as knitr drops
+  the messages of a chunk that fails unless it has `error = TRUE`. Replay still never runs the recorded code itself.
 - **Fork blocks** (`fork=` header): the replay result is bound to the block id with `session_replay_bind(block,
   s)` in a process table `the$replay_blocks` (gptr-created sessions only, never user frames; replaced on
   re-source). Recorded fork turns are wrapped `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`;
