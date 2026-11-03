@@ -204,24 +204,34 @@ ckpt_on_tool_result = function(event, ctx) {
   }
 }
 
-#' agent_start and turn_end hooks on a CLI route (IC-65): bring the file tracker up to date
-#' before the child acts, record what it changed after each turn
+#' agent_start, tool_execution_start and turn_end hooks on a CLI route (IC-65): bring the file
+#' tracker up to date before the child acts, note a step it runs outside R (an informational
+#' event, contract 8.5) and record what changed after each turn in which such a step or a served
+#' call could write files; R-only and text-only turns are not scanned (D-312)
 #' @noRd
 ckpt_on_cli = function(st, event, ctx) {
   s = ctx$session
-  if (!ckpt_cli_session(s) || !ckpt_enabled("files", ctx, list())) return(NULL)
+  step = identical(event$type, "tool_execution_start")
+  if (step && !isTRUE(event$informational) || !ckpt_cli_session(s) ||
+        !ckpt_enabled("files", ctx, list())) {
+    return(NULL)
+  }
   ck = ckpt_ck_of(st, s)
-  if (identical(event$type, "agent_start")) {
-    ckpt_files_sync(ckpt_files_tr(ck))
+  tr = ckpt_files_tr(ck)
+  if (step) {
+    tr$dirty = TRUE
+  } else if (identical(event$type, "agent_start")) {
+    ckpt_files_sync(tr)
   } else {
-    frag = ckpt_files_turn_scan(ck, ckpt_turn(s), force = TRUE)
+    frag = ckpt_files_turn_scan(ck, ckpt_turn(s), force = isTRUE(tr$dirty))
     if (!is.null(frag)) ckpt_append_scan(s, frag)
   }
   NULL
 }
 
-#' agent_end hook: the memory budget, the per-turn scan (once walks are slow, and always on a CLI
-#' route: an aborted run has no `turn_end`) and one blob collection per session
+#' agent_end hook: the memory budget, the per-turn scan (once walks are slow, and on a CLI route
+#' after a turn that could write files: an aborted run has no `turn_end`) and one blob collection
+#' per session
 #' @noRd
 ckpt_on_agent_end = function(st, ctx) {
   s = ctx$session
@@ -230,7 +240,8 @@ ckpt_on_agent_end = function(st, ctx) {
   turn = ckpt_turn(s)
   ckpt_objects_budget(ck, turn, session_home(s))
   if (ckpt_enabled("files", ctx, list())) {
-    frag = ckpt_files_turn_scan(ck, turn, force = ckpt_cli_session(s))
+    frag = ckpt_files_turn_scan(ck, turn,
+                                force = ckpt_cli_session(s) && isTRUE(ckpt_files_tr(ck)$dirty))
     if (!is.null(frag)) ckpt_append_scan(s, frag)
   }
   if (is.null(ck$gc_done)) {
@@ -283,7 +294,7 @@ builtin_checkpoints = function(gptr) {
   st$sessions = st$sessions %||% new.env(parent = emptyenv())
   for (nm in c("objects", "files", "state")) gptr$register(ckpt_spec(st, nm))
   gptr$on("tool_result", ckpt_on_tool_result)
-  for (ev in c("agent_start", "turn_end")) {
+  for (ev in c("agent_start", "tool_execution_start", "turn_end")) {
     gptr$on(ev, function(event, ctx) ckpt_on_cli(st, event, ctx))
   }
   gptr$on("agent_end", function(event, ctx) ckpt_on_agent_end(st, ctx))

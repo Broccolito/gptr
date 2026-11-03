@@ -192,8 +192,8 @@ ckpt_is_link = function(path) {
 #' `last_coverage`, the last recording scan's interval was complete at both ends; `walk_secs`, how
 #' long the last scan took; `explicit` and `explicit_mode`, the state ("" absent, "?" left to the
 #' recording scan or not capturable) and mode bits of every predicted absolute path; `per_turn`,
-#' one scan per turn (`scanned_turn`) once scans are slow or partial; `synced`, a sync since the
-#' last per-turn scan
+#' one scan per turn (`scanned_turn`) once scans are slow or partial; `dirty`, a call or a step
+#' outside R that can write files ran since the last sync or per-turn scan
 #' @noRd
 ckpt_files_tr = function(ck) {
   if (is.null(ck$files)) {
@@ -382,7 +382,7 @@ ckpt_files_sync = function(tr) {
   tr$hash = character()
   tr$mode = integer()
   tr$absent = character()
-  tr$synced = TRUE
+  tr$dirty = FALSE
   ckpt_files_observe(tr, s)
   invisible(tr)
 }
@@ -446,6 +446,7 @@ ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
     ckpt_files_sync(tr)
   }
   tr$scanned_turn = turn
+  tr$dirty = TRUE
   paths = ckpt_call_paths(call)
   for (p in paths) {
     rel = ckpt_walked(tr, p)
@@ -525,15 +526,15 @@ ckpt_files_after = function(ck, call, token) {
 }
 
 #' One scan recorded as its own fragment: at the end of a turn in per-turn mode whose calls could
-#' write files (they synced the tracker), and (`force`) after each turn of a CLI route whose child
-#' edits files itself (IC-65)
+#' write files (`dirty`), and (`force`) after a turn of a CLI route whose child may have edited
+#' files itself (IC-65)
 #' @return A fragment (its `files` may be empty when `coverage` is "partial"), or NULL when
 #'   nothing changed and coverage is complete.
 #' @noRd
 ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
   tr = ckpt_files_tr(ck)
-  if (is.null(tr$stat) || !(isTRUE(tr$per_turn) && isTRUE(tr$synced) || force)) return(NULL)
-  tr$synced = FALSE
+  if (is.null(tr$stat) || !(isTRUE(tr$per_turn) && isTRUE(tr$dirty) || force)) return(NULL)
+  tr$dirty = FALSE
   rows = ckpt_files_step(tr)
   if (!length(rows) && isTRUE(tr$last_coverage)) return(NULL)
   list(id = ckpt_frag_id(), turn = as.integer(turn), root = tr$root, files = rows,

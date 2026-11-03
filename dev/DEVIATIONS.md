@@ -10322,3 +10322,29 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   give a classed character ..."; s1-composition "decision launch notices identify real cache
   misses ..."; doc-replay "without .gptr/, gptr_cache() counts and clears the System 1 answers in
   memory". Evidence: progress/fixes-1.0.1/lane-C.md.
+
+## D-353 - Fixes 1.0.1 round 2 lane Y A CLI turn's files are scanned only when it could write files (2026-11-03)
+- Rule (amends D-312's "CLI routes scan every turn"): on claude-cli and codex the turn-end and
+  agent-end scans run only after a turn that could write files: a file-capable served call (the
+  files checkpointer's before()) or a step outside R, which the Codex adapter reports as an
+  informational `tool_execution_start` event (contract 8.5; a native shell command, file edit,
+  web search or another server's MCP call). The tracker's `dirty` flag (was `synced`) records
+  either; a sync clears it, so the CLI's agent_start sync no longer counts as a reason to scan.
+  The claude child runs with `--tools ""`, so only served calls mark its turns. API routes are
+  unchanged: their per-turn scan follows a file-capable call, as before. D-310, D-311 and D-313
+  are unchanged (the CLI agent_start sync, its replacing observations, served-call pre-images).
+- Why: every CLI turn was scanned, and in a project of more than 2,000 entries each scan stopped
+  early, so a turn that only answered in text or only ran R on objects got a "file coverage"
+  item: `/undo` asked "Undo anyway?", the rewind was partial and the next request carried a
+  `<rewind>` block, against D-312, `?gptr_rewind` and NEWS 1.0.1 (live retest rt-ckpt, captures
+  d1-d5; the azure control and an empty folder rewound fully).
+- Trade-off: a native edit is seen only through Codex's own item events; a CLI that edited files
+  without reporting a step would go unrecorded, as for any unscanned path. The aborted-run case
+  of 8f019d5c is kept, as the informational start precedes the edit.
+- Contract-visible: 04 sections 7.16 and 8.5 (the Codex sandbox mapping); 03 section 6.16 Files.
+- Tests: ckpt-scan-integration "R-only and text-only turns rewind fully in capped and partially
+  scanned projects" (now on API and CLI routes, and the next request has no `<rewind>`), "a CLI
+  turn with a step outside R keeps the coverage item of a partial scan"; cli-codex "a Codex
+  turn's files are scanned only after a step outside R (D-353)" (the fake Codex CLI's text and
+  codex_shell cases); the IC-65 native-edit tests of ckpt-rewind announce their edit with
+  `local_native_step()` (helper-fake.R). Evidence: progress/fixes-1.0.1/round2-Y.md.

@@ -234,20 +234,40 @@ test_that("a real unreadable file is listed without a backup until it can be rea
 
 test_that("R-only and text-only turns rewind fully in capped and partially scanned projects", {
   skip_on_cran()
-  for (n in c(300L, 2100L)) {
+  for (cli in c(FALSE, TRUE)) for (n in c(300L, 2100L)) {
+    info = paste0(if (cli) "CLI" else "API", " route, ", n, " files")
+    local_mocked_bindings(ckpt_cli_session = function(s) cli)
     root = local_project(files = list("a.R" = "a = 1"))
     expect_true(dir.create(file.path(root, "bulk")))
     expect_true(all(file.create(file.path(root, "bulk", sprintf("f%04d.R", seq_len(n))))))
     local_gptr_options(checkpoint_scan_timeout = 20, quiet = TRUE)
-    local_fake_provider(list(fake_tool("r", code = "x = 1"), "made x", "hello"))
+    fake = local_fake_provider(list(fake_tool("r", code = "x = 1"), "made x", "hello", "again"))
     work = new.env()
     session = peter("make x", model = "fake/fake-1", mode = "auto", envir = work)
     session |> peter("say hello")
-    expect_false("file coverage" %in% gptr_rewind(session, 0, preview = TRUE)$item)
+    expect_false("file coverage" %in% gptr_rewind(session, 0, preview = TRUE)$item, info = info)
     expect_no_warning(gptr_rewind(session, 0))
-    expect_false(session$last_rewind$partial)
+    expect_false(session$last_rewind$partial, info = info)
     expect_false(exists("x", envir = work, inherits = FALSE))
+    session |> peter("again")
+    last = fake_requests(fake)[[length(fake_requests(fake))]]$messages
+    texts = unlist(lapply(last, function(m) vapply(m$content, function(b) b$text %||% "", "")))
+    expect_false(any(startsWith(texts, "<rewind ")), info = info)
   }
+})
+
+test_that("a CLI turn with a step outside R keeps the coverage item of a partial scan", {
+  skip_on_cran()
+  root = local_project(files = list("a.R" = "a = 1"))
+  expect_true(dir.create(file.path(root, "bulk")))
+  expect_true(all(file.create(file.path(root, "bulk", sprintf("f%04d.R", seq_len(2100L))))))
+  local_gptr_options(checkpoint_scan_timeout = 20, quiet = TRUE)
+  local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  local_fake_provider(list("listed"))
+  local_native_step()
+  session = peter("list the files", model = "fake/fake-1", mode = "auto", envir = new.env())
+  expect_true("file coverage" %in% gptr_rewind(session, 0, preview = TRUE)$item)
+  expect_warning(gptr_rewind(session, 0), class = "gptr_warning_rewind_partial")
 })
 
 test_that("a complete scan with capped captures leaves undo coverage complete", {

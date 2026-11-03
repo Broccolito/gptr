@@ -43,6 +43,17 @@ fake_requests = function(spec) {
   spec$log$requests
 }
 
+# A CLI child's step outside R before each request of the calling test: the informational event
+# Codex emits for a native shell command or file edit (contract 8.5)
+local_native_step = function(.env = parent.frame()) {
+  off = gptr_register(gptr_hook("before_request", function(event, ctx) {
+    session_emit(ctx$session, "tool_execution_start", tool_call_id = "codex_item_0",
+                 tool_name = "codex_file_change", input = json_obj(), informational = TRUE)
+    NULL
+  }))
+  withr::defer(off(), envir = .env)
+}
+
 # An empty secret vault for the calling test, emptied again when the test ends
 local_vault = function(.env = parent.frame()) {
   vault_reset()

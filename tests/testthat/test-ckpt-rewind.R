@@ -179,6 +179,7 @@ test_that("on a CLI route the files the child changes during a turn are checkpoi
   skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  local_native_step()
   local_fake_provider(function(request) {
     writeLines("a = 2", file.path(proj, "R", "a.R"))
     "Codex edited R/a.R"
@@ -556,6 +557,7 @@ test_that("a CLI child's file edit is undone by gptr_rewind() (IC-65)", {
   skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  local_native_step()
   local_fake_provider(function(request) {
     writeLines("a = 2", file.path(proj, "R", "a.R"))
     "Codex edited R/a.R"
@@ -570,6 +572,7 @@ test_that("a CLI child's file edit in an aborted turn is undone too (IC-65)", {
   skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  local_native_step()
   st = new.env()
   local_fake_provider(function(request) {
     if (is.null(st$s)) return("ok")
@@ -628,6 +631,7 @@ test_that("a turn's file scan never records gptr's own block writes (per-turn mo
   expect_bound_rewind()
   local_gptr_options(checkpoint_scan_budget = Inf)
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  local_native_step()
   expect_bound_rewind()
 })
 
