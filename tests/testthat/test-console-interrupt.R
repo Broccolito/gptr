@@ -350,6 +350,22 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
                      grepl("follow-up queued", err, fixed = TRUE)))
 })
 
+test_that("on a CLI route the pause menu's steer says it waits for the CLI's answer (P30 review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  live = session_live(s)
+  live$run = list(model = list(type = "cli"))
+  withr::defer(assign("run", NULL, envir = live))
+  local_menu_answers(c("s", "use only mpg"))
+  err = notices(with_interrupt_policy(function() {
+    fake_interrupt()
+    "done"
+  }, list(run), mode = "call"))
+  # under the line read at `steer> `, which is its receipt, the note alone
+  expect_identical(sum(err == paste0(strrep(" ", 7L), "(after the CLI's answer)")), 1L)
+  expect_false(any(grepl("use only mpg", err, fixed = TRUE)))
+})
+
 test_that("the pause menu leaves the answer's held row to continue after it (visual review)", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)

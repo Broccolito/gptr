@@ -314,8 +314,9 @@ console_repl_prompt = function() {
 }
 
 #' Queue pause-menu or typed text on the session (IC-49, IC-55: source "pause_menu" or "repl",
-#' IC-76) after the `input` event (source "steer"), with its receipt (console_receipt()) unless the
-#' read that took it shows it already in the receipt of kind `shown`; blank text queues nothing.
+#' IC-76) after the `input` event (source "steer"), with its receipt (console_receipt(), which the
+#' read that took the text began where it showed the word of kind `shown`); blank text queues
+#' nothing.
 #' While a REPL prompt runs (console_repl_prompt()), a follow-up, and text starting with / or !, is
 #' the next prompt instead (D-242): it waits in the reader's `typed` lines, and its `input` event
 #' comes when it is sent; the reader's `sent` is the kind queued last (console_newest()).
@@ -330,13 +331,13 @@ policy_enqueue = function(s, text, as, source = "pause_menu", shown = NULL) {
   later = identical(as, "follow_up") || grepl("^\\s*[/!]", text)
   if (!is.null(rs)) rs$reader$sent = if (later) "follow_up" else "steer"
   if (!is.null(rs) && later) {
-    if (!identical(shown, "follow_up")) console_receipt(s, text, "follow_up")
+    console_receipt(s, text, "follow_up", shown)
     rs$reader$typed = c(rs$reader$typed, text)
     return(invisible(TRUE))
   }
   ev = ev_dispatch("input", ev_new("input", text = text, source = "steer"), session = s)
   if (identical(ev$action, "handled")) return(invisible(FALSE))
-  if (!identical(shown, as)) console_receipt(s, ev$text, as)
+  console_receipt(s, ev$text, as, shown)
   st = console_state()
   st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, source = source)))
   policy_flush()
@@ -348,26 +349,29 @@ policy_enqueue = function(s, text, as, source = "pause_menu", shown = NULL) {
 #' the person's rows at column 0 on the input band (console_band()), `steer> <text>` (the agent
 #' reads it at its next step boundary) or `next> <text>` (after this answer), its word as the
 #' prompt `peter> ` reads, the text wrapped under itself (console_person_rows()); a steer on a CLI
-#' route ends with a dim `(after the CLI's answer)`, on a row of its own where the last is full. A
+#' route ends with a dim `(after the CLI's answer)`, on a row of its own where the last is full.
+#' Where the read that took the text showed the word of kind `shown` (the pause menu's `steer> `
+#' and `next> `), that row is the receipt, and only the note follows it, on a row of its own. A
 #' block of the person's lines (console_person_write()). Inside an evaluation it has the console's
 #' colours.
 #' @noRd
-console_receipt = function(s, text, as) {
+console_receipt = function(s, text, as, shown = NULL) {
   rlang::local_options(cli.num_colors = console_colors())
   sym = console_style()
   steer = identical(as, "steer")
-  rows = console_person_rows(if (steer) "steer>" else "next>", text)
+  word = if (steer) "steer>" else "next>"
+  rows = if (is.null(shown)) console_person_rows(word, text)
   if (steer && identical(session_live(s)$run$model[["type"]], "cli")) {
     grey = if (nzchar(sym$band)) sym$band_dim else sym$dim
     note = "(after the CLI's answer)"
     n = length(rows)
-    if (live_fit(rows[[n]]) + 1L + nchar(note) < cli::console_width()) {
+    if (n && live_fit(rows[[n]]) + 1L + nchar(note) < cli::console_width()) {
       rows[[n]] = paste(rows[[n]], grey(note))
     } else {
-      rows = c(rows, paste0(strrep(" ", 7L), grey(note)))
+      rows = c(rows, paste0(strrep(" ", nchar(word) + 1L), grey(note)))
     }
   }
-  console_person_write(s, console_band(rows))
+  if (length(rows)) console_person_write(s, console_band(rows))
 }
 
 #' The dim row that says a message `it` (console_newest()) went back into the draft (Up, D-301):
