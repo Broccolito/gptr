@@ -208,3 +208,54 @@ test_that("CLI metadata matches cannot prove uncaptured original contents", {
   expect_length(frag$files, 0L)
   expect_identical(frag$coverage, "partial")
 })
+
+test_that("a partial sync gives no pre-image to an edit or deletion made outside gptr", {
+  for (change in c("edit", "delete")) {
+    local_project(files = list("a.R" = "original", "b.R" = "keep"))
+    next_scan = partial_scan(c("a.R", "b.R"),
+                            c(a.R = ckpt_store_put("a.R"), b.R = ckpt_store_put("b.R")),
+                            complete = TRUE)
+    local_mocked_bindings(ckpt_scan_run = function(...) next_scan)
+    ck = ckpt_ck_new("s0000000211")
+    tr = ckpt_files_tr(ck)
+    ckpt_files_sync(tr)
+    # between turns, the person edits or deletes a.R; the next sync does not reach it
+    if (change == "edit") writeLines("USER EDIT", "a.R") else unlink("a.R")
+    next_scan = partial_scan("b.R", c(b.R = tr$hash[["b.R"]]))
+    ckpt_files_sync(tr)
+    next_scan = if (change == "edit") {
+      partial_scan(c("a.R", "b.R"), c(a.R = ckpt_store_put("a.R"), b.R = tr$hash[["b.R"]]))
+    } else {
+      partial_scan("b.R", c(b.R = tr$hash[["b.R"]]), absent = "a.R")
+    }
+    frag = ckpt_files_turn_scan(ck, 2L, force = TRUE)
+    expect_false(any(vapply(frag$files, function(r) isTRUE(r$restorable), NA)))
+    ckpt_files_undo(ck, frag)
+    if (change == "edit") {
+      expect_identical(readLines("a.R"), "USER EDIT")
+    } else {
+      expect_false(file.exists("a.R"))
+    }
+  }
+})
+
+test_that("a file recreated outside gptr after a proven absence is not undone as created", {
+  local_project(files = list("a.R" = "first", "b.R" = "keep"))
+  next_scan = partial_scan(c("a.R", "b.R"),
+                          c(a.R = ckpt_store_put("a.R"), b.R = ckpt_store_put("b.R")))
+  local_mocked_bindings(ckpt_scan_run = function(...) next_scan)
+  ck = ckpt_ck_new("s0000000212")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  unlink("a.R")
+  next_scan = partial_scan("b.R", c(b.R = tr$hash[["b.R"]]), absent = "a.R")
+  expect_identical(ckpt_files_turn_scan(ck, 1L, force = TRUE)$files[[1L]]$status, "deleted")
+  # between turns, the person recreates a.R; the next sync does not reach it
+  writeLines("USER FILE", "a.R")
+  next_scan = partial_scan("b.R", c(b.R = tr$hash[["b.R"]]))
+  ckpt_files_sync(tr)
+  next_scan = partial_scan(c("a.R", "b.R"), c(a.R = ckpt_store_put("a.R"), b.R = tr$hash[["b.R"]]))
+  frag = ckpt_files_turn_scan(ck, 2L, force = TRUE)
+  ckpt_files_undo(ck, frag)
+  expect_identical(readLines("a.R"), "USER FILE")
+})

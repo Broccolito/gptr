@@ -9597,3 +9597,22 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   paths, startup files, links or FIFOs"; test-ckpt-files.R "a scan slower than
   gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
   progress/fixes-1.0.1/lane-A.md.
+
+## D-311 - P16 A sync's observations replace the tracker's (2026-11-02)
+- Rule (review of #98): a sync, the scan that brings the tracker up to date without recording (at
+  the first mutating call of a turn or call, and at a CLI child's start), replaces the tracker's
+  observations (rows, content hashes, mode bits, proven absences) with its own. A path it did not
+  reach has no pre-image and no proven absence from before it, so a later recording scan neither
+  restores an edit nor recreates a deletion made outside gptr between turns, and does not undo a
+  file the person recreated as "created". Recording scans keep the unvisited observations of the
+  turn's sync, as before. The first sync is the baseline (`gptr.checkpoint_track_file_max`).
+- Why: a bounded sync can stop before a known path; its old hash then served as the pre-image of
+  the next recording scan that reached the path, and rewinding that turn reverted the person's
+  own edit or deletion. 1.0.0's syncs were complete, so this was new in #98.
+- Trade-off: after a partial sync, a change a turn makes to a path the sync missed has no
+  automatic backup that turn (unpredicted writes only; predicted targets are backed up before the
+  call).
+- Contract-visible: 04 section 7.16; 03 section 6.16 Files.
+- Tests: test-ckpt-partial.R "a partial sync gives no pre-image to an edit or deletion made outside
+  gptr", "a file recreated outside gptr after a proven absence is not undone as created".
+  Evidence: progress/fixes-1.0.1/lane-A.md.

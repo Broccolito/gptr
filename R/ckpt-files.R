@@ -291,18 +291,6 @@ ckpt_files_observe = function(tr, s) {
   }
 }
 
-#' The first automatic baseline: one bounded scan (ckpt_scan_run())
-#' @noRd
-ckpt_files_baseline = function(tr) {
-  tr$stat = ckpt_empty_walk()
-  tr$hash = character()
-  tr$mode = integer()
-  tr$absent = character()
-  s = ckpt_scan_run(tr$root, tr$prune, old = tr$stat, baseline = TRUE)
-  s$time = as.numeric(Sys.time())
-  ckpt_files_observe(tr, s)
-}
-
 #' Compare completed observations; missing observations are never evidence of deletion.
 #' A newly discovered file is only known to be created when the previous inventory was complete.
 #' @return `list(walk, time, created, modified, deleted, ...)`.
@@ -372,11 +360,19 @@ ckpt_files_step = function(tr) {
   rows
 }
 
-#' Bring the tracker up to date without recording: the baseline on first use, else a scan whose
-#' changes (edits made outside gptr) a rewind never undoes
+#' Bring the tracker up to date without recording (the baseline on first use): a scan whose
+#' changes (edits made outside gptr) a rewind never undoes. Its observations replace the tracker's,
+#' so a path it did not reach has no pre-image or proven absence from before it (D-311).
 #' @noRd
 ckpt_files_sync = function(tr) {
-  if (is.null(tr$stat)) ckpt_files_baseline(tr) else ckpt_files_step(tr)
+  s = ckpt_scan_run(tr$root, tr$prune, old = tr$stat %||% ckpt_empty_walk(),
+                    baseline = is.null(tr$stat))
+  s$time = as.numeric(Sys.time())
+  tr$stat = ckpt_empty_walk()
+  tr$hash = character()
+  tr$mode = integer()
+  tr$absent = character()
+  ckpt_files_observe(tr, s)
   invisible(tr)
 }
 

@@ -3048,8 +3048,10 @@ cut short (D-310). Limits are 2,000 inspected entries and 256 captured files, pl
 and total byte limits. Apply this policy to initial baselines, tool scans and CLI/turn/agent
 boundary scans. There is no unlimited catch-up
 scan. Completed observations distinguish known contents, verified absence and unknown paths;
-unvisited old observations remain available. A partial inventory is never evidence that an
-unseen file was created or deleted. Discovered changes without valid pre-images are not
+a recording scan keeps the unvisited observations of the turn's sync, while a sync (which records
+nothing) replaces the tracker's observations, so only what it observed gives a pre-image or
+proves an absence (D-311). A partial inventory is never evidence that an unseen file was created
+or deleted. Discovered changes without valid pre-images are not
 restorable, and coverage notices explain that other changes may not be listed or undoable.
 
 Predicted targets of gptr-controlled writes are backed up immediately before the call,
