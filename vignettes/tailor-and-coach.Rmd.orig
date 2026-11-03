@@ -120,6 +120,10 @@ Code, not a model, then decides. The new coaching is kept only when the final ru
 normally, delivered at least what the starting run delivered (a value, objects, files, or else
 text), took no riskier kind of action, met every `require` rule and passed your `check`.
 
+![One coaching call. Two coaches read the first run and propose coaching, each proposal does the
+task once, the composer keeps what visibly helped, and code decides whether the final run's
+coaching is kept. The result is a harness, so it can be coached again.](figures/coach-loop.svg)
+
 ```{r, eval = FALSE}
 survey = data.frame(id = 1:8, age = c(34, 51, -9, 28, 45, -9, 62, 39))
 want = mean(c(34, 51, 28, 45, 62, 39))

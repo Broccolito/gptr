@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 108" width="360" height="162">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+@media (prefers-color-scheme:dark){svg:root{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:14s linear infinite both}
+.a1{animation-name:a1}.a2{animation-name:a2}.a3{animation-name:a3}.a4{animation-name:a4}
+.a5{animation-name:a5}.a6{animation-name:a6}.a7{animation-name:a7}
+@keyframes a1{0%,2.9%{opacity:0;stroke-dashoffset:1}9.3%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a2{0%,10.7%{opacity:0;stroke-dashoffset:1}17.1%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a3{0%,18.6%{opacity:0;stroke-dashoffset:1}25%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a4{0%,26.4%{opacity:0;stroke-dashoffset:1}32.9%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a5{0%,34.3%{opacity:0;stroke-dashoffset:1}40.7%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a6{0%,42.1%{opacity:0;stroke-dashoffset:1}48.6%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a7{0%,50%{opacity:0;stroke-dashoffset:1}56.4%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="240" height="108"/>
+<rect class="ln" x="0.5" y="30.5" width="239" height="77" rx="3"/>
+<text class="n" x="232" y="101" text-anchor="end">your R session</text>
+<text x="10" y="51">mtcars</text>
+<circle class="dot" cx="50" cy="48" r="2"/>
+<path class="ln" d="M50 48H230"/>
+<g class="a1"><rect class="s2" x="40" y="5" width="5" height="8"/><text x="49" y="12">peter("fit")</text></g>
+<path class="ln a1" pathLength="1" d="M78 17V28" marker-end="url(#h)"/>
+<path class="ln a2" pathLength="1" d="M78 51V64.5" marker-end="url(#h)"/>
+<g class="a3"><text x="10" y="71">fit</text><circle class="dot" cx="78" cy="68" r="2"/></g>
+<path class="ln a3" pathLength="1" d="M78 68H230"/>
+<g class="a4"><rect class="s2" x="113" y="5" width="5" height="8"/><text x="122" y="12">|&gt; peter("residuals")</text></g>
+<path class="ln a4" pathLength="1" d="M172 17V28" marker-end="url(#h)"/>
+<path class="ln a5" pathLength="1" d="M172 71V84.5" marker-end="url(#h)"/>
+<g class="a6"><text x="10" y="91">res</text><circle class="dot" cx="172" cy="88" r="2"/></g>
+<path class="ln a6" pathLength="1" d="M172 88H230"/>
+</svg>

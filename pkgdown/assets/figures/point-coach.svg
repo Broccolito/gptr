@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 108" width="360" height="162">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+@media (prefers-color-scheme:dark){svg:root{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:14s linear infinite both}
+.a1{animation-name:a1}.a2{animation-name:a2}.a3{animation-name:a3}.a4{animation-name:a4}
+.a5{animation-name:a5}.a6{animation-name:a6}.a7{animation-name:a7}
+@keyframes a1{0%,2.9%{opacity:0;stroke-dashoffset:1}9.3%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a2{0%,10.7%{opacity:0;stroke-dashoffset:1}17.1%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a3{0%,18.6%{opacity:0;stroke-dashoffset:1}25%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a4{0%,26.4%{opacity:0;stroke-dashoffset:1}32.9%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a5{0%,34.3%{opacity:0;stroke-dashoffset:1}40.7%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a6{0%,42.1%{opacity:0;stroke-dashoffset:1}48.6%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@keyframes a7{0%,50%{opacity:0;stroke-dashoffset:1}56.4%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="240" height="108"/>
+<rect class="ln" x="0.5" y="6.5" width="62" height="80" rx="3"/>
+<text class="t" x="8" y="20">harness</text>
+<text x="8" y="36">note</text>
+<text x="8" y="49">skills</text>
+<text x="8" y="62">review</text>
+<text x="8" y="75">rules</text>
+<path class="ln a1" pathLength="1" d="M66 22H147" marker-end="url(#h)"/>
+<text class="n a1" x="106" y="17" text-anchor="middle">runs of your task</text>
+<rect class="s2" x="152" y="14" width="11" height="16"/>
+<rect class="s2" x="167" y="14" width="11" height="16"/>
+<text class="n" x="183" y="21">coaches</text>
+<text class="n" x="183" y="31">propose</text>
+<path class="ln a2" pathLength="1" d="M165 35V70H136" marker-end="url(#h)"/>
+<text class="n a2" x="171" y="58">final run</text>
+<rect class="dot a3" x="128" y="61" width="2" height="18"/>
+<text class="n a3" x="129" y="92" text-anchor="middle">your check</text>
+<path class="ln a4" pathLength="1" d="M124 70H67" marker-end="url(#h)"/>
+<text class="n a4" x="95" y="65" text-anchor="middle">kept</text>
+<path class="ln a5" pathLength="1" d="M31 33.5H55"/>
+<path class="ln a5" pathLength="1" d="M40 46.5H55"/>
+<path class="ln a6" pathLength="1" d="M100 49A7 7 0 1 1 106.5 42" marker-end="url(#h)"/>
+<text class="n a6" x="111" y="47">coach again</text>
+</svg>

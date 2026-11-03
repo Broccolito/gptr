@@ -28,6 +28,28 @@ img.logo {
   content: url("reference/figures/logo-dark.png");
 }
 
+/* Figures are SVG images; their colours follow the colour scheme of the page around them. */
+html:not([data-bs-theme="dark"]) {
+  color-scheme: light;
+}
+
+/* Home: the lead points as a grid, each under its figure (extra.js adds the figures). */
+.template-home .gptr-points {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem 2.5rem;
+  margin: 2rem 0 2.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.gptr-points img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 0.75rem;
+}
+
 /* Articles: each section's name beside its titles and one-line descriptions. */
 .template-article-index main {
   flex: 0 0 100%;
@@ -132,7 +154,7 @@ img.logo {
     margin: 0 0 0.75rem;
   }
 
-  .template-article-index .section,
+  .template-home .gptr-points, .template-article-index .section,
   .template-article-index dl {
     grid-template-columns: minmax(0, 1fr);
   }

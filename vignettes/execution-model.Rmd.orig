@@ -28,6 +28,10 @@ receives, and where memory or file transfers still occur.
 5. Tool results return to the model until it finishes, is interrupted, or reaches a limit.
 6. The session retains the conversation, status, usage and a designated result, if there is one.
 
+![One turn, read from the top. The model receives a description of your objects and requests
+tools; each request passes the permission gate, its R code runs on the objects in your session,
+and the result returns to the model until it answers.](figures/one-turn.svg)
+
 For an ordinary interactive call, start with a prompt and the data:
 
 ```{r, eval = FALSE}
