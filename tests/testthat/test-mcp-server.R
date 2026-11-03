@@ -805,6 +805,32 @@ test_that("client snippets carry a 3,600 s tool timeout and print without the to
   expect_false("mcp_serve" %in% job_list()$kind)
 })
 
+test_that("snippets keep the token out of format(), str(), knitr and Jupyter's rich output", {
+  skip_without_server()
+  local_gptr_options(mode = "manual")
+  h = gptr_mcp_serve(envir = new.env())
+  withr::defer(gptr_mcp_serve(stop = TRUE))
+  value = secret_value(h$token, h$url)
+  shows = function(x) any(grepl(value, unlist(x), fixed = TRUE))
+  for (n in names(h$config)) expect_false(shows(format(h$config[[n]])), label = n)
+  expect_false(shows(utils::capture.output(utils::str(h$config))))
+  skip_if_not_installed("knitr")
+  e = new.env()
+  e$h = h
+  knitted = knitr::knit(text = c("```{r}", "h$config", "h$config$claude_code", "```"),
+                        envir = e, quiet = TRUE)
+  expect_match(paste(knitted, collapse = "\n"), "[secret:GPTR_MCP_TOKEN]", fixed = TRUE)
+  expect_false(shows(knitted))
+  # IRkernel shows every mimetype repr gives (text/html, text/markdown, text/latex, ...)
+  skip_if_not_installed("repr")
+  for (x in c(list(h$config), h$config)) {
+    for (mime in names(repr::mime2repr)) {
+      out = tryCatch(repr::mime2repr[[mime]](x), error = function(e) NULL)
+      expect_false(shows(out), label = mime)
+    }
+  }
+})
+
 test_that("gptr_mcp_serve() validates its arguments and is refused from model code", {
   expect_error(gptr_mcp_serve(tools = "bash"), class = "gptr_error_invalid_argument")
   expect_error(gptr_mcp_serve(envir = 1), class = "gptr_error_invalid_argument")

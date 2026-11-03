@@ -735,6 +735,22 @@ print.gptr_mcp_handle = function(x, ...) {
   invisible(x)
 }
 
+#' A client snippet's text with its token redacted
+#'
+#' @param x A `gptr_mcp_snippet`.
+#' @param ... Ignored.
+#' @return A character vector.
+#' @export
+#' @noRd
+format.gptr_mcp_snippet = function(x, ...) {
+  text = if (is.list(x)) {
+    c(paste(x$args, collapse = " "), paste0(names(x$env), "=", unname(x$env)))
+  } else {
+    as.character(x)
+  }
+  redact(text, "persist")
+}
+
 #' Print a client snippet with its token redacted
 #'
 #' @param x A `gptr_mcp_snippet`.
@@ -743,18 +759,34 @@ print.gptr_mcp_handle = function(x, ...) {
 #' @export
 #' @noRd
 print.gptr_mcp_snippet = function(x, ...) {
-  if (is.list(x)) {
-    text = c(paste(x$args, collapse = " "), paste0(names(x$env), "=", unname(x$env)))
-    note = "(the token is hidden; $args are the codex options, $env the child's environment)"
+  note = if (is.list(x)) {
+    "(the token is hidden; $args are the codex options, $env the child's environment)"
   } else {
-    text = as.character(x)
-    note = "(the token is hidden; as.character() gives the text to paste)"
+    "(the token is hidden; as.character() gives the text to paste)"
   }
-  msg_verbatim(c(redact(text, "persist"), note))
+  msg_verbatim(c(format(x), note))
   invisible(x)
 }
+
+#' Show a client snippet's structure with its token redacted
+#'
+#' @param object A `gptr_mcp_snippet`.
+#' @param ... Passed to `str()`.
+#' @return `NULL`, invisibly.
+#' @exportS3Method utils::str
+#' @noRd
+str.gptr_mcp_snippet = function(object, ...) utils::str(redact(unclass(object), "persist"), ...)
 
 on_load({
   the$mcp_tokens = new.env(parent = emptyenv())
 })
+
+#' No rich repr: Jupyter (IRkernel) then shows a snippet, and a list holding one (`$config`), only
+#' as the redacted text/plain of print()
+#' @noRd
+mcp_snippet_repr = function(obj, ...) NULL
+
+on_load(s3_register("repr::repr_html", "gptr_mcp_snippet", method = mcp_snippet_repr))
+on_load(s3_register("repr::repr_markdown", "gptr_mcp_snippet", method = mcp_snippet_repr))
+on_load(s3_register("repr::repr_latex", "gptr_mcp_snippet", method = mcp_snippet_repr))
 on_load(on_unload(mcp_serve_stop))
