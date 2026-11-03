@@ -406,7 +406,8 @@ test_that("a skipped SKILL.md is named by gptr_skills() and by a preload of its 
   expect_no_warning(gptr_skills("project"))
   sk = gptr_skills("project")
   expect_identical(nrow(sk), 0L)
-  shown = paste(utils::capture.output(print(sk)), collapse = "\n")
+  # the footer wraps at the console width
+  shown = gsub("\\s+", " ", paste(utils::capture.output(print(sk)), collapse = " "))
   expect_match(shown, paste0("# 2 SKILL.md files skipped: .gptr/skills/Bad_Name, ",
                              ".gptr/skills/nodesc; gptr_registry(diagnostics = TRUE) says why."),
                fixed = TRUE)
