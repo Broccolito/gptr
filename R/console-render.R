@@ -1201,7 +1201,8 @@ console_result_block = function(rec, call, result) {
 }
 
 #' message_end: close the streamed answer, cut (finish(cut = TRUE)) when it was aborted, failed or
-#' truncated, or print it whole when nothing was streamed; for a tool result, its result lines
+#' truncated, or print it whole when nothing was streamed, so the next answer's text opens a block
+#' of its own; for a tool result, its result lines
 #' @noRd
 console_on_message_end = function(event, ctx) {
   rec = console_record(event)
@@ -1221,6 +1222,8 @@ console_on_message_end = function(event, ctx) {
     rec$think = NULL
     rec$md = NULL
     rec$md_index = NULL
+    # the next answer's text (a steer's) opens its own block, a blank line between (#41)
+    if (identical(rec$last, "text")) rec$last = NULL
   } else if (identical(msg$role, "tool_result")) {
     call = get0(paste0("t", msg$tool_call_id), envir = rec$tools, inherits = FALSE) %||%
       list(id = msg$tool_call_id, name = msg$tool_name, input = list())

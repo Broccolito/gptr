@@ -247,6 +247,18 @@ test_that("a receipt between two paragraphs has one blank row on each side (P30 
   expect_match(rows[q + 2L], "^  word01 ")
 })
 
+test_that("the answer to a steer is a block of its own, after the answer before it (P30 follow-up)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 1L)
+  fake = slow_first()
+  local_typed(typed_once("use base R", function() length(fake_requests(fake)) == 1L))
+  rows = sub(".*\r", "", typing_console(fake, c("go", "/exit"))$out)
+  at = match("  first", rows)
+  expect_identical(rows[at + 1:2], c("", "  second"))
+})
+
 test_that("on a CLI route the receipt says the steer is sent after the CLI's answer", {
   skip_on_cran()
   local_console_test()
