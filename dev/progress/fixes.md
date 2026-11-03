@@ -11381,3 +11381,24 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   stays a release step); the F-58 row names FIX-51 and the residual. Deviations: D-297 edited in
   place. Open: F-58's residual (documented, a design change for the maintainer: each row's path
   position) and the rest of FIX-49's Open.
+
+## CI-108 - Shards split the suite by measured time, macOS in one wave (2026-11-03)
+
+- Problem: a push's CI took about 25 minutes, and 35 to 44 when two runs overlapped. Test files
+  were dealt to shards round-robin by name, so a lane's shards ran 2.3 to 8.4 minutes of tests on
+  macOS, 2.6 to 9.5 on Windows and 4.0 to 11.7 on the connection gate. `cb7cab66` had raised macOS
+  to 8 shards, but GitHub runs five macOS jobs at a time, so three waited for a second wave (about
+  24 minutes on the critical path). On 2026-11-03 a slow macOS runner pushed one shard past the
+  20-minute limit.
+- Fix (`tests/testthat/ci-shard.R`, `.github/workflows/R-CMD-check.yaml`, `test-zzz.R`):
+  `ci_shard_files()` gives the slowest file first to the shard with the least time so far, by a
+  table of each file's median seconds per OS from four runs (Linux from the connection gate, macOS,
+  Windows); a file not in the table counts 1 s, so files of equal time still take turns in name
+  order. The OS comes from `Sys.info()`. macOS runs 5 shards again, one wave. Names are matched
+  exactly (a data frame's row names match partially).
+- Predicted test time per shard (from the same medians): macOS 9.1 to 9.2 minutes, Windows 5.4 to
+  5.5, connection gate 6.5, `LC_ALL=C` even across its 4 shards (two workers each).
+- Tests: test-zzz.R "CI shards run each test file once, Windows native ones in shard 1 (D-239)"
+  adds that a file's time decides its shard and that the table names only existing test files with
+  a column per OS; "each sharded lane's required context gates the latest attempt of its shards
+  (CI-107)" covers the new macOS matrix.

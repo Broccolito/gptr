@@ -305,6 +305,18 @@ test_that("CI shards run each test file once, Windows native ones in shard 1 (D-
     expect_error(shard$ci_shard(selector), label = selector)
   }
   expect_error(shard$ci_shard_files(files[1:3], c(1L, 4L)))
+  # a file's time decides its shard: the slowest file has a shard to itself
+  timed = new.env(parent = shard)
+  sys.source(test_path("ci-shard.R"), envir = timed)
+  timed$ci_shard_seconds = data.frame(linux = 30, row.names = "b")
+  expect_identical(timed$ci_shard_files(files, c(1L, 4L), "linux"), "test-b.R")
+  expect_identical(sort(unlist(lapply(1:4, function(i) {
+    timed$ci_shard_files(files, c(i, 4L), "linux")
+  }))), files)
+  # the table names only test files that exist, with a column for each OS's shards
+  seconds = shard$ci_shard_seconds
+  expect_identical(names(seconds), c("linux", "macos", "windows"))
+  expect_true(all(file.exists(test_path(paste0("test-", rownames(seconds), ".R")))))
   expect_identical(shard$ci_shard_filter(c("test-a.R", "test-b_2-c.r")), "^(a|b_2-c)$")
   expect_error(shard$ci_shard_filter("test-a b.R"))
   expect_error(shard$ci_shard_filter(c("test-a.R", "test-a.r")))
