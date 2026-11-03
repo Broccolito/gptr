@@ -168,7 +168,18 @@ s1_failure = function(cls, status, text, request_id, model_id, retry_after = NUL
                      retry_after = retry_after)
   final = cls %in% c("aborted", "redirect", "spend_cap", "retry_after")
   list(ok = FALSE, error = err, retry = s1_retry_of(err) && !final,
-       delay = s1_delay(retry_after), usage = usage)
+       delay = s1_delay(retry_after), usage = s1_failed_usage(usage, status, cls))
+}
+
+#' The usage of a failed attempt (D-251): one that reports no count costs a known zero when its
+#' request was rejected (HTTP status 400 or more) or never received (`network`,
+#' `timeout_connect`); any other stays as reported, unknown counts NA
+#' @noRd
+s1_failed_usage = function(usage, status, cls) {
+  known = is.list(usage) && !(is.na(s1_count(usage[["input"]])) &&
+                                is.na(s1_count(usage[["output"]])))
+  unbilled = isTRUE(status >= 400L) || isTRUE(cls %in% c("network", "timeout_connect"))
+  if (known || !unbilled) usage else list(input = 0, output = 0)
 }
 
 # ---- the typesafe-system-one adapter ------------------------------------------------------------
@@ -397,7 +408,8 @@ s1_http = function(spec, provider, on_done, on_fail) {
 #' @noRd
 s1_outcome = function(res, model_id = NA_character_) {
   if (inherits(res, "condition")) {
-    return(list(ok = FALSE, error = res, retry = s1_retry_of(res), usage = res[["usage"]],
+    return(list(ok = FALSE, error = res, retry = s1_retry_of(res),
+                usage = s1_failed_usage(res[["usage"]], res[["status"]], res[["error_type"]]),
                 delay = s1_delay(res[["retry_after"]])))
   }
   if (!is.list(res)) {
@@ -413,13 +425,7 @@ s1_outcome = function(res, model_id = NA_character_) {
 #' A nested pump passes no run ids, so it never starts another run's FIFO tool (contract 8.2,
 #' IC-57).
 #' @noRd
-s1_pump = function(until) {
-  if (reactor_depth() > 0L) {
-    reactor_pump(until = until, allow_runs = character())
-  } else {
-    reactor_pump(until = until)
-  }
-}
+s1_pump = function(until) reactor_pump(until = until)
 
 #' Wait on the reactor (interruptible; never a sleep inside a callback)
 #' @noRd
@@ -646,7 +652,6 @@ s1_dispatch = function(model, states, questions, start_for, engine, calibrated, 
                       })
   answers = vector("list", n)
   conditions = vector("list", n)
-  usages = vector("list", n)
   version = NULL
   rids = character()
   values = list()
@@ -673,13 +678,12 @@ s1_dispatch = function(model, states, questions, start_for, engine, calibrated, 
       conditions[i] = list(got)
     } else {
       answers[i] = list(got)
-      usages[i] = list(results[[map[i]]]$value[["usage"]])
     }
   }
   usage = list(input = totals$input, output = totals$output)
   usage$cost = s1_cost(usage, model)
   list(answers = answers, conditions = conditions, errors = s1_errors_df(conditions),
-       usages = usages, usage = usage, model_version = version %||% model$id,
+       usage = usage, model_version = version %||% model$id,
        request_ids = rids, engine = engine,
        calibrated = if (length(values)) {
          s1_calib(lapply(values, function(v) v[["calibrated"]] %||% calibrated))
@@ -751,6 +755,8 @@ s1_request = function(model, states, questions, opts = list()) {
       spec = tryCatch(cl[["build"]](model, ustates[[j]], questions, aopts),
                       gptr_error_s1 = function(e) e)
       if (inherits(spec, "condition")) {
+        # never sent: a known zero (D-251)
+        spec$usage = list(input = 0, output = 0)
         done(s1_outcome(spec, model$id))
         return(NULL)
       }
@@ -787,7 +793,8 @@ s1_request = function(model, states, questions, opts = list()) {
 s1_section_body = paste0(
   "Use System 1 for typed decision leaves inside your R workflow: ",
   "peter(\"Is this an RCT?\", abstracts, model = {s1}) returns a logical vector with ",
-  "attr(, \"prob\"); choices = c(\"a\", \"b\") returns labels. Batch hundreds or thousands; ",
+  "attr(, \"prob\"); choices = c(\"a\", \"b\") returns labels; levels = c(\"low\", \"high\") ",
+  "returns an expected 0-based score. Batch hundreds or thousands; ",
   "omit agents and parallel. gptr.s1_max_active controls concurrency (default 8; 1 sequential). ",
   "Chunk inputs above gptr.s1_max_elements (10,000). Use results in if/for/while, ",
   "check uncertain answers, and keep reasoning and writing for yourself."

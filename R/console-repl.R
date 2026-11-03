@@ -6,12 +6,17 @@
 #'
 #' `call` is the gateway's `gptr_call` record of the console call (contract 7.8): its resolved
 #' identifiers, budget and `.opts` apply to the first prompt, also on a piped session, and its
-#' plain-symbol context objects are attached to it.
+#' plain-symbol context objects are attached to it. Its explicit `mode =` changes a continued
+#' session at once, as /mode does, so the banner, the prompt and /mcp serve use it; the front end
+#' gives the yolo notice (repl_banner() after the banner).
 #' @noRd
 repl_state = function(session, envir, stdin = FALSE, call = NULL) {
   check_class(session, "gptr_session", "s", null = TRUE)
   check_env(envir, "envir")
   check_flag(stdin, "stdin")
+  if (!is.null(session) && isTRUE(call$args$mode_given)) {
+    session_set_mode(session, call$ids$mode, source = "user", notice = FALSE)
+  }
   rs = new.env(parent = emptyenv())
   rs$session = session
   rs$envir = envir
@@ -478,6 +483,9 @@ repl_file_block = function(path, shown, max_lines = 40L, room = Inf) {
   x[bad] = iconv(x[bad], "CP1252", "UTF-8")
   more = length(x) > max_lines
   x = redact(clean_terminal(utils::head(x, max_lines)), profile = "context")
+  v = view_lines(x, room, "code")
+  more = more || !identical(v, x)
+  x = v
   tag = function(cut) paste0(file, if (cut) " truncated=\"true\"", ">")
   n = lines_fit(x, room, "code", function(m) c(tag(more || m > 0L), "</file>"))
   if (!n && length(x)) {

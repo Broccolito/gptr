@@ -1,8 +1,9 @@
 # console-commands.R -- the slash commands of architecture 6.17 as `command` specs (P14, layer L5,
 # area console; contract 10.2 kind 10). The console only dispatches: /undo, /redo, /rewind and
 # /checkpoints are registered by P16 and prompt templates by P17 (IC-31). Exports of later plans
-# (gptr_doc(), gptr_rewind(), gptr_skills(), gptr_mcp()) are reached through ns_fun(); exports of
-# other layers are called as gptr::<name>() (plan ambiguity 1).
+# (gptr_doc(), gptr_rewind(), gptr_skills(), gptr_mcp()) and the server start of /mcp serve
+# (mcp_serve_open()) are reached through ns_fun(); exports of other layers are called as
+# gptr::<name>() (plan ambiguity 1).
 
 #' The command specs registered by builtin_console()
 #' @noRd
@@ -515,6 +516,10 @@ cmd_doc = function(args, ctx) {
   f = ns_fun("gptr_doc")
   if (is.null(f)) return("Binding a document needs gptr_doc(), which is not available.")
   f(args)
+  if (grepl("[.]ipynb$", args, ignore.case = TRUE)) {
+    return(paste0("Bound ", args, "; console turns are not recorded into it, only the calls in ",
+                  "its cells when it runs in a Jupyter kernel."))
+  }
   paste0("Recording into ", args, ".")
 }
 
@@ -545,11 +550,9 @@ cmd_mcp = function(args, ctx) {
     if (is.null(rs) || isTRUE(rs$stdin)) {
       return("/mcp serve returns to an interactive R prompt; it cannot serve after piped R exits.")
     }
-    f = ns_fun("gptr_mcp_serve")
+    f = ns_fun("mcp_serve_open")
     if (is.null(f)) return("MCP is not available.")
-    old = options(gptr.mode = repl_mode(rs))
-    on.exit(options(old), add = TRUE)
-    handle = f(envir = repl_eval_env(rs))
+    handle = f(repl_eval_env(rs), repl_mode(rs))
     if (!is.null(rs$session)) last_set(rs$session)
     rs$exit = TRUE
     return(c(print_lines(handle),

@@ -25,8 +25,9 @@
 #' (unnamed ones are labeled by their expression, named ones by name). Conversational context
 #' bindings refer to objects where they live; descriptions are budgeted separately from
 #' in-memory R computation. Every other argument is matched by its exact name only: a named
-#' object whose name abbreviates one and whose value fits it, such as `mo = "plan"`, stays context
-#' and warns (`gptr_warning_partial_name`).
+#' object whose name abbreviates one and whose value fits it, such as `mo = "plan"`, or a string
+#' named as an [gptr_agent()] option, such as `export = "fit"`, stays context and warns
+#' (`gptr_warning_partial_name`).
 #'
 #' A literal prompt gets `{name}` interpolation from `envir` (atomic vectors of 1 to 50 values;
 #' `{{` and `}}` are literal braces); `.opts = list(interpolate = FALSE)` switches it off.
@@ -66,8 +67,9 @@
 #' so a turn that selects none keeps it. Agent-created objects remain in `envir`.
 #'
 #' @section Finding APIs:
-#' Inside agent R code, `peter$search("provider setup")` searches callable members and gptr's
-#' public APIs and help topics. `peter$help("gptr")` lists the functions and topics;
+#' Inside agent R code, `peter$search("provider setup")` searches callable members, skills, tools
+#' and gptr's public APIs and help topics; API rows follow the members, skills and tools it finds
+#' and fill the rows they leave free. `peter$help("gptr")` lists the functions and topics;
 #' `peter$help("gptr::gptr_mcp_add")` reads installed help. Add `source = TRUE` for bounded
 #' function-definition text, without executing it. Private source requires an explicit name
 #' such as `peter$help("gptr:::member_help", source = TRUE)`; private functions are not supported
@@ -81,7 +83,9 @@
 #'       prompt = NULL, envir = parent.frame(), background = FALSE,
 #'       budget = NULL, replay = NULL, .opts = list(), .run = TRUE,
 #'       .stdin = FALSE)
-#' @param ... A session to continue, the prompt, and context objects.
+#' @param ... A session to continue, the prompt, and context objects. A decision model reads a
+#'   named object under its name (`text = x`) and any other as `input`, so its answers and cache
+#'   entries never depend on how a variable is named or subset.
 #' @param model A model name (`sonnet`, `"anthropic/claude-sonnet-5-5"`), a provider or router spec
 #'   such as [gptr_fake_provider()], or `NULL` for the configured default. A call made by the
 #'   agent's own R code, and a team or fan-out it starts, uses the running session's model instead.
@@ -106,10 +110,14 @@
 #'   Each child gets its element alone as `.x`, a named list of one attached as `.x[["A"]]`;
 #'   `.opts = list(context = "none")`, which would drop it, is refused. A child that succeeds
 #'   keeps only the values it returned with [gptr_return()], so they must be self-contained.
-#' @param choices,levels,threshold System 1 answer shape, for a decision model (`jev`,
-#'   `"ollama/clef-flash"`; after `gptr_config(system1 = "emulate:<ref>")`, `model = jev` runs it
-#'   through a chat model). A conversational model refuses them, `min_confidence` and `uncertain`
-#'   (`threshold` only when it is not 0.5) rather than ignore them. `choices` given as a factor, or
+#' @param choices,levels,threshold System 1 answer shape, for a decision model (`"jev"`,
+#'   `"ollama/clef-flash"`; after `gptr_config(system1 = "emulate:<ref>")`, `model = "jev"` runs
+#'   it through a chat model). The default is a logical `gptr_decision`, TRUE when P(yes) is at
+#'   least `threshold`; `choices` give a `gptr_choice` of labels; ordered `levels` give a
+#'   `gptr_score`, the expected 0-based level (0 to k - 1), whose level probabilities
+#'   `gptr_prob(x, "probabilities")` returns. A conversational model refuses them,
+#'   `min_confidence` and `uncertain` (`threshold` only when it is not 0.5) rather than ignore
+#'   them. `choices` given as a factor, or
 #'   `.opts = list(output = "factor")`, return a plain factor with those levels and no
 #'   probabilities or confidence.
 #' @param min_confidence A number from 0 to 1. An answer whose confidence is below it is
@@ -278,7 +286,7 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
                "noninteractive", what = "console", questions = character())
   }
   labels = dot_labels(exprs, nms)
-  items = gateway_context_items(sel$context, kinds, sites, labels, facts, addrs)
+  items = gateway_context_items(sel$context, kinds, sites, labels, facts, addrs, nms)
   call = call_new(prompt = prompt_text, template = template, interp = interp, session = target,
                   context = items, values = values,
                   envir = unmask_env(if (env_given) envir else caller),
@@ -1193,7 +1201,7 @@ sdk_work = function(runs, until, timeout) {
   force(until)
   force(timeout)
   if (is.null(until)) return(function() run_wait(runs, timeout = timeout))
-  allow = if (is.null(run_current())) NULL else vapply(runs, function(r) r$id, "")
+  allow = if (!is.null(run_current()) || reactor_nested()) vapply(runs, function(r) r$id, "")
   function() reactor_pump(until = until, slice_ms = 100L, allow_runs = allow, timeout = timeout)
 }
 
@@ -1341,14 +1349,19 @@ route_refuse_s1_args = function(call) {
             threshold = !is.null(a$threshold) && !identical(a$threshold, 0.5),
             min_confidence = !is.null(a$min_confidence), uncertain = !is.null(a$uncertain))
   if (!any(given)) return(invisible(TRUE))
+  # a model reference nothing resolves is named as unknown, with its suggestions (D-322)
+  m = call$ids$model
+  if (is.character(m) && is.na(gateway_model_type(m))) {
+    run_model_resolve(m, if (!is.null(call$session)) session_data(call$session)$id)
+  }
   arg = names(given)[given][1L]
   label = gateway_model_label(call$ids$model)
   who = if (is.na(label)) "this call" else paste("model", label)
   gptr_abort(c(paste0("`", arg, "` shapes a System 1 decision; ", who, " is conversational, so ",
                       "peter() would start a conversation and ignore it."),
-               paste0("Use a decision model (model = jev or \"ollama/clef-flash\"; after ",
-                      "gptr_config(system1 = \"emulate:<ref>\"), model = jev runs it through a ",
-                      "chat model), or drop the argument.")),
+               paste0("Use a decision model (model = \"jev\" or \"ollama/clef-flash\"; after ",
+                      "gptr_config(system1 = \"emulate:<ref>\"), model = \"jev\" runs it ",
+                      "through a chat model), or drop the argument.")),
              "invalid_argument", arg = arg, expected = "a decision (classifier) model")
 }
 

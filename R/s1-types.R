@@ -434,7 +434,7 @@ Summary.gptr_s1 = function(...) {
 
 #' Probabilities and confidence of System 1 answers
 #'
-#' System 1 calls (`peter(question, x, model = jev)`) return typed vectors: a `gptr_decision`
+#' System 1 calls (`peter(question, x, model = "jev")`) return typed vectors: a `gptr_decision`
 #' (logical), a `gptr_choice` (character) or a `gptr_score` (double, the expected 0-based level).
 #' They work in `if()`, `while()`, `ifelse()`, `table()`, `sum()` and comparisons like the bare
 #' vectors, and carry the model's probabilities as attributes. `gptr_prob()` reads them.
@@ -649,6 +649,10 @@ s1_preflight = function(model, provider, safety = NULL) {
 s1_prepare = function(ref, safety = NULL, replay = NULL) {
   model_prepare(ref, safety = safety, replay = replay)
 }
+
+#' Does Ollama serve this model (natively or through a provider at an Ollama endpoint)?
+#' @noRd
+s1_ollama_route = function(model, provider) catalog_ollama_route(model, provider)
 
 #' The configured System 1 reference, or NULL when none is usable (contract 7.5, IC-74)
 #' @noRd

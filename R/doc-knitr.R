@@ -9,25 +9,44 @@
 #' knit_print method for sessions: the answer as Markdown; for a turn that ran live in this
 #' process also the code it ran, so the first render is complete before the new agent chunk
 #' exists (its chunk runs from the next render on), fenced as the agent chunk is (a backtick line
-#' in the code never ends the fence). Redacted like the agent block (IC-74)
+#' in the code never ends the fence). Redacted like the agent block (IC-74). Blank lines around
+#' it keep it a Markdown block of its own, as knitr joins a chunk's outputs with nothing between
+#' (a plot the turn drew would start its paragraph). Nothing at all when there is nothing to show
+#' (a replayed session without its answer): Quarto wraps even an empty text in an output div
 #' @noRd
 knit_print.gptr_session = function(x, ...) {
   txt = x$text %||% NA_character_
   out = if (length(txt) && !all(is.na(txt))) paste(txt[!is.na(txt)], collapse = "\n\n") else ""
   code = doc_knit_code(x)
+  if (!nzchar(out) && !length(code)) return(invisible(NULL))
   if (length(code)) {
     fence = doc_rmd_fence("```", unlist(strsplit(code, "\n", fixed = TRUE)))
     out = c(out, "", paste0(fence, "r"), code, fence)
   }
-  knitr::asis_output(redact(paste(out, collapse = "\n"), "persist"))
+  knitr::asis_output(paste0("\n\n", redact(paste(out, collapse = "\n"), "persist"), "\n\n"))
 }
 
 #' knit_print method for System 1 vectors: the one-line summary of their document block,
-#' redacted as doc.s1_block redacts that block (free-text choice levels reach it; IC-74)
+#' redacted as doc.s1_block redacts that block (free-text choice levels reach it; IC-74), a
+#' Markdown block of its own as a session's is
 #' @noRd
 knit_print.gptr_s1 = function(x, ...) {
-  knitr::asis_output(paste0("`", redact(doc_s1_summary(x), "persist"), "`\n"))
+  knitr::asis_output(paste0("\n\n`", redact(doc_s1_summary(x), "persist"), "`\n\n"))
 }
+
+#' Notebook text of a System 1 vector: what print() shows (values with p or conf, the footer
+#' naming model, calibration and date) without styling, redacted as knit_print.gptr_s1 is; the
+#' HTML and Markdown displays keep it inert, so repr's bare-vector methods never drop them
+#' @noRd
+doc_s1_repr_text = function(x, ...) {
+  redact(paste(cli::ansi_strip(utils::capture.output(print(x))), collapse = "\n"), "persist")
+}
+
+#' @noRd
+doc_s1_repr_html = function(x, ...) doc_repr_pre(doc_s1_repr_text(x))
+
+#' @noRd
+doc_s1_repr_markdown = function(x, ...) doc_repr_fence(doc_s1_repr_text(x))
 
 #' Use the compact history printer before knitr delegates to a data-frame renderer
 #' @noRd
@@ -55,7 +74,8 @@ doc_knit_code = function(s) {
 }
 
 #' Skip the chunk with this label for the rest of the knit: a label hook (chaining any existing
-#' one) sets eval = FALSE for skipped labels; the document hook of the knit restores the hooks it
+#' one) sets eval = FALSE and include = FALSE for skipped labels, so the old code of a regenerated
+#' block neither runs nor shows in the output; the document hook of the knit restores the hooks it
 #' replaced, and so does an after.knit hook, which knitr runs on exit also when the knit fails
 #' (the document hook is then never reached, and knit() may have reset the document hook to its
 #' default already). Both hooks run in every knit() of the session, so they end the skip only in
@@ -74,7 +94,9 @@ doc_knitr_skip = function(label) {
   ours = function() doc_knit_depth() <= depth
   mine$label = function(options) {
     if (is.function(old$label)) options = old$label(options)
-    if (isTRUE(options$label %in% doc_state()$knitr_skip)) options$eval = FALSE
+    if (isTRUE(options$label %in% doc_state()$knitr_skip)) {
+      options[c("eval", "include")] = list(FALSE, FALSE)
+    }
     options
   }
   mine$document = function(x) {
@@ -130,3 +152,7 @@ on_load(s3_register("repr::repr_html", "gptr_session_summary", method = doc_hist
 on_load(s3_register("repr::repr_markdown", "gptr_session_summary",
                    method = doc_history_repr_markdown))
 on_load(s3_register("repr::repr_latex", "gptr_session_summary", method = doc_history_repr_latex))
+on_load(s3_register("repr::repr_text", "gptr_s1", method = doc_s1_repr_text))
+on_load(s3_register("repr::repr_html", "gptr_s1", method = doc_s1_repr_html))
+on_load(s3_register("repr::repr_markdown", "gptr_s1", method = doc_s1_repr_markdown))
+on_load(s3_register("repr::repr_latex", "gptr_s1", method = doc_history_repr_latex))

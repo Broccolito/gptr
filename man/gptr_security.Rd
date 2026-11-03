@@ -41,7 +41,9 @@ asking, and still asks before deleting protected files, files outside the projec
 project itself, moving the working directory out of the project, \code{rm(list = ls())},
 \verb{options(gptr.*)} and sending a secret over the network (see Secrets below); \code{plan} changes
 nothing, though a call it reads as read-only can still use the network or start a process:
-\code{gptr_models(refresh = TRUE)} downloads the model catalog, and \code{gptr_providers()} with
+\code{gptr_models(refresh = TRUE)} downloads the model catalog or, with \verb{provider =}, asks that
+provider for its models with its credential (starting the \code{claude} or \code{codex} tool for those),
+and \code{gptr_providers()} with
 \code{check = TRUE} or \code{check_login = TRUE} contacts the providers or starts the \code{claude} and
 \code{codex} status commands. In every mode
 \code{r} code that calls \code{q()}, \code{readline()} or another function that would end, pause or hang your R

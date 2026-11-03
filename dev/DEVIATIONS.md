@@ -4440,9 +4440,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   the served call's fragment or in the turn scan; an aborted run has no `turn_end`, so on a CLI
   route `agent_end` scans too, after builtin:cli has stopped the child (builtin:checkpoints loads
   after builtin:cli; review: a cancelled Codex turn's own edits were absorbed by the next sync,
-  files `0/0`). An untracked file is captured only while it is as the last walk saw it, so a child's
-  edit never becomes a pre-image (its row says no pre-image, and `/undo` does not claim to restore
-  it).
+  files `0/0`). A scanned target is captured only while it is as the last scan saw it (its hash,
+  or without one its size and mtime), so a child's edit of it does not become a pre-image (the
+  turn scan records it with the turn-start content); a target no scan observed gets its state
+  just before the served call (D-313).
 - Contract-visible: 04 IC-79 (served calls are checkpointed; contract edges `checkpoint_before`,
   `checkpoint_after`).
 - Tests: mcp-server, cli-claude, cli-codex, ckpt-files, ckpt-rewind (an aborted turn), arch-layers.
@@ -4641,8 +4642,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule: `gptr_risk(envir =)` reports "overwrites `x`" (level 2, 3 above `gptr.protect_size`) for a
   plain `=`/`<-` or a `for` variable evaluated in `envir` only when `x` is bound in `envir` itself,
   where R creates the binding; `<<-`, `assign()`, replacement calls (an environment changes by
-  reference) and an assignment inside a call that may evaluate it elsewhere (`local()`, `with()`,
-  `within()`, `evalq()` and the other unknown-effect calls of IC-31) still look up the enclosing
+  reference) and an assignment inside a call that may evaluate it elsewhere (`local(envir =)`,
+  `with()`, `within()`, `evalq()` and the other unknown-effect calls of IC-31; amended by D-346 for
+  one-argument `local()`) still look up the enclosing
   environments to the global one. A sub-agent overlay's `x = ...` over a caller's `x` is level 1
   (new object), as is one in plan mode's scratch overlay over the home (it runs there and is
   discarded).
@@ -5902,12 +5904,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
     read the ECHO flag when they start and then draw nothing typed, so the newline of Enter is
     written after the answer. Where R reads no terminal or stty fails (R.app, Windows, IRkernel,
     radian; RStudio, and Positron with rstudioapi installed, ask in their own dialog,
-    `rstudioapi::askForPassword()`, as before), one dim row above the chevron says once in the
-    session `This console shows the key as you type; gptr_env() loads keys from a
-    file instead.` R's history never held a `readline()` answer. Contract-visible: 04 section 15.10
-    IC-77. Tests: test-console-ui.R "a terminal reads a secret with its echo off, then restores it
-    (cheat-sheet review)", "a console that shows a secret as typed says so once (cheat-sheet
-    review)", "a terminal: gptr_login() reads a key without showing it (cheat-sheet review)".
+    `rstudioapi::askForPassword()`, as before), secret entry is refused before reading (#104; it
+    first said once that the console shows the key as typed), and the refusal names
+    `gptr_env(path)` or a remembered login made once in RStudio or terminal R on Unix (1.0.1 lane
+    B). R's history never held a `readline()` answer. Contract-visible: 04 section 15.10 IC-77.
+    Tests: test-console-ui.R "a terminal reads a secret with its echo off, then restores it
+    (cheat-sheet review)", "secret reads refuse consoles without hidden input before reading", "a
+    terminal: gptr_login() reads a key without showing it (cheat-sheet review)".
 - Cheat-sheet review (2026-10-23, console-1): the first-use setup menu adds
   `4  Cancel and return to R`, its default, so its hint reads
   `Choose a number; Enter = Cancel and return to R` and Enter cancels at once; before, it had no
@@ -5943,10 +5946,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
     (the drain, Task 2). Tests: test-console-typing.R "a question drains fd 0 before it reads: lines
     steer, a partial line is kept".
   - A secret read in Emacs' comint (M-x shell, ESS: `INSIDE_EMACS` names it) is no hidden read
-    (`tty_secret()` gives NULL), so the dim row says once that this console shows the key as typed:
-    comint's buffer shows the text and keeps it in its input ring whatever the tty's echo, while
-    gptr set `-echo` there and said nothing. Contract-visible: 04 section 15.10 IC-77. Tests:
-    test-console-ui.R "a console that shows a secret as typed says so once (cheat-sheet review)".
+    (`tty_secret()` gives NULL), so it is refused before reading, as on other consoles without
+    hidden input (#104): comint's buffer shows the text and keeps it in its input ring whatever the
+    tty's echo, while gptr set `-echo` there and said nothing. Contract-visible: 04 section 15.10
+    IC-77. Tests: test-console-ui.R "secret reads refuse consoles without hidden input before
+    reading".
   - The width the live row pads its status to (`status_w`) counts the lasting words only, not
     `keys wait` or `question waiting`, which go when `r` returns or the question is asked: one row
     with both kept every later draft of the run 20 columns from its status
@@ -9808,3 +9812,756 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   counts its group and shows active phases without hiding pending work", "the live row shows from
   the run's start, its clock from the prompt's Enter (#98)", "a prompt's live row shows from Enter,
   before its run starts; a refusal ends it (#98)"; tmux capture `prerun-row`.
+## D-310 - P16 Automatic file scans run in the R session (2026-11-02)
+- Rule (amends #98's record, progress/first-response-bounded-scans.md, "an owned R worker"): the
+  bounded scan (`ckpt_scan_run()`) runs in the R session, not in a supervised `Rscript` worker. It
+  keeps #98's limits and semantics: at most 2,000 inspected entries (`ckpt_entry_max`, also the
+  tracker's retention bound) and 256 captures within the byte limits; known paths first (a
+  readable parent proves one absent), then breadth first, source-like names first, with the
+  prune rules; at most `gptr.checkpoint_scan_timeout` seconds (2), checked between entries and
+  before each capture. An interrupt the person continues from (the pause menu's continue) ends the
+  scan too (reason "interrupted"); one that aborts keeps unwinding (no exiting handler, G3) and
+  leaves the tracker as it was. A scan keeps the records it completed.
+  `gptr.checkpoint_scan_budget` compares the scan's own time.
+- Why: every mutating call paid two R process launches (0.6-0.9 s each, more under load); the
+  deadline included start-up, so a busy machine reported "coverage incomplete (time limit)" and
+  lost file undo even in an empty project; killed workers left their R temp directories; the
+  worker loaded the installed gptr, not the loaded namespace; and its per-entry record files kept
+  the 2,000-entry limit out of reach. In the session a 2,000-entry scan takes about 0.5 s (path
+  classes are computed per directory in one call) and a small project's a few milliseconds.
+- Trade-off: a filesystem call that blocks (a hung network mount, a slow listing of one huge
+  directory) cannot be cut short in the session, as in 1.0.0; the timeout bounds the work between
+  such calls.
+- Removed: `ckpt_scan_main()`, the worker's spec and record files, `ckpt_scan_cleanup()`,
+  `ckpt_scan_reap()` and the pending-child guard, the `ckpt_scan` entry of `proc_rscript()`, and
+  test-ckpt-scan-lifecycle.R (its byte-cap and startup-path cases moved to test-ckpt-scan.R).
+- Contract-visible: 04 sections 3.1 (options row) and 7.16; 03 sections 3.2 (`ckpt-scan.R` row)
+  and 6.16 Files; `?gptr_options`; `?gptr_rewind` (its option list gains the timeout); vignette
+  teams-and-background (.Rmd.orig now holds the paragraph too).
+- Tests: test-ckpt-scan.R "the time budget stops a scan between entries and keeps what it
+  completed", "a zero budget scans nothing and invalid budgets are refused", "an interrupt the
+  person continues from stops the scan and keeps its records", "scans never capture protected
+  paths, startup files, links or FIFOs"; test-ckpt-files.R "a scan slower than
+  gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
+  progress/fixes-1.0.1/lane-A.md.
+
+## D-311 - P16 A sync's observations replace the tracker's (2026-11-02)
+- Rule (review of #98): a sync, the scan that brings the tracker up to date without recording (at
+  the first mutating call of a turn or call, and at a CLI child's start), replaces the tracker's
+  observations (rows, content hashes, mode bits, proven absences) with its own. A path it did not
+  reach has no pre-image and no proven absence from before it, so a later recording scan neither
+  restores an edit nor recreates a deletion made outside gptr between turns, and does not undo a
+  file the person recreated as "created". Recording scans keep the unvisited observations of the
+  turn's sync, as before. The first sync is the baseline (`gptr.checkpoint_track_file_max`).
+- Why: a bounded sync can stop before a known path; its old hash then served as the pre-image of
+  the next recording scan that reached the path, and rewinding that turn reverted the person's
+  own edit or deletion. 1.0.0's syncs were complete, so this was new in #98.
+- Trade-off: after a partial sync, a change a turn makes to a path the sync missed has no
+  automatic backup that turn (unpredicted writes only; predicted targets are backed up before the
+  call).
+- Contract-visible: 04 section 7.16; 03 section 6.16 Files.
+- Tests: test-ckpt-partial.R "a partial sync gives no pre-image to an edit or deletion made outside
+  gptr", "a file recreated outside gptr after a proven absence is not undone as created".
+  Evidence: progress/fixes-1.0.1/lane-A.md.
+
+## D-312 - P16 File coverage is partial only where a scan stopped early (2026-11-02)
+- Rule (review of #98): a files fragment's coverage is `"partial"` only when a scan of its interval
+  stopped early (time, entry limit, interrupt, an unreadable directory or an unavailable path). A
+  complete scan that hit a capture limit, a size limit or an unreadable file keeps coverage
+  complete; those files' later changes are rows without a pre-image, as in 1.0.0, and a
+  same-size, same-time edit of a file without a backup goes unseen, as in 1.0.0 (the
+  39b553a4 rule that made such scans partial is withdrawn).
+- Rule: the files checkpointer skips R code whose classified effects are only reads and object
+  writes (`ckpt_file_free()`: `gptr_risk()` categories within `read` and `object_write`; an
+  unlisted function, a session change, a file write or code without a risk is file-capable); the
+  objects checkpointer still records it. A per-turn scan at `agent_end` follows only a turn that
+  synced the tracker, which a file-capable call does; CLI routes scan every turn (IC-65).
+- Why: any project over 256 capturable files was capture-capped, and any over 2,000 entries
+  partial, so every rewind there warned `gptr_warning_rewind_partial`, put a `<rewind>` block in
+  the next request and made `/undo` ask "Undo anyway?", also for turns that only assigned objects
+  or only answered in text. `?gptr_rewind` promises that a full restore tells the model nothing.
+- Contract-visible: 04 section 7.16; 03 section 6.16 Files; `?gptr_rewind`.
+- Tests: test-ckpt-scan-integration.R "R-only and text-only turns rewind fully in capped and
+  partially scanned projects", "a complete scan with capped captures leaves undo coverage
+  complete", "a real unreadable file is listed without a backup until it can be read";
+  test-ckpt-partial.R "a complete scan that cannot back up a file keeps coverage and lists its
+  edits"; test-ckpt-rewind.R "R code that can write no file skips only the files checkpointer".
+  Evidence: progress/fixes-1.0.1/lane-A.md.
+
+## D-313 - P16 Peter's own writes to unobserved or unbacked targets are undone on every route (2026-11-02)
+- Rule (review of #98): a predicted target that no scan observed (outside the walk, or beyond a
+  partial inventory: not in the tracker's rows or proven absences) gets its state just before the
+  call as its explicit pre-image on every route, as API routes did. A target a scan observed gets
+  one on every route while it still holds what that scan saw (`ckpt_as_scanned()`): its content
+  hash, or, for a file the scan inventoried without a backup (past the capture limit or the
+  baseline size), its size and modification time, or its proven absence; else the turn's
+  recording scan, which holds the turn-start observation, records it. This withdraws #98's
+  content-hash-only rule for CLI routes (`sync = FALSE`; its record,
+  progress/first-response-bounded-scans.md, "Matching size and modification time alone do not
+  prove ...") and restores 1.0.0's (D-201). So `/undo` reverts Peter's own approved edit of an
+  unscanned or unbacked file and removes a file Peter created, and the report and the `<rewind>`
+  block name both.
+- Why: #98 marked such targets "?" on CLI routes and dropped their rows, so `/undo` on claude-cli
+  and codex left Peter's own edit and new file in place, named neither, and reported only "file
+  coverage"; the same prompt on an API route restored both. In a project of 257 to 2,000 entries
+  a complete scan backs up 256 files, so most served edits there had no pre-image.
+- Trade-off: a native CLI edit of an unscanned file earlier in the same turn is not undone (no
+  scan saw the original), as for any unscanned file; the row restores the content from just
+  before Peter's call. A native edit of a file without a backup that keeps its size and
+  modification time becomes the pre-image, as an unpredicted write's does on API routes (D-312,
+  as in 1.0.0); one that changes either is recorded by a recording scan without a pre-image.
+- Contract-visible: 04 sections 7.16, IC-65 and IC-79 (section 15, which also stops claiming a
+  full walk); 03 section 6.16 Files; D-201 edited in place.
+- Tests: test-ckpt-partial.R "a CLI-served write to a target no scan observed is undone to its
+  prior state", "a CLI-served write that creates an unobserved target is removed by undo", "a
+  CLI-served write outside the project is undone to its state before the call", "a CLI-served
+  write to a scanned file without a backup is undone while it is as seen"; test-ckpt-files.R "CLI
+  calls back up an unhashed target only while its size and mtime match the scan";
+  test-ckpt-scan-integration.R "real partial checkpoints preserve targeted writes and report
+  native coverage honestly", "a CLI-served write to a real scanned file past the capture limit is
+  undone". Evidence: progress/fixes-1.0.1/lane-A.md.
+
+## D-314 - P16 Checkpoint notices are console lines for the person (2026-11-02)
+- Rule (review and live tests of #98): the coverage notice reads "File undo covers part of <root>:
+  the automatic scan stopped early (<reason>), so changes to files it did not reach cannot be
+  undone. Files Peter's tools name are backed up before they change." It and the per-turn scan
+  notice (`ckpt_notice()`) are written once per project root and process through
+  `gptr_message_write()`, without a message condition, so no tool result records them (D-188's
+  out-of-scope path: a sub-agent's hook running inside the parent's `r` evaluation), and not at
+  all while knitting or in a Jupyter kernel; `gptr.quiet` silences them. The per-turn scan notice
+  is not shown after a scan that stopped early, which already told the person.
+- Why: the notice addressed the model ("Use ls/find/read ..."), blamed "native CLI edits" on
+  every route, reached the parent model's tool result from a CLI child's `agent_start` hook, and
+  filled rendered Quarto, R Markdown and notebook output.
+- Contract-visible: 04 sections 1.5 and 7.16.
+- Tests: test-ckpt-files.R "the coverage notice is a console line for the person, once per root",
+  "the coverage notice stays out of tool results, documents and notebooks", "a scan slower than
+  gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
+  progress/fixes-1.0.1/lane-A.md.
+
+## D-345 - Fixes 1.0.1 lane I Output lines reach the model whole (2026-11-02)
+- Rule (amends 04 `clean_terminal()` and `truncate_output()`, architecture `utils-text.R`):
+  `clean_terminal()` no longer cuts lines at 400 characters with ` ...[+N chars]`; it only removes
+  ANSI/OSC sequences and collapses `\r` progress. The cut happened before `truncate_output()`, so a
+  445-character answer of a sub-agent printed with `cat()` reached the parent cut, the out store
+  and spill file kept only the cut line, and the parent reported the answer as incomplete. The
+  same cut reached `peter$py()` and job output values, knitted engine output and attached files.
+  The token budget of each view is now the only bound: text within it (about 4000 tokens for `r`)
+  reaches the model as printed. When `truncate_output()` must cut, lines over 400 characters
+  continue as 400-character pieces first (split by code points, in time linear in the line,
+  non-ASCII included), so a long line cannot leave the 40% head or the 60% tail empty; the notice
+  counts those lines, and the out store and spill file hold the same lines, every character
+  included, so `peter$out(id, lines =)` matches the notice. The helper views cut as D-348 says.
+  No option. The token benchmark replays recorded results and is unchanged.
+- Contract-visible: 04 `clean_terminal()` and `truncate_output()` rows; architecture `utils-text.R`
+  row.
+- Tests: test-utils-text.R "a cut keeps lines over 400 characters as 400-character pieces",
+  "a cut splits a long non-ASCII line in linear time", "clean_terminal() drops ANSI and OSC
+  sequences, collapses progress, keeps long lines"; test-eval-format.R "a long line within the budget reaches the model whole". Evidence:
+  progress/fixes-1.0.1/lane-I.md.
+
+## D-346 - Fixes 1.0.1 lane I local()'s code binds plain names in its own environment (2026-11-02)
+- Rule (amends D-213 and 04 `gptr_risk()`): in the code of a one-argument `local()` that is base R's
+  (not bound by the code or in the session), a plain `=`/`<-` of a name and a `for` variable bind in
+  local()'s own environment, as R does. `gptr_risk()` no longer reports them as overwrites of the
+  caller's object or as `assigned`, `code_targets()` and the checkpointer no longer predict them,
+  and `eval_assign_targets()` leaves them out of the evaluation's `assigned`, so the result no
+  longer says `~ x modified` for an object the code only read. Formerly `local({ x = 5 })` with
+  `x` in the workspace read "overwrites `x`" (level 2, 3 above `gptr.protect_size`, 4 for a
+  harness) and reported `x` modified although it was unchanged. Unchanged: `<<-`, `assign()`,
+  `list2env()`, a replacement (an environment changes by reference), `:=` and `set*()` inside
+  local(), `local(expr, envir =)`, an assignment inside `eval()`, `evalq()`, `with()` or
+  `within()` within local()'s code, and a `local` the code or the session binds still reach the
+  caller's objects, in both walkers (`eval_assign_targets()` reads the code alone, so there a
+  `local` only the session binds reads as base R's; it can only miss a same-valued reassignment,
+  as `modified` comes from the environment diff). The guard still treats names local()'s code
+  binds as bound (`q = 1` there is not base `q`).
+- Contract-visible: 04 `gptr_risk()` (the lookup of overwrites); `?gptr_risk` (`envir`).
+- Tests: test-perm-classify.R "a plain assignment in local()'s code binds in local()'s own
+  environment (D-346)"; test-eval-guard.R "eval_assign_targets finds assignments, replacements,
+  assign(), := and set*()"; test-eval-core.R "an object local()'s code only reads is not reported
+  as modified (D-346)". Evidence: progress/fixes-1.0.1/lane-I.md.
+
+## D-347 - Fixes 1.0.1 lane I Reading the trust decision is level 0 (2026-11-02)
+- Rule (amends IC-53 item 3): `gptr_trust()`'s row in `risk-functions.csv` is level 0 `read`, and
+  `by_args()` adds level 4 `control` for any `trust` other than `NULL` (a value the code computes
+  included), as for `gptr_cache()`, `gptr_scrub()` and `gptr_jobs()`. A function value
+  (`lapply(dirs, gptr_trust)`) is control, since its arguments are unknown. Formerly every call was
+  level 4, so `print(gptr::gptr_trust("."))` asked a person even in `auto`, although the function
+  returns at once when `trust` is `NULL` and only the recording path calls
+  `session_control_check()`. `?gptr_security` already names only changes to gptr's configuration.
+  `gptr_config()` and `gptr_permissions()` with no arguments keep their level 4 rows (no report
+  asked for them; their recording paths are guarded at run time).
+- Contract-visible: 04 `gptr_trust()` and IC-53 item 3; `risk-functions.csv`.
+- Tests: test-perm-classify.R "gptr's own configuration is the control category, level 4 (IC-53,
+  IC-54)" (read forms level 0, write and computed forms 4); test-perm-gate.R "control actions need
+  a person in every mode, plan included (IC-53, IC-54)" (the read form runs in `auto`). Evidence:
+  progress/fixes-1.0.1/lane-I.md.
+
+## D-348 - Fixes 1.0.1 lane I A helper view that must cut shows the head of a long line (2026-11-02)
+- Rule (amends D-345, 04 section 9.4 and architecture `utils-text.R`): the views that show text they
+  did not store (`peter$sh()`, `peter$py()`, `peter$sql()` and job prints, `peter$out()` and
+  `peter$help()` values, an `@file` block) keep every line whole when the text fits their budget;
+  when it does not, `view_lines()` first shows each line over 400 characters as its first 400 and
+  ` ...[+N chars]` (the 1.0.0 marker), then the view cuts by lines as before. After D-345 such a
+  view left out a line larger than its budget, so `peter$sh()` of one 50,000-character line and
+  `tail-line` printed only the notice and `tail-line`, `print(peter$out(id))` of it said
+  `index the value`, and a one-line minified file was `not attached`. These views do not split a
+  line into pieces as `truncate_output()` does: their notices count the lines of the value or store
+  the model indexes, which they did not make, so a piece count would point `x[a:b]` and
+  `peter$out(id, lines =)` at the wrong lines. The value and the store keep the whole line. An
+  `@file` block cut this way is marked `truncated="true"`.
+- Contract-visible: 04 section 9.4 (prints); architecture `utils-text.R` row.
+- Tests: test-bridge-sh.R "a view that must cut shows a line over 400 characters as its head
+  (D-348)"; test-tool-namespace.R "print.gptr_text() prints head and tail within the budget with a
+  notice"; test-console-repl.R "a one-line @file over the budget attaches the head of its line
+  (D-348)". Evidence: progress/fixes-1.0.1/lane-I.md.
+
+## D-315 - 1.0.1 lane B A session login reaches worker and coaching children (2026-11-02)
+- Rule (review #104 and combined interactions; amends 03 section 6.13): a `scope = "session"`
+  credential lives only in the parent's vault state, so a worker sub-agent (chat and System 1
+  providers) or a coaching child could not resolve it and failed with `gptr_error_no_key`.
+  `child_env_provider_key()` now forwards it under the provider's first `auth` variable, through
+  `provider_credential()`, so the endpoint binding and the vault origin still apply; an edited
+  endpoint forwards nothing. The worker keeps the parent's order: a vault handle, then the session
+  login, then an environment variable (a set variable no longer wins over the session login). A remembered (`"user"` or
+  `"keyring"`) login is not forwarded: the child reads `auth.json` or the keyring itself, as before,
+  and no further secret enters its environment.
+- Contract-visible: 03 section 6.13 (worker credential forwarding).
+- Tests: test-auth-childenv.R "a session login reaches workers as its provider's key, bound to the
+  endpoint".
+
+## D-316 - 1.0.1 lane B Stdio slot consent ignores R's working directory and the environment (2026-11-02)
+- Rule (review #104 correctness and design): `mcp_stdio_binding()` hashed `getwd()` for a server
+  without a configured `cwd`, the expanded arguments and the whole expanded environment, the slot's
+  own `${VAR}` value included, so a remembered slot aborted with "changed since credential entry"
+  after `setwd()`, in an R session started elsewhere, or once any placeholder's variable was set or
+  rotated (a PAT under a name such as `GH_PAT`, a `DATABASE_URL`, a `--token ${X}` argument). The
+  binding is now the configuration as written (`mcp_cache_key()`: command, arguments, `env` and
+  `cwd` before expansion), its source file and the resolved executable's path and contents. What
+  placeholders expand to is the user's environment, trusted like the allowlisted variables
+  (`PATH`, `HOME`, proxies, certificate files) the server inherits anyway; binding a part of it gave
+  no protection those do not already bypass, and broke remembered logins. The executable's content
+  hash stays (the review proposed dropping it): an updated launcher is a changed executable, and
+  the error says to log in again. The login prompt names "R's working directory when the server
+  starts" when no `cwd` is configured.
+- Contract-visible: `?gptr_login` (`slot`); 04 `gptr_login()` paragraph; the MCP guide.
+- Tests: test-auth-setup.R "a remembered stdio slot survives setwd() and environment values, not a
+  config edit".
+
+## D-317 - 1.0.1 lane B Credential entry says what happened and where it went (2026-11-02)
+- Rule (live credential test): `/skip` and `/cancel` typed at the hidden prompt skip and cancel,
+  as in the questions; they were stored as the key. Ctrl-D in a terminal reads as blank
+  (interactive `readline()` returns `""` at EOF), so it skips; `?gptr_login` says so.
+- Rule (assisted setup): every outcome of `gptr_login()` is one `gptr_message_login` notice
+  (`key`, `status`), "Stored the credential for <key> in <store>." or "Skipped/Cancelled: no
+  credential was stored for <key>.", never the value; inside the `r` tool it is a message event
+  the model reads. The invisible return value is unchanged (no `"stored"` status on `TRUE`), and
+  `options(gptr.quiet = TRUE)` silences the notice like any other.
+- Rule (storage): the review and the notice name the one store used. A remembered login reuses an
+  existing keyring item for the record's own secret field (`refresh` for OAuth, else `key`); an
+  item for another field no longer leaves the new secret in `auth.json` beside it.
+- Rule (refusals): a UI without hidden input refuses before the OAuth paste fallback opens the
+  browser, and the refusal names `gptr_env(path)` or a remembered login made once in RStudio or
+  terminal R on Unix; `scope = "keyring"` without the package names `install.packages("keyring")`.
+  The hidden answer's own vault entry (`login-input`) is redaction-only (`active = FALSE`), so only
+  the destination-bound handle resolves.
+- Rule (rstudio UI): prompts keep their line feeds (`console_escape()`), and a `select()` title goes
+  in the dialog's message, its caption `gptr`.
+- Contract-visible: `?gptr_login`; 04 `gptr_login()` paragraph and section 11.8; the language-models
+  guide.
+- Tests: test-auth-setup.R "/skip and /cancel at the hidden prompt skip and cancel instead of
+  storing a key", "login says what it stored, skipped or cancelled, never the value", "an end of
+  input at a terminal's hidden prompt reads as blank and skips", "a remembered login names the one
+  store it uses and keeps an existing keyring item", "an OAuth paste fallback without hidden input
+  refuses before the browser opens", "keyring storage without the keyring package says how to
+  install it", "model-initiated login sends only safe status to requests, messages and history";
+  test-console-ui.R "the rstudio UI keeps the line feeds of gptr's own prompts and escapes the
+  rest". Evidence: progress/fixes-1.0.1/lane-B.md.
+
+## D-318 - 1.0.1 lane B MCP credential reads and logout names (2026-11-02)
+- Rule: a stdio start reads the credential store fail-soft (the session's credentials remain), as
+  `provider_credential()` does, so a malformed `auth.json` no longer stops every stdio server. An
+  HTTP request reads its record once (`oauth_access(rec = )`); every destination check stays.
+  `mcp_http_auth()` uses only the connection's setup-time binding; a missing one fails closed.
+  Logout resolves a name with login's rule (`mcp_server_resolve()`) and uses a cached connection's
+  name only once the configuration is gone: an R-style alias of a running server no longer wins
+  over the configured name it imitates.
+- Contract-visible: none.
+- Tests: test-auth-setup.R "a malformed credential store does not stop stdio servers; session slots
+  still work", "HTTP MCP path and authentication configuration edits invalidate login", "logout
+  resolves a configured name before a cached alias".
+
+## D-335 - FIX-1.0.1 lane F: `/mcp serve` and a resumed console use the chat's mode (2026-11-02)
+- Rule (serve mode; review #103, two medium reports): `/mcp serve` passes the chat's mode
+  (`repl_mode()`) straight to the server start, the internal `mcp_serve_open(envir, mode)`. It no
+  longer goes through `options(gptr.mode)`, which a session-scope `gptr_config(mode =)` overrides
+  (contract 11.2 ranks the session layer above options), so a plan chat could start a yolo server.
+  `gptr_mcp_serve()` keeps its signature and serves in the configured default; a running server
+  keeps its workspace and mode. Rejected: an exported `gptr_mcp_serve(mode =)`, a new argument for
+  one handoff.
+- Rule (resumed console; live #103, medium): an explicit `mode =` on a continued session
+  (`s |> peter(mode = "plan")`) switches the session when its console opens (`repl_state()` calls
+  `session_set_mode(source = "user")`, as `/mode` does), so the banner, the prompt, `/status` and
+  `/mcp serve` use it before the first prompt. Leaving the console without a prompt keeps the new
+  mode, as `/mode` would. An inherited mode leaves the session's own. The switch leaves the yolo
+  notice to the front end (`session_set_mode(notice = FALSE)`): the console says it after its
+  banner, as for a new yolo console, and the jsonl front end on stderr when it opens.
+- Contract-visible: 04 section 15.5 IC-57 (the mode is passed directly).
+- Tests: test-mcp-waits.R "MCP serving hands the chat's workspace and mode to R, never a looser
+  session mode" (replaces the test that mocked `ns_fun()` and set the mode as an option; it also
+  covers reuse of a running server and a console with no session yet); test-console-repl.R "an
+  explicit mode = on a continued session applies when its console opens", "a continued console
+  opened with mode = "yolo" says so after its banner"; test-console-jsonl.R "a jsonl frontend
+  continued with mode = "yolo" gives the yolo notice on stderr".
+
+## D-336 - FIX-1.0.1 lane F: MCP client snippets are redacted in every print path (2026-11-02)
+- Rule (live, high): IRkernel showed `h$config` and each snippet as text/html, text/markdown and
+  text/latex, which repr builds from the raw value, so the bearer token reached the screen and the
+  saved notebook. Snippets now return `NULL` from `repr_html`, `repr_markdown` and `repr_latex`
+  (registered when repr loads), so Jupyter shows a snippet only as the redacted text/plain of
+  `print()`. repr's list method returns `NULL` when an element does, so `$config` is covered too.
+  `format()` gives the redacted text that `print()` shows, and `str()` shows the redacted value.
+  knitr and Quarto print through `print()`.
+- Rule (verification of the fix, low): the codex `$env` is a snippet too, a named character vector
+  that processx and withr still take as the child's environment (`c()` and `[[` give plain
+  values), and `$config` has class `c("gptr_mcp_config", "list")` with `format()` and `print()`
+  methods. `format()` of a list unlists each element, which dropped the snippet class. Printing,
+  formatting, `str()`, knitr and Jupyter's repr of `$config`, of a snippet and of `$env` now all
+  redact.
+- Residual: by contract the token stays in the snippet values, since `as.character()` is the paste
+  path. Code that reads raw values (`as.character()`, `c()`, `unlist()`, `toString()`, `dput()`,
+  an IDE's variable pane) shows it. Rejected: storing only redacted text and restoring the token
+  in `as.character()`, `$` and `[[` methods, which changes `$env` and adds a method for every
+  accessor.
+- Contract-visible: `?gptr_mcp_serve` (snippets are redacted in notebooks and documents too); 04
+  section 5.11 (`config` is a `gptr_mcp_config`).
+- Tests: test-mcp-server.R "snippets keep the token out of format(), str(), knitr and Jupyter's
+  rich output" (the repr part runs where repr is installed; it failed for text/html, text/markdown
+  and text/latex before the change, and for `format()` of `$config` and every path of `$env`
+  before the follow-up).
+
+## D-337 - FIX-1.0.1 lane F: when the MCP server answers, and where its notices go (2026-11-02)
+- Rule (live and review #103, one medium and two low reports): serving pauses at Peter's own prompt
+  in every console, not only in R.app, because every non-piped console reads with `readline()`.
+  Rscript, knitr, Quarto and a Jupyter kernel have no idle prompt, so a request waits for the next
+  gptr wait (none comes between Jupyter cells) and a client may time out. `?gptr_mcp_serve`, both
+  vignettes and IC-57 say so. A new server started where `interactive()` is `FALSE` says so in one
+  notice. `interactive()` was chosen over a list of front ends: IRkernel runs R with `-e`, and a
+  document rendered from an interactive session gets no notice, since R is idle again afterwards.
+- Rule (live #103, low): a refusal notice at R's idle prompt starts a row of its own instead of
+  continuing the prompt row. Background notices already did this; both now use one helper,
+  `message_row()`. Not done: redrawing the prompt (readline owns that row, and writing
+  `getOption("prompt")` would desynchronise its display, so background notices do not either),
+  dimming it (a refusal asks the person to act, unlike the dim status line a settled background
+  session leaves) and naming a suggested rule (beyond the defect; the client's result keeps its
+  generic text).
+- Rule (review #103, low): the cheat sheet's serve row says to keep R idle and names `/mcp serve`.
+  Its slash-command row stays `/skills /mcp`: a wider first column wrapped page 1 past its end. The
+  architecture's command list names `/mcp [serve]`.
+- Contract-visible: 04 section 15.5 IC-57; 03 section 6.17; `?gptr_mcp_serve`; mcp and
+  interactive-console vignettes; the cheat sheet and its PDF.
+- Tests: test-mcp-server.R "a server started where R has no idle prompt says when it answers" (it
+  mocks `gptr_is_interactive()`, which the server reads, so it also holds in an interactive R), "an
+  idle refusal's notice starts a row of its own below R's prompt"; test-agent-background.R "a notice
+  at an idle tick starts a row of its own below R's prompt" (unchanged, now through the helper).
+
+## D-338 - FIX-1.0.1 lane F: child waits wake promptly; one test of a nested pump (2026-11-02)
+- Rule (review and live #103, three low reports): `proc_run()` pumps in 20 ms slices. The output
+  cap, the timeout and the echo are still checked every 200 ms. A child writing to files is no wake
+  source, so the 200 ms slice made every top-level child wait last at least 200 ms, and a served
+  request during a wait waited up to one slice per message. Rejected: waking on the child's processx
+  poll connection, which adds a pump argument and leaves HTTP requests waiting a slice.
+- Rule (review #103, low): `proc_run(merge = TRUE)` sends stderr into the stdout file and returns
+  `stderr = ""`; `bridge_run()`, a copy of the wait loop, is gone. D-298's mention of it is history.
+- Rule (review #103, two low reports): `reactor_nested()` (a pump on the stack or a served tool
+  executing) is the one test of nesting. It decides `reactor_pump()`'s default `allow_runs`, and the
+  ids that `run_wait()`, `sdk_work()` and `subagent_schedule()` pass, which keyed on pump depth or
+  `run_current()` alone, and whether `oauth_redirect_setup()` falls back to a paste prompt (it kept
+  an inline copy of the test). A nested `peter()` or `gptr_wait()` inside an `r` call served at
+  R's idle prompt therefore runs only its own runs' tools. `s1_pump()` keeps only the default.
+- Not done: `kill_all()`'s process-tree sweep after each child (about 150 ms at load 20) predates
+  #103 and keeps orphaned grandchildren from surviving.
+- Contract-visible: 04 sections 7.4 (`proc_run()`'s `merge` and the 20 ms exit wake) and 15.5
+  IC-57.
+- Tests: test-proc-spawn.R "a child's exit ends a wait outside a pump within a short slice" (0.204 s
+  after the spawn before the change; its `proc_run()` child sleeps 50 ms, since one that exits
+  before the first check passed with the 200 ms slice), "proc_run(merge = TRUE) sends stderr into
+  the stdout file";
+  test-mcp-waits.R "a nested peter() inside an idle served tool runs no sibling R tool".
+
+## D-339 - FIX-1.0.1 lane F: findings left to other lanes or deferred (2026-11-02)
+- Rule (live, low; `peter$search` ranking): left open for a follow-up on top of lane E. Lane E
+  ranks `api` documents after the other kinds (D-330) and adds no name rule, so on its branch
+  `member_search("mcp")` still ranks `gptr_mcp_remove`, `gptr_trust`, `gptr_mcp_add`,
+  `gptr_logout` and `gptr_login` ahead of `gptr_mcp`, and `"register provider"` misses
+  `gptr_provider`. The fix the finding gives (order hits by the share of the query's tokens in the
+  hit's name, then by BM25) edits the lines lane E rewrote, so making it here would conflict.
+- Rule (live, low; long tool output in the console): IC-82 and D-245's visual review say the margin
+  shows each printed line. Capping it is a console design decision for the maintainer, not a small
+  fix.
+- Rule (live, low; checkpoint notice reason): lane A replaced the scan worker and fixed the
+  misleading time-limit notice (D-310 to D-314).
+- Rule (review #103, low; test coverage): the handoff, reuse, session-scope mode, nested-run and
+  child-exit cases are tested (D-335, D-338). The `peter$bg()` workaround for a child that calls
+  this R's server is documented but not tested, since the test needs a background run whose child
+  is an MCP client of the same process.
+- Tests: none (no code change).
+
+## D-325 - 1.0.1 lane D CLI and callback catalogs are listed only on explicit refresh (2026-11-02)
+- Rule: a provider's `discover()` callback, which includes the `claude` and `codex` CLI catalogs,
+  runs only on `gptr_models(provider =, refresh = TRUE)`, after consent. Before use,
+  `catalog_inventory()` runs only the native model-list APIs, which are bounded to four seconds.
+  Formerly the first `claude-cli` or `codex` run every five minutes spawned the CLI to list its
+  models and waited for up to 30 s (33 s for Codex) before the request. A hang was then cached as
+  a failed listing. The before-use listing gained nothing for a CLI run, because the model is
+  resolved before the run and `codex/default` keeps the shipped list (ff0be9d5). Amends #106's
+  contract text (04 sections 6.2 `gptr_models()`, 7.20 and 10.2 `discover`).
+- Rule: `pcli_claude_catalog()` polls without blocking and waits through `reactor_pump()`, as
+  `proc_run()` does, so an explicit refresh keeps MCP replies, timers and other sessions live.
+  The 30 s limit stays.
+- Contract-visible: `?gptr_models`; `vignette("language-models")`.
+- Tests: test-cli-discovery.R ("the Claude catalog waits through the reactor and CLI catalogs run
+  only on refresh").
+
+## D-326 - 1.0.1 lane D Claude CLI discovery registers full ids, never selection aliases (2026-11-02)
+- Rule: `pcli_claude_models()` gives each initialize selection the first `claude-` id among its
+  `value` and `resolvedModel`, and skips a selection that has none. An id taken from
+  `resolvedModel` carries no display name, because the alias's name (`Default (recommended)`)
+  would replace the catalog's name for that model. Formerly every `value` was registered, so
+  `claude-cli/sonnet` and `claude-cli/default` became catalog ids passed as `--model sonnet`.
+  That broke the full-id rule (03 section 8.4, 04 sections 8.5 and 11.10), and the backend of a
+  recorded ref changed whenever Claude moved the alias. The shipped full-id rows were also listed
+  `unlisted` next to an `advertised` alias row. #106's sentence "Claude selection aliases come
+  from `value`" (04 section 7.20) is replaced. The IC-19 declared-alias precedence of
+  `model_resolve()` stays.
+- Rule: in `gptr_models()`, the `default` row of `claude-cli` and `codex` takes the availability of
+  the full id it runs (`pcli_default_model()`), since no CLI lists `default`. Formerly that row
+  read `unlisted` after a successful refresh. Amends 04 section 6.2 and `?gptr_models`.
+- Tests: test-cli-discovery.R ("Claude discovery uses only initialize and keeps full ids, never
+  selection aliases"; "a CLI route's default row is advertised when the full id it runs is").
+
+## D-327 - 1.0.1 lane D Provider listings in the network texts; `gptr_models()` stays level 0 (2026-11-02)
+- Rule: `?gptr_egress` ("Other network use") and `?gptr_security` (plan mode) say that a
+  provider's model list is asked for after the egress acknowledgment: on
+  `gptr_models(provider =, refresh = TRUE)`, which for `claude` and `codex` starts the tool, and
+  before the first request to a provider with a native list API (D-325). Formerly they said gptr
+  contacts nothing else on its own.
+- Rule (amends D-300): `gptr_models()` stays level 0 in `risk-functions.csv`. With `provider =`
+  it now sends that provider's configured credential, so D-300's reason "no key is sent" no
+  longer holds. The new reason: the listing is gated by the same egress acknowledgment as a
+  prompt, carries no session context, and only refreshes gptr's discovery layer.
+- Rule: the egress question of a listing (`context = "listing"`) says that no prompt is sent and
+  that the recorded answer also covers prompts with automatic context. The acknowledgment is one
+  per provider.
+- Contract-visible: `?gptr_egress`, `?gptr_security`.
+- Tests: test-provider-model-discovery.R ("the egress question of a listing says no prompt is
+  sent and what consent covers").
+
+## D-328 - 1.0.1 lane D The `gptr_runtime` note is a P06 rule and shows in `$history` (2026-11-02)
+- Rule: the `gptr_runtime` operator note (#106) stays in the path and in `$messages`, because it
+  is part of what the model is sent. `session_history()` previews and estimates a message
+  without text blocks by its blocks' text. Formerly the note showed as a blank `operator` row of
+  0 tokens in `$history`, `summary()` and `print()`, and so did context-only `agent_report`
+  messages.
+- Rule (contract placement): the note's rule moves from 04 section 7.20 (CLI providers) to
+  section 7.6 (`agent-run.R`), since `run_build()` appends it for every provider, and
+  `gptr_runtime` joins the context kinds of section 4.1.1.
+- Tests: test-session-history-display.R ("a context-only message previews and estimates its
+  context text").
+
+## D-340 - v1.0.1 lane G A Jupyter client that takes no input gets no question (2026-11-02)
+- Rule (headless notebooks; live findings disc, start, docs): `gptr_can_prompt()` counts an
+  IRkernel as able to ask only when its current execute request does not say
+  `allow_stdin = false`, the flag nbconvert, papermill and Quarto's jupyter engine send. IRkernel
+  1.3.2 sends an input request whatever the flag says and waits forever, so record consent,
+  project trust, approvals and every other question hung the cell. The flag is read from the
+  executor that IRkernel installs as `base::readline()`; only an explicit false says no, so a
+  missing request or another kernel keeps today's behaviour. The first time it says no, one
+  notice tells that each question takes its unattended answer (recording only with consent given
+  beforehand, as `gptr_doc()` gives it; untrusted project resources not loaded; approvals refused).
+- Contract-visible: 04 section 3 (`jupyter.in_kernel` row), 7.1 (`gptr_can_prompt()` row) and 15.2
+  IC-43; 03 section 6 (UI backends); vignette("script-as-history").
+- Tests: test-utils-options.R "a Jupyter request with allow_stdin = false asks nothing, said once
+  (IC-43)". Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-341 - v1.0.1 lane G A kernel records into the bound notebook, never a look-alike (2026-11-02)
+- Rule (notebook site; live findings disc, docs): without a `JPY_SESSION_NAME` that names a file
+  (nbconvert, papermill, VS Code), `doc_site_jupyter()` takes the `gptr_doc()` binding when that
+  notebook holds the call, else the one notebook in the working directory that does. When several
+  do (JupyterLab's `-Copy1`, an `nbconvert --output` notebook), the notebook the kernel runs is
+  unknown: one notice per folder names them and says to call `gptr_doc()`, and the call goes the
+  nested path (no site path: neither recorded nor replayed, and no console turn). Before, the
+  first match by file name won, so a copy that sorts first took the blocks or failed the replay.
+  Every notebook is now looked at, so one whose bytes lack an ASCII word of the call's strings
+  (which its cell holds as written) is skipped before it is decoded or parsed: a folder of large
+  notebooks costs about one read each, not one JSON parse each.
+- Contract-visible: 03 section 6.9 (locate precedence); `?gptr_doc` (unchanged: a binding already
+  names the document).
+- Tests: test-doc-locate.R "a kernel without JPY_SESSION_NAME picks the bound notebook, else the
+  one match". Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-342 - v1.0.1 lane G R Markdown and Quarto console transcripts replay (2026-11-02)
+- Rule (console into .Rmd/.qmd; live finding docs): a console target in R Markdown or Quarto
+  opens with a chunk holding `library(gptr)` (`doc_transcript_preamble()`), the rule .R
+  transcripts already had, and takes each direct R line, slash command and rewind note as an R
+  chunk of those lines (fence lengthened past any backtick line in them). A direct R line's `#>`
+  output is left out there, as agent chunks leave theirs: rendering prints it. Before, the first
+  turn wrote a bare `s_<id> = peter(...)` chunk and every other console line was dropped, so the
+  document did not render (`could not find function "peter"`) and a turn using a `!` object
+  failed. The `#~` switching of direct R lines after an undo stays `.R`-only (a line using an
+  undone object then fails on render, as it would at the console). A document whose last chunk
+  is unterminated takes no such chunk (knitr would read it as that chunk's body): a notice says
+  so once, as for a block there.
+- Contract-visible: 04 section 15.3 (the transcript paragraph of IC-49); vignette
+  ("script-as-history").
+- Tests: test-doc-replay.R "an R Markdown transcript loads gptr and keeps direct R lines as chunks
+  that knit"; test-doc-io.R "transcript lines are appended raw to an .R transcript, as a chunk to
+  Rmd and qmd". Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-343 - v1.0.1 lane G A calling chunk that uses the agent's objects early is told so (2026-11-02)
+- Rule (re-render; live finding local): in R Markdown, Quarto and notebooks a block's code stays
+  in its own chunk or cell after the calling one, and replay stays as IC-46 has it: it rebuilds
+  the session and never runs the recorded code, which runs as document code. So the lines after
+  `peter()` in the calling chunk see the agent's objects on the first render (the live run made
+  them) but not on a re-render. gptr says so once per block, when the block is recorded (in the
+  first report) and when it replays (just before the error), naming the objects: those of the
+  `created=` key and the names the block's top-level code assigns that the rest of the chunk or
+  cell uses. While knitting, the replay's notice also goes to stderr: knitr drops the messages of
+  a chunk that fails (`rmarkdown::render()` and Quarto default to `error = FALSE`), so the
+  report would never show it. Not taken: running the recorded code at the call and skipping its chunk (knitr only:
+  a notebook cannot skip a later cell, so the code would run twice there; it would also move the
+  block's plots and output and override a chunk the person turned off).
+- Contract-visible: 04 section 15.3 IC-46 (Used early); `?gptr_doc`; vignette
+  ("script-as-history").
+- Tests: test-doc-knitr.R "a calling chunk that uses the block's objects after the call is told
+  so, once" (also with `error = FALSE`). Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-330 - Lane E `peter$search()` ranks api documents after the members, tools and skills (2026-11-02)
+- Rule (review #100; regression from 1.0.0): the roughly 106 `api` documents (`gptr::name`, one per
+  export and Rd alias) share generic words such as file, code and session, and in one BM25 pool they
+  pushed callable members, skills and deferred tools out of the default 8 rows ("read file" lost
+  write, edit, grep and find; "run code" lost sh, sql and script). `member_search()` now indexes the
+  `api` documents apart from every other kind: the other kinds rank as they did in 1.0.0, and `api`
+  rows fill only the slots they leave free. A query only the API answers (`login credentials`)
+  still returns api rows, and `peter$help("gptr")` lists the whole API whatever a search showed.
+- Rule (review #100): the api documents are ordered by bytes (`sort(method = "radix")`), since
+  equal scores keep document order and every S3 alias of a page has the same text, so the rows
+  returned differed between the C and a UTF-8 collation; `peter$help("gptr::", source = TRUE)`
+  answers "No function found" instead of a base error; `ns_gptr_exports()` reads NAMESPACE for an
+  installed package and a source tree alike, and one `ns_rd_aliases()` serves search and help.
+- Contract-visible: 04 section 9.4 (`search`).
+- Tests: test-tool-namespace.R "peter$search() lists api documents only after the members, tools and
+  skills it found"; the 1.0.0 assertion that a skill ranks first for "shiny apps" is restored.
+
+## D-331 - Lane E Plugin resolution: a bare name falls through, an installed Claude plugin always resolves (2026-11-02)
+- Rule (review #101; regression from 1.0.0): only a name that contains `/` or `\`, or starts with `.`
+  or `~`, is a path that must be a plugin directory (P17, contract 7.17), and "This path is not a
+  plugin directory" ends resolution for such names only. A bare name that happens to match a
+  folder of the working directory (`docs/`, or a package author's source folder) still falls
+  through to `.gptr/plugins/<name>/`, installed packages and installed Claude Code plugins, as in
+  1.0.0; 1.0.1 had made the same-named folder end resolution. The marketplace explanation is chosen
+  last: a path or a bare name whose folder is a marketplace root gets it when nothing else resolves
+  the name, so `plugins = "my-marketplace-clone"` run from its parent still learns why.
+- Rule (review #101; D-088): the marketplace-only exclusion of `plugin_from_dir()` applies only when
+  no `kind` is given, so "a given `kind` always resolves" holds again: an installed Claude Code
+  plugin whose install root holds only `.claude-plugin/marketplace.json` (a `strict: false` entry
+  with `source: "./"`) is listed and resolves by name as in 1.0.0, and `plugin_enable()` reports an
+  empty bundle if nothing is usable. A path to a marketplace root is still refused. The marketplace
+  message ends "and name that path in `plugins`", which fits both `peter(plugins =)` and the
+  setting.
+- Contract-visible: 04 section 11.12, amended in place.
+- Tests: test-ext-plugins.R "a bare plugin name is not blocked by a same-named folder in the working
+  directory" (also with a same-named marketplace clone), "an installed Claude plugin whose install
+  root is a marketplace resolves by its name", and the marketplace-root test, which now also covers
+  `.mcp.json` and `skills/`.
+
+## D-332 - Lane E A configured plugin entry that fails is recorded once, with its path (2026-11-02)
+- Rule (review #101; live finding): `gptr_plugins()` and the session-start sync (`plugins_sync()`,
+  run by the skills, prompts and agents `session_start` hooks, so three times at every top-level
+  start) wrote the same failure in two forms: the listing once, with the entry named, the sync
+  three times and nameless, so a marketplace root in the `plugins` setting added three or four rows
+  per start and the log (1,000 rows) lost older diagnostics within about 300 starts. Both call one
+  function, `plugin_entry_failed()`, which records `<entry>: <message>` unless that row is already
+  in `gptr_registry(diagnostics = TRUE)`. No console warning is added: an unresolved configured entry
+  stays a diagnostic, as contract 10.8 has it, and `gptr_plugins()` shows the footer (a `/plugins`
+  command was never specified, `03` section 6.17).
+- Rule (review #101): `gptr_plugins()` no longer counts a configured extension entry (an `.R` file or
+  a named extension) as a skipped plugin, since activation enables it through `extension_resolve()`
+  before `plugin_resolve()`.
+- Contract-visible: 04 section 11.12 (unchanged).
+- Tests: test-ext-plugins.R "a configured marketplace path is recorded once, with its path, at every
+  start".
+
+## D-333 - Lane E The control exports state the permission rule once, in one wording (2026-11-02)
+- Rule (review #102): `gptr_steer()`, `gptr_cancel()`, `gptr_on()`, `gptr_tailor()`, `gptr_resume()`,
+  `gptr_config()` and `gptr_permissions()` said, in three wordings, that a call from model code
+  "requires human approval" (for steer, cancel and on "targeting another session"). That is the
+  second line (`session_control_check()`), which spares the run's own session. The rule a user meets
+  is the first: every statically flagged `control` call asks in every mode but `yolo`, whichever
+  session it targets, and `yolo` runs it without asking (`?gptr_security`). All seven pages now say
+  "From model code during a run, `<fn>()` needs an allowing permission decision (a person's, in every
+  mode but `yolo`; see gptr_security); otherwise it signals `gptr_error_permission`." The other
+  control exports (`gptr_trust()`, `gptr_fork()`, `gptr_init()`, `gptr_doc()`, `gptr_env()`,
+  `gptr_login()`, `gptr_logout()`, `gptr_mcp_add()`, `gptr_mcp_remove()`) stay as they are: the
+  sentence is on the pages that named the rule, and `?gptr_security` states it for all of them.
+- Rule (review #102): `?gptr_mcp_add` says that a server with `"direct"` exposure (also through the
+  setting `mcp.exposure`) is connected when a session starts unless its tool list is cached;
+  `?gptr_backend` says that `gptr_check()` probes `start()` with a minimal specification and calls
+  `cancel(handle)` on its probe handle, while the scheduler uses `handle$cancel()`; `?gptr_adapter`
+  lists `sign` and the header-piece form `list("Bearer ", opts$credential)`; `?gptr_env` again says
+  that it never prints, logs or returns a value.
+- Contract-visible: none (no code change).
+- Tests: none (text only); `isolated-check.R document` shows no further change.
+
+## D-334 - Lane E The r tool description points gptr's own setup at discovery; token baselines re-measured (2026-11-02)
+- Rule (live finding on the Codex route): asked to "set up an MCP server for this project", a model
+  edited `.codex/config.toml`, because nothing it saw said that MCP servers, skills and settings for
+  the project are gptr's (`gptr_mcp_add()`, `gptr_init()`, `.gptr/mcp.json`); `peter$search("mcp")`
+  was run only after the user corrected it. The sentence the `r` description carries since #100,
+  "For harness APIs, ...", now reads "To set up MCP servers, skills or settings in gptr itself, or
+  find its APIs, use `peter$search("words")` and `peter$help("gptr")` inside r; ...". It is one rule
+  for every preset and route, costs 13 o200k tokens more (55 in all, 42 of them since #100), and
+  names no function, so the minimal preset still teaches discovery without loading the API.
+- Rule (review #100, baselines): the measured totals move to 1,317 / 2,502 / 2,979 / 3,122 (minimal,
+  standard core, all, interactive) and the golden transcripts' prefixes by 13 (the others by up to
+  21 more, the drift of earlier merges); the `estimate` block, which had drifted to 3.5% above, is
+  re-measured at 1,713 / 2,675 / 3,177 / 3,385, so the 2% and 5% gates bind again. Architecture 7.1,
+  7.2 and 12.1 and contract 9.2 and the IC-68 fixture row state the new figures (each was 42 below
+  the measurement). A later change to a prompt text re-measures with
+  `Rscript --vanilla dev/bench/tokens/run.R --update` and records the figures here or in a D-n.
+- Contract-visible: 03 sections 7.1, 7.2 and 12.1; 04 sections 9.2 and the IC-68 fixture row.
+- Tests: test-tool-discovery.R "minimal tool declarations teach discovery without loading the API
+  documentation"; test-bench-context.R "the measured o200k baselines are pinned" and the 5% estimate
+  test; `dev/bench/tokens/run.R --check`.
+
+## D-320 - Fixes 1.0.1 lane C Agent guidance and System 1 inputs (2026-11-02)
+- Rule (alias): `{s1}` is written as an R string in every branch (`model = "jev"`, `"clef"`,
+  `"ollama/clef-flash"`), and every agent-read hint and help example quotes it. Was the bare `jev`
+  (quoted only with `/` or `:`), which agents read as an R object and looked for (`get("jev")`,
+  `exists("jev")`) before asking which model to use. A bare `model = jev` still resolves (IC-41).
+  The o200k counts are unchanged (`model = jev)` and `model = "jev")` are both 12 tokens in the
+  measured phrase; `run.R --check` OK, no `--update`).
+- Rule (inputs): a System 1 state is keyed by the context's argument name only when it is named
+  (`peter(q, text = x)`: `text`, through `s1_key_name()`); any other input is `input` (`input_1`,
+  ... for more; the piped session stays `session`), and a value described from its binding drops
+  the `name: ` prefix of `describe_binding()`. Context items carry `named` (contract 7.8). Was the
+  expression label (`reviews`, `x`, `feedback_text`, else `input`), which entered the state, the
+  "The input is in `...`." sentence and so the cache key: `x = reviews; peter(q, x)` sent every
+  request again and could flip answers (0.46 to 0.54). Answers that 1.0.0 recorded for an unnamed
+  input no longer match: a live call requests them again, and replay (`GPTR_REPLAY=replay`,
+  `replay = "replay"`, R CMD check) stops with `gptr_error_not_recorded` for a provider that is
+  not offline until the call runs once with `replay = "auto"`. Naming the input after its 1.0.0
+  variable (`peter(q, reviews = reviews)`) reuses the entries of values sent whole, not of described
+  ones (probe in progress/fixes-1.0.1/lane-C.md). The Jev and Ollama fixtures name their input
+  (`text =`).
+- Rule (decision notes): the `documents` section says a note is "recorded as a "## Decision:"
+  comment", as the r tool's schema does (was "written as "## Decision: ..."", which models read as
+  the note's own format), and `doc_turn_r()` drops a leading `#* decision:` (any case) from the
+  note before it adds the marker, so a block holds one "## Decision: " (was "## Decision: ##
+  Decision: ..." in Rmd, notebook and Quarto blocks). The o200k static prefixes of standard_all
+  and standard_interactive grow by one token (2966 to 2967, 3109 to 3110; within the 2% gate, no
+  `--update`).
+- Rule (scores): the `system1` section adds "levels = c("low", "high") returns an expected 0-based
+  score", and `?peter` `choices,levels,threshold` names the three result types. Was silent on
+  `levels`, so agents asked to rate or score used `choices` and hand-coded 1..3. The static
+  prefixes grow by 17 o200k tokens (standard_all 2967 to 2984, standard_interactive 3110 to 3127;
+  within the 2% gate of 2966 and 3109, no `--update`); the section stays within its 150 budget.
+- Rule (ctx$decide): `ctx$decide()` passes `.session` (the ctx's session or its id) only to an
+  `s1.decide` service whose formals declare it, as the builtin `s1_decide()` does; a replacement
+  with the documented `function(question, x, ...)` gets the call alone. Was `.session` for every
+  service (PR #105): a replacement forwarding `...` to `peter()` sent the session as a second
+  input, its last answer included, and `function(question, x, choices = NULL)` failed with
+  "unused argument".
+- Contract-visible: 03 sections 4.1.5, 7.3 (`{s1}`, `documents`, `system1`) and 10.3 NS-4, 04
+  sections 7.0 (`s1.decide`), 7.8 (`context`) and 9.3; `?peter` `...` and `choices`,
+  `?gptr_prob`, vignette system-one.
+- Tests: prompt-sections "{s1} is replaced by the configured System 1 alias, quoted as an R
+  string"; northstar's frozen prompt; gptr-gateway "System 1 arguments are refused on a
+  conversational route (D-250)"; s1-client "a System 1 request does not depend on how its input
+  is spelled (D-320)", "NS-4: if (peter(..., model = judge)) works ..."; s1-route "s1_inputs()
+  reads symbols by name ...", "large values are described instead of sent ..."; gptr-capture
+  "gateway_context_items() builds the context items ..."; doc-blocks "a note that already
+  starts with the Decision marker is not marked twice"; doc-formats' documents text; ext-api
+  "ctx$decide() gives .session only to an s1.decide service that declares it". Evidence:
+  progress/fixes-1.0.1/lane-C.md.
+
+## D-321 - Fixes 1.0.1 lane C System 1 accounting (2026-11-02)
+- Rule (unbilled failures): D-251's sessions-6 rule applies to System 1 attempts: a failed attempt
+  that reports no count and whose request was rejected (HTTP status >= 400) or never received
+  (`network`, `timeout_connect`) records `input = 0, output = 0` (`s1_failed_usage()`, from
+  `s1_failure()` and `s1_outcome()`, so the TypeSafe, Ollama, in-process and emulated paths alike),
+  and so does a request the adapter's `build` refuses (never sent). Idle and first-byte timeouts
+  and a received reply without usage stay unknown (NA). Was NA for every such attempt since
+  PR #105 charged each attempt: one retried 429 made the batch's `meta$usage` and the owning
+  session's totals unknown, and a cost limit then named the model as having no prices.
+- Rule (workers): a worker's `result` line sums its chat rows only (`worker_outcome()`), and its
+  System 1 rows travel in the result file (`s1`); the parent charges each to the proxy session
+  (its adapter state's `worker_session`) with the worker's provider, model, route and cost
+  (`worker_s1_charge()` through P13's `s1_charge_row()`, a declared `subagent` contract edge of
+  `helper-arch.R`). Was one
+  summed row priced at the chat model's rates (10,000 decisions of about 300 tokens read as $6.06
+  of claude-sonnet-5-5, not about $0.13), and one System 1 row with unknown usage made the whole
+  sum NULL, so the parent charged only its estimate.
+- Contract-visible: 04 sections 7.13 (owned System 1 usage) and 11.11 (the worker's result).
+- Tests: s1-client "an unbilled System 1 failure costs a known zero, as a chat request does
+  (D-251)", "bounded rounds resubmit only failed elements ..."; subagent-worker "a worker's
+  System 1 rows stay out of its chat usage (D-321)"; subagent-backends "a worker composes native
+  typed decisions with provenance and their own charges". Evidence:
+  progress/fixes-1.0.1/lane-C.md.
+
+## D-322 - Fixes 1.0.1 lane C Gateway refusals of System 1 and agent arguments (2026-11-02)
+- Rule (unknown model): `route_refuse_s1_args()` first resolves a character `model =` that
+  `gateway_model_type()` cannot type (`run_model_resolve()`, with the continued session's own
+  providers), so a reference that resolves to nothing is `gptr_error_unknown_model` with its
+  suggestions. Was "model jev-1.14.0 is conversational, so peter() would start a conversation",
+  for the physical id a decision's `meta$model` reports, on the `new`, `nested` and `continue`
+  routes (an unresolved model counted as conversational).
+- Rule (agent options): a named context dot `backend`, `objects` or `export` whose value is
+  character warns `gptr_warning_partial_name` ("`export =` is attached as a context object: it is
+  an agent() option, not a peter() argument.", with the `agents = list(<name> = agent(export =
+  ...))` form) and stays context (D-251's sessions-5 rule, which keeps named context a feature).
+  Other `gptr_agent()` options (`name`, `description`, `file`, ...) are common context names and
+  stay quiet. Was silent: an agent's `peter(..., backend = "cli", objects = "d", export = "x")`
+  attached the three strings and exported nothing. The orchestration skill now says
+  `agent(export = ...)`.
+- Contract-visible: 04 sections 2.2 (warnings) and 6.1 (dots), 6.1.1 (the System 1 argument
+  refusal); `?peter` details; skill gptr-orchestration.
+- Tests: gptr-gateway "System 1 arguments with an unknown model name the unknown model (D-322)",
+  "a named dot that names an agent() option warns and stays context (D-322)". Evidence:
+  progress/fixes-1.0.1/lane-C.md.
+
+## D-323 - Fixes 1.0.1 lane C Emulated System 1 on Ollama and worker start (2026-11-02)
+- Rule (emulation on Ollama): `s1_ready()` prepares an emulation's chat model on an Ollama route
+  (`s1_ollama_route()`, the L1 wrapper of `catalog_ollama_route()`) as `run_target()` prepares a
+  chat call's (egress check, then `model_prepare()`, which discovers
+  only without current evidence), on live calls; replay keeps the preflight alone. Was a
+  preflight only, so every new R process failed with "there is no current discovery evidence"
+  until `gptr_models(provider = "ollama", refresh = TRUE)`, while a chat call on the same model
+  worked.
+- Rule (worker start): `backend_worker_start()` keeps the canonical System 1 reference when it
+  resolves and ships the setting as written when it is `gptr_error_unknown_model` (a typo, a
+  removed local model, an `emulate:` model without catalog rows), so a chat-only worker starts and
+  only a decision it asks reports the error. Was an abort of every `agent(backend = "worker")`
+  start, naming System 1, although the worker never decided (PR #105).
+- Contract-visible: 04 sections 6.1.1 (model preparation) and 11.11 (the `system1` snapshot).
+- Tests: s1-emulate "emulation through a local Ollama chat model discovers it as a chat call does
+  (D-323)"; "emulation preflights the chat model before any state is serialised or sent" keeps
+  `s1_emulate()` itself discovery-free; subagent-backends "workers freeze the effective System 1
+  role and its bounded policy". Evidence: progress/fixes-1.0.1/lane-C.md.
+
+## D-324 - Fixes 1.0.1 lane C System 1 batch messages and cache listing (2026-11-02)
+- Rule (failure warning): a vectorised call's `s1_errors` warning quotes its most common failure
+  message and how many elements it failed ("3 of 3 System 1 elements failed and are NA (3 with:
+  System 1 request failed with HTTP 400: ...); see attr(x, "meta")$errors."). Was the count
+  alone, so a model-level failure (Ollama's legacy-format 400, a bad key) read as noise while a
+  one-element call showed the reason. The NA results and the one warning stay (contract 2.2).
+- Rule (launch notice): the cache-miss notice counts both nouns ("1 uncached input (1 request).");
+  was "1 uncached inputs".
+- Rule (cache listing): `gptr_cache("info")` gives the `s1` row the path `memory` when its
+  answers are held in memory only (no `.gptr/`); was a temporary directory with 0 bytes.
+- Contract-visible: 04 sections 2.2 (`s1_errors`) and 6.4 (`gptr_cache()`); `?gptr_cache`.
+- Tests: s1-route "a vector call's warning quotes its most common failure", "INFRA-18: choices
+  give a classed character ..."; s1-composition "decision launch notices identify real cache
+  misses ..."; doc-replay "without .gptr/, gptr_cache() counts and clears the System 1 answers in
+  memory". Evidence: progress/fixes-1.0.1/lane-C.md.

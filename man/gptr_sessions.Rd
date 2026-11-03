@@ -45,8 +45,9 @@ callr) is attached under the split-brain rules. \verb{block =} returns the sessi
 replay bound to that block. Resuming restores conversation state, not a complete analysis
 workspace, and does not rerun the R tool code. Make required objects available in \code{envir}; use
 document replay when the intention is to execute the recorded analysis again.
-A call from model code that resolves another session or rebuilds a stored session requires
-human approval; otherwise it signals \code{gptr_error_permission}.
+From model code during a run, \code{gptr_resume()} needs an allowing permission decision (a person's,
+in every mode but \code{yolo}; see \link{gptr_security}); otherwise it signals
+\code{gptr_error_permission}.
 
 \code{gptr_last()} returns the most recently active session of this R process. It is held strongly
 (it survives \code{gc()}), so a session whose call was interrupted before its result was assigned

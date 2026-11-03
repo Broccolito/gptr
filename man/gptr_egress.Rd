@@ -73,11 +73,15 @@ while its local-only inference is on (the default; see \code{providers} in \code
 
 \section{Other network use}{
 
-gptr contacts nothing else on its own. The model catalog is refreshed only by
-\code{gptr_models(refresh = TRUE)}, reachability checks run only with
-\code{gptr_providers(check = TRUE)}, and MCP servers, sub-agents and command-line tools are
-contacted only when a session uses them. The \code{claude} and \code{codex} command-line routes send
-the conversation through those vendors' tools under their own terms.
+After the acknowledgment above, gptr asks a provider for its model list on
+\code{gptr_models(provider = , refresh = TRUE)}, and before the first request to a provider with a
+native model-list API (at most once per five minutes in an R process). The listing carries only
+that provider's credential, never a prompt or session context; for the \code{claude} and \code{codex}
+tools only the explicit refresh lists models, by starting the tool without a prompt. The
+models.dev catalog is refreshed only by \code{gptr_models(refresh = TRUE)}, reachability checks run
+only with \code{gptr_providers(check = TRUE)}, and MCP servers, sub-agents and command-line tools
+are otherwise contacted only when a session uses them. The \code{claude} and \code{codex} command-line
+routes send the conversation through those vendors' tools under their own terms.
 }
 
 \seealso{

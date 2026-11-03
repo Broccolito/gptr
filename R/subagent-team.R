@@ -50,7 +50,7 @@ subagent_schedule = function(items, max_total, on_settle = NULL) {
     if (!length(running)) break
     if (!settled()) {
       # inside an `r` evaluation only these children's runs may use the reactor (IC-57)
-      allow = if (!top) vapply(handles[running], function(h) h$run$id, "")
+      allow = if (!top || reactor_nested()) vapply(handles[running], function(h) h$run$id, "")
       pump = function() reactor_pump(until = settled, slice_ms = 100L, allow_runs = allow)
       if (top && ext_service_has("console.interrupt_policy")) {
         ext_service_get("console.interrupt_policy")(pump, list(), mode = "call")

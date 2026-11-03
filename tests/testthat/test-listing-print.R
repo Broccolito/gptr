@@ -119,3 +119,15 @@ test_that("C-locale listings fit printed Unicode escapes without changing source
   expect_true(any(grepl("FALSE", out, fixed = TRUE)))
   expect_identical(x, before)
 })
+
+test_that("a block listing at width 80 keeps its date whole and shortens free text first", {
+  local_reproducible_output(width = 80L)
+  rows = list(doc_block_row("0135a6", "cell 4", "Fit a linear model of mpg on wt", "fresh",
+                            list(model = "azure/gpt-5.6-luna-2026-07-09", date = "2026-11-02",
+                                 tokens = "8697/178", session = "saf9ae6d820")))
+  x = new_listing(doc_blocks_frame(rows), "gptr_blocks")
+  out = utils::capture.output(print(x))
+  expect_true(all(nchar(out, type = "width") <= 80L))
+  expect_true(any(grepl("2026-11-02", out, fixed = TRUE)))
+  expect_true(any(grepl("8697/178", out, fixed = TRUE)))
+})

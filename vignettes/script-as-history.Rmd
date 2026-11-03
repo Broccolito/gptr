@@ -149,7 +149,9 @@ the session that re-asks. A named model must be available there;
 stopped early (an error, `max_turns`, a blocked call or the budget) is recorded too, with a last
 `## Run: <status>` line, and the next prompt continues its session. Other code typed at R's own
 `>` prompt is not recorded, so a transcript whose turns use objects made there fails on replay;
-create such inputs with `!code` in the `peter()` console.
+create such inputs with `!code` in the `peter()` console. A bound `.Rmd` or `.qmd` file records
+console turns as chunks: it opens with a chunk loading gptr, and `!code` lines and slash
+commands become R chunks without their printed output, which rendering prints again.
 
 A console turn's block opens with `#< ` comment lines: what the console sent with the prompt,
 the head of each `@file` and the notes of earlier `!` lines. `gptr_source(replay = "live")`
@@ -248,7 +250,11 @@ apply them with `gptr_doc(path, sync = TRUE)`.
 ## R Markdown, Quarto and Jupyter
 
 In `.Rmd` and `.qmd`, a recorded block becomes a chunk labeled `gptr-<id>` after its calling
-chunk. A binding belongs to the R process that made it. `rmarkdown::render()` knits in the
+chunk. On the first render the agent's objects exist right after the call, but when the
+document is rendered again the block replays and its code runs in that later chunk, so end the
+calling chunk with the `peter()` call and use what the agent made from the next chunk on. gptr
+says so when a calling chunk uses such an object after the call; notebook cells work the same
+way. A binding belongs to the R process that made it. `rmarkdown::render()` knits in the
 calling R session, so a binding made there covers the report:
 
 
@@ -270,6 +276,10 @@ usual:
 library(gptr)
 gptr_doc("analysis.qmd")
 ```
+
+A render in a new R process replays the agent's answers (`$text`) only from a `.gptr/`
+workspace: run `gptr_init(".")` once, or the replayed report says that they are missing and
+shows the recorded code alone.
 
 `gptr_source()` is not a renderer for either format. Arrange the document's setup to load
 gptr, prepare its input data and select a model or replay mode. Knitting cannot ask for
@@ -293,6 +303,10 @@ gptr_doc(FALSE)
 
 A notebook edited since a pending block was queued may need conflict resolution. Reopening
 or listing a file is not proof that pending blocks were applied successfully.
+
+A notebook that nbconvert, papermill or Quarto runs takes no input, so gptr asks it no
+question and says so once. Bind it with `gptr_doc()` in a cell before its calls to record, and
+allow the agent's code as for `Rscript` above.
 
 ## Harness calls and coaching calls
 

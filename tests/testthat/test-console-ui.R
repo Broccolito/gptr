@@ -1248,6 +1248,24 @@ test_that("the rstudio UI has no UI outside RStudio and then denies", {
   expect_true(is.na(rs$select("t", c("a", "b"))))
 })
 
+test_that("the rstudio UI keeps the line feeds of gptr's own prompts and escapes the rest", {
+  skip_if_not_installed("rstudioapi")
+  shown = list()
+  local_mocked_bindings(ui_rstudio = function() TRUE)
+  local_mocked_bindings(askForPassword = function(prompt) {
+    shown$password <<- prompt
+    "x"
+  }, showPrompt = function(title, message, default = "") {
+    shown$prompt <<- c(title, message)
+    "1"
+  }, .package = "rstudioapi")
+  rs = ui_rstudio_spec()
+  rs$input("API key\nDestination: https://x.test\u202e", secret = TRUE)
+  expect_identical(shown$password, "API key\nDestination: https://x.test<U+202E>")
+  expect_identical(rs$select("Sign in\nStorage: here", c("Go", "Skip")), 1L)
+  expect_identical(shown$prompt, c("gptr", "Sign in\nStorage: here\n1: Go\n2: Skip"))
+})
+
 test_that("the scripted UI answers in order, logs and fails closed when empty (12.2)", {
   skip_on_cran()
   root = local_project()

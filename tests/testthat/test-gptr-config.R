@@ -963,6 +963,11 @@ test_that("replay_guard() refuses providers that call a remote model, in replay 
                        auth = "CORP_LLM_KEY",
                        models = list(list(id = "corp-large", context = 128000)))
   expect_error(replay_guard(corp), class = "gptr_error_not_recorded")
+  # outside a .gptr/ workspace the records of another R session are gone: say why
+  local_mocked_bindings(workspace_dir = function(path = getwd()) NULL)
+  expect_error(replay_guard(corp, "System 1 call"),
+               "Outside a .gptr/ workspace.*gptr_init[(]\".\"[)]",
+               class = "gptr_error_not_recorded")
   withr::local_envvar(GPTR_REPLAY = "auto")
   expect_invisible(replay_guard(corp))
 })

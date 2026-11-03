@@ -499,6 +499,8 @@ test_that("bounded rounds resubmit only failed elements, honouring retry-after u
   expect_null(res$answers[[3]])
   expect_s3_class(res$conditions[[3]], "gptr_error_s1_overloaded")
   expect_identical(res$errors$index, 3L)
+  # rejected attempts without usage cost a known zero (D-251), so the batch's usage stays known
+  expect_identical(res$usage[c("input", "output")], list(input = 200, output = 4))
   local_gptr_options(s1_rounds = 1L)
   seen$calls = list()
   s1_request(s1_model(p), states_of("down"), noul_questions(), list(provider = p))
@@ -526,6 +528,46 @@ test_that("transport failures map to retryable or final System 1 conditions", {
   expect_false(redirect$retry)
   # a server delay above gptr.max_retry_delay is final (IC-64), as on the emulation path
   expect_false(fail("retry_after", 429L, 120)$retry)
+})
+
+test_that("an unbilled System 1 failure costs a known zero, as a chat request does (D-251)", {
+  skip_on_cran()
+  zero = list(input = 0, output = 0)
+  fail = function(cls, status = NA_integer_, usage = NULL) {
+    s1_failure(paste0("gptr_error_", cls), status, "x", NA, "m", usage = usage)
+  }
+  # never received, or rejected with a status of 400 or more, and no usage reported
+  expect_identical(fail("network")$usage, zero)
+  expect_identical(fail("timeout_connect")$usage, zero)
+  expect_identical(fail("rate_limit", 429L)$usage, zero)
+  expect_identical(fail("rate_limit", 429L, list(input = NA_real_, output = NA_real_))$usage, zero)
+  # a request the service may have processed stays unknown; reported usage is kept
+  expect_null(fail("timeout_first_byte")$usage)
+  expect_null(fail("timeout_idle")$usage)
+  expect_identical(fail("rate_limit", 429L, list(input = 5, output = 0))$usage,
+                   list(input = 5, output = 0))
+  # an HTTP reply as s1_request() reads it: a rejection without usage, then one reporting it
+  m = list(id = "m")
+  expect_identical(s1_outcome(s1_wire_parse(m, 503L, list(), "{}", list()))$usage, zero)
+  billed = "{\"usage\": {\"input_tokens\": 5, \"output_tokens\": 0}}"
+  expect_identical(s1_outcome(s1_wire_parse(m, 503L, list(), billed, list()))$usage,
+                   list(input = 5, output = 0))
+  # a received reply without answers or usage stays unknown
+  expect_identical(s1_outcome(s1_wire_parse(m, 200L, list(), "{}", list()))$usage,
+                   list(input = NA_real_, output = NA_real_))
+  # a request the adapter refuses to build is never sent
+  off = gptr_register(gptr_adapter("refusing-s1", "http_json", classify = list(
+    build = function(model, state, questions, opts) {
+      stop(s1_condition("s1_validation", "The state is too large.", model = model$id))
+    },
+    parse = function(...) stop("nothing is parsed"))))
+  withr::defer(off())
+  p = gptr_provider("refusing", api = "refusing-s1", base_url = "http://127.0.0.1:9/v1/",
+                    type = "classifier", local = TRUE, offline = TRUE,
+                    models = list(list(id = "refusing-s1", type = "classifier")))
+  res = s1_request(s1_model(p), states_of("a"), noul_questions(), list(provider = p))
+  expect_s3_class(res$conditions[[1]], "gptr_error_s1_validation")
+  expect_identical(res$usage[c("input", "output")], zero)
 })
 
 test_that("an unregistered provider without a spec is an unknown model", {
@@ -876,9 +918,40 @@ test_that("NS-4: if (peter(..., model = judge)) works and creates no session", {
   expect_identical(included, "a01")
   expect_length(setdiff(names(live_all()), before), 0L)
   req = fake_requests(judge)[[1]]
-  expect_identical(req$state, list(abstract = abstract))
+  expect_identical(req$state, list(input = abstract))
   expect_identical(req$question$type, "noul")
-  expect_match(req$question$instructions, "The input is in `abstract`.", fixed = TRUE)
+  expect_match(req$question$instructions, "The input is in `input`.", fixed = TRUE)
+})
+
+test_that("a System 1 request does not depend on how its input is spelled (D-320)", {
+  skip_on_cran()
+  s1_fresh()
+  judge = rct_judge()
+  q = "Is this abstract about a randomised controlled trial?"
+  abstracts = abstracts20()[1:3]
+  first = peter(q, abstracts, model = judge)
+  expect_length(fake_requests(judge), 3L)
+  x = abstracts
+  again = list(peter(q, x, model = judge), peter(q, abstracts[2], model = judge),
+               peter(q, unname(abstracts[3]), model = judge))
+  expect_length(fake_requests(judge), 3L)
+  expect_true(all(vapply(again, function(a) all(attr(a, "meta")$cached), NA)))
+  expect_identical(as.logical(again[[1]]), as.logical(first))
+  # a large value is described without its binding's name
+  big = matrix(1:100000, 100)
+  m = big
+  peter(q, big, model = judge)
+  peter(q, m, model = judge)
+  expect_length(fake_requests(judge), 4L)
+  expect_false(grepl("big", fake_requests(judge)[[4]]$state$input, fixed = TRUE))
+  # a named input keeps its name as the state key, and several unnamed ones are numbered
+  peter(q, text = abstracts[[1]], model = judge)
+  req = fake_requests(judge)[[5]]
+  expect_identical(req$state, list(text = abstracts[[1]]))
+  expect_match(req$question$instructions, "The input is in `text`.", fixed = TRUE)
+  peter(q, abstracts[[1]], abstracts[[2]], model = judge)
+  req = fake_requests(judge)[[6]]
+  expect_identical(names(req$state), c("input", "input_1"))
 })
 
 test_that("NS-4: a vector gives a named decision vector; repeats come from the cache", {
@@ -982,6 +1055,20 @@ test_that("System 1 emits a decision event and writes one summary line at top le
                    paste0("gptr_decision: 1 TRUE / 1 FALSE (judge-s1-1.0, ", Sys.Date(), ")"))
 })
 
+test_that("a summary the notebook already shows as the block is not said again", {
+  s1_fresh()
+  local_fake_provider(list(0.9, 0.1, 0.9, 0.1), name = "judge", type = "classifier")
+  local_gptr_options(quiet = FALSE, verbose = 1L)
+  shown = new.env()
+  shown$value = TRUE
+  local_service("doc.s1_block", function(call, summary) invisible(shown$value))
+  expect_no_message(peter("Q?", c(a = "x", b = "y"), model = "judge/judge-s1"),
+                    message = "gptr_decision")
+  shown$value = NULL
+  expect_message(peter("Q?", c(a = "x2", b = "y2"), model = "judge/judge-s1"),
+                 "gptr_decision: 1 TRUE / 1 FALSE", class = "gptr_message_progress")
+})
+
 test_that("failures: a scalar call signals, a vector gives NA and one s1_errors warning", {
   skip_on_cran()
   s1_fresh()
@@ -1066,7 +1153,7 @@ test_that("NS-5: System 1 routes each task to a strong or a cheap System 2 model
   skip_on_cran()
   s1_fresh()
   local_fake_provider(function(state, question) {
-    if (grepl("subtle", state$task, fixed = TRUE)) 0.9 else 0.1
+    if (grepl("subtle", state$input, fixed = TRUE)) 0.9 else 0.1
   }, name = "hardness", type = "classifier")
   strong_fake = local_fake_provider(list("strong answer"), name = "fstrong")
   cheap_fake = local_fake_provider(list("cheap answer"), name = "fcheap")

@@ -25,22 +25,20 @@ capability manual or a runtime index.
 - Four inaccurate internal comments were corrected: two artifact URL promises overlooked fresh
   access tokens; artifact sweeping runs at each listing rather than only once; and the reactor's
   5 ms cap concerns its next I/O wait rather than callback/iteration duration. Behavior unchanged.
-- New credential-input and discovery implementations belong to their owning branches. Their
+- New credential-input, discovery and plugin setup diagnostics belong to their owning branches. Their
   changed signatures and behavior need their own matching docs and final integration review.
   The small new `?peter` discovery pointer is a separate commit to ship with that implementation.
 
 ## Focused verification
 
-- `devtools::test(filter = "ext-plugins")`: expected eight failures before the setup diagnostics
-  fix; after the fix, **408 passes, zero failures/warnings/skips** (about 10 seconds).
 - `roxygen2::roxygenise(roclets = "rd")`: only relevant Rd pages changed; NAMESPACE unchanged.
 - `docs_problems(rd_read_dir())` from `dev/release/lib.R`: zero problems.
 - `tools::codoc(dir = ".")`: zero code/documentation signature mismatches.
 - The revised adapter example was extracted with `tools::Rd2ex()` and executed offline after
   `pkgload::load_all()`: completed successfully.
 - `git diff --check`: clean. No live credentials or provider calls, package downloads, or full
-  suite/check were used for this audit. The plugin suite uses its existing temporary toy-package
-  installation fixture. Final broad validation belongs to the integrated candidate and CI.
+  suite/check were used for this audit. Final broad validation belongs to the integrated candidate
+  and CI.
 
 ## Export-by-export review
 
@@ -81,7 +79,7 @@ capability manual or a runtime index.
 | `gptr_on` | `R/gptr-sdk.R` | `gptr_on` | Model-call approval requirement |
 | `gptr_parallel` | `R/subagent-team.R` | `gptr_parallel` | No confirmed documentation gap |
 | `gptr_permissions` | `R/perm-rules.R` | `gptr_permissions` | No confirmed documentation gap |
-| `gptr_plugins` | `R/ext-plugins.R` | `gptr_plugins` | Marketplace/empty bundle diagnostics and listing limits |
+| `gptr_plugins` | `R/ext-plugins.R` | `gptr_plugins` | Documented with the plugin setup diagnostics (PR 101) |
 | `gptr_policy` | `R/ext-specs.R` | `gptr_policy` | No confirmed documentation gap |
 | `gptr_preimage` | `R/ckpt-objects.R` | `gptr_preimage` | No confirmed documentation gap |
 | `gptr_prob` | `R/s1-types.R` | `gptr_prob` | Names preserved, including unnamed inputs |
@@ -117,11 +115,3 @@ capability manual or a runtime index.
 
 `as.data.frame.gptr_session_summary`, `format.gptr_risk`, `format.gptr_session`, `gptr-background`, `gptr_egress`, `gptr_options`, `gptr_security`, `print.gptr_session`, `print.gptr_session_summary`, `session-accessors`, `str.gptr_session`, `summary.gptr_session`. No additional confirmed documentation mismatch was found
 in these topics at the audited base.
-
-## Focused setup behavior
-
-Marketplace-only roots now direct the user to an individual plugin. A plugin without supported
-resources or R extension code fails activation with a diagnostic; a valid R factory may
-intentionally register nothing. Existing marketplace repositories that also carry their own
-plugin manifest/resources remain supported. The listing columns, trust rules, lazy activation,
-credential storage, provider adapters and session prompt-freezing rules remain unchanged.

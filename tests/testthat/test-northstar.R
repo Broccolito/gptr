@@ -367,7 +367,7 @@ test_that("NS-12: plan mode changes nothing; a non-interactive manual ask stops 
 
 # ---- IC-68: the composed prompt with every built-in loaded equals architecture 7.3 -------------
 
-# Architecture 7.3 as amended by IC-67/IC-68 ({s1} = jev), split into short source lines.
+# Architecture 7.3 as amended by IC-67/IC-68 ({s1} = "jev"), split into short source lines.
 ns_expected_t0 = function() {
   paste(c(
     paste0("You are Peter, an expert R programmer and data analyst working inside the",
@@ -470,14 +470,14 @@ ns_expected_t0 = function() {
     paste0("- Make recorded code the clean final version: named objects, no explorat",
            "ory prints. Pass record = false for throwaway checks (head(), summaries,",
            " tests)."),
-    paste0("- Record key modelling decisions with note (one line, written as \"## Dec",
-           "ision: ...\"); key printed outputs are added as #> comments automatically",
+    paste0("- Record key modelling decisions with note (one line, recorded as a \"## ",
+           "Decision:\" comment); key printed outputs are added as #> comments automatically",
            "."),
     paste0("- To change code you wrote earlier, edit that block in the document inst",
            "ead of appending a second version."),
     paste0("- In the document, prompts are quoted strings in peter(\"...\"), and System",
-           " 1 decisions are peter(..., model = jev) inside if, for or while. Add suc",
-           "h calls only when the user asks for an agent step in the script."),
+           " 1 decisions are peter(..., model = \"jev\") inside if, for or while. Add",
+           " such calls only when the user asks for an agent step in the script."),
     "</documents>",
     "",
     "<artifacts>",
@@ -492,8 +492,9 @@ ns_expected_t0 = function() {
     "",
     "<system1>",
     paste0("Use System 1 for typed decision leaves inside your R workflow: ",
-           "peter(\"Is this an RCT?\", abstracts, model = jev) returns a logical vector with ",
-           "attr(, \"prob\"); choices = c(\"a\", \"b\") returns labels. ",
+           "peter(\"Is this an RCT?\", abstracts, model = \"jev\") returns a logical vector with ",
+           "attr(, \"prob\"); choices = c(\"a\", \"b\") returns labels; levels = c(\"low\", ",
+           "\"high\") returns an expected 0-based score. ",
            "Batch hundreds or thousands; ",
            "omit agents and parallel. gptr.s1_max_active controls concurrency (default 8; ",
            "1 sequential). Chunk inputs above gptr.s1_max_elements (10,000). Use results in ",

@@ -428,7 +428,8 @@ session_display_text = function(s) {
 }
 
 #' `$history`: one row per message on the active path; an assistant's `tokens` is its reported
-#' total (`NA` when unreported, IC-74), other messages are estimated
+#' total (`NA` when unreported, IC-74), other messages are estimated; a message without text
+#' blocks (an operator note such as `gptr_runtime`) shows its context text
 #' @noRd
 session_history = function(s) {
   d = session_data(s)
@@ -443,6 +444,9 @@ session_history = function(s) {
     tools = if (identical(m$role, "tool_result")) m$tool_name else
       paste(vapply(msg_calls(m), function(b) b$name, ""), collapse = ",")
     text = msg_text(m)
+    if (!nzchar(text)) {
+      text = paste(vapply(m$content, function(b) b$text %||% "", ""), collapse = "\n")
+    }
     tokens = if (identical(m$role, "assistant")) m$usage$total %||% NA_real_ else
       est_tokens(text, "prose")
     rows[[i]] = data.frame(turn = turn, role = m$role, preview = substr(text, 1L, 60L),
@@ -617,24 +621,13 @@ doc_history_repr_text = function(x, ...) {
 
 #' Keep history text inert in the notebook's HTML representation
 #' @noRd
-doc_history_repr_html = function(x, ...) {
-  text = doc_history_repr_text(x)
-  text = gsub("&", "&amp;", text, fixed = TRUE)
-  text = gsub("<", "&lt;", text, fixed = TRUE)
-  text = gsub(">", "&gt;", text, fixed = TRUE)
-  paste0("<pre>", text, "</pre>")
-}
+doc_history_repr_html = function(x, ...) doc_repr_pre(doc_history_repr_text(x))
 
 #' A literal fence preserves the compact preview without interpreting its markup
 #' @noRd
-doc_history_repr_markdown = function(x, ...) {
-  text = doc_history_repr_text(x)
-  runs = regmatches(text, gregexpr("`+", text))[[1L]]
-  fence = strrep("`", max(3L, nchar(runs) + 1L))
-  paste(c(fence, text, fence), collapse = "\n")
-}
+doc_history_repr_markdown = function(x, ...) doc_repr_fence(doc_history_repr_text(x))
 
-#' Suppress the inherited data-frame LaTeX representation of the complete history
+#' Suppress the inherited data-frame (or bare-vector) LaTeX representation
 #' @noRd
 doc_history_repr_latex = function(x, ...) NULL
 
@@ -858,9 +851,10 @@ session_set_model = function(s, ref, reason = "user") {
 }
 
 #' Switch the session's permission mode (`gptr.mode_change`); a running run changes mode at once
-#' and gets an operator `<mode>` message after the current tool results
+#' and gets an operator `<mode>` message after the current tool results. `notice = FALSE` leaves
+#' the yolo notice to the caller (a console says it after its banner)
 #' @noRd
-session_set_mode = function(s, mode, source = "user") {
+session_set_mode = function(s, mode, source = "user", notice = TRUE) {
   check_class(s, "gptr_session", "s")
   mode = check_choice(mode, session_modes, "mode")
   check_string(source, "source")
@@ -869,7 +863,7 @@ session_set_mode = function(s, mode, source = "user") {
   if (identical(from, mode)) return(invisible(s))
   session_append(s, entry_custom("gptr.mode_change", list(from = from, to = mode, source = source)))
   d$mode = mode
-  mode_notice(mode)
+  if (notice) mode_notice(mode)
   live = session_live(s)
   run = if (is.null(live)) NULL else live$run
   if (!is.null(run)) mode_apply_run(s, run, mode)

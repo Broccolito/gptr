@@ -109,7 +109,8 @@ default. Both are the person's to run: from your code they need the person's app
 - Model code may start at most 8 tasks per team or fan-out (`gptr.subagents.max_tasks`), and
   sub-agents nest one level deep by default (`gptr.subagents.max_depth`).
 - Children that run in parallel may not write outside their environment (`<<-`, `assign()` into
-  another environment, `:=`, data.table `set*()`); return results with `export =` instead.
+  another environment, `:=`, data.table `set*()`); return results with `agent(export = ...)`
+  instead.
 - `gptr_usage(reviews)` sums the members' tokens and cost; budgets are charged to the session
   that started them.
 - Look at objects with `peter$describe(x)`, `dim()` and `head()`.

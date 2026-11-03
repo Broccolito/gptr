@@ -1,15 +1,15 @@
 {
   "preset": {
-    "minimal": 1304,
-    "standard_core": 2489,
-    "standard_all": 2966,
-    "standard_interactive": 3109
+    "minimal": 1317,
+    "standard_core": 2502,
+    "standard_all": 2997,
+    "standard_interactive": 3140
   },
   "estimate": {
-    "minimal": 1641,
-    "standard_core": 2603,
-    "standard_all": 3105,
-    "standard_interactive": 3314
+    "minimal": 1713,
+    "standard_core": 2675,
+    "standard_all": 3177,
+    "standard_interactive": 3385
   },
   "estimator": "est_tokens() with the G2 constants of architecture 12.5: tool array as json, T0 and T1 as prose",
   "sections": {
@@ -103,7 +103,7 @@
       },
       {
         "name": "r",
-        "description": "Run R code in the user's live R session. Objects persist between calls and belong to the user. Returns printed output, messages, warnings, errors with a traceback, and plots as images. Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and last 60% and names a peter$out(id) handle for the rest. For harness APIs, use peter$search(\"words\") and peter$help(\"gptr\") inside r; peter$help(\"gptr::name\") gives docs, source = TRUE gives its function definition.",
+        "description": "Run R code in the user's live R session. Objects persist between calls and belong to the user. Returns printed output, messages, warnings, errors with a traceback, and plots as images. Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and last 60% and names a peter$out(id) handle for the rest. To set up MCP servers, skills or settings in gptr itself, or find its APIs, use peter$search(\"words\") and peter$help(\"gptr\") inside r; peter$help(\"gptr::name\") gives docs, source = TRUE its definition.",
         "input_schema": {
           "type": "object",
           "required": [
@@ -382,7 +382,7 @@
         "tier": "T0",
         "order": 500,
         "budget": 250,
-        "text": "Code from successful r calls is written into the user's document (named in <environment>) in a block below the peter() call that asked for it, so the document re-runs from top to bottom. Therefore:\n- Make recorded code the clean final version: named objects, no exploratory prints. Pass record = false for throwaway checks (head(), summaries, tests).\n- Record key modelling decisions with note (one line, written as \"## Decision: ...\"); key printed outputs are added as #> comments automatically.\n- To change code you wrote earlier, edit that block in the document instead of appending a second version.\n- In the document, prompts are quoted strings in peter(\"...\"), and System 1 decisions are peter(..., model = {s1}) inside if, for or while. Add such calls only when the user asks for an agent step in the script."
+        "text": "Code from successful r calls is written into the user's document (named in <environment>) in a block below the peter() call that asked for it, so the document re-runs from top to bottom. Therefore:\n- Make recorded code the clean final version: named objects, no exploratory prints. Pass record = false for throwaway checks (head(), summaries, tests).\n- Record key modelling decisions with note (one line, recorded as a \"## Decision:\" comment); key printed outputs are added as #> comments automatically.\n- To change code you wrote earlier, edit that block in the document instead of appending a second version.\n- In the document, prompts are quoted strings in peter(\"...\"), and System 1 decisions are peter(..., model = {s1}) inside if, for or while. Add such calls only when the user asks for an agent step in the script."
       },
       {
         "name": "artifacts",
@@ -396,7 +396,7 @@
         "tier": "T0",
         "order": 650,
         "budget": 150,
-        "text": "Use System 1 for typed decision leaves inside your R workflow: peter(\"Is this an RCT?\", abstracts, model = {s1}) returns a logical vector with attr(, \"prob\"); choices = c(\"a\", \"b\") returns labels. Batch hundreds or thousands; omit agents and parallel. gptr.s1_max_active controls concurrency (default 8; 1 sequential). Chunk inputs above gptr.s1_max_elements (10,000). Use results in if/for/while, check uncertain answers, and keep reasoning and writing for yourself."
+        "text": "Use System 1 for typed decision leaves inside your R workflow: peter(\"Is this an RCT?\", abstracts, model = {s1}) returns a logical vector with attr(, \"prob\"); choices = c(\"a\", \"b\") returns labels; levels = c(\"low\", \"high\") returns an expected 0-based score. Batch hundreds or thousands; omit agents and parallel. gptr.s1_max_active controls concurrency (default 8; 1 sequential). Chunk inputs above gptr.s1_max_elements (10,000). Use results in if/for/while, check uncertain answers, and keep reasoning and writing for yourself."
       },
       {
         "name": "skills",

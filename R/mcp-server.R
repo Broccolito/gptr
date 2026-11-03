@@ -166,9 +166,10 @@ mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   }
   if (is.null(ask)) return(list(decision = "allow", reason = ""))
   if (notice) {
-    gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your approval; it ",
-                       "was refused. Allow it with gptr_permissions(allow = ...) or run it ",
-                       "yourself."), "notice")
+    message_row(gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your ",
+                                   "approval; it was refused. Allow it with gptr_permissions(",
+                                   "allow = ...) or run it yourself."), "notice"),
+                row = reactor_depth() == 0L)
   }
   list(decision = "deny",
        reason = paste0(if (nzchar(ask$reason)) ask$reason else "this needs approval",
@@ -608,28 +609,26 @@ mcp_http_route = function(st, req) {
 
 #' Client snippets for Codex, Claude Code, Claude Desktop and Cursor, each with a tool timeout of
 #' 3,600 s (HTTP MCP clients time a request out after 60 s by default). They carry the token, so
-#' they print redacted. The Codex snippet is a list: `args` (the `-c` overrides, which read the
-#' token from GPTR_MCP_TOKEN) and `env` (the environment to start Codex with); the others are JSON
-#' text (contract 6.3)
+#' they, the codex `env` and the list of them (a `gptr_mcp_config`) print and format redacted. The
+#' Codex snippet is a list: `args` (the `-c` overrides, which read the token from GPTR_MCP_TOKEN)
+#' and `env` (the environment to start Codex with); the others are JSON text (contract 6.3)
 #' @noRd
 mcp_client_snippets = function(url, token) {
   bearer = paste("Bearer", token)
-  obj = function(x) {
-    structure(json_encode(list(mcpServers = list(gptr = x)), pretty = TRUE),
-              class = c("gptr_mcp_snippet", "character"))
-  }
-  list(
-    codex = structure(list(args = c("-c", paste0("mcp_servers.gptr.url=", url), "-c",
-                                    "mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN",
-                                    "-c", "mcp_servers.gptr.tool_timeout_sec=3600"),
-                           env = c(GPTR_MCP_TOKEN = token)),
-                      class = c("gptr_mcp_snippet", "list")),
+  snippet = function(x) structure(x, class = c("gptr_mcp_snippet", class(x)))
+  obj = function(x) snippet(json_encode(list(mcpServers = list(gptr = x)), pretty = TRUE))
+  structure(list(
+    codex = snippet(list(args = c("-c", paste0("mcp_servers.gptr.url=", url), "-c",
+                                  "mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN",
+                                  "-c", "mcp_servers.gptr.tool_timeout_sec=3600"),
+                         env = snippet(c(GPTR_MCP_TOKEN = token)))),
     claude_code = obj(list(type = "http", url = url, headers = list(Authorization = bearer),
                            timeout = 3600000L)),
     claude_desktop = obj(list(command = "npx", args = I(c("-y", "mcp-remote", url, "--header",
                                                           paste0("Authorization: ", bearer))),
                               timeout = 3600000L)),
-    cursor = obj(list(url = url, headers = list(Authorization = bearer), timeout = 3600000L)))
+    cursor = obj(list(url = url, headers = list(Authorization = bearer), timeout = 3600000L))),
+    class = c("gptr_mcp_config", "list"))
 }
 
 #' A `gptr_mcp_handle` (contract 5.11): url, port, token_env, config and stop(), plus `token`,
@@ -656,16 +655,20 @@ mcp_handle_new = function(st, tok, stop) {
 #' belong to a dedicated gptr session whose permission mode is the configured default when the
 #' server starts, independently of a chat's explicit mode; like any new session, it becomes
 #' [gptr_last()]. A running server keeps its original workspace and mode until stopped.
-#' Requests are answered at R's top-level idle prompt or during an outermost reactor wait.
-#' A nested console `readline()` (including Peter's prompt in R.app), ordinary blocking R code,
-#' or a nested tool wait can pause serving. In Peter, `/mcp serve` starts or reuses the server
-#' and returns to R's prompt; a new server uses that chat's workspace and mode. Resume the chat
-#' with `gptr_last() |> peter()`. Calls that need approval are refused with a note on how to allow
-#' them, because gptr never asks from a background callback. The token appears only in the
-#' snippets of `$config` (printed redacted; `as.character()` gives the text to paste;
-#' `$config$codex` holds the `codex` options
-#' in `$args` and the environment to start Codex with in `$env`). One server runs per R process.
-#' Needs 'httpuv', 'later' and 'openssl'; gptr's own codex route does not use this server.
+#' Requests are answered at R's top-level idle prompt or during an outermost gptr wait. Serving
+#' pauses while Peter's own prompt waits (in every console), while other R code runs and during a
+#' nested tool wait. Where R has no idle prompt (Rscript, knitr, Quarto, or a Jupyter kernel
+#' between cells), a request waits for the next gptr wait, such as `peter$sh()` or
+#' [gptr_wait()], and a client may time out (a server started there says so); serve from an
+#' interactive R console instead.
+#' In Peter, `/mcp serve` starts or reuses the server and returns to R's prompt; a new server
+#' uses that chat's workspace and mode. Resume the chat with `gptr_last() |> peter()`. Calls that
+#' need approval are refused with a note on how to allow them, because gptr never asks from a
+#' background callback. The token appears only in the snippets of `$config`, which show it
+#' redacted, in notebooks and documents too (`as.character()` gives the text to paste;
+#' `$config$codex` holds the `codex` options in `$args` and the environment to start Codex with
+#' in `$env`). One server runs per R process. Needs 'httpuv', 'later' and 'openssl'; gptr's own
+#' codex route does not use this server.
 #'
 #' If shutdown cannot be confirmed, access is revoked and the server is retained for retry.
 #' Call `gptr_mcp_serve(stop = TRUE)` again; new requests are refused until shutdown completes.
@@ -691,11 +694,20 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   check_env(envir, "envir")
   port = check_number(port, "port", min = 1, max = 65535, int = TRUE, null = TRUE)
   check_flag(stop, "stop")
-  ext_control_guard("gptr_mcp_serve")
   if (stop) {
+    ext_control_guard("gptr_mcp_serve")
     mcp_serve_stop()
     return(invisible(NULL))
   }
+  mcp_serve_open(envir, setting_get("mode", default = "manual"), unique(tools), port)
+}
+
+#' Start the server with a dedicated session in `mode` (the configured default, or the chat's
+#' for /mcp serve, so a session-scope setting never loosens it), or return the running handle,
+#' which keeps its workspace and mode
+#' @noRd
+mcp_serve_open = function(envir, mode, tools = mcp_default_tools(), port = NULL) {
+  ext_control_guard("gptr_mcp_serve")
   if (isTRUE(the$mcp_server$stopping)) {
     gptr_abort("The MCP server is stopping; retry its stop before serving new requests.",
                "not_available", member = "mcp_serve")
@@ -703,13 +715,17 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   if (!is.null(the$mcp_server$handle)) return(the$mcp_server$handle)
   st = mcp_serve_start(port)
   st$envir = envir
-  # the dedicated session (contract 6.3, IC-58; P01's arch_contract_edges() admits this edge):
-  # the mode setting now, and a placeholder model, since it never sends a request
-  s = session_new(setting_get("model", default = "mcp/serve"),
-                  setting_get("mode", default = "manual"), home = envir, kind = "chat")
-  tok = mcp_serve_token(s, unique(tools))
+  # the dedicated session (contract 6.3, IC-58; P01's arch_contract_edges() admits this edge),
+  # with a placeholder model, since it never sends a request
+  s = session_new(setting_get("model", default = "mcp/serve"), mode, home = envir, kind = "chat")
+  tok = mcp_serve_token(s, tools)
   st$user = list(key = tok$key, session = s)
   st$handle = mcp_handle_new(st, tok, mcp_serve_stop)
+  if (!gptr_is_interactive()) {
+    gptr_inform(paste("R has no idle prompt in a script, document or Jupyter kernel: the MCP",
+                      "server answers only during gptr waits such as peter$sh() or gptr_wait(),",
+                      "not between them or between Jupyter cells."), "notice")
+  }
   st$handle
 }
 
@@ -735,6 +751,24 @@ print.gptr_mcp_handle = function(x, ...) {
   invisible(x)
 }
 
+#' A client snippet's text with its token redacted
+#'
+#' @param x A `gptr_mcp_snippet`.
+#' @param ... Ignored.
+#' @return A character vector.
+#' @export
+#' @noRd
+format.gptr_mcp_snippet = function(x, ...) {
+  text = if (is.list(x)) {
+    c(paste(x$args, collapse = " "), format(x$env))
+  } else if (is.null(names(x))) {
+    as.character(x)
+  } else {
+    paste0(names(x), "=", unname(x))
+  }
+  redact(text, "persist")
+}
+
 #' Print a client snippet with its token redacted
 #'
 #' @param x A `gptr_mcp_snippet`.
@@ -743,18 +777,55 @@ print.gptr_mcp_handle = function(x, ...) {
 #' @export
 #' @noRd
 print.gptr_mcp_snippet = function(x, ...) {
-  if (is.list(x)) {
-    text = c(paste(x$args, collapse = " "), paste0(names(x$env), "=", unname(x$env)))
-    note = "(the token is hidden; $args are the codex options, $env the child's environment)"
+  note = if (is.list(x)) {
+    "(the token is hidden; $args are the codex options, $env the child's environment)"
   } else {
-    text = as.character(x)
-    note = "(the token is hidden; as.character() gives the text to paste)"
+    "(the token is hidden; as.character() gives the text to paste)"
   }
-  msg_verbatim(c(redact(text, "persist"), note))
+  msg_verbatim(c(format(x), note))
   invisible(x)
 }
+
+#' The client snippets' text with their token redacted
+#'
+#' @param x A `gptr_mcp_config`.
+#' @param ... Passed to `format()`.
+#' @return A named character vector.
+#' @export
+#' @noRd
+format.gptr_mcp_config = function(x, ...) format(lapply(x, format), ...)
+
+#' Print the client snippets with their token redacted
+#'
+#' @param x A `gptr_mcp_config`.
+#' @param ... Passed to `print()`.
+#' @return `x`, invisibly.
+#' @export
+#' @noRd
+print.gptr_mcp_config = function(x, ...) {
+  print(unclass(x), ...)
+  invisible(x)
+}
+
+#' Show a client snippet's structure with its token redacted
+#'
+#' @param object A `gptr_mcp_snippet`.
+#' @param ... Passed to `str()`.
+#' @return `NULL`, invisibly.
+#' @exportS3Method utils::str
+#' @noRd
+str.gptr_mcp_snippet = function(object, ...) utils::str(redact(unclass(object), "persist"), ...)
 
 on_load({
   the$mcp_tokens = new.env(parent = emptyenv())
 })
+
+#' No rich repr: Jupyter (IRkernel) then shows a snippet, and a list holding one (`$config`), only
+#' as the redacted text/plain of print()
+#' @noRd
+mcp_snippet_repr = function(obj, ...) NULL
+
+on_load(s3_register("repr::repr_html", "gptr_mcp_snippet", method = mcp_snippet_repr))
+on_load(s3_register("repr::repr_markdown", "gptr_mcp_snippet", method = mcp_snippet_repr))
+on_load(s3_register("repr::repr_latex", "gptr_mcp_snippet", method = mcp_snippet_repr))
 on_load(on_unload(mcp_serve_stop))

@@ -50,6 +50,14 @@ reactor_depth = function() {
   if (is.null(r)) 0L else r$depth
 }
 
+#' Is a pump on the stack or a served tool executing? Then a pump runs only the FIFO tools of the
+#' runs it names (IC-57)
+#' @noRd
+reactor_nested = function() {
+  r = get0("reactor", envir = the, inherits = FALSE)
+  !is.null(r) && (r$depth > 0L || r$tool_depth > 0L)
+}
+
 #' The next id, `t<integer>` (IC-20)
 #' @noRd
 reactor_id = function(r) {
@@ -189,7 +197,7 @@ reactor_pump = function(until = function() FALSE, slice_ms = 100L, allow_runs = 
   check_number(timeout, "timeout", min = 0)
   r = reactor_get()
   if (missing(allow_runs)) {
-    allow_runs = if (r$depth == 0L && r$tool_depth == 0L) NULL else character()
+    allow_runs = if (reactor_nested()) character() else NULL
   } else {
     check_strings(allow_runs, "allow_runs", null = TRUE)
   }

@@ -214,11 +214,12 @@ test_that("gateway_context_items() builds the context items of contract 7.8 from
   skip_on_cran()
   facts = list(dot_facts("go"), dot_facts(1:10), dot_facts(mtcars), dot_facts("lit"))
   items = gateway_context_items(c(2L, 3L, 4L), c("literal", "symbol", "value", "literal"),
-                                c(NA, "big", NA, NA), c("\"go\"", "big", "head(x)", "\"lit\""),
-                                facts, c(NA, "0x1", NA, NA))
+                                c(NA, "big", NA, NA), c("\"go\"", "big", "head(x)", "lit"),
+                                facts, c(NA, "0x1", NA, NA), c("", "", "", "lit"))
   expect_length(items, 3L)
   expect_identical(items[[1L]]$kind, "symbol")
   expect_identical(items[[1L]]$name, "big")
+  expect_identical(vapply(items, function(it) it$named, NA), c(FALSE, FALSE, TRUE))
   expect_null(items[[1L]]$slot)
   expect_identical(items[[1L]]$address, "0x1")
   expect_identical(items[[1L]]$facts$class, "integer")

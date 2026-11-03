@@ -329,7 +329,7 @@ declares, if any.
 | `utils-encoding.R` | L0 | `as_utf8()` at every ingress [IC-62], UTF-8 marking before every parse/serialise, `os_bytes()`, `fs_path()`, binary-connection text I/O, C-locale guards | - | P01 |
 | `utils-options.R` | L0 | documented `gptr.*` option defaults; `gptr_has_human()`, `gptr_can_prompt()` [IC-43], front-end detection, verbosity, `supervise_default()`; mockable `gptr_is_interactive()`, `gptr_readline()`, `gptr_confirm()`; `setting_get()` (contract IC-09) | - | P01 |
 | `utils-paths.R` | L0 | project root (with the `gptr.project_root` override), `gptr_user_dir(which)` = `tools::R_user_dir("gptr", which)`, `user_home()`, `app_config_dir()` [IC-63], `path_key()`, `rscript_path()` [IC-60], workspace root (`.gptr` or `tempdir()/gptr`), atomic write (temp + `file.rename` with retries and an in-place fallback), the leaf `save_rds()`/`serialize_leaf()` wrappers that always pass `ascii = FALSE` (R7), path classes (incl. `control`, `instructions` [IC-54]), Windows reserved names | - | P01 |
-| `utils-text.R` | L0 | head 40% / tail 60% truncation to a token budget, spill files, the `out(id)` store (per session, last 20 results each [IC-71]), ANSI/OSC and carriage-return cleanup, 400-char line caps | - | P01 |
+| `utils-text.R` | L0 | head 40% / tail 60% truncation to a token budget, spill files, the `out(id)` store (per session, last 20 results each [IC-71]), ANSI/OSC and carriage-return cleanup (lines kept whole; a cut continues lines over 400 characters as pieces, D-345, and a helper view's cut shows their first 400, D-348) | - | P01 |
 | `utils-tokens.R` | L0 | class-aware estimator `est_tokens(x, class)` (G2 constants), image-token formulas, per-session EWMA multiplier | - | P01 |
 | `utils-size.R` | L0 | `env_snap_size(x, home, shared)`, the one size rule (each part and string once; code, top-level environments, the home and running frames 0; long lists and environments sampled) and `env_compact_seq()` [D-247] | - | P09 |
 | `json-encode.R` | L0 | `json_encode()`, once-serialised entries (`json_verbatim`), bodies assembled by concatenation | - | P01 |
@@ -430,7 +430,7 @@ declares, if any.
 | `doc-knitr.R` | L5 | `knit_print` methods, stale-chunk label hooks | - | P15 |
 | `ckpt-objects.R` | L4 | copy-safe object pre-images, capture policy, settle, spill [G7]; the exported `gptr_preimage()` S3 generic | - | P16 |
 | `ckpt-files.R` | L4 | content-addressed file store, baseline and walk, 3-way restore | - | P16 |
-| `ckpt-scan.R` | L4 | bounded filesystem scan and capture in a supervised R child | - | P16 |
+| `ckpt-scan.R` | L4 | bounded filesystem scan and capture in the R session | - | P16 |
 | `ckpt-rewind.R` | L4 | checkpoint records, `gptr_rewind()`, `gptr_checkpoints()`, `/undo`, `/redo`, `/rewind` | checkpoints | P16 |
 | `skill-discover.R` | L4 | skill discovery, lenient frontmatter (yaml), compact budgeted catalog, activation, `gptr_skills()` | skills | P17 |
 | `skill-templates.R` | L4 | prompt templates, `/name args` expansion | prompts | P17 |
@@ -678,7 +678,10 @@ element; a data frame, one per row; a named list, one state; `I(x)`, exactly one
 data-frame condition in `while()`; a function cannot see that it is a condition, so gptr prints a once-per-session
 message naming `I(x)` when it splits a data frame into several states [IC-71]). A piped session gives one state built by
 `as_state(s)`: its last answer (at most 2,000 characters) plus value facts; no turn is added and a
-`gptr.decision` custom entry is appended [G3 (12)]. Question type: `choices` -> choice, `levels` -> score,
+`gptr.decision` custom entry is appended [G3 (12)]. A state is keyed by its argument name when the context is
+named (`text = x`), else `input` (`input_1`, ... for more), and the question names that key; how a value is
+spelled (`x`, `reviews[2]`, `unname(r)`) never reaches the request, the describer text or the cache key
+[D-320]. Question type: `choices` -> choice, `levels` -> score,
 else a boolean (wire name `noul`, never the public `bool` [04a]). Results: `gptr_decision` (logical),
 `gptr_choice` (classed character; a factor only when `choices` is a factor or `.opts$output = "factor"`, a
 plain factor without probabilities whose `meta` attribute holds only `errors`, when elements failed [D-250]),
@@ -1717,7 +1720,7 @@ Nested calls are recorded in the outer result's `details$nested` (at most 20) [0
 An `ask` with no human stops the run with `status = "blocked"` and a classed `gptr_error_permission` stating
 the action and how to allow it (`mode = auto`, a rule, or `gptr_permissions()`); the session is attached to
 the condition. `options(gptr.noninteractive_ask = "deny")` returns a denial to the model instead [P-A §6.7]. In a
-non-interactive `manual` run the `ask` tool stays declared (+145 tokens), and calling it stops the run with status
+non-interactive `manual` run the `ask` tool stays declared (+166 tokens), and calling it stops the run with status
 `blocked` and `gptr_error_noninteractive` carrying the questions (NS-12: "stops with a clear error instead of
 guessing") [IC-68]. Plan mode (`mode = plan`) uses the `readonly` preset: `read`, and `r` evaluated in a scratch
 `new.env(parent = envir)` where only calls known to be read-only run (an allowlist; anything else is denied as
@@ -1826,7 +1829,8 @@ nothing (the user's control-flow code is the REQ-26(c) record). Undone turns bec
 **Locating and writing.** `doc_locate()` precedence: validated srcref (text must contain this prompt; reject
 `.active-rstudio-document`) > `source()`/`sys.source()` frame (identical-expression match, read inside
 `tryCatch` with an off switch: CRAN grey zone [14 fact-check]) > knitr/Quarto (`QUARTO_DOCUMENT_PATH`) >
-IRkernel (`JPY_SESSION_NAME`, then content) > `Rscript --file=` > IDE (rstudioapi, guarded) > console. Calls
+IRkernel (`JPY_SESSION_NAME`, then the bound notebook, then the one notebook in the working directory holding the
+call; several such notebooks: no site and a notice, D-341) > `Rscript --file=` > IDE (rstudioapi, guarded) > console. Calls
 are matched by content and ordinal, never stale line numbers. Writes use raw bytes preserving EOL, BOM and the
 final newline, a temp file in the same directory then `file.rename()`, an md5 conflict check with re-locate and
 retry (with rename retries and an in-place fallback on Windows, and case-insensitive path keys on Windows and
@@ -1846,7 +1850,7 @@ never executes a recorded block: in replay a piped session is advanced **in plac
 `identical()` holds along a replayed pipe chain), otherwise it returns a replayed session with zero tokens whose
 history comes from the session file truncated at the recorded turn, or is reconstructed from the document when the
 file is absent (a fresh clone; `history_source = "reconstructed"`) [IC-46]; the document's own code runs next. Live regeneration without double execution works under `gptr_source()`, knitr
-(scoped label hook) and line-by-line IDE runs; under base `source()`/Rscript, `live` and stale regeneration
+(scoped label hook: the old agent chunk neither runs nor shows) and line-by-line IDE runs; under base `source()`/Rscript, `live` and stale regeneration
 downgrade to replay with a warning. Replay is forced when `_R_CHECK_PACKAGE_NAME_` is set outside testthat (the
 examples of R CMD check; tests use offline fake and mock providers and may pass `replay =`) [13, 14 §4.4.2; IC-45].
 Calls nested in loops and functions have no block: they run live on re-source, or fail with "not recorded" under
@@ -2027,7 +2031,7 @@ the mode (only tightened) and, without `model =`, the running session's model, n
 session's own spec of the model's provider or router (one passed as `model =`); an egress question it raises names the
 sub-agent and that model [D-210].
 The same inheritance order applies to a direct `subagent_start()`: an explicit spec or agent model,
-then its parent's model, then the settings default. Before backend or pool selection, P19 uses P06's
+then its parent's model (every session has one). Before backend or pool selection, P19 uses P06's
 `model_canonical()` with the parent session id. Canonical provider-qualified references, aliases
 (including provider aliases and CLI family references) and thinking suffixes therefore select the
 same target as an ordinary `peter()` call, preserving the session-scoped provider or router spec.
@@ -2040,7 +2044,11 @@ the parent's model, without an automatic downgrade or provider switch.
 Workers snapshot the parent's effective System 1 role and its `s1_max_active`, `s1_rounds`,
 `s1_state_max` and `s1_max_elements` options. Only credentials of the designated chat and
 System 1 providers are forwarded, through the worker environment; unrelated providers' keys
-are omitted. Local credential forwarding requires no separate egress acknowledgment. Each
+are omitted. A `scope = "session"` login, which exists only in the parent process, is forwarded
+under the provider's first key variable while it matches the configured endpoint, ahead of an
+environment variable as in the parent; a remembered one the worker reads from `auth.json` itself,
+so no further secret enters its environment [D-315].
+Local credential forwarding requires no separate egress acknowledgment. Each
 actual System 1 dispatch retains its ordinary consent and replay guards before network I/O.
 
 Workers and fan-out children return no scratch objects [D-189]: a worker writes its home as a reference that the
@@ -2109,19 +2117,26 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   address change means modified; release the rest. At turn end spill the largest held images or drop the
   oldest (defuse + `rm()`), and drop images older than `gptr.undo_turns` (20).
 - **Files.** A content-addressed store (XXH128 via rlang, gzip level 1, deduplicated). Automatic
-  baseline and subsequent scans run in an owned R worker, with a worker wait deadline of
-  `gptr.checkpoint_scan_timeout` (2 s by default), including startup; bounded result collection
-  follows. Limits are 2,000 inspected entries and 256 captured files plus the existing per-file
-  and total byte caps. The
+  baseline and subsequent scans run in the R session for at most `gptr.checkpoint_scan_timeout`
+  (2 s by default), checked between entries and before each capture; an interrupt the person
+  continues from also ends one, and a scan keeps what it completed; a filesystem call that blocks
+  cannot be cut short [D-310]. Limits are 2,000 inspected entries and 256 captured files plus the
+  existing per-file and total byte caps. The
   same policy applies before and after tools and at CLI, turn and agent boundaries; there is no
-  unlimited catch-up scan. Partial inventories retain unvisited observations and never infer
-  creation or deletion from an unobserved path. Automatic file undo covers only changes with
-  sufficient observations and valid pre-images; coverage limitations are reported. Predicted
+  unlimited catch-up scan. A recording scan keeps the unvisited observations of the turn's sync
+  and never infers creation or deletion from an unobserved path; a sync's observations replace the
+  tracker's, so a path it did not reach has no pre-image or proven absence from before it
+  [D-311]. Automatic file undo covers only changes with sufficient observations and valid
+  pre-images; coverage is partial only where a scan stopped early, and R code that can write no
+  file and turns without a file-capable call get no file record [D-312]. Predicted
   literal targets of gptr-controlled calls are captured immediately before mutation, independently
-  of automatic coverage. A CLI-served call without synchronization cannot treat content first
-  seen after the child started as a turn-start pre-image. Arbitrary native CLI/shell writes
-  outside coverage are not guaranteed undo. Project discovery remains scoped and on demand through
-  `ls`, `find` and `read`, rather than requiring a complete startup inventory. Never capture a
+  of automatic coverage. On every route a scanned target gets a pre-image only while it is as
+  the last scan saw it (content hash, or size and mtime for a file without a backup), so a
+  CLI-served call without synchronization does not treat a native edit the child made after
+  that scan as a turn-start pre-image (the turn's recording scan has that one); a target no scan
+  observed gets its state just before the call, so undo reverts Peter's own write [D-313]. Unpredicted writes by R code, a shell or a
+  CLI outside coverage are not guaranteed undo. Project discovery remains scoped and on demand
+  through `ls`, `find` and `read`, rather than requiring a complete startup inventory. Never capture a
   `protected` or `control` path (`.env`, `.Renviron`, keys), whose rewind row reads "no pre-image"
   [D-298]; the store is anchored to the tracker's project root, not the working directory.
   Restores are 3-way (user edits after the turn are kept); never through symlinks or hard links;
@@ -2318,7 +2333,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   the compaction request and the next request's estimate as a ledger row, from which it measures the context
   left [D-245]),
   `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
-  `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
+  `/skills`, `/skill:<name>`, `/mcp [serve]`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
   templates as `/<name> args`, registered when a session starts and by the console (the `templates.sync`
   service) before `/help`, a `/` completion and a call of a name unknown, so a template works as the first input
   and a template saved since is found (D-252). Commands are recorded as comments in transcripts. Their output,
@@ -2331,12 +2346,14 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   Ctrl-C notices at the prompt and of the pause menu start with a line end (D-225).
 - **UI backends** (`ui` specs): `console`, `none`, `scripted` (tests), `rstudio` (dialogs; a timed-out dialog
   is a denial with a notice). The UI abstraction is how Shiny or RPC front ends replace the console. Whether anyone
-  can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works
-  [18 §2; IC-43].
+  can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works,
+  unless the client takes no input (`allow_stdin = false`: nbconvert, papermill) [18 §2; IC-43; D-340].
   Console selector titles intentionally preserve line feeds for setup and question text; option
   labels, details and other control/bidi/zero-width characters remain escaped. Permission approval
   rendering retains its separate escaping contract.
-- **Other front ends**: `knit_print` for sessions and System 1 vectors; the JSONL event sink (`frontend`
+- **Other front ends**: `knit_print` for sessions and System 1 vectors, and Jupyter `repr` methods for sessions,
+  histories and System 1 vectors (a System 1 vector shows what `print()` shows: each value's p or conf and the
+  model, calibration and date footer); the JSONL event sink (`frontend`
   "jsonl": redacted Pi-named events on a connection, used by worker children and by agentic layers written in
   other languages) [P-B graft].
 
@@ -2450,10 +2467,10 @@ texts below, serialised as the Anthropic tool array [final/prompt/measure.R, mea
 
 | Preset | Direct tools | Tool array | T0 system | Used for |
 |---|---|---|---|---|
-| `minimal` | `r`, `read`, `edit`, `write` | 614 | 648 | sub-agents, cheap models |
-| `standard` (default) | minimal + `ask` when a human is present, or in a non-interactive `manual` run | 614-791 (the `r` schema variant, §7.2) | 1,291 core + conditional sections (1,734 with all and the `ask` line) | interactive and programmatic use |
+| `minimal` | `r`, `read`, `edit`, `write` | 669 | 648 | sub-agents, cheap models |
+| `standard` (default) | minimal + `ask` when a human is present, or in a non-interactive `manual` run | 669-846 (the `r` schema variant, §7.2) | 1,291 core + conditional sections (1,734 with all and the `ask` line) | interactive and programmatic use |
 | `readonly` | `read`, `r` (scratch environment), `ask` when a human is present | about 560 | as standard without the edit and write rules (-115), plan mode block | plan mode |
-| `extended` | standard + direct `grep`, `find`, `ls`; full `<r_performance>` | 1,254 | 2,060 | models that underuse code; models with a 4,096-token cache minimum |
+| `extended` | standard + direct `grep`, `find`, `ls`; full `<r_performance>` | 1,309 | 2,060 | models that underuse code; models with a 4,096-token cache minimum |
 
 (Measured after the review [IC-68]; presets are registered `preset` records, so a plugin can add one [IC-69].)
 
@@ -2474,17 +2491,17 @@ literally asked for; the user and the document get the full diff from `details` 
 
 ```json
 [{"name":"read","description":"Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.","input_schema":{"type":"object","required":["path"],"properties":{"path":{"type":"string","description":"Path to the file to read (relative or absolute)"},"offset":{"type":"number","description":"Line number to start reading from (1-indexed)"},"limit":{"type":"number","description":"Maximum number of lines to read"}}}},
- {"name":"r","description":"Run R code in the user's live R session. Objects persist between calls and belong to the user. Returns printed output, messages, warnings, errors with a traceback, and plots as images. Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and last 60% and names a peter$out(id) handle for the rest.","input_schema":{"type":"object","required":["code"],"properties":{"code":{"type":"string","description":"R code to evaluate. May contain several expressions."},"record":{"type":"boolean","description":"Record this code in the user's document (default true). Use false for throwaway inspection."},"note":{"type":"string","description":"One-line decision or rationale, recorded as a '## Decision:' comment."},"timeout":{"type":"number","description":"Seconds; best effort. Default: none when the user is present, else 3600."}}}},
+ {"name":"r","description":"Run R code in the user's live R session. Objects persist between calls and belong to the user. Returns printed output, messages, warnings, errors with a traceback, and plots as images. Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and last 60% and names a peter$out(id) handle for the rest. To set up MCP servers, skills or settings in gptr itself, or find its APIs, use peter$search(\"words\") and peter$help(\"gptr\") inside r; peter$help(\"gptr::name\") gives docs, source = TRUE its definition.","input_schema":{"type":"object","required":["code"],"properties":{"code":{"type":"string","description":"R code to evaluate. May contain several expressions."},"record":{"type":"boolean","description":"Record this code in the user's document (default true). Use false for throwaway inspection."},"note":{"type":"string","description":"One-line decision or rationale, recorded as a '## Decision:' comment."},"timeout":{"type":"number","description":"Seconds; best effort. Default: none when the user is present, else 3600."}}}},
  {"name":"edit","description":"Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.","input_schema":{"type":"object","required":["path","edits"],"properties":{"path":{"type":"string","description":"Path to the file to edit (relative or absolute)"},"edits":{"type":"array","items":{"type":"object","required":["oldText","newText"],"properties":{"oldText":{"type":"string","description":"Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call."},"newText":{"type":"string","description":"Replacement text for this targeted edit."}}},"description":"One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead."}}}},
  {"name":"write","description":"Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.","input_schema":{"type":"object","required":["path","content"],"properties":{"path":{"type":"string","description":"Path to the file to write (relative or absolute)"},"content":{"type":"string","description":"Content to write to the file"}}}},
  {"name":"ask","description":"Ask the user one to four questions and wait for the answers, when a decision changes the result and cannot be inferred. The user may always type their own answer. Not for permission to run code: the harness asks for that itself.","input_schema":{"type":"object","required":["questions"],"properties":{"questions":{"type":"array","maxItems":4,"items":{"type":"object","required":["id","question"],"properties":{"id":{"type":"string"},"question":{"type":"string"},"type":{"enum":["single","multi","text"]},"options":{"type":"array","maxItems":9,"items":{"type":"string"}},"default":{"type":"string"}}}}}}}]
 ```
 
-Measured: four tools 674 tokens with the full `r` schema shown above; `ask` adds 145 (P-C's trimmed schema, vs
-about 336 for 18 §3.6's); the `r` tool alone 197. The `r` schema is frozen in one of four variants [IC-68]:
+Measured: four tools 729 tokens with the full `r` schema shown above; `ask` adds 145 (P-C's trimmed schema, vs
+about 336 for 18 §3.6's); the `r` tool alone 252. The `r` schema is frozen in one of four variants [IC-68]:
 `record` and `note` only when a document is bound at freeze, `timeout` (then described "Seconds; best effort.
-Default 3600.") only when no human can answer: 188 (document, no human), 169 (document, human), 137 (no document,
-no human: sub-agents), 118 (no document, human) tokens, so the minimal array is 614. The `r` result cap is about 4,000 estimated tokens [G2 (g)]; `read` caps at 2,000 lines, 50 KB
+Default 3600.") only when no human can answer: 243 (document, no human), 224 (document, human), 192 (no document,
+no human: sub-agents), 173 (no document, human) tokens, so the minimal array is 669. The `r` result cap is about 4,000 estimated tokens [G2 (g)]; `read` caps at 2,000 lines, 50 KB
 and 12,000 tokens, with line numbers off (cat -n costs +19-26%) [G2 (g)]; direct MCP results cap at 4,000.
 
 ### 7.3 The system prompt (verbatim)
@@ -2492,7 +2509,7 @@ and 12,000 tokens, with line numbers off (cat -n costs +19-26%) [G2 (g)]; direct
 Frozen at session start by `prompt-sections.R`; each section is a registered `prompt_section` spec with a
 tier, order and budget, replaceable by plugins and by `.gptr/SYSTEM.md` or `.opts$system` (which replace
 `preamble`, `tools` and `rules`, Pi's rule) [G4 §3.1-3.2]. T0 ends after `<context>`; T1 starts at `<skills>`.
-Strings in R sources are ASCII. `{s1}` is the configured System 1 alias (`jev`). Each capability's text is
+Strings in R sources are ASCII. `{s1}` is the configured System 1 alias written as an R string (`"jev"`). Each capability's text is
 contributed by the built-in that owns it [IC-68]: `<rules>` is the `guidelines` of the active direct tools in
 array order (read: line 1; r: five lines 2-6; edit: lines 7-10; write: line 11) followed by P07's three closing lines,
 so the `readonly` preset has no edit or write lines; `<r_session>` is P07's core with fragments (`parent =
@@ -2557,7 +2574,7 @@ The r tool runs code in the environment peter() was called from. Objects you cre
 <documents>
 Code from successful r calls is written into the user's document (named in <environment>) in a block below the peter() call that asked for it, so the document re-runs from top to bottom. Therefore:
 - Make recorded code the clean final version: named objects, no exploratory prints. Pass record = false for throwaway checks (head(), summaries, tests).
-- Record key modelling decisions with note (one line, written as "## Decision: ..."); key printed outputs are added as #> comments automatically.
+- Record key modelling decisions with note (one line, recorded as a "## Decision:" comment); key printed outputs are added as #> comments automatically.
 - To change code you wrote earlier, edit that block in the document instead of appending a second version.
 - In the document, prompts are quoted strings in peter("..."), and System 1 decisions are peter(..., model = {s1}) inside if, for or while. Add such calls only when the user asks for an agent step in the script.
 </documents>
@@ -2567,7 +2584,7 @@ For an interactive view (filters, drill-down, dashboards) build a Shiny app, not
 </artifacts>
 
 <system1>
-Use System 1 for typed decision leaves inside your R workflow: peter("Is this an RCT?", abstracts, model = {s1}) returns a logical vector with attr(, "prob"); choices = c("a", "b") returns labels. Batch hundreds or thousands; omit agents and parallel. gptr.s1_max_active controls concurrency (default 8; 1 sequential). Chunk inputs above gptr.s1_max_elements (10,000). Use results in if/for/while, check uncertain answers, and keep reasoning and writing for yourself.
+Use System 1 for typed decision leaves inside your R workflow: peter("Is this an RCT?", abstracts, model = {s1}) returns a logical vector with attr(, "prob"); choices = c("a", "b") returns labels; levels = c("low", "high") returns an expected 0-based score. Batch hundreds or thousands; omit agents and parallel. gptr.s1_max_active controls concurrency (default 8; 1 sequential). Chunk inputs above gptr.s1_max_elements (10,000). Use results in if/for/while, check uncertain answers, and keep reasoning and writing for yourself.
 </system1>
 
 <modes>
@@ -2995,8 +3012,8 @@ prompt per request [07].
 
 1. `if (peter("Is this abstract about a randomised controlled trial?", abstract, model = jev))`: the literal is
    the prompt, `abstract` the context; `jev` resolves to `typesafe/jev-latest`, a classifier provider, so
-   route a applies and no session is created. One state `{"abstract": "<text>"}`, question `{type: "noul",
-   instructions: "... The input is in abstract.", criteria: ...}`.
+   route a applies and no session is created. One state `{"input": "<text>"}`, question `{type: "noul",
+   instructions: "...", criteria: ...}`, whose instructions end "The input is in `input`."
 2. S1 cache lookup (memory before `gptr_init()`, else `.gptr/cache/s1/`, input hash only); a miss is one
    reactor request with the key materialised only for the TypeSafe origin; `noul: 0.97` ->
    `structure(TRUE, class = c("gptr_decision", "gptr_s1", "logical"), prob = 0.97, ...)` goes straight into
@@ -3286,12 +3303,12 @@ listed in 12.4.
 
 | Preset | Tool array | T0 | T1 (fixture: `<r_env>` + 2 built-in skills) | Static total | Reference points |
 |---|---|---|---|---|---|
-| `minimal` (sub-agents) | 614 | 648 | 0 | **1,262** (about 1,700 Claude) | Pi's 4-tool default 919-1,175 [G2 (b)] |
-| `standard` core (no documents, artifacts, System 1; no human) | 614 | 1,291 | 542 | **2,447** (about 3,300) | |
-| `standard`, non-interactive, all sections, a bound document | 665 | 1,717 | 542 | **2,924** (about 3,950) | G4's 7-tool default 3,598 |
-| `standard`, interactive (+ `ask`), all sections, a bound document | 791 | 1,734 | 542 | **3,067** (about 4,140) | Claude Code CLI 3-18K [07] |
-| `standard`, interactive (+ `ask`), no document | 740 | 1,551 | 542 | 2,833 (about 3,820) | |
-| `extended` | 1,254 | 2,060 | 542 | 3,856 (about 5,210) | Codex 19-38K per turn [08] |
+| `minimal` (sub-agents) | 669 | 648 | 0 | **1,317** (about 1,780 Claude) | Pi's 4-tool default 919-1,175 [G2 (b)] |
+| `standard` core (no documents, artifacts, System 1; no human) | 669 | 1,291 | 542 | **2,502** (about 3,380) | |
+| `standard`, non-interactive, all sections, a bound document | 720 | 1,717 | 542 | **2,979** (about 4,020) | G4's 7-tool default 3,598 |
+| `standard`, interactive (+ `ask`), all sections, a bound document | 846 | 1,734 | 542 | **3,122** (about 4,220) | Claude Code CLI 3-18K [07] |
+| `standard`, interactive (+ `ask`), no document | 795 | 1,551 | 542 | 2,888 (about 3,900) | |
+| `extended` | 1,309 | 2,060 | 542 | 3,911 (about 5,280) | Codex 19-38K per turn [08] |
 
 Measured after the review with rtiktoken o200k [IC-68]; the parenthesised values project Claude tokens with the
 1.35 prior of §12.5 (range 1.3-1.6) [IC-73]. Budgets are in o200k-estimated units scaled by the session's
@@ -3332,7 +3349,7 @@ static prefix is read from cache at 0.025-0.1x the input price.
 
 | Mechanism | Saving | Evidence |
 |---|---|---|
-| Four direct tools; search and everything else as `peter$` members | 674 vs 1,199 tokens of tool schema per uncached request; about 36 vs 328 per member [G1 §2.5; an upper bound, G1 fact-check] | G4 §2.8, measured §7.2 |
+| Four direct tools; search and everything else as `peter$` members | 729 vs 1,199 tokens of tool schema per uncached request; about 36 vs 328 per member [G1 §2.5; an upper bound, G1 fact-check] | G4 §2.8, measured §7.2 |
 | MCP tools as R signatures | 50 GitHub tools: 2,285 vs 11,361 tokens; 125 tools: 2,285 vs 28,534 | G2 (b) |
 | Composition in one `r` call | 2.2x fewer requests and 3.6x less cumulative input on golden transcripts; SQL in 3 steps 6,476 -> 175 tokens; 8 polyglot tasks 45,140 (bash tool) -> 7,592 (same commands via `peter$sh`) -> 1,967 (R-composed), i.e. 22.9x | G2 (d), G5 token table |
 | R as polyglot glue with default budgets | results stay R objects; cross-language data never passes through the context; frugal bash can match on pure text filtering, R wins on defaults, objects and round trips | G5 fact-check 11 |
@@ -3349,7 +3366,7 @@ static prefix is read from cache at 0.025-0.1x the input price.
 | `r` schema variants | 9-79 tokens per request (`record`/`note` only with a bound document, `timeout` only without a human) | [IC-68] |
 | Rules from the active tools' guidelines | -115 tokens in the `readonly` (plan) preset; disabling a built-in removes its `<r_session>` line | [IC-68] |
 | Deduplicated turn blocks | an unchanged plugin block is not re-sent every prompt | [IC-38] |
-| `minimal` preset for sub-agents | 1,262 vs about 3,067 static tokens per child request | §12.1 |
+| `minimal` preset for sub-agents | 1,317 vs about 3,122 static tokens per child request | §12.1 |
 | System 1 for judgements | about 383 vs 2,174 input tokens per decision; about 100x cheaper in dollars | G2 (d), 04 |
 | System 1 over a session | 55-70 characters of state instead of the transcript | G3 (12) |
 | Replay and caches | 0 tokens for replayed blocks, cached System 1 elements, knitr-cached chunks, `print`, `$value`, audit entries | G3 (14), 14 |

@@ -78,6 +78,31 @@ test_that("an IRkernel session can prompt but does not count as a watching human
   expect_false(gptr_can_prompt())
 })
 
+test_that("a Jupyter request with allow_stdin = false asks nothing, said once (IC-43)", {
+  # IRkernel installs its executor's readline() in base; the executor holds the request
+  kernel_readline = function(allow) {
+    local({
+      current_request = list(content = list(allow_stdin = allow))
+      function(prompt = "") ""
+    })
+  }
+  the$once[["message:jupyter_no_stdin"]] = NULL
+  local_gptr_options(quiet = FALSE)
+  expect_true(jupyter_stdin(kernel_readline(TRUE)))
+  expect_true(jupyter_stdin(function(prompt = "") ""))
+  expect_true(jupyter_stdin(base::readline))
+  expect_message(expect_false(jupyter_stdin(kernel_readline(FALSE))),
+                 "takes no input.*nbconvert", class = "gptr_message_notice")
+  expect_no_message(expect_false(jupyter_stdin(kernel_readline(FALSE))))
+  withr::local_options(gptr.interactive = NULL, jupyter.in_kernel = TRUE,
+                       knitr.in.progress = NULL)
+  withr::local_envvar(TESTTHAT = "false", `_R_CHECK_PACKAGE_NAME_` = "")
+  local_mocked_bindings(gptr_is_interactive = function() FALSE,
+                        jupyter_stdin = function() FALSE, .package = "gptr")
+  expect_false(gptr_can_prompt())
+  expect_false(gptr_confirm("Record gptr blocks into nb.ipynb?", default = FALSE))
+})
+
 test_that("testthat and R CMD check never count as a human", {
   withr::local_options(gptr.interactive = NULL)
   local_mocked_bindings(gptr_is_interactive = function() TRUE)

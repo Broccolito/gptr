@@ -45,11 +45,14 @@ killed. Such blocks wait in the \verb{.gptr/} of the document's project, else in
 \code{tools::R_user_dir("gptr", "cache")}, so any R process of the same user can apply them.
 }
 \details{
-Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
-or functions do not. Only blank lines may separate a call's statement from its blocks: after a
+Eligible top-level calls and pipe chains own document blocks; calls nested inside loops or
+functions do not. In R Markdown, Quarto and notebooks a call's blocks are a chunk or cell after
+its calling one, so when the document runs again, code after the call in that chunk or cell runs
+before them: use what the agent made from a later chunk or cell (gptr says so once when a calling
+chunk or cell does). Only blank lines may separate a call's statement from its blocks: after a
 comment or code line between them the blocks belong to no call, so the call is asked again and
-gets a new block while the old block's code still runs. A block records the R code the agent
-ran: of a call that stopped part-way,
+gets a new block while the old block's code still runs. A block records the R code the agent ran:
+of a call that stopped part-way,
 the expressions that ran, and code that changed your objects even where the model passed
 \code{record = false}, which leaves out only inspection. Binding supplies recording consent even
 when automatic recording is off, but \code{.opts = list(record = FALSE)} suppresses recording for

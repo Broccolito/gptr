@@ -2210,7 +2210,7 @@ test_that("tool calls of a run show escaped previews and results (acceptance 7)"
   out = utils::capture.output(peter("go", model = fake, envir = e, mode = auto))
   expect_true("  | r  z = 1 # <U+001B>[31mred" %in% out)
   # the elapsed time follows when the call took a second or more (a first call on a slow runner)
-  expect_match(out, "^    \\+ z( \\([0-9.]+ s\\))?$", all = FALSE)
+  expect_match(out, "^    \\+ z( - [1-9][0-9]*[.][0-9] s)?$", all = FALSE)
   expect_false(any(grepl("\033", out, fixed = TRUE)))
   expect_identical(e$z, 1)
 })

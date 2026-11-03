@@ -85,6 +85,13 @@ test_that("long output keeps head and tail with a peter$out() notice", {
   expect_length(out_get(out$out_id), 5000L)
 })
 
+test_that("a long line within the budget reaches the model whole", {
+  long = paste(rep("word", 250), collapse = " ")
+  out = format_eval_result(fake_result(list(list(type = "output", text = long))), 4000L)
+  expect_identical(out$text, long)
+  expect_false(out$truncated)
+})
+
 test_that("image tokens count against the budget", {
   skip_on_cran()
   img = list(type = "image", mime = "image/png", data = "x", source = "plot", width = 768L,

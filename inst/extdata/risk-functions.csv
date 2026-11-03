@@ -992,7 +992,7 @@
 "gptr","gptr_tailor",4,"control","","changes gptr's configuration or another session"
 "gptr","gptr_tool",0,"read","",""
 "gptr","gptr_tool_result",0,"read","",""
-"gptr","gptr_trust",4,"control","","changes gptr's configuration or another session"
+"gptr","gptr_trust",0,"read","","control with trust = TRUE or FALSE, which records a decision"
 "gptr","gptr_usage",0,"read","",""
 "gptr","peter",1,"network","","sub-agents; their tools are gated in the inherited mode"
 "grDevices","adjustcolor",0,"read","",""
