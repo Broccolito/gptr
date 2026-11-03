@@ -295,18 +295,19 @@ test_that("HTTP MCP path and authentication configuration edits invalidate login
   local_mocked_bindings(mcp_server_get = function(name, session = NULL) spec)
   local_scripted_ui(list(paste0("http-config-canary-", strrep("f", 20))))
   gptr_login("mcp:demo", method = "key", scope = "session")
-  conn = new.env(parent = emptyenv())
-  conn$spec = spec
-  conn$headers = list()
-  conn$auth_key = "mcp:demo"
-  conn$origin = "https://mcp.example"
-  conn$url = spec$url
-  expect_s3_class(mcp_http_auth(conn)[[2]], "gptr_secret")
-  conn$url = "https://mcp.example/other-account"
-  expect_null(mcp_http_auth(conn))
-  conn$url = spec$url
-  conn$spec$headers = list(`X-Account` = "another")
-  expect_null(mcp_http_auth(conn))
+  # a configuration edit rebuilds the connection, as mcp_conn_get() does
+  connect = function(spec) {
+    conn = new.env(parent = emptyenv())
+    conn$name = spec$name
+    conn$spec = spec
+    conn$project = project_root()
+    mcp_http_setup(conn)
+  }
+  expect_s3_class(mcp_http_auth(connect(spec))[[2]], "gptr_secret")
+  moved = utils::modifyList(spec, list(url = "https://mcp.example/other-account"))
+  expect_null(mcp_http_auth(connect(moved)))
+  edited = utils::modifyList(spec, list(headers = list(`X-Account` = "another")))
+  expect_null(mcp_http_auth(connect(edited)))
 })
 
 test_that("stdio logout closes a cached child when its configuration is unavailable", {

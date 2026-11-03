@@ -1203,8 +1203,7 @@ mcp_http_auth = function(conn, force = FALSE) {
   tryCatch({
     rec = auth_store_get(conn$auth_key)
     if (!is.null(rec$binding)) {
-      binding = conn$auth_binding %||% mcp_http_binding(conn$spec, mcp_expand_spec(conn$spec))
-      if (!identical(rec$binding, binding)) return(NULL)
+      if (!identical(rec$binding, conn$auth_binding)) return(NULL)
     }
     if (rlang::is_string(rec$resource) &&
           !identical(url_for_log(rec$resource), url_for_log(conn$url))) return(NULL)
