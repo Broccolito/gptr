@@ -727,7 +727,8 @@ s1_json_values = function(v) {
 }
 
 #' The failure policy (contract 2.2): a scalar call signals its element's condition; a
-#' vectorised call keeps NA for failed elements and warns once with class s1_errors
+#' vectorised call keeps NA for failed elements and warns once with class s1_errors, quoting its
+#' most common failure
 #' @noRd
 s1_failures = function(conditions, n) {
   errors = s1_errors_df(conditions)
@@ -739,8 +740,11 @@ s1_failures = function(conditions, n) {
                error_type = e[["error_type"]], request_id = e[["request_id"]],
                model = e[["model"]])
   }
-  gptr_warn(paste0(nrow(errors), " of ", n, " System 1 elements failed and are NA; ",
-                   "see attr(x, \"meta\")$errors."), "s1_errors", errors = errors)
+  m = errors$message
+  top = names(sort(table(m), decreasing = TRUE))[1L]
+  gptr_warn(paste0(nrow(errors), " of ", n, " System 1 elements failed and are NA (",
+                   sum(m == top), " with: ", top, "); see attr(x, \"meta\")$errors."),
+            "s1_errors", errors = errors)
 }
 
 #' Write the one-line block of a statement through P15's doc.s1_block service, when registered and

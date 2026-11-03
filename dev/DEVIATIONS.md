@@ -9671,3 +9671,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (D-323)"; "emulation preflights the chat model before any state is serialised or sent" keeps
   `s1_emulate()` itself discovery-free; subagent-backends "workers freeze the effective System 1
   role and its bounded policy". Evidence: progress/fixes-1.0.1/lane-C.md.
+
+## D-324 - Fixes 1.0.1 lane C System 1 batch messages (2026-11-02)
+- Rule (failure warning): a vectorised call's `s1_errors` warning quotes its most common failure
+  message and how many elements it failed ("3 of 3 System 1 elements failed and are NA (3 with:
+  System 1 request failed with HTTP 400: ...); see attr(x, "meta")$errors."). Was the count
+  alone, so a model-level failure (Ollama's legacy-format 400, a bad key) read as noise while a
+  one-element call showed the reason. The NA results and the one warning stay (contract 2.2).
+- Contract-visible: 04 section 2.2 (`s1_errors`).
+- Tests: s1-route "a vector call's warning quotes its most common failure", "INFRA-18: choices
+  give a classed character ...". Evidence: progress/fixes-1.0.1/lane-C.md.

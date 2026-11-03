@@ -874,6 +874,22 @@ test_that("INFRA-18: min_confidence with uncertain NA, \"stop\" or a function fo
   expect_identical(as.logical(yes), c(TRUE, TRUE, FALSE))
 })
 
+test_that("a vector call's warning quotes its most common failure", {
+  skip_on_cran()
+  s1_fresh()
+  local_fake_provider(function(state, question) {
+    if (identical(state$input, "c")) return(list(error = "rate limited", status = 429L))
+    list(error = "run 'ollama pull clef-flash:latest' first", status = 400L)
+  }, name = "stale", type = "classifier")
+  local_gptr_options(s1_rounds = 1L)
+  x = c("a", "b", "c")
+  w = expect_warning(peter("Is it fine?", x, model = "stale/stale-s1"),
+                     class = "gptr_warning_s1_errors")
+  expect_match(conditionMessage(w), paste0("3 of 3 System 1 elements failed and are NA (2 with: ",
+                                           "run 'ollama pull clef-flash:latest' first)"),
+               fixed = TRUE)
+})
+
 test_that("INFRA-18: choices give a classed character with a plain ==; a factor stays a factor", {
   # Undescribed choices go on the wire as {"liver": null, ...} (report 04a), which P01's fake
   # classifier refuses ("need at least two text criteria"; D-077), and a factor's options never
@@ -932,6 +948,7 @@ test_that("a factor answer keeps the call's meta, which its failure warning poin
     }
   )
   expect_match(conditionMessage(seen$w), "see attr(x, \"meta\")$errors", fixed = TRUE)
+  expect_match(conditionMessage(seen$w), "(1 with: ", fixed = TRUE)
   expect_identical(class(f), "factor")
   expect_identical(levels(f), c("liver", "lung", "other"))
   expect_identical(unname(as.character(f)), c("liver", NA))

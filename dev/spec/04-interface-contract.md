@@ -295,7 +295,7 @@ Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `depre
 abbreviates a `peter()` argument its value fits, D-251, or is a character `backend`, `objects` or
 `export`, `gptr_agent()` options `peter()` lacks, D-322), `replay_downgraded` (P15; live/stale
 regeneration downgraded under `source()`), `doc_conflict` (P15; md5 conflict after three attempts),
-`s1_errors` (P13; failed elements in a vectorised call; field `errors`), `readline_limit` (P14),
+`s1_errors` (P13; failed elements in a vectorised call, quoting the most common failure, D-324; field `errors`), `readline_limit` (P14),
 `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only when
 `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs
 in live session entries; field `counts`), `untrusted_setting` (P08; `gptr_config()` saved keys an
