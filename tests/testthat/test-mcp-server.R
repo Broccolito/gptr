@@ -409,6 +409,28 @@ test_that("a fork's served calls evaluate in its overlay; a plan-mode parent sta
   expect_identical(p$envir$d, mtcars)
 })
 
+test_that("a plan-mode served r call runs a nested read-only sh call; a writing one is refused", {
+  skip_on_cran()
+  root = local_project(files = list("note.txt" = "hello"))
+  p = local_served_session("plan")
+  id = session_data(p$session)$id
+  served = function(code) mcp_dispatch_local(r_call(code), id)$result
+  # the nested gate reads the call's overlay as the plan policy does for the call itself (D-351)
+  for (cmd in c("echo hi", "ls", "cat note.txt")) {
+    res = served(paste0("peter$sh('", cmd, "')$stdout"))
+    expect_false(res$isError, label = cmd)
+  }
+  expect_match(served("peter$sh('cat note.txt')$stdout")$content[[1L]]$text, "hello", fixed = TRUE)
+  for (code in c("peter$sh('touch made.txt')", "x = 'touch'; peter$sh(paste(x, 'made.txt'))",
+                 "peter$script('made.R')")) {
+    res = served(code)
+    expect_true(res$isError, label = code)
+    expect_match(res$content[[1L]]$text, "plan mode", fixed = TRUE)
+    expect_false(grepl("scratch environment", res$content[[1L]]$text, fixed = TRUE))
+  }
+  expect_false(file.exists(file.path(root, "made.txt")))
+})
+
 test_that("a served refusal offers what a person can do, never an allow rule that cannot work", {
   local_gptr_options(quiet = FALSE)
   y = local_served_session("manual")

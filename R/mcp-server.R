@@ -322,7 +322,7 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
   gptr_r_call = r_call_new(ctx)
   if (!mcp_pumped(run)) {
     sid = if (!is.null(session)) session_data(session)$id
-    gptr_r_call$gate = function(name, input) mcp_nested_gate(name, input, ctx, sid, call$risk)
+    gptr_r_call$gate = function(name, input) mcp_nested_gate(name, input, ctx, sid, call)
   }
   if (!is.null(run)) {
     outer = run$tool_call
@@ -364,15 +364,17 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
 #' run in its `wd`, as the member's own risk reads it, or a script's path), as the static gate
 #' reads one, with the registered secrets its `env` hands the child for the rules, and then, when
 #' that hand-over meets the secret guard, the member itself (its own risk), which no rule for `r`
-#' code covers; any other with its tool's risk of its input. A secret the served call's analysis
-#' (`outer`) guards was that call's question, as in dispatch_nested(). Signals the denial.
+#' code covers; any other with its tool's risk of its input. The literal is gated in the served
+#' call's environment (`outer$envir`), as the plan policy reads it. A secret the served call's
+#' analysis (`outer$risk`) guards was that call's question, as in dispatch_nested(). Signals the
+#' denial.
 #' @noRd
 mcp_nested_gate = function(name, input, ctx, sid = NULL, outer = NULL) {
   spec = registry_get("tool", name, session = sid)
   call = list(name = name, input = input, tool = spec, nested = TRUE,
               risk = if (is.function(spec$risk)) spec$risk(input, ctx))
-  if (isTRUE(call$risk$secret_guard) && isTRUE(outer$secret_guard) &&
-      all(call$risk$secrets %in% outer$secrets)) {
+  if (isTRUE(call$risk$secret_guard) && isTRUE(outer$risk$secret_guard) &&
+      all(call$risk$secrets %in% outer$risk$secrets)) {
     call$risk$secret_guard = FALSE
   }
   calls = list(call)
@@ -380,7 +382,7 @@ mcp_nested_gate = function(name, input, ctx, sid = NULL, outer = NULL) {
     code = nested_literal(name, input)
     risk = ext_service_get("risk.classify")(code, envir = NULL, root = project_root(), kind = "r")
     risk$secrets = unique(c(risk$secrets, call$risk$secrets))
-    calls = c(list(list(name = "r", input = list(code = code), risk = risk)),
+    calls = c(list(list(name = "r", input = list(code = code), risk = risk, envir = outer$envir)),
               if (isTRUE(call$risk$secret_guard)) calls)
   }
   for (x in calls) {
