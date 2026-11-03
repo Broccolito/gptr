@@ -9592,3 +9592,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   names the document).
 - Tests: test-doc-locate.R "a kernel without JPY_SESSION_NAME picks the bound notebook, else the
   one match". Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-342 - v1.0.1 lane G R Markdown and Quarto console transcripts replay (2026-11-02)
+- Rule (console into .Rmd/.qmd; live finding docs): a console target in R Markdown or Quarto
+  opens with a chunk holding `library(gptr)` (`doc_transcript_preamble()`), the rule .R
+  transcripts already had, and takes each direct R line, slash command and rewind note as an R
+  chunk of those lines (fence lengthened past any backtick line in them). A direct R line's `#>`
+  output is left out there, as agent chunks leave theirs: rendering prints it. Before, the first
+  turn wrote a bare `s_<id> = peter(...)` chunk and every other console line was dropped, so the
+  document did not render (`could not find function "peter"`) and a turn using a `!` object
+  failed. The `#~` switching of direct R lines after an undo stays `.R`-only (a line using an
+  undone object then fails on render, as it would at the console).
+- Contract-visible: 04 section 15.3 (the transcript paragraph of IC-49); vignette
+  ("script-as-history").
+- Tests: test-doc-replay.R "an R Markdown transcript loads gptr and keeps direct R lines as chunks
+  that knit"; test-doc-io.R "transcript lines are appended raw to an .R transcript, as a chunk to
+  Rmd and qmd". Evidence: progress/fixes-1.0.1/lane-G.md.

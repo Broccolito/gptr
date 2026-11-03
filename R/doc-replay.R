@@ -1327,14 +1327,15 @@ doc_on_console_direct = function(event, ctx) {
   code = doc_direct_code(doc_split_lines(code))
   st = data$status
   created = as_utf8(as.character(data$created %||% character()))
-  lines = if (is.null(st) || identical(st, "ok")) {
-    c("", doc_direct_header(NULL, created), code,
-      doc_output_lines(as.character(data$output %||% character())))
+  ok = is.null(st) || identical(st, "ok")
+  lines = if (ok) {
+    c("", doc_direct_header(NULL, created), code)
   } else {
     named = rlang::is_string(st) && grepl("^[a-z_]{1,20}\\z", st, perl = TRUE)
     c("", doc_direct_header(if (named) st else "failed", created), paste0("#~ ", code))
   }
-  doc_console_append(lines, ctx$session)
+  doc_console_append(lines, ctx$session,
+                     if (ok) doc_output_lines(as.character(data$output %||% character())))
 }
 
 # a direct R line's header (doc_direct_header()): its reason and its key=value pairs
@@ -1476,22 +1477,27 @@ doc_on_console_command = function(event, ctx) {
   doc_console_append(paste0("# ", doc_one_line(txt[1L])), ctx$session)
 }
 
-#' Append console lines to the console transcript target (an .R transcript; the writer redacts
-#' them with the persist profile under write consent), then rescan it (doc_transcript_rescan());
-#' always NULL (notify channels). While `session` runs in the background (the pause menu's `[b]`),
+#' Append console lines to the console transcript target (the writer redacts them with the
+#' persist profile under write consent): an .R transcript, then rescanned
+#' (doc_transcript_rescan()), gets `out`, a direct R line's `#>` output, after them; an R Markdown
+#' or Quarto one gets them as a chunk without it, as knitr prints the output itself (D-342).
+#' Always NULL (notify channels). While `session` runs in the background (the pause menu's `[b]`),
 #' whose block is written when the run ends, they wait in its live handle until
 #' doc_on_agent_end() has written that block, so the record keeps the order typed
 #' @noRd
-doc_console_append = function(lines, session = NULL) {
+doc_console_append = function(lines, session = NULL, out = NULL) {
   live = if (inherits(session, "gptr_session")) session_live(session)
   if (!is.null(live$background) && !is.null(live$run)) {
-    live$held = c(live$held, list(lines))
+    live$held = c(live$held, list(list(lines, out)))
     return(NULL)
   }
   target = doc_transcript_target(ask = FALSE)
-  if (!is.null(target) && identical(doc_format_of(target), "r")) {
-    doc_transcript_append(target, lines, session = session)
+  fmt = doc_format_of(target)
+  if (identical(fmt, "r")) {
+    doc_transcript_append(target, c(lines, out), session = session)
     doc_transcript_rescan(target, session)
+  } else if (isTRUE(fmt %in% c("rmd", "qmd"))) {
+    doc_transcript_append(target, lines, session = session)
   }
   NULL
 }
@@ -1504,7 +1510,7 @@ doc_console_held = function(s) {
   held = live$held
   if (!length(held)) return(invisible(NULL))
   live$held = NULL
-  for (lines in held) doc_console_append(lines, s)
+  for (h in held) doc_console_append(h[[1L]], s, h[[2L]])
   invisible(NULL)
 }
 

@@ -1396,16 +1396,22 @@ doc_ide_upsert = function(fmt, site, up) {
 }
 
 #' Append lines to a console transcript (direct R lines, slash commands, rewind notes) under
-#' write consent, the `document_write` event (kind "transcript") and doc_rewrite(). Only an
-#' `.R` transcript takes raw lines (contract 11.5): a notebook would no longer be JSON and an
-#' R Markdown or Quarto document would read them as prose, so other paths are refused (FALSE).
-#' The lines are redacted with the persist profile before the event (IC-74).
+#' write consent, the `document_write` event (kind "transcript") and doc_rewrite(). An `.R`
+#' transcript takes raw lines (contract 11.5); an R Markdown or Quarto one takes them as one R
+#' chunk, as they are R code and comments (D-342); a notebook would no longer be JSON, so it is
+#' refused (FALSE). The lines are redacted with the persist profile before the event (IC-74).
 #' @noRd
 doc_transcript_append = function(path, lines, session = NULL) {
-  if (!identical(doc_format_of(path), "r")) return(invisible(FALSE))
+  fmt = doc_format_of(path)
+  if (!isTRUE(fmt %in% c("r", "rmd", "qmd"))) return(invisible(FALSE))
   if (!doc_consent(path, ask = FALSE)) return(invisible(FALSE))
   lines = redact(as_utf8(as.character(lines)), "persist")
-  ev = doc_event(path, "r", "transcript", NULL, lines, session)
+  if (!identical(fmt, "r")) {
+    lines = lines[cumsum(nzchar(trimws(lines))) > 0L]
+    fence = doc_rmd_fence("```", lines)
+    lines = c("", paste0(fence, "{r}"), lines, fence)
+  }
+  ev = doc_event(path, fmt, "transcript", NULL, lines, session)
   if (isTRUE(ev$block)) return(invisible(FALSE))
   lines = ev$lines %||% lines
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
