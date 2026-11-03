@@ -40,8 +40,9 @@ agent_label = function(run) {
 
 #' Keep the first `head` and last `1 - head` share of lines within a token budget
 #'
-#' When the text fits, it is returned unchanged. Otherwise the full text is stored in the out
-#' store and in a spill file, and the kept lines surround the notice
+#' When the text fits, it is returned unchanged. Otherwise lines over 400 characters continue as
+#' 400-character pieces, so the cut always has lines to keep; these lines are stored in the out
+#' store and in a spill file, and the kept ones surround the notice
 #' `[... n lines omitted; all: peter$out("<id>")]`.
 #' @noRd
 truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) {
@@ -49,14 +50,24 @@ truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) 
   class = check_choice(class, names(token_cpt), "class")
   head = check_number(head, "head", min = 0, max = 1)
   lines = text_lines(text)
-  total = length(lines)
   costs = est_tokens_each(paste0(lines, "\n"), class)
   if (sum(costs) <= budget) {
     return(list(
       text = paste(lines, collapse = "\n"), truncated = FALSE, omitted = 0L,
-      total_lines = total, out_id = NULL, spill = NULL
+      total_lines = length(lines), out_id = NULL, spill = NULL
     ))
   }
+  long = which(nchar(lines, allowNA = TRUE) > 400L)
+  if (length(long)) {
+    lines = as.list(lines)
+    lines[long] = lapply(lines[long], function(x) {
+      at = seq(1L, nchar(x), 400L)
+      substring(x, at, at + 399L)
+    })
+    lines = unlist(lines)
+    costs = est_tokens_each(paste0(lines, "\n"), class)
+  }
+  total = length(lines)
   out_id = out_put(lines, "stdout", list(class = class))
   spill = spill_write(lines, prefix = paste0("gptr-output-", out_id))
   notice_cost = est_tokens_each(paste0(truncation_notice(total, out_id), "\n"), class)
@@ -250,8 +261,8 @@ doc_one_line = function(x) {
   ui_escape(trimws(gsub("[\r\n\t\u0085\u2028\u2029]+", " ", x)))
 }
 
-#' Clean terminal output: drop ANSI/OSC sequences, keep the last frame of \r progress lines,
-#' cap lines at 400 characters. Returns lines.
+#' Clean terminal output: drop ANSI/OSC sequences and keep the last frame of \r progress lines.
+#' Returns lines, each whole: the token budget of the view that shows them is the only bound.
 #' @noRd
 clean_terminal = function(x) {
   x = as_utf8(as.character(x))
@@ -265,18 +276,6 @@ clean_terminal = function(x) {
   # the last frame of each line, without a regex: [^\n\r]*\r is quadratic on one long line
   cr = grepl("\r", lines, fixed = TRUE)
   lines[cr] = vapply(strsplit(lines[cr], "\r", fixed = TRUE), function(p) p[length(p)], "")
-  cap_lines(lines, 400L)
-}
-
-#' Cut lines longer than `max_chars`, noting how many characters were dropped
-#' @noRd
-cap_lines = function(lines, max_chars = 400L) {
-  width = nchar(lines, type = "chars", allowNA = TRUE)
-  long = !is.na(width) & width > max_chars
-  if (any(long)) {
-    extra = width[long] - max_chars
-    lines[long] = paste0(substr(lines[long], 1L, max_chars), " ...[+", extra, " chars]")
-  }
   lines
 }
 

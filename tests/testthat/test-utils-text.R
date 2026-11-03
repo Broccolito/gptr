@@ -86,7 +86,20 @@ test_that("spill_write() redacts and names the file by its stem", {
   expect_identical(readLines(path, encoding = "UTF-8"), c("key [secret:KEY]", "second line"))
 })
 
-test_that("clean_terminal() drops ANSI and OSC sequences, collapses progress and caps lines", {
+test_that("a cut keeps lines over 400 characters as 400-character pieces", {
+  local_out_store()
+  lines = c(strrep("a", 1000), sprintf("row %d", 1:300))
+  res = truncate_output(lines, budget_tokens = 400)
+  kept = strsplit(res$text, "\n", fixed = TRUE)[[1]]
+  expect_identical(kept[1], strrep("a", 400))
+  expect_identical(kept[length(kept)], "row 300")
+  expect_identical(res$total_lines, 303L)
+  expect_identical(out_get(res$out_id), c(strrep("a", c(400, 400, 200)), sprintf("row %d", 1:300)))
+  expect_identical(truncate_output(lines[1:2], budget_tokens = 1000)$text,
+                   paste(lines[1:2], collapse = "\n"))
+})
+
+test_that("clean_terminal() drops ANSI and OSC sequences, collapses progress, keeps long lines", {
   x = c(
     "\033[31mred\033[0m text",
     "\033]8;;https://example.org\aa link\033]8;;\a",
@@ -96,7 +109,7 @@ test_that("clean_terminal() drops ANSI and OSC sequences, collapses progress and
   )
   out = clean_terminal(x)
   expect_identical(out[1:4], c("red text", "a link", "100%", "done"))
-  expect_identical(out[5], paste0(strrep("z", 400), " ...[+50 chars]"))
+  expect_identical(out[5], strrep("z", 450))
   expect_identical(clean_terminal(c("abc\rdef", "a\rb\rc\r", "x")), c("def", "c", "x"))
 })
 
@@ -106,7 +119,7 @@ test_that("clean_terminal() is linear on one long line", {
     out = clean_terminal(c(strrep("a", 1e7), paste0(strrep("b", 1e7), "\rc\r", strrep("d", 1e7))))
   })
   expect_lt(t[["elapsed"]], 10)
-  expect_identical(out, paste0(strrep(c("a", "d"), 400), " ...[+", 1e7 - 400, " chars]"))
+  expect_true(identical(out, strrep(c("a", "d"), 1e7)))
 })
 
 test_that("listings print at most 20 rows, a count line and the footer", {

@@ -2426,11 +2426,11 @@ eol = "\n" | "\r\n", bom = lgl(1), encoding = chr(1), final_newline = lgl(1))`, 
 
 | Function | Contract | Consumers |
 |---|---|---|
-| `truncate_output(text, budget_tokens, class = "r_output", head = 0.4)` | `list(text = chr(1), truncated = lgl(1), omitted = int(1), total_lines = int(1), out_id = chr(1) \| NULL, spill = chr(1) \| NULL)`; keeps the first 40% and last 60% of lines within the budget, inserts `[... n lines omitted; all: peter$out(<id>)]`, stores the full text with `out_put()` and a spill file | P09, P10, P18, P22 |
+| `truncate_output(text, budget_tokens, class = "r_output", head = 0.4)` | `list(text = chr(1), truncated = lgl(1), omitted = int(1), total_lines = int(1), out_id = chr(1) \| NULL, spill = chr(1) \| NULL)`; returns text within the budget unchanged; otherwise lines over 400 characters continue as 400-character pieces, it keeps the first 40% and last 60% of those lines within the budget, inserts `[... n lines omitted; all: peter$out(<id>)]`, and stores all of them with `out_put()` and a spill file (D-345) | P09, P10, P18, P22 |
 | `out_put(text, stream = "stdout", meta = list(), session = NULL)` | chr(1) id `o` + 6 hex (RNG-free); kept in the session's store (the process store when `session` is `NULL`), the last `gptr.out_keep` entries (IC-71) | P09, P22 |
 | `out_get(id, stream = c("stdout", "stderr"), lines = NULL, session = NULL)` | chr (lines) from the session store, then the process store, then the spill file; `gptr_error_invalid_argument` when none has it | P10 (`peter$out`) |
 | `spill_write(text, prefix)` | path `<prefix>.txt` under `ws_path("cache", "tmp")`; redacted with `persist` | P09, P22 |
-| `clean_terminal(x)` | removes ANSI/OSC sequences, collapses `\r` progress, caps lines at 400 characters | P09, P22, P04 |
+| `clean_terminal(x)` | removes ANSI/OSC sequences, collapses `\r` progress; keeps every line whole (D-345) | P09, P22, P04 |
 | `new_listing(df, class, footer = NULL)` | the listing classes of §5.12 and their shared `print` method | P02, P05, P06, P11, P15-P18, P21, P23 |
 
 **`utils-tokens.R`**: `est_tokens(x, class = c("prose", "code", "r_output", "str", "csv", "json", "error",
