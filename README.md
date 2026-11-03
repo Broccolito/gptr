@@ -242,11 +242,14 @@ CRAN install, open it in R with
 
 ## Why Peter?
 
-The name honors Peter Naur's work on readable language definitions and
-Peter Cathcart Wason's research with Jonathan Evans on reasoning. In
-Naur's spirit, gptr records sessions as runnable documents. System 1 and
-System 2 name software roles in gptr; they imply nothing about human
-cognition. See [Why
+gptr reads as a grammar of Peter: g for grammar, as in ggplot2's grammar
+of graphics, and ptr for Peter, your agent in R. The name honors two
+Peters. Peter Naur edited the ALGOL 60 report, which defined the
+language's syntax in a readable grammar notation now called Backus-Naur
+Form; in that spirit, gptr records sessions as runnable documents. Peter
+Cathcart Wason studied human reasoning, and his dual-process account
+with Jonathan Evans inspires gptr's System 1 and System 2, names for
+software roles that imply nothing about human cognition. See [Why
 Peter?](https://broccolito.github.io/gptr/articles/why-peter.html) for
 the history and sources.
 
