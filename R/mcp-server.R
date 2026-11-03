@@ -264,7 +264,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     spec$risk(input, ctx)
   }
   call = list(id = paste0("mcp_", id), name = name, input = input, tool = spec, nested = FALSE,
-              risk = risk)
+              risk = risk, envir = env)
   if (!is.null(run)) call = tool_call_hook(run, call, risk)
   if (!is.null(call$blocked)) {
     if (!is.null(st)) st$refused = call$refused
@@ -664,7 +664,9 @@ mcp_handle_new = function(st, tok, stop) {
 #' In Peter, `/mcp serve` starts or reuses the server and returns to R's prompt; a new server
 #' uses that chat's workspace and mode. Resume the chat with `gptr_last() |> peter()`. Calls that
 #' need approval are refused with a note on how to allow them, because gptr never asks from a
-#' background callback. The token appears only in the snippets of `$config`, which show it
+#' background callback. In plan mode, `r` calls that only read run in a scratch environment above
+#' the workspace (what they create is not kept) and every call that changes something is
+#' refused. The token appears only in the snippets of `$config`, which show it
 #' redacted, in notebooks and documents too (`as.character()` gives the text to paste;
 #' `$config$codex` holds the `codex` options in `$args` and the environment to start Codex with
 #' in `$env`). One server runs per R process. Needs 'httpuv', 'later' and 'openssl'; gptr's own

@@ -41,7 +41,9 @@ interactive R console instead.
 In Peter, \verb{/mcp serve} starts or reuses the server and returns to R's prompt; a new server
 uses that chat's workspace and mode. Resume the chat with \code{gptr_last() |> peter()}. Calls that
 need approval are refused with a note on how to allow them, because gptr never asks from a
-background callback. The token appears only in the snippets of \verb{$config}, which show it
+background callback. In plan mode, \code{r} calls that only read run in a scratch environment above
+the workspace (what they create is not kept) and every call that changes something is
+refused. The token appears only in the snippets of \verb{$config}, which show it
 redacted, in notebooks and documents too (\code{as.character()} gives the text to paste;
 \verb{$config$codex} holds the \code{codex} options in \verb{$args} and the environment to start Codex with
 in \verb{$env}). One server runs per R process. Needs 'httpuv', 'later' and 'openssl'; gptr's own

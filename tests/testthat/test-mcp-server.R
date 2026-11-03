@@ -389,15 +389,22 @@ test_that("a fork's served calls evaluate in its overlay; a plan-mode parent sta
   expect_false(res$isError)
   expect_identical(get("y_child", envir = session_home(f), inherits = FALSE), 42)
   expect_false(exists("y_child", envir = x$envir, inherits = FALSE))
-  # at an idle console a plan-mode session has no run, hence no scratch overlay (IC-15): P11's
-  # plan policy refuses every r call then
+  # at an idle console a plan-mode session has no run: a read-only r call evaluates in a fresh
+  # scratch overlay of its home (IC-15, D-351), and anything that changes something is refused
   p = local_served_session("plan")
-  for (code in c("saveRDS(d, 'd.rds')", "nrow(d)")) {
-    res = mcp_dispatch_local(r_call(code), session_data(p$session)$id)$result
-    expect_true(res$isError)
+  id = session_data(p$session)$id
+  res = mcp_dispatch_local(r_call("z = nrow(d)\nz"), id)$result
+  expect_false(res$isError)
+  expect_match(res$content[[1L]]$text, "32", fixed = TRUE)
+  expect_false(exists("z", envir = p$envir, inherits = FALSE))
+  for (code in c("saveRDS(d, 'd.rds')", "d$x = 1", "d <<- 1", "assign('zz', 1, globalenv())")) {
+    res = mcp_dispatch_local(r_call(code), id)$result
+    expect_true(res$isError, label = code)
     expect_match(res$content[[1L]]$text, "plan mode", fixed = TRUE)
   }
   expect_false(file.exists("d.rds"))
+  expect_false(exists("zz", envir = globalenv(), inherits = FALSE))
+  expect_identical(p$envir$d, mtcars)
 })
 
 test_that("a served call asks a person only while a pump runs (IC-57)", {

@@ -10334,3 +10334,20 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-auth-setup.R "/skip and /cancel at the hidden prompt skip and cancel instead of
   storing a key" and "ordinary text questions can be submitted, skipped and cancelled". Evidence:
   progress/fixes-1.0.1/round2-X.md.
+
+## D-351 - Fixes 1.0.1 round 2 lane X Plan-mode /mcp serve serves read-only r calls (2026-11-03)
+- Rule (amends IC-15 and IC-57 for an idle console): `mcp_serve_exec()` puts the
+  environment it evaluates in on the call it gates (`call$envir`), and the `plan` policy checks
+  `call$envir` before `ctx$envir` for the scratch overlay. A served `r` call of a plan-mode session
+  with no run therefore runs in the fresh overlay `mcp_serve_envir()` builds above the session's
+  home when every call of its code is known read-only (IC-54) and nothing existing changes; the
+  overlay is dropped with the call, so nothing it creates is kept. A write, an edit, a changed
+  existing object (`<<-`, `d$x =`) and any call off the allowlist are refused as before. Formerly
+  the policy read `ctx$envir`, which at an idle console is the home itself, so the overlay never
+  counted and every served `r` call, `value + 1` included, was refused with "plan mode needs a
+  scratch environment for r".
+- Contract-visible: `?gptr_mcp_serve` says what plan mode serves.
+- Tests: test-mcp-server.R "a fork's served calls evaluate in its overlay; a plan-mode parent
+  stays in plan" (`nrow(d)` runs and leaves nothing in the home; `saveRDS()`, `d$x =`, `<<-` and
+  `assign()` into the global environment are refused and change nothing). Evidence:
+  progress/fixes-1.0.1/round2-X.md.
