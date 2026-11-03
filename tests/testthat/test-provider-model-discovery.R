@@ -350,6 +350,30 @@ test_that("before-use inventory preserves an explicit replay override without op
   expect_equal(n, 1L)
 })
 
+test_that("run, gateway and model preparation each inventory with the replay override", {
+  local_gw()
+  local_inventory_catalog()
+  seen = character()
+  local_mocked_bindings(egress_check = function(...) TRUE, replay_guard = function(...) TRUE,
+    provider_credential = function(...) NULL,
+    catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
+      seen <<- c(seen, replay %||% "none")
+      invisible(NULL)
+    })
+  m = model_resolve("openai/known")
+  call = list(args = list(replay = "auto", opts = list(context = "none")))
+  s = session_new(m$ref, "auto", home = new.env())
+  gateway_guards(call, s, NULL)
+  expect_identical(seen, "auto")
+  run = new.env(parent = emptyenv())
+  run$shell = s
+  run$opts = list(call = call, safety = list())
+  run_model_ready(run, m$ref)
+  expect_identical(seen, c("auto", "auto"))
+  model_prepare(m$ref, replay = "record")
+  expect_identical(seen, c("auto", "auto", "record"))
+})
+
 test_that("tenant header edits invalidate reuse and offline freshness without looking up keys", {
   local_inventory_catalog()
   withr::local_options(gptr.replay = "auto")
