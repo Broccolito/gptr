@@ -9600,3 +9600,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: 04 section 6.1.1 (the System 1 argument refusal).
 - Tests: gptr-gateway "System 1 arguments with an unknown model name the unknown model (D-322)".
   Evidence: progress/fixes-1.0.1/lane-C.md.
+
+## D-321 - Fixes 1.0.1 lane C System 1 accounting (2026-11-02)
+- Rule (unbilled failures): D-251's sessions-6 rule applies to System 1 attempts: a failed attempt
+  that reports no count and whose request was rejected (HTTP status >= 400) or never received
+  (`network`, `timeout_connect`) records `input = 0, output = 0` (`s1_failed_usage()`, from
+  `s1_failure()` and `s1_outcome()`, so the TypeSafe, Ollama, in-process and emulated paths alike),
+  and so does a request the adapter's `build` refuses (never sent). Idle and first-byte timeouts
+  and a received reply without usage stay unknown (NA). Was NA for every such attempt since
+  PR #105 charged each attempt: one retried 429 made the batch's `meta$usage` and the owning
+  session's totals unknown, and a cost limit then named the model as having no prices.
+- Contract-visible: 04 section 7.13 (owned System 1 usage).
+- Tests: s1-client "an unbilled System 1 failure costs a known zero, as a chat request does
+  (D-251)", "bounded rounds resubmit only failed elements ...". Evidence:
+  progress/fixes-1.0.1/lane-C.md.

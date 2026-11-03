@@ -168,7 +168,18 @@ s1_failure = function(cls, status, text, request_id, model_id, retry_after = NUL
                      retry_after = retry_after)
   final = cls %in% c("aborted", "redirect", "spend_cap", "retry_after")
   list(ok = FALSE, error = err, retry = s1_retry_of(err) && !final,
-       delay = s1_delay(retry_after), usage = usage)
+       delay = s1_delay(retry_after), usage = s1_failed_usage(usage, status, cls))
+}
+
+#' The usage of a failed attempt (D-251): one that reports no count costs a known zero when its
+#' request was rejected (HTTP status 400 or more) or never received (`network`,
+#' `timeout_connect`); any other stays as reported, unknown counts NA
+#' @noRd
+s1_failed_usage = function(usage, status, cls) {
+  known = is.list(usage) && !(is.na(s1_count(usage[["input"]])) &&
+                                is.na(s1_count(usage[["output"]])))
+  unbilled = isTRUE(status >= 400L) || isTRUE(cls %in% c("network", "timeout_connect"))
+  if (known || !unbilled) usage else list(input = 0, output = 0)
 }
 
 # ---- the typesafe-system-one adapter ------------------------------------------------------------
@@ -397,7 +408,8 @@ s1_http = function(spec, provider, on_done, on_fail) {
 #' @noRd
 s1_outcome = function(res, model_id = NA_character_) {
   if (inherits(res, "condition")) {
-    return(list(ok = FALSE, error = res, retry = s1_retry_of(res), usage = res[["usage"]],
+    return(list(ok = FALSE, error = res, retry = s1_retry_of(res),
+                usage = s1_failed_usage(res[["usage"]], res[["status"]], res[["error_type"]]),
                 delay = s1_delay(res[["retry_after"]])))
   }
   if (!is.list(res)) {
@@ -751,6 +763,8 @@ s1_request = function(model, states, questions, opts = list()) {
       spec = tryCatch(cl[["build"]](model, ustates[[j]], questions, aopts),
                       gptr_error_s1 = function(e) e)
       if (inherits(spec, "condition")) {
+        # never sent: a known zero (D-251)
+        spec$usage = list(input = 0, output = 0)
         done(s1_outcome(spec, model$id))
         return(NULL)
       }

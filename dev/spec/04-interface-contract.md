@@ -2978,7 +2978,9 @@ The console's named `kernel_model_ref(..., strict = TRUE)` edge rejects native c
 explicit `emulate:` references before opening a conversation or switching its model. Startup
 uses `strict = FALSE` so an unresolved conversational choice keeps the usual setup behavior.
 Completed answers enter the cache immediately,
-so interruption or budget exhaustion retains them. Unknown counts stay NA. Process and session
+so interruption or budget exhaustion retains them. Unknown counts stay NA, except that a failed
+attempt reporting none whose request was rejected (HTTP status >= 400), never received (`network`,
+`timeout_connect`) or never built records known zeros, as a chat request does (D-251, D-321). Process and session
 usage deduplicate shared request ids; standalone calls keep one aggregate process row per batch.
 The driver sums retry usage before duplicate inputs are expanded. A cache miss announces the
 target and unique request count; completion announces the summary, respecting quiet/verbosity and

@@ -499,6 +499,8 @@ test_that("bounded rounds resubmit only failed elements, honouring retry-after u
   expect_null(res$answers[[3]])
   expect_s3_class(res$conditions[[3]], "gptr_error_s1_overloaded")
   expect_identical(res$errors$index, 3L)
+  # rejected attempts without usage cost a known zero (D-251), so the batch's usage stays known
+  expect_identical(res$usage[c("input", "output")], list(input = 200, output = 4))
   local_gptr_options(s1_rounds = 1L)
   seen$calls = list()
   s1_request(s1_model(p), states_of("down"), noul_questions(), list(provider = p))
@@ -526,6 +528,46 @@ test_that("transport failures map to retryable or final System 1 conditions", {
   expect_false(redirect$retry)
   # a server delay above gptr.max_retry_delay is final (IC-64), as on the emulation path
   expect_false(fail("retry_after", 429L, 120)$retry)
+})
+
+test_that("an unbilled System 1 failure costs a known zero, as a chat request does (D-251)", {
+  skip_on_cran()
+  zero = list(input = 0, output = 0)
+  fail = function(cls, status = NA_integer_, usage = NULL) {
+    s1_failure(paste0("gptr_error_", cls), status, "x", NA, "m", usage = usage)
+  }
+  # never received, or rejected with a status of 400 or more, and no usage reported
+  expect_identical(fail("network")$usage, zero)
+  expect_identical(fail("timeout_connect")$usage, zero)
+  expect_identical(fail("rate_limit", 429L)$usage, zero)
+  expect_identical(fail("rate_limit", 429L, list(input = NA_real_, output = NA_real_))$usage, zero)
+  # a request the service may have processed stays unknown; reported usage is kept
+  expect_null(fail("timeout_first_byte")$usage)
+  expect_null(fail("timeout_idle")$usage)
+  expect_identical(fail("rate_limit", 429L, list(input = 5, output = 0))$usage,
+                   list(input = 5, output = 0))
+  # an HTTP reply as s1_request() reads it: a rejection without usage, then one reporting it
+  m = list(id = "m")
+  expect_identical(s1_outcome(s1_wire_parse(m, 503L, list(), "{}", list()))$usage, zero)
+  billed = "{\"usage\": {\"input_tokens\": 5, \"output_tokens\": 0}}"
+  expect_identical(s1_outcome(s1_wire_parse(m, 503L, list(), billed, list()))$usage,
+                   list(input = 5, output = 0))
+  # a received reply without answers or usage stays unknown
+  expect_identical(s1_outcome(s1_wire_parse(m, 200L, list(), "{}", list()))$usage,
+                   list(input = NA_real_, output = NA_real_))
+  # a request the adapter refuses to build is never sent
+  off = gptr_register(gptr_adapter("refusing-s1", "http_json", classify = list(
+    build = function(model, state, questions, opts) {
+      stop(s1_condition("s1_validation", "The state is too large.", model = model$id))
+    },
+    parse = function(...) stop("nothing is parsed"))))
+  withr::defer(off())
+  p = gptr_provider("refusing", api = "refusing-s1", base_url = "http://127.0.0.1:9/v1/",
+                    type = "classifier", local = TRUE, offline = TRUE,
+                    models = list(list(id = "refusing-s1", type = "classifier")))
+  res = s1_request(s1_model(p), states_of("a"), noul_questions(), list(provider = p))
+  expect_s3_class(res$conditions[[1]], "gptr_error_s1_validation")
+  expect_identical(res$usage[c("input", "output")], zero)
 })
 
 test_that("an unregistered provider without a spec is an unknown model", {
