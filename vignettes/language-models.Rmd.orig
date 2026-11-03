@@ -64,8 +64,8 @@ and precedence.
 For a model that reasons, choose its effort with `.opts = list(thinking = "high")` or with a
 suffix on the reference, such as `"openai/gpt-6-sol:high"`; either way the level stays with the
 session for later turns. The levels are `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`,
-`"xhigh"` and `"max"`. A model without the requested level uses the closest one it has,
-preferring a higher one, and says so.
+`"xhigh"` and `"max"`. A model without the requested level uses the next higher one it has,
+else the next lower, and says so.
 
 ### API providers
 
@@ -117,9 +117,9 @@ gptr's `auth.json` (mode 0600 on Unix), `"session"` keeps it in this R process o
 file or environment variable, and `"keyring"` uses the operating system's credential store
 through the optional keyring package. Leave a key blank or type `/skip` to skip; `/cancel` or
 an interrupt cancels. Peter can run the same call while it helps you set up a provider or an MCP
-server: `gptr_login(..., scope = "session")` needs your approval, you type the value at the
-hidden prompt, and the value never reaches the model. Hidden input is not encryption;
-`gptr_logout()` removes a stored credential.
+server: `gptr_login(..., scope = "session")` needs your approval (except in yolo mode), you type
+the value at the hidden prompt, and the value never reaches the model. Hidden input is not
+encryption; `gptr_logout()` removes a stored credential.
 
 An OpenAI-compatible service can use the existing completions adapter. Register its endpoint,
 credential variable and the model metadata supplied by your service:

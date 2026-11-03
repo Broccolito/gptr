@@ -17,7 +17,7 @@ inspect, reuse or modify.
   inputs and packages.
 - **Improve the agent on your own task.** Models revise the agent's
   instructions from runs of your task; gptr keeps only revisions that
-  pass its checks and yours, round after round.
+  pass its checks and any of yours, round after round.
 
 ## Installation
 

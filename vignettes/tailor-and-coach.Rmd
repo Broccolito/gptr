@@ -37,7 +37,7 @@ Two functions make one. Both return a harness: a function you call exactly like 
 
 - `gptr_tailor()` builds a harness from parts you write. It calls no model and returns at once.
 - `gptr_coach()` lets Peter improve itself on your task: models revise the coaching from runs of
-  your task, and code keeps a revision only when a new run passes gptr's checks and yours. It
+  your task, and code keeps a revision only when a new run passes gptr's checks and any of yours. It
   calls models, runs several sessions and takes minutes.
 
 ![A harness, from peter outwards. gptr_tailor() sets the fixed arguments, your rules and the
@@ -74,7 +74,7 @@ survey_peter = gptr_tailor(
   )
 )
 survey_peter
-#> <gptr_harness 8e6dff89c49b> built on peter (gptr 1.0.1)
+#> <gptr_harness 0d58e03ea70d> built on peter (gptr 1.0.1)
 #> fixed: mode = "auto"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review 1 round(s), rules none
@@ -127,7 +127,7 @@ co = survey_peter$coaching
 co$review = NULL
 quick_peter = gptr_tailor(survey_peter, mode = "edits", coaching = co)
 quick_peter
-#> <gptr_harness f146d1eb7b14> built on peter (gptr 1.0.1)
+#> <gptr_harness ec0a87041781> built on peter (gptr 1.0.1)
 #> fixed: mode = "edits"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review none, rules none
@@ -140,7 +140,7 @@ With `gptr_coach()`, Peter's harness improves from its own runs. Coaches, which 
 models, read runs of your task and rewrite the coaching, and code, not a model, decides whether
 to keep the new coaching. The result is a harness, so it can be coached again, on the same task
 or the next one. This is recursive self-improvement in a narrow sense: only the coaching
-changes, and only when a new run passes gptr's checks and yours.
+changes, and only when a new run passes gptr's checks and any of yours.
 
 With the default settings, one call works in five steps:
 
@@ -320,7 +320,7 @@ path = tempfile(fileext = ".rds")
 saveRDS(survey_peter, path)
 their_peter = gptr_tailor(readRDS(path))
 their_peter
-#> <gptr_harness 6d0e7be57de7> built on peter (gptr 1.0.1)
+#> <gptr_harness 4fcfea65e07f> built on peter (gptr 1.0.1)
 #> fixed: mode = "auto"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review 1 round(s), rules none
