@@ -483,7 +483,8 @@ escaped with `&quot;`; the rendered string is what is stored). All mark strings 
 `project_instructions` (attrs `path`), `environment`, `mode` (attrs `name`), `plan` (attrs `from`), `workspace`
 (attrs `env`, `objects`), `workspace_changes` (attrs `since`, `reason`, optional), `attached` (attrs `name`),
 `skill_content` (attrs `name`), `agent_reports`, `checkpoint` (attrs `n`, `turns`, `tokens_before`),
-`project_instructions_update` (attrs `path`), `agent_notification`. Plugins add kinds through `context_block`
+`project_instructions_update` (attrs `path`), `agent_notification`, `gptr_runtime` (no attrs; the operator note
+of the current request's route, §7.6). Plugins add kinds through `context_block`
 specs (§10.2); the kind name is the spec name.
 
 ### 4.2 Messages
@@ -1406,14 +1407,16 @@ provider discovery). The default listing and model resolution remain offline. Wi
 contacts that provider's native model-list API or `discover()` callback after egress and replay checks,
 using the configured credential. Native API discovery is bounded to four pages, four seconds total,
 one second per request and 4096 records. Except for native Ollama evidence preparation, selected
-providers with listing support are also inventoried before real use;
+providers with a native listing API are also inventoried before real use (a `discover()` callback,
+including the claude and codex CLI catalogs, runs only on explicit refresh, D-325);
 successes and failures are cached for five minutes in this R process, bound to endpoint, effective
 provider headers, registry lifecycle and credential fingerprint for native API requests. Explicit refresh bypasses the cache.
 Failed discovery retains previous models. A successful empty listing removes only that provider's
 discovery layer; reviewed, configured and registered entries remain. Sparse new ids gain no guessed
 tools, token limits or prices. Absent reasoning metadata is displayed as `NA`. `availability` is `unknown`, `advertised`, `unlisted`, or the latter two
 with ` (stale)` after expiry, failure or endpoint change; `checked_at` is the last successful listing's
-UTC time (`NA` before any). Advertisement does not establish inference capability, entitlement or
+UTC time (`NA` before any). A built-in CLI's `default` row takes the availability of the full id it
+runs (D-326). Advertisement does not establish inference capability, entitlement or
 billing access. Native Ollama evidence and preflight requirements remain unchanged.
 Conditions: `invalid_argument`, `egress`, `not_recorded`; native Ollama and global catalog refresh
 can signal `network`. Other failed provider listings are advisory and reported in the listing footer.
@@ -2733,6 +2736,14 @@ blocked hint of `perm_check()`).
 `streaming`, `tools`, `boundary`, then a terminal status), `turn`, `mode`, `model` (record), `depth`,
 `parent_run`, `opts`, `signal` (environment: `aborted`, `reason`), `started`, `children` (chr session ids).
 
+Before a request to any provider, a changed small `gptr_runtime` operator context block is appended describing the
+current requested/resolved route, transport, CLI model argument where applicable, and the
+last matching response's reported model or its absence. It points at the R session's
+`gptr_models()`/`gptr_providers()` rather than the enclosing CLI's helper/delegate catalog.
+Past blocks describe historical requests. Unchanged text is not appended again; ordinary
+transcript assembly includes the blocks in token estimates, request views and cache prefixes.
+`$history` previews and estimates the block's text (D-328).
+
 **`agent-dispatch.R`**
 
 | Function | Contract | Consumers |
@@ -3174,11 +3185,13 @@ subagent_backend(gptr_agent(model = "codex"), model_resolve("codex"))     # "cli
 | `pcli_find(cli = c("claude", "codex"))` | `cli-common.R` | path from `gptr.cli_path`, then PATH, then the per-OS known locations of IC-65; native binaries only for claude (the npm `claude.cmd` shim is refused with an install hint); `gptr_error_cli_missing` otherwise | P20 |
 | `pcli_version(path)`, `pcli_probe(path)` | `cli-common.R` | `package_version` from `--version` and a capability probe of `--help` (cached per path and mtime; run only on first use or `check = TRUE`); below the minimum (`claude` >= 2.0.0), or a `-p` that defaults to `--bare` without a documented opt-out, signals `gptr_error_cli_version` | P20 (`status()` reads the cache only unless `gptr_providers(check = TRUE)`, IC-65) |
 | `pcli_login_status(cli)` | `cli-common.R` | help-gated CLI login-status commands, closed stdin and 3 s timeout per subprocess; returns only `signed in`, `not signed in`, or `unknown`, never raw auth output; no model request | P05 when `check_login = TRUE` |
-| `pcli_discover_models(provider)` | `cli-common.R`, `cli-claude.R`, `cli-codex.R` | sparse model records from Claude SDK initialization or the help-gated `codex debug models` JSON catalog; no user prompt or inference, no direct credential-file reads, 30 s timeout; unsupported discovery returns `NULL`, a successful empty catalog returns `list()`, failures omit raw CLI/account output | P05 provider discovery |
+| `pcli_discover_models(provider)` | `cli-common.R`, `cli-claude.R`, `cli-codex.R` | sparse model records from Claude SDK initialization or the help-gated `codex debug models` JSON catalog; no user prompt or inference, no direct credential-file reads, 30 s timeout; unsupported discovery returns `NULL`, a successful empty catalog returns `list()`, failures omit raw CLI/account output; the Claude wait runs the reactor; called only on explicit refresh (D-325) | P05 provider discovery |
 
 CLI catalogs describe selectable choices and may be cached or bundled; they do not verify
-account entitlement. Missing capabilities and limits remain unknown. Claude selection aliases
-come from `value`; `resolvedModel` is catalog resolution, not observed inference identity.
+account entitlement. Missing capabilities and limits remain unknown. Claude discovery keeps
+full ids only (03 §8.4, D-326): a selection's `value` when it is a `claude-` id, else its
+`resolvedModel` (catalog resolution, not observed inference identity) without the alias's display
+name; selection aliases such as `sonnet` or `default` are not catalog ids.
 `response_model` holds only a nonempty scalar model name from that request's native response
 metadata or CLI output (Claude init/message metadata or a Codex reroute notice). The selected
 `model` remains separate; a CLI reported difference produces a notice. Codex exec normally
@@ -3188,12 +3201,7 @@ selection from a reported difference using metadata matched to the last request 
 footers show both names when the response reports a model different from the selected name;
 matching names retain the compact footer.
 
-Before a request, a changed small `gptr_runtime` operator context block is appended describing the
-current requested/resolved route, transport, CLI model argument where applicable, and the
-last matching response's reported model or its absence. It points at the R session's
-`gptr_models()`/`gptr_providers()` rather than the enclosing CLI's helper/delegate catalog.
-Past blocks describe historical requests. Unchanged text is not appended again; ordinary
-transcript assembly includes the blocks in token estimates, request views and cache prefixes.
+The `gptr_runtime` operator note of §7.6 carries the CLI model argument.
 
 Example calls:
 
@@ -3702,7 +3710,7 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 
 | # | Kind | Resolve / order | Fields (type) | Contract and failure rule | Defined by |
 |---|---|---|---|---|---|
-| 1 | `provider` | first | `id` (= name, `^[a-z0-9][a-z0-9-]*$`), `api` chr(1), `base_url` chr(1)\|NULL, `auth` (chr of environment-variable names, or `function()` returning a handle or `NULL`, or `NULL` for none), `models` list of model records\|NULL (a record's `prices` is a data frame or a list of price records, checked and normalised to the §4.9 df by the `prices.table` service, D-250), `compat` named list, `type` (`chat`, `classifier`, `cli`), `headers` named list of non-secret strings, `discover` `function()` -> df with `id`\|list of sparse model records\|NULL, `status` `function()` -> named list\|NULL (reads cached data only unless `check = TRUE`), `aliases` chr, `local` lgl(1) (loopback server: unknown model ids allowed, no egress acknowledgement), `offline` lgl(1) (no remote model is called: exempt from `replay_guard()`; the fake provider and the mock-server and fake-CLI test providers, IC-45), `rate` `list(requests_per_s, tokens_per_s)`\|NULL (static limits feeding the token bucket, IC-64) | data; `auth` is evaluated per request (INFRA-22); `discover` runs on explicit refresh or before real provider use after consent, cached for five minutes; NULL is unsupported, an empty result succeeds, and errors retain prior models | P02 |
+| 1 | `provider` | first | `id` (= name, `^[a-z0-9][a-z0-9-]*$`), `api` chr(1), `base_url` chr(1)\|NULL, `auth` (chr of environment-variable names, or `function()` returning a handle or `NULL`, or `NULL` for none), `models` list of model records\|NULL (a record's `prices` is a data frame or a list of price records, checked and normalised to the §4.9 df by the `prices.table` service, D-250), `compat` named list, `type` (`chat`, `classifier`, `cli`), `headers` named list of non-secret strings, `discover` `function()` -> df with `id`\|list of sparse model records\|NULL, `status` `function()` -> named list\|NULL (reads cached data only unless `check = TRUE`), `aliases` chr, `local` lgl(1) (loopback server: unknown model ids allowed, no egress acknowledgement), `offline` lgl(1) (no remote model is called: exempt from `replay_guard()`; the fake provider and the mock-server and fake-CLI test providers, IC-45), `rate` `list(requests_per_s, tokens_per_s)`\|NULL (static limits feeding the token bucket, IC-64) | data; `auth` is evaluated per request (INFRA-22); `discover` runs only on explicit refresh, after consent (D-325); NULL is unsupported, an empty result succeeds, and errors retain prior models | P02 |
 | 2 | `adapter` | first (name = `api`) | `api`, `transport`, `build`, `parse`, `stream`, `classify`, `capabilities` (§8.1) | never throws after `start` (§8.1); a thrown error becomes `stop_reason = "error"` | P02 |
 | 3 | `model` | first (name = `provider/id`) | the §4.9 record fields (`prices` as for `provider`) | data | P02 |
 | 4 | `router` | first | `route` `function(request, ctx)` -> chr(1) model ref or `list(model, thinking = NULL, state = NULL)`; `description`; `timeout` num(1) (default 2 s) | usable as `model = <name>`; called by P06 before every request and at compaction (IC-69); `request` = `list(prompt, messages (projected, read-only), state, previous, reason = "turn" \| "compaction" \| "direct", session)`; a timeout, an error or a non-registered result falls back to the default model with a diagnostic and a `route` event; System 1 through `ctx$decide()`; each switch appends `model_change` and a `gptr.router` state entry | P02 |

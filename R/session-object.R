@@ -428,7 +428,8 @@ session_display_text = function(s) {
 }
 
 #' `$history`: one row per message on the active path; an assistant's `tokens` is its reported
-#' total (`NA` when unreported, IC-74), other messages are estimated
+#' total (`NA` when unreported, IC-74), other messages are estimated; a message without text
+#' blocks (an operator note such as `gptr_runtime`) shows its context text
 #' @noRd
 session_history = function(s) {
   d = session_data(s)
@@ -443,6 +444,9 @@ session_history = function(s) {
     tools = if (identical(m$role, "tool_result")) m$tool_name else
       paste(vapply(msg_calls(m), function(b) b$name, ""), collapse = ",")
     text = msg_text(m)
+    if (!nzchar(text)) {
+      text = paste(vapply(m$content, function(b) b$text %||% "", ""), collapse = "\n")
+    }
     tokens = if (identical(m$role, "assistant")) m$usage$total %||% NA_real_ else
       est_tokens(text, "prose")
     rows[[i]] = data.frame(turn = turn, role = m$role, preview = substr(text, 1L, 60L),

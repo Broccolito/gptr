@@ -106,6 +106,17 @@ test_that("build() starts one exec per turn with a fresh private relay mailbox",
   pcli_untrack("s0123456789")
 })
 
+test_that("build() records a request's model argument with its id, before it can fail", {
+  opts = stub_opts()
+  opts$state$pcli_model_arg = "gpt-6-sol"
+  local_mocked_bindings(pcli_track = function(...) invisible(NULL),
+    pcli_find = function(cli) gptr_abort("no codex here", "cli_missing"))
+  expect_error(pcli_codex_build(stub_model("codex", "gpt-6-luna"), list(request_id = "q2"), opts),
+               class = "gptr_error_cli_missing")
+  expect_identical(opts$state$pcli_request_id, "q2")
+  expect_identical(opts$state$pcli_model_arg, "gpt-6-luna")
+})
+
 # Write one request into a relay mailbox as the relay does, pump until the session answers;
 # returns the answer's text, or NULL when none came within `timeout` seconds
 relay_ask = function(dir, msg, allow_runs = NULL, timeout = 5) {
@@ -267,6 +278,21 @@ test_that("a Codex shell step shows its command without the shell's -lc wrapper"
                           "{\"command\":\"/bin/zsh -lc \\\"python - <<'PY'\\nprint(1)\\nPY\\\"\"}"))
   expect_identical(shell("i5", "/bin/zsh -lc 'set -e\nmake check'"),
                    "  \u258e codex_shell  {\"command\":\"set -e\\nmake check\"}")
+})
+
+test_that("a Codex web search row shows the query Codex reports when the search completes", {
+  skip_on_cran()
+  opts = stub_opts()
+  n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+  item = list(id = "ws_1", type = "web_search", query = "", action = list(type = "other"))
+  push_obj(n, list(type = "item.started", item = item))
+  item$query = "R lm weights"
+  item$action = list(type = "search", query = "R lm weights")
+  push_obj(n, list(type = "item.completed", item = item))
+  tools = Filter(function(e) startsWith(e$type, "tool_execution"), opts$log$events)
+  expect_identical(vapply(tools, function(e) e$type, ""),
+                   c("tool_execution_start", "tool_execution_end"))
+  expect_identical(tools[[1L]]$input$query, "R lm weights")
 })
 
 test_that("Codex reports other servers' MCP calls, not gptr's own; reasoning is thinking", {
@@ -578,6 +604,21 @@ test_that("malformed Codex events are ignored or read as unknown, never an R err
   expect_false(push_obj(n2, list(type = "error", error = list(message = "flaky"))))
   expect_true(push_obj(n2, list(type = "turn.failed", error = list(message = 5L))))
   expect_match(n2$message()$error_message, "Codex reported an error: flaky", fixed = TRUE)
+})
+
+test_that("a provider error body Codex relays shows the service's message", {
+  skip_on_cran()
+  why = paste0("The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT ",
+               "account.")
+  body = json_encode(list(type = "error", status = 400L, error = list(
+    type = "invalid_request_error", message = why, code = "model_not_found")))
+  for (events in list(list(list(type = "turn.failed", error = list(message = body))),
+                      list(list(type = "error", message = body), list(type = "turn.failed")))) {
+    opts = stub_opts()
+    n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+    for (ev in events) push_obj(n, ev)
+    expect_identical(n$message()$error_message, paste("Codex reported an error:", why))
+  }
 })
 
 test_that("the Windows sandbox probe caches answers and timeouts, never a run that did not start", {

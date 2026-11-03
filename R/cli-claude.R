@@ -11,14 +11,20 @@
 
 # ---- build (Task 5) ----------------------------------------------------------------------------
 
+#' The variables that keep a claude child without auto memory, CLAUDE.md files or prompt history
+#' (the catalog child and coaching children)
+#' @noRd
+pcli_claude_quiet = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1",
+                      CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")
+
 #' Initialize an empty Claude SDK session and retain only its model catalog; no user message
-#' is sent. Keep stdin open until the response, then retire the supervised child.
+#' is sent. Keep stdin open until the response, then retire the supervised child. The wait
+#' runs the reactor, as proc_run() does, so other sessions and timers stay live.
 #' @noRd
 pcli_claude_catalog = function(args) {
   path = pcli_find("claude")
   p = proc_spawn(path[[1L]], c(as.character(path[-1L]), args), stdin = "|",
-                 env = child_env("cli-claude", set = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1",
-                   CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1", CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")),
+                 env = child_env("cli-claude", set = pcli_claude_quiet),
                  wd = path_norm(tempdir()))
   on.exit({
     tryCatch(kill_all(p, grace = 0), error = function(e) NULL)
@@ -31,7 +37,7 @@ pcli_claude_catalog = function(args) {
   deadline = Sys.time() + 30
   bytes = 0
   repeat {
-    p$poll_io(50L)
+    p$poll_io(0L)
     lines = p$read_output_lines()
     p$read_error_lines()
     bytes = bytes + sum(nchar(lines, type = "bytes"))
@@ -47,10 +53,13 @@ pcli_claude_catalog = function(args) {
       return(list(models = response$response$models))
     }
     if (!p$is_alive() || Sys.time() >= deadline) pcli_catalog_error("claude")
+    reactor_pump(until = function() !p$is_alive(), slice_ms = 50L, timeout = 0.05)
   }
 }
 
-#' The selectable identifiers and effort levels reported by Claude's initialize response
+#' The selectable models and effort levels reported by Claude's initialize response, as full
+#' ids (03 8.4): a selection's `value` when it is a `claude-` id, else its `resolvedModel`, which
+#' takes no alias display name; a selection alias (`sonnet`, `default`) is never a catalog id
 #' @noRd
 pcli_claude_models = function() {
   args = c("-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
@@ -61,9 +70,11 @@ pcli_claude_models = function() {
   out = list()
   for (m in obj$models) {
     if (!is.list(m)) next
-    id = pcli_chr(m$value)
-    if (is.null(id) || !nzchar(id)) next
-    out[[length(out) + 1L]] = compact(list(id = id, name = pcli_chr(m$displayName),
+    value = pcli_chr(m$value)
+    id = Find(function(x) startsWith(x, "claude-"), c(value, pcli_chr(m$resolvedModel)))
+    if (is.null(id)) next
+    out[[length(out) + 1L]] = compact(list(id = id,
+      name = if (identical(id, value)) pcli_chr(m$displayName),
       reasoning = if (isTRUE(m$supportsEffort) || isTRUE(m$supportsAdaptiveThinking)) TRUE,
       thinking_levels = pcli_model_strings(m$supportedEffortLevels)))
   }
@@ -230,11 +241,7 @@ pcli_claude_build = function(model, context, opts) {
     args = pcli_claude_args(model_id, files$mcp, files$system, budget = flags,
                            optout = probe$bare_optout, resume = resume, role = role)
     # set after the profile drops CLAUDE_CODE_*, so they reach the CLI
-    env = character()
-    if (!is.null(role)) {
-      env = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1",
-              CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")
-    }
+    env = if (is.null(role)) character() else pcli_claude_quiet
     start = list(command = path[[1L]], args = c(as.character(path[-1L]), args),
                  env_profile = "cli-claude", env = env, wd = path_norm(getwd()))
     state$cli_api = "cli-claude"

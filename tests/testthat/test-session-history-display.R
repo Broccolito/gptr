@@ -40,6 +40,18 @@ test_that("both public histories are full read-only snapshots with concise print
   expect_length(fake_requests(provider), 0L)
 })
 
+test_that("a context-only message previews and estimates its context text", {
+  local_store()
+  s = test_session()
+  note = msg_operator("reminder", "unused")
+  note$content = list(block_context("gptr_runtime", "Current request in gptr/Peter (R)"))
+  session_append(s, entry_message(note))
+  row = s$history[1L, ]
+  expect_identical(row$role, "operator")
+  expect_match(row$preview, "Current request in gptr", fixed = TRUE)
+  expect_gt(row$tokens, 0)
+})
+
 test_that("the row limit is explicit, validated, and leaves the complete table untouched", {
   testthat::local_reproducible_output(width = 80)
   x = history_display_fixture()

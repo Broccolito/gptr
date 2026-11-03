@@ -27,18 +27,23 @@ test_that("Codex discovery reads its CLI catalog without starting a turn", {
   expect_identical(calls, list(c("debug", "models", "--help"), c("debug", "models")))
 })
 
-test_that("Claude discovery uses only initialize and preserves reported selection aliases", {
+test_that("Claude discovery uses only initialize and keeps full ids, never selection aliases", {
   local_mocked_bindings(pcli_claude_catalog = function(args) {
     expect_true(all(c("--tools", "--strict-mcp-config", "--setting-sources",
                       "--disable-slash-commands", "--no-session-persistence") %in% args))
     expect_false("--model" %in% args)
     list(models = list(list(value = "sonnet", displayName = "Sonnet",
       resolvedModel = "claude-new-sonnet", supportsEffort = TRUE,
-      supportedEffortLevels = list("low", "high"))))
+      supportedEffortLevels = list("low", "high")),
+      list(value = "claude-haiku-4-5", displayName = "Haiku 4.5"),
+      list(displayName = "No id"),
+      list(value = "opusplan", displayName = "Opus Plan"),
+      list(value = "default", resolvedModel = "default")))
   })
   models = pcli_discover_models("claude-cli")
-  expect_identical(models[[1L]]$id, "sonnet")
-  expect_identical(models[[1L]]$name, "Sonnet")
+  expect_identical(vapply(models, function(m) m$id, ""), c("claude-new-sonnet", "claude-haiku-4-5"))
+  expect_null(models[[1L]]$name)
+  expect_identical(models[[2L]]$name, "Haiku 4.5")
   expect_identical(models[[1L]]$thinking_levels, c("low", "high"))
   expect_null(models[[1L]]$context)
   expect_null(models[[1L]]$input)
@@ -94,6 +99,57 @@ test_that("Claude catalog sends one initialize frame and always retires its chil
   process$is_alive = function() FALSE
   err = expect_error(pcli_claude_catalog(character()), class = "gptr_error_provider")
   expect_false(grepl("account diagnostics", conditionMessage(err), fixed = TRUE))
+})
+
+test_that("the Claude catalog waits through the reactor and CLI catalogs run only on refresh", {
+  fired = FALSE
+  timer = reactor_timer(reactor_now() + 0.05, function() fired <<- TRUE)
+  withr::defer(reactor_cancel(timer))
+  reads = 0L
+  process = new.env(parent = emptyenv())
+  process$write_input = function(text) NULL
+  process$poll_io = function(timeout) NULL
+  process$read_error_lines = function() character()
+  process$is_alive = function() TRUE
+  process$read_output_lines = function() {
+    reads <<- reads + 1L
+    if (!fired && reads < 200L) return(character())
+    json_encode(list(type = "control_response", response = list(subtype = "success",
+      request_id = "gptr_models", response = list(models = list()))))
+  }
+  local_mocked_bindings(pcli_find = function(cli) structure("claude", cli = cli),
+    child_env = function(profile, set) character(), proc_spawn = function(...) process,
+    kill_all = function(p, grace) NULL, proc_release = function(p) NULL)
+  expect_identical(pcli_claude_catalog(character()), list(models = list()))
+  expect_true(fired)
+  listed = 0L
+  local_mocked_bindings(check_running = function() FALSE, egress_check = function(...) TRUE,
+    replay_guard = function(...) TRUE, pcli_discover_models = function(provider) {
+      listed <<- listed + 1L
+      list(list(id = "claude-opus-5-5"))
+    })
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  p = provider_get("claude-cli")
+  expect_null(catalog_inventory(p))
+  expect_identical(listed, 0L)
+  expect_identical(catalog_inventory(p, refresh = TRUE), "claude-opus-5-5")
+  expect_identical(listed, 1L)
+})
+
+test_that("a CLI route's default row is advertised when the full id it runs is", {
+  local_mocked_bindings(check_running = function() FALSE, egress_check = function(...) TRUE,
+    replay_guard = function(...) TRUE, pcli_discover_models = function(provider) {
+      list(list(id = pcli_default_model(provider_get(provider)$api)))
+    })
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  for (pid in c("claude-cli", "codex")) {
+    found = gptr_models(provider = pid, refresh = TRUE)
+    runs = paste0(pid, c("/default", paste0("/", pcli_default_model(provider_get(pid)$api))))
+    expect_identical(found$availability[found$ref %in% runs], c("advertised", "advertised"))
+    expect_true(all(found$availability[!found$ref %in% runs] == "unlisted"))
+  }
 })
 
 test_that("CLI identity records each request's reports separately from the selected model", {

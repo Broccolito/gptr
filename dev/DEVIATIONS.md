@@ -9964,3 +9964,65 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   this R's server is documented but not tested, since the test needs a background run whose child
   is an MCP client of the same process.
 - Tests: none (no code change).
+
+## D-325 - 1.0.1 lane D CLI and callback catalogs are listed only on explicit refresh (2026-11-02)
+- Rule: a provider's `discover()` callback, which includes the `claude` and `codex` CLI catalogs,
+  runs only on `gptr_models(provider =, refresh = TRUE)`, after consent. Before use,
+  `catalog_inventory()` runs only the native model-list APIs, which are bounded to four seconds.
+  Formerly the first `claude-cli` or `codex` run every five minutes spawned the CLI to list its
+  models and waited for up to 30 s (33 s for Codex) before the request. A hang was then cached as
+  a failed listing. The before-use listing gained nothing for a CLI run, because the model is
+  resolved before the run and `codex/default` keeps the shipped list (ff0be9d5). Amends #106's
+  contract text (04 sections 6.2 `gptr_models()`, 7.20 and 10.2 `discover`).
+- Rule: `pcli_claude_catalog()` polls without blocking and waits through `reactor_pump()`, as
+  `proc_run()` does, so an explicit refresh keeps MCP replies, timers and other sessions live.
+  The 30 s limit stays.
+- Contract-visible: `?gptr_models`; `vignette("language-models")`.
+- Tests: test-cli-discovery.R ("the Claude catalog waits through the reactor and CLI catalogs run
+  only on refresh").
+
+## D-326 - 1.0.1 lane D Claude CLI discovery registers full ids, never selection aliases (2026-11-02)
+- Rule: `pcli_claude_models()` gives each initialize selection the first `claude-` id among its
+  `value` and `resolvedModel`, and skips a selection that has none. An id taken from
+  `resolvedModel` carries no display name, because the alias's name (`Default (recommended)`)
+  would replace the catalog's name for that model. Formerly every `value` was registered, so
+  `claude-cli/sonnet` and `claude-cli/default` became catalog ids passed as `--model sonnet`.
+  That broke the full-id rule (03 section 8.4, 04 sections 8.5 and 11.10), and the backend of a
+  recorded ref changed whenever Claude moved the alias. The shipped full-id rows were also listed
+  `unlisted` next to an `advertised` alias row. #106's sentence "Claude selection aliases come
+  from `value`" (04 section 7.20) is replaced. The IC-19 declared-alias precedence of
+  `model_resolve()` stays.
+- Rule: in `gptr_models()`, the `default` row of `claude-cli` and `codex` takes the availability of
+  the full id it runs (`pcli_default_model()`), since no CLI lists `default`. Formerly that row
+  read `unlisted` after a successful refresh. Amends 04 section 6.2 and `?gptr_models`.
+- Tests: test-cli-discovery.R ("Claude discovery uses only initialize and keeps full ids, never
+  selection aliases"; "a CLI route's default row is advertised when the full id it runs is").
+
+## D-327 - 1.0.1 lane D Provider listings in the network texts; `gptr_models()` stays level 0 (2026-11-02)
+- Rule: `?gptr_egress` ("Other network use") and `?gptr_security` (plan mode) say that a
+  provider's model list is asked for after the egress acknowledgment: on
+  `gptr_models(provider =, refresh = TRUE)`, which for `claude` and `codex` starts the tool, and
+  before the first request to a provider with a native list API (D-325). Formerly they said gptr
+  contacts nothing else on its own.
+- Rule (amends D-300): `gptr_models()` stays level 0 in `risk-functions.csv`. With `provider =`
+  it now sends that provider's configured credential, so D-300's reason "no key is sent" no
+  longer holds. The new reason: the listing is gated by the same egress acknowledgment as a
+  prompt, carries no session context, and only refreshes gptr's discovery layer.
+- Rule: the egress question of a listing (`context = "listing"`) says that no prompt is sent and
+  that the recorded answer also covers prompts with automatic context. The acknowledgment is one
+  per provider.
+- Contract-visible: `?gptr_egress`, `?gptr_security`.
+- Tests: test-provider-model-discovery.R ("the egress question of a listing says no prompt is
+  sent and what consent covers").
+
+## D-328 - 1.0.1 lane D The `gptr_runtime` note is a P06 rule and shows in `$history` (2026-11-02)
+- Rule: the `gptr_runtime` operator note (#106) stays in the path and in `$messages`, because it
+  is part of what the model is sent. `session_history()` previews and estimates a message
+  without text blocks by its blocks' text. Formerly the note showed as a blank `operator` row of
+  0 tokens in `$history`, `summary()` and `print()`, and so did context-only `agent_report`
+  messages.
+- Rule (contract placement): the note's rule moves from 04 section 7.20 (CLI providers) to
+  section 7.6 (`agent-run.R`), since `run_build()` appends it for every provider, and
+  `gptr_runtime` joins the context kinds of section 4.1.1.
+- Tests: test-session-history-display.R ("a context-only message previews and estimates its
+  context text").

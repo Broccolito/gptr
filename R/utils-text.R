@@ -305,7 +305,7 @@ new_listing = function(df, class, footer = NULL) {
 }
 
 #' Print a listing: at most 20 rows, a count line (naming as.data.frame() when rows are left out),
-#' then the footer
+#' then the footer wrapped to the console width
 #'
 #' @param x A listing data frame.
 #' @param ... Ignored.
@@ -328,7 +328,7 @@ print.gptr_listing = function(x, ...) {
   }
   cat(count, "\n", sep = "")
   footer = attr(x, "footer", exact = TRUE)
-  if (length(footer)) cat(footer, sep = "\n")
+  if (length(footer)) cat(strwrap(footer, width = cli::console_width()), sep = "\n")
   invisible(x)
 }
 
@@ -346,7 +346,11 @@ listing_print_lines = function(x, width = cli::console_width()) {
   x = x[idx]
   headers = listing_cell(names(x), min(24L, budget))
   values = lapply(x, function(col) {
-    text = if (is.character(col) || is.factor(col)) as.character(col) else format(col, trim = TRUE)
+    text = if (is.character(col) || is.factor(col)) {
+      as.character(col)
+    } else {
+      format(col, trim = TRUE, scientific = FALSE)
+    }
     listing_cell(text, Inf)
   })
   caps = ifelse(names(x) == "description", 40L, ifelse(names(x) == "path", 28L, 24L))
