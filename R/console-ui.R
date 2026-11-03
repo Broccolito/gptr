@@ -261,6 +261,8 @@ ui_permission_lines = function(request) {
   arg = c(lines, "")[1L]
   width = ui_width()
   code = is.character(request$input[["code"]])
+  # a path or command too wide is cut in its middle, as the console's call row cuts it
+  if (!code) arg = console_cut_middle(arg, max(20L, width - nchar(more)) - nchar(tool) - 6L)
   first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ",
                  if (startsWith(request$tool %||% "", "mcp__") && !code) sym$dim(arg) else
                    console_code(arg, console_lang(request$tool)))

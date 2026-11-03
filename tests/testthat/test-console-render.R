@@ -794,6 +794,24 @@ test_that("the ask tool's call line counts its questions in words (visual review
   expect_identical(console_preview(list(questions = list(q, q))), "2 questions")
 })
 
+test_that("a call's path is project-relative, cut in its middle to keep its file name", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE)
+  proj = local_project()
+  rel = "zz_archive/2019/q3/raw/legacy/notes/drafts/methods.qmd"
+  call = list(name = "edit", input = list(path = file.path(proj, rel), edits = list()))
+  # the project-relative path, as the approval's own row and the result row show it
+  expect_identical(console_call_line(call, 120L), paste0("  \u258e edit  ", rel))
+  # too wide: its start and its file name, the cut between them
+  row = console_call_line(call, 50L)
+  expect_identical(cli::ansi_nchar(row, type = "width"), 50L)
+  expect_match(row, "^  \u258e edit  zz_archive/.*\u2026/methods[.]qmd$")
+  # outside the project it stays absolute
+  out = list(name = "read", input = list(path = "/var/data/run-2024/summary.csv"))
+  expect_match(console_call_line(out, 30L, "read"), "\u2026/summary[.]csv$")
+  # text without a file name to keep: half its room each side
+  expect_identical(console_cut_middle(paste(letters, collapse = ""), 11L), "abcde\u2026vwxyz")
+})
+
 test_that("a diff row wider than the console is cut, its spaces and sign kept (visual review)", {
   withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE)
   row = "+     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"

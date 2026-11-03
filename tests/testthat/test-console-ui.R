@@ -77,6 +77,16 @@ test_that("gptr_confirm() asks as a console question: keys under it, the chevron
   expect_identical(out[[3L]], "      y yes \u00b7 n no \u00b7 enter yes")
 })
 
+test_that("an approval's own path row keeps its file name, cut in its middle (P30 follow-up)", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 50L)
+  proj = local_project()
+  rel = "zz_archive/2019/q3/raw/legacy/notes/drafts/methods.qmd"
+  req = list(tool = "edit", input = list(path = file.path(proj, rel)), tool_call_id = "c-path")
+  row = ui_permission_lines(req)[[1L]]
+  expect_match(row, "^  \u258e edit  zz_archive/.*\u2026/methods[.]qmd$")
+  expect_lte(cli::ansi_nchar(row, type = "width"), 50L)
+})
+
 test_that("questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", {
   # every row under the title is at column 4, under its text (visual review: the hint was at 2)
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)

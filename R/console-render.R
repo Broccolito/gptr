@@ -806,8 +806,8 @@ console_msg_text = function(msg) {
   paste(text[!is.na(text)], collapse = "\n")
 }
 
-#' The preview lines of a tool input: its code, its one-line command, its path, its questions,
-#' else compact JSON
+#' The preview lines of a tool input: its code, its one-line command, its path (inside the project
+#' relative to it, as the approval's rows show it), its questions, else compact JSON
 #' @noRd
 console_preview = function(input) {
   text = if (is.character(input$code) && length(input$code)) {
@@ -815,7 +815,8 @@ console_preview = function(input) {
   } else if (rlang::is_string(input$command) && !grepl("\n", input$command, fixed = TRUE)) {
     input$command
   } else if (is.character(input$path) && length(input$path)) {
-    input$path[[1L]]
+    path = input$path[[1L]]
+    if (is_abs_path(path)) path_rel(path) else path
   } else if (is.list(input$questions)) {
     n = length(input$questions)
     paste0(n, if (n == 1L) " question" else " questions")
@@ -884,6 +885,9 @@ console_call_line = function(call, width, kind = "act") {
                 agent = paste0(sym$blue(sym$agent), " ", name),
                 paste0(sym$red(sym$tool), " ", cli::style_bold(name)))
   arg = c(lines, "")[[1L]]
+  if (!code) {
+    arg = console_cut_middle(arg, width - cli::ansi_nchar(paste0("  ", head, "  "), type = "width"))
+  }
   if (nzchar(arg) && kind == "act") {
     arg = if (mcp && !code) sym$dim(arg) else console_code(arg, lang)
   }
@@ -894,6 +898,23 @@ console_call_line = function(call, width, kind = "act") {
     return(as.character(cli::ansi_strtrim(one, width)))
   }
   c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L, width))
+}
+
+#' `text` cut to `width` display columns in its middle, the ellipsis there, so its start and its
+#' end stay: a path keeps its file name (its last `/` and what follows) where that leaves room
+#' before it, else half the width is its end; whole when it fits
+#' @noRd
+console_cut_middle = function(text, width) {
+  w = function(x) cli::ansi_nchar(x, type = "width")
+  if (w(text) <= width) return(text)
+  ell = console_style()$ellipsis
+  room = max(2L, width - w(ell))
+  end = sub("^.*(/[^/]*)$", "\\1", text)
+  if (identical(end, text) || w(end) >= room) {
+    end = text
+    while (w(end) > room %/% 2L) end = substring(end, 2L)
+  }
+  paste0(cli::ansi_strtrim(text, room - w(end), ellipsis = ""), ell, end)
 }
 
 #' Rows wrapped to `width` display columns with their spaces kept (code, a diff): a row breaks at
