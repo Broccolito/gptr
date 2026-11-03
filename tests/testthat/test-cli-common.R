@@ -357,7 +357,8 @@ test_that("CLI invocations always get full model ids", {
     }
     NULL
   })
-  expect_identical(pcli_model_id(list(id = "default", api = "cli-codex")), "fresh-cli-model")
+  # an advertised Codex model is not proof the account may use it (a ChatGPT login refuses some)
+  expect_identical(pcli_model_id(list(id = "default", api = "cli-codex")), "gpt-6-sol")
   expect_identical(pcli_model_id(list(id = "claude-opus-5-5", api = "cli-claude")),
                    "claude-opus-5-5")
   local_mocked_bindings(model_resolve = function(ref, strict = TRUE) stop("no catalog"))

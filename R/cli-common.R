@@ -550,8 +550,10 @@ pcli_coach_preflight = function(cli, refuse) {
 #' Full model id behind `<cli provider>/default` (CLI invocations always get full ids, 03 8.4):
 #' the newest Sonnet for claude and the newest GPT for codex from the catalog
 #'
-#' Codex uses a GPT only when its own catalog lists it (including CLI discovery); API-only
-#' additions leave the shipped fallback unchanged. Resolution never starts discovery here.
+#' For codex the catalog's GPT is used only when it is one of the full ids pcli_models("codex")
+#' ships: the Codex catalog lags the API's, and a model the CLI advertises (discovery) may still
+#' be refused for the account (a ChatGPT login refuses gpt-6.1-sol), so `default` never follows
+#' discovery; an unlisted id falls back to gpt-6-sol (D-097). Resolution never starts discovery.
 #' @noRd
 pcli_default_model = function(api) {
   codex = identical(api, "cli-codex")
@@ -560,9 +562,7 @@ pcli_default_model = function(api) {
   id = if (is.list(m)) m[["id"]] else NULL
   ok = rlang::is_string(id) && nzchar(id)
   if (ok && codex) {
-    known = tryCatch(model_resolve(paste0("codex/", id), strict = FALSE), error = function(e) NULL)
-    ok = identical(known$provider, "codex") ||
-      id %in% setdiff(vapply(pcli_models("codex"), function(x) x$id, ""), "default")
+    ok = id %in% setdiff(vapply(pcli_models("codex"), function(x) x$id, ""), "default")
   }
   if (ok) return(id)
   if (codex) "gpt-6-sol" else "claude-sonnet-5-5"
