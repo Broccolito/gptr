@@ -258,6 +258,10 @@ library(gptr)
 gptr_doc("analysis.qmd")
 ```
 
+A render in a new R process replays the agent's answers (`$text`) only from a `.gptr/`
+workspace: run `gptr_init(".")` once, or the replayed report says that they are missing and
+shows the recorded code alone.
+
 `gptr_source()` is not a renderer for either format. Arrange the document's setup to load
 gptr, prepare its input data and select a model or replay mode. Knitting cannot ask for
 approval, so allow the agent's code as described for `Rscript` above. Plain R chunks still

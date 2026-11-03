@@ -11,12 +11,14 @@
 #' exists (its chunk runs from the next render on), fenced as the agent chunk is (a backtick line
 #' in the code never ends the fence). Redacted like the agent block (IC-74). Blank lines around
 #' it keep it a Markdown block of its own, as knitr joins a chunk's outputs with nothing between
-#' (a plot the turn drew would start its paragraph)
+#' (a plot the turn drew would start its paragraph). Nothing at all when there is nothing to show
+#' (a replayed session without its answer): Quarto wraps even an empty text in an output div
 #' @noRd
 knit_print.gptr_session = function(x, ...) {
   txt = x$text %||% NA_character_
   out = if (length(txt) && !all(is.na(txt))) paste(txt[!is.na(txt)], collapse = "\n\n") else ""
   code = doc_knit_code(x)
+  if (!nzchar(out) && !length(code)) return(invisible(NULL))
   if (length(code)) {
     fence = doc_rmd_fence("```", unlist(strsplit(code, "\n", fixed = TRUE)))
     out = c(out, "", paste0(fence, "r"), code, fence)

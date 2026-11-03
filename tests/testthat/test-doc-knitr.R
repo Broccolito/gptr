@@ -14,6 +14,9 @@ test_that("sessions knit as their answer, plus the code of a live turn", {
   dr = session_data(r)
   dr$last_text = "There are 32 rows."
   expect_identical(as.character(knit_print.gptr_session(r)), "\n\nThere are 32 rows.\n\n")
+  # a replayed session without its answer shows nothing (Quarto would wrap "" in an empty div)
+  dr$last_text = NA_character_
+  expect_null(knit_print.gptr_session(r))
   x = structure(c(TRUE, TRUE, FALSE), class = c("gptr_decision", "gptr_s1", "logical"),
                 meta = list(model = "jev-1.13.0", date = "2026-09-29"))
   expect_identical(as.character(knit_print.gptr_s1(x)),
