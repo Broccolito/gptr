@@ -483,7 +483,7 @@ if (nrow(apps))
   url = "http://127.0.0.1:8000/mcp")</dt><dd>Your server's URL (or command for stdio); connects on use.</dd>
           <dt data-kind="template">peter$mcp[["SERVER"]][["TOOL"]]()</dt><dd>Template: replace names and tool arguments.</dd>
           <dt data-kind="external-service">mcp = gptr_mcp_serve()
-as.character(mcp$config$claude_code)</dt><dd>httpuv/later/openssl needed. Paste into Claude Code; keep R open. When done: <code>mcp$stop()</code>.</dd>
+as.character(mcp$config$claude_code)</dt><dd>httpuv/later/openssl needed. Paste into Claude Code; keep R idle (from Peter: <code>/mcp serve</code>). When done: <code>mcp$stop()</code>.</dd>
           <dt>up = gptr_tool("shout", "Upper-case.",
   fun = function(x) toupper(x))
 off = gptr_register(up)</dt><dd>Register a tool; off() removes it.</dd>

@@ -189,6 +189,40 @@ test_that("provider refresh merges advertised IDs while retaining catalog capabi
   expect_identical(empty$availability, "unlisted")
 })
 
+test_that("the listing footer names failed listings of listed providers once, with the row count", {
+  local_inventory_catalog()
+  local_mocked_bindings(egress_check = function(...) TRUE, replay_guard = function(...) TRUE,
+    provider_credential = function(...) NULL,
+    catalog_http_request = function(...) inventory_response(list(), status = 405L))
+  gptr_models(provider = "openai", refresh = TRUE)
+  gptr_models(provider = "anthropic", refresh = TRUE)
+  all = gptr_models()
+  footer = attr(all, "footer")
+  expect_match(footer, paste0(", ", nrow(all), " models;"), fixed = TRUE)
+  expect_match(footer, "; listing failed for openai (HTTP 405); prior catalog kept", fixed = TRUE)
+  expect_no_match(footer, "anthropic", fixed = TRUE)
+  expect_match(attr(gptr_models(provider = "anthropic"), "footer"),
+               "listing failed for anthropic (HTTP 405)", fixed = TRUE)
+})
+
+test_that("a failed listing without an HTTP status names gptr's own reason, never other text", {
+  local_inventory_catalog()
+  local_mocked_bindings(egress_check = function(...) TRUE, replay_guard = function(...) TRUE,
+    provider_credential = function(...) NULL)
+  failed = function() {
+    sub(".*listing failed for openai \\((.*)\\); prior.*", "\\1",
+        attr(gptr_models(provider = "openai", refresh = TRUE), "footer"))
+  }
+  local({
+    local_mocked_bindings(reactor_pump = function(...) FALSE)
+    expect_identical(failed(), "no answer within 1 s")
+  })
+  local_mocked_bindings(catalog_http_request = function(...) inventory_response(list()))
+  expect_identical(failed(), "returned an invalid response")
+  local_mocked_bindings(catalog_http_request = function(...) stop("sensitive callback text"))
+  expect_identical(failed(), "listing unavailable")
+})
+
 test_that("preparation inventories once, explicit refresh bypasses cache, failures keep models", {
   local_inventory_catalog()
   n = 0L
@@ -214,7 +248,7 @@ test_that("preparation inventories once, explicit refresh bypasses cache, failur
   found = gptr_models(provider = "openai")
   expect_true("openai/new-id" %in% found$ref)
   expect_identical(found$availability[found$ref == "openai/new-id"], "advertised (stale)")
-  expect_match(attr(found, "footer"), "refresh failed", fixed = TRUE)
+  expect_match(attr(found, "footer"), "listing failed for openai", fixed = TRUE)
   expect_no_match(attr(found, "footer"), "sensitive callback text", fixed = TRUE)
   provider_ready(m, provider_get("openai"), prepare = TRUE)
   expect_equal(n, 3L) # failed attempts are cached too
@@ -239,6 +273,21 @@ test_that("discovery preserves consent and replay refusals before credentials or
   expect_true(nrow(gptr_models(provider = "openai")) > 0L)
 })
 
+test_that("the egress question of a listing says no prompt is sent and what consent covers", {
+  local_inventory_catalog()
+  local_gptr_options(interactive = TRUE)
+  box = new.env(parent = emptyenv())
+  local_mocked_bindings(egress_state = function(...) list(exempt = FALSE),
+    settings_get = function(...) NULL, gptr_confirm = function(question, default = FALSE) {
+      box$q = question
+      FALSE
+    }, catalog_http_request = function(...) stop("network"))
+  expect_error(gptr_models(provider = "openai", refresh = TRUE), class = "gptr_error_egress")
+  expect_match(box$q, "^Listing models asks openai for its model list; no prompt is sent\\.")
+  expect_match(box$q, "also lets gptr send your prompts to openai together with automatic context",
+               fixed = TRUE)
+})
+
 test_that("custom discover callbacks support sparse records and successful empty inventories", {
   local_inventory_catalog()
   p = provider_get("openai")
@@ -255,6 +304,21 @@ test_that("custom discover callbacks support sparse records and successful empty
   catalog_discover(p)
   expect_null(model_resolve("openai/callback-id", strict = FALSE))
   expect_identical(model_resolve("openai/known")$id, "known")
+})
+
+test_that("discovery reads the catalog once, not once per unnamed record", {
+  local_inventory_catalog()
+  p = provider_get("openai")
+  p$discover = function() lapply(seq_len(50L), function(i) list(id = paste0("m", i)))
+  n = 0L
+  real = catalog_get
+  local_mocked_bindings(catalog_get = function() {
+    n <<- n + 1L
+    real()
+  })
+  catalog_discover(p)
+  expect_lte(n, 1L)
+  expect_identical(model_resolve("openai/m50")$name, "m50")
 })
 
 test_that("before-use inventory preserves an explicit replay override without opening refresh", {
@@ -286,6 +350,30 @@ test_that("before-use inventory preserves an explicit replay override without op
   expect_equal(n, 1L)
 })
 
+test_that("run, gateway and model preparation each inventory with the replay override", {
+  local_gw()
+  local_inventory_catalog()
+  seen = character()
+  local_mocked_bindings(egress_check = function(...) TRUE, replay_guard = function(...) TRUE,
+    provider_credential = function(...) NULL,
+    catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
+      seen <<- c(seen, replay %||% "none")
+      invisible(NULL)
+    })
+  m = model_resolve("openai/known")
+  call = list(args = list(replay = "auto", opts = list(context = "none")))
+  s = session_new(m$ref, "auto", home = new.env())
+  gateway_guards(call, s, NULL)
+  expect_identical(seen, "auto")
+  run = new.env(parent = emptyenv())
+  run$shell = s
+  run$opts = list(call = call, safety = list())
+  run_model_ready(run, m$ref)
+  expect_identical(seen, c("auto", "auto"))
+  model_prepare(m$ref, replay = "record")
+  expect_identical(seen, c("auto", "auto", "record"))
+})
+
 test_that("tenant header edits invalidate reuse and offline freshness without looking up keys", {
   local_inventory_catalog()
   withr::local_options(gptr.replay = "auto")
@@ -308,7 +396,7 @@ test_that("tenant header edits invalidate reuse and offline freshness without lo
   expect_identical(gptr_models(provider = "openai")$availability, "advertised")
 })
 
-test_that("built-in compatible callbacks retry when their optional credential changes", {
+test_that("built-in compatible servers' listings retry when their optional credential changes", {
   local_inventory_catalog()
   key = NULL
   n = 0L
@@ -343,6 +431,17 @@ test_that("reentrant preparation reuses an advisory inventory attempt already in
   catalog_inventory(p, replay = "auto")
   expect_equal(n, 1L)
   expect_identical(gptr_models(provider = "openai")$availability, "advertised")
+})
+
+test_that("gateways serving the TypeSafe protocol have no TypeSafe model listing", {
+  local_inventory_catalog()
+  local_mocked_bindings(egress_check = function(...) stop("must not begin setup"),
+    catalog_http_request = function(...) stop("must not contact the gateway"))
+  for (id in c("openrouter-jev", "vercel-jev")) {
+    expect_null(provider_models(provider_get(id), credential = NULL))
+    expect_null(catalog_inventory(provider_get(id), refresh = TRUE))
+  }
+  expect_true(provider_models_supported(provider_get("typesafe")))
 })
 
 test_that("hosted decision requests inventory only after their effective replay guard", {

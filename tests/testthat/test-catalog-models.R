@@ -361,6 +361,12 @@ test_that("an unknown id points to explicit provider discovery without doing I/O
   withr::defer(off())
   err = expect_error(model_resolve("versa/x"), class = "gptr_error_unknown_model")
   expect_match(conditionMessage(err), 'provider = "versa"', fixed = TRUE)
+  # a provider without a listing API or discover() gets no hint that would do nothing
+  off2 = gptr_register(gptr_provider("brx", api = "bedrock-converse",
+                                     base_url = "https://brx.example"))
+  withr::defer(off2())
+  err = expect_error(model_resolve("brx/x"), class = "gptr_error_unknown_model")
+  expect_no_match(conditionMessage(err), "gptr_models(", fixed = TRUE)
 })
 
 test_that("a reference that names a provider gets suggestions from that provider only (#44)", {
@@ -823,6 +829,15 @@ test_that("resolution is offline: builtins and gptr_models('sonnet') start no tr
   expect_match(df$ref[[1]], "^anthropic/claude-sonnet-")
   expect_equal(df$ref[[1]], model_resolve("sonnet")$ref)
   expect_equal(count$transfers, 0L)
+})
+
+test_that("an untagged Ollama catalog name is advertised when its :latest tag is installed", {
+  local_catalog(list(list(provider = "ollama", id = "clef-flash", name = "Clef Flash"),
+                     list(provider = "ollama", id = "clef", name = "Clef")))
+  local_ollama_server()
+  found = gptr_models(provider = "ollama", refresh = TRUE)
+  expect_identical(found$availability[found$ref == "ollama/clef-flash"], "advertised")
+  expect_identical(found$availability[found$ref == "ollama/clef"], "unlisted")
 })
 
 test_that("native Ollama discovery reads version, tags and show only on explicit request", {

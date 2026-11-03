@@ -126,6 +126,66 @@ test_that("Quarto and Jupyter locations come from their environment variables", 
   expect_identical(doc_match_anchor(doc_rmd_calls(un), a)$line1, 6L)
 })
 
+test_that("a kernel without JPY_SESSION_NAME picks the bound notebook, else the one match", {
+  fixture = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
+  proj = local_project()
+  local_no_running_document()
+  local_gptr_options(quiet = FALSE)
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = NA)
+  # copies that sort first: JupyterLab's Duplicate and an nbconvert --output notebook
+  for (f in c("notebook.ipynb", "notebook-Copy1.ipynb", "notebook.executed.ipynb")) {
+    expect_true(file.copy(fixture, file.path(proj, f)))
+  }
+  nb = path_norm(file.path(proj, "notebook.ipynb"))
+  call = doc_bare_call(quote(peter("summarise the mpg column")), "summarise the mpg column")
+  local_doc_binding(nb, "ipynb")
+  site = doc_locate(call)
+  expect_identical(site$path, nb)
+  expect_true(site$top_level)
+  # unbound (or bound to a transcript), several notebooks hold the call: none is recorded or
+  # replayed, the call is no console turn, and a notice says so once
+  local_doc_binding(file.path(proj, "t.R"))
+  expect_message({
+    site = doc_locate(call)
+  }, "notebook-Copy1.ipynb, notebook.executed.ipynb, notebook.ipynb.*gptr_doc",
+  class = "gptr_message_notice")
+  expect_null(site$path)
+  expect_false(site$top_level)
+  expect_false(doc_route_match(call))
+  expect_no_message(doc_locate(call))
+  unlink(file.path(proj, c("notebook-Copy1.ipynb", "notebook.executed.ipynb")))
+  expect_identical(doc_locate(call)$path, nb)
+  # a notebook whose bytes lack a word of the call's strings is not parsed
+  parse = nb_parse
+  parsed = 0L
+  testthat::local_mocked_bindings(nb_parse = function(lines) {
+    parsed <<- parsed + 1L
+    parse(lines)
+  })
+  doc_locate(call)
+  alone = parsed
+  other = gsub("summarise", "plot", readLines(fixture), fixed = TRUE)
+  for (i in 1:3) writeLines(other, file.path(proj, paste0("a", i, ".ipynb")))
+  parsed = 0L
+  expect_identical(doc_locate(call)$path, nb)
+  expect_identical(parsed, alone)
+})
+
+test_that("a call in no document says once that a bound notebook takes no console turns", {
+  proj = local_project()
+  local_no_running_document()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  nb = file.path(proj, "console.ipynb")
+  local_doc_binding(nb, "ipynb")
+  call = doc_bare_call(quote(peter("count rows")), "count rows")
+  expect_message(expect_false(doc_route_match(call)),
+                 "not recorded into a notebook [(]console.ipynb[)].*\\.R, \\.Rmd or \\.qmd",
+                 class = "gptr_message_notice")
+  expect_no_message(doc_route_match(call))
+  expect_false(file.exists(nb))
+})
+
 test_that("calls in no document go to the console transcript target, if any", {
   proj = local_project()
   local_no_running_document()

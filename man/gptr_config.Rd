@@ -29,7 +29,8 @@ removes a key from the scope. \code{egress} (the providers you allow automatic c
 accepted only at user scope. \code{mode = yolo} and turning off local-only Ollama inference
 (\code{providers = list(ollama = list(local_only = FALSE))}) are accepted only at user or session
 scope; a project can only keep local-only inference on. A change called from model code
-during a run requires your approval; otherwise it signals \code{gptr_error_permission}.
+during a run needs an allowing permission decision (a person's, in every mode but \code{yolo}; see
+\link{gptr_security}); otherwise it signals \code{gptr_error_permission}.
 
 The \code{"session"} scope means this R process, not one conversation. User settings live at
 \code{tools::R_user_dir("gptr", "config")/settings.json}; project settings live in \verb{.gptr/}.

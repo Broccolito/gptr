@@ -65,14 +65,17 @@ These are the object and output helper signatures:
 
 ``` r
 peter$describe(x, budget = 150L)
-peter$help(name, package = NULL, budget = 800L)
+peter$help(name, package = NULL, budget = 800L, source = FALSE)
 peter$search(words, limit = 8L)
 peter$plot(which = NULL, width = 1000L, height = 700L)
 peter$out(id, stream = c("stdout", "stderr"), lines = NULL)
 ```
 
 `describe()` returns a compact object description. `help()` also accepts an R help topic,
-`"namespace/member"` or `"server/tool"`. `search()` returns names, kinds, signatures and scores.
+`"namespace/member"` or `"server/tool"`. `help("gptr")` lists gptr's functions and help topics,
+`help("gptr::name")` reads one, and `source = TRUE` returns a function's definition (an internal
+function needs `"gptr:::name"`). `search()` returns names, kinds, signatures and scores; gptr's own
+functions and help topics (kind `api`) follow the members, tools and skills it finds.
 `plot()` attaches the current plot, or a stored plot selected by `which`, to a running `r` result;
 it returns invisibly. `out()` retrieves full captured text by output id, optionally only selected
 lines. Display budgets limit what is printed, not the stored full output.

@@ -602,7 +602,7 @@ test_that("files over the capture cap and symbolic links are not restorable", {
   expect_true(nzchar(Sys.readlink(file.path(proj, "link.md"))))
 })
 
-test_that("CLI calls cannot promote an unhashed file's metadata to an original pre-image", {
+test_that("CLI calls back up an unhashed target only while its size and mtime match the scan", {
   local_gptr_options(checkpoint_track_file_max = 10)
   proj = local_project(files = list("edited.csv" = strrep("o", 20), "kept.csv" = strrep("o", 20)))
   ck = ckpt_ck_new("s0000000034")
@@ -616,11 +616,12 @@ test_that("CLI calls cannot promote an unhashed file's metadata to an original p
   rows = stats::setNames(frag$files, vapply(frag$files, function(r) r$path, ""))
   expect_false(rows[["edited.csv"]]$restorable)
   expect_match(rows[["edited.csv"]]$reason, "no pre-image")
-  expect_false(rows[["kept.csv"]]$restorable)
+  expect_true(rows[["kept.csv"]]$restorable)
   u = ckpt_files_undo(ck, frag)
   expect_identical(u$ok[u$item == "file edited.csv"], FALSE)
+  expect_true(u$ok[u$item == "file kept.csv"])
   expect_identical(readLines(file.path(proj, "edited.csv")), "served")
-  expect_identical(readLines(file.path(proj, "kept.csv")), "served")
+  expect_identical(readLines(file.path(proj, "kept.csv")), strrep("o", 20))
 })
 
 test_that("undo restores mode bits; old rows, later edits and missing copies are not written", {
@@ -637,11 +638,8 @@ test_that("undo restores mode bits; old rows, later edits and missing copies are
   writeLines("a longer new file", file.path(proj, "new.txt"))
   file.remove(file.path(proj, "run.sh"))
   frag = ckpt_files_after(ck, call, tok)
-  old = ckpt_files_undo(ck, frag, turn_now = 101L)
-  expect_match(old$action[old$item != "file coverage"], "older than", all = TRUE)
-  restored = ckpt_files_undo(ck, frag)
-  expect_false(restored$ok[restored$item == "file coverage"])
-  expect_true(all(restored$ok[restored$item != "file coverage"]))
+  expect_match(ckpt_files_undo(ck, frag, turn_now = 101L)$action, "older than", all = TRUE)
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
   expect_identical(format(file.mode(file.path(proj, c("run.sh", "a.R")))), c("750", "700"))
   writeLines("a = 3", file.path(proj, "a.R"))
   r = ckpt_files_undo(ck, frag, redo = TRUE)
@@ -776,9 +774,7 @@ test_that("slow walks switch the session to one scan per turn plus predicted pat
   writeLines(strrep("y", 100), file.path(proj, "R", "a.R"))
   frag3 = ckpt_files_after(ck, call3, tok3)
   expect_identical(frag3$files[[1L]]$status, "modified")
-  coverage = ckpt_files_turn_scan(ck, 2L)
-  expect_length(coverage$files, 0L)
-  expect_identical(coverage$coverage, "partial")
+  expect_null(ckpt_files_turn_scan(ck, 2L))
   expect_true(ckpt_files_undo(ck, frag3)$ok)
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 2")
   # a predicted path that unpredicted code changed earlier in the turn is left to the turn scan
@@ -794,18 +790,12 @@ test_that("slow walks switch the session to one scan per turn plus predicted pat
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 2")
 })
 
-# The notices of gptr.checkpoint_scan_budget that `expr` signals (shown nowhere)
+# The console lines of gptr.checkpoint_scan_budget notices that `expr` writes (shown nowhere)
 scan_notices = function(expr) {
-  seen = new.env(parent = emptyenv())
-  seen$text = character()
-  withCallingHandlers(expr, gptr_message_notice = function(m) {
-    seen$text = c(seen$text, conditionMessage(m))
-    invokeRestart("muffleMessage")
-  })
-  grep("gptr.checkpoint_scan_budget", seen$text, fixed = TRUE, value = TRUE)
+  grep("gptr.checkpoint_scan_budget", utils::capture.output(expr), fixed = TRUE, value = TRUE)
 }
 
-test_that("only the walk counts against gptr.checkpoint_scan_budget, not root lookups", {
+test_that("only the scan counts against gptr.checkpoint_scan_budget, not root lookups", {
   skip_on_cran()
   local_project(gptr = FALSE)
   local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
@@ -825,13 +815,13 @@ test_that("only the walk counts against gptr.checkpoint_scan_budget, not root lo
   expect_false(isTRUE(ck$files$per_turn))
 })
 
-test_that("a walk slower than gptr.checkpoint_scan_budget switches to per-turn scans once", {
+test_that("a scan slower than gptr.checkpoint_scan_budget switches to per-turn scans once", {
   local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
   proj = local_project(files = list("a.R" = "a = 1"))
   scan = ckpt_scan_run
   local_mocked_bindings(ckpt_scan_run = function(...) {
     result = scan(...)
-    result$walk_seconds = 0.3
+    result$seconds = 0.3
     result
   })
   ck = ckpt_ck_new("s0000000096")
@@ -844,6 +834,43 @@ test_that("a walk slower than gptr.checkpoint_scan_budget switches to per-turn s
   expect_length(notices, 1L)
   expect_match(notices, paste0("Checkpoint scans of ", proj), fixed = TRUE)
   expect_true(ck$files$per_turn)
+})
+
+# A fresh tracker of `root` and a scan that reached every entry or stopped at the time limit
+notice_tracker = function(root) list2env(list(root = root, stat = ckpt_empty_walk()))
+notice_scan = function(complete) {
+  list(walk = ckpt_empty_walk(), hash = character(), mode = integer(), absent = character(),
+       not_files = character(), uncaptured = character(), complete = complete,
+       reason = if (complete) "" else "time limit", seconds = 0)
+}
+
+test_that("the coverage notice is a console line for the person, once per root", {
+  root = local_project()
+  local_gptr_options(quiet = FALSE)
+  expect_silent(ckpt_files_observe(notice_tracker(root), notice_scan(TRUE)))
+  expect_no_message(out <- capture.output(ckpt_files_observe(notice_tracker(root),
+                                                             notice_scan(FALSE))))
+  text = paste(out, collapse = " ")
+  expect_match(text, paste0("File undo covers part of ", root), fixed = TRUE)
+  expect_match(text, "stopped early (time limit)", fixed = TRUE)
+  expect_false(grepl("ls/find/read|native CLI", text))
+  expect_silent(ckpt_files_observe(notice_tracker(root), notice_scan(FALSE)))
+})
+
+test_that("the coverage notice stays out of tool results, documents and notebooks", {
+  root = local_project()
+  local_gptr_options(quiet = FALSE)
+  for (opt in c("knitr.in.progress", "jupyter.in_kernel")) {
+    withr::with_options(stats::setNames(list(TRUE), opt), {
+      expect_silent(ckpt_files_observe(notice_tracker(root), notice_scan(FALSE)))
+    })
+  }
+  e = new.env()
+  e$observe = function() ckpt_files_observe(notice_tracker(root), notice_scan(FALSE))
+  out = capture.output(res <- eval_r("observe()", e, tee = FALSE))
+  expect_match(paste(out, collapse = " "), "File undo covers part of", fixed = TRUE)
+  texts = vapply(res$events, function(ev) ev$text %||% "", "")
+  expect_false(any(grepl("undo", texts, ignore.case = TRUE)))
 })
 
 test_that("files that cannot be read are listed, never captured and stop nothing else", {
@@ -861,10 +888,8 @@ test_that("files that cannot be read are listed, never captured and stop nothing
   Sys.chmod(file.path(proj, "key.pem"), "0000", use_umask = FALSE)
   frag = ckpt_files_after(ck, call, tok)
   expect_identical(paths_status(frag), c(key.pem = "created", `R/a.R` = "modified"))
-  expect_identical(frag$coverage, "partial")
-  report = ckpt_files_undo(ck, frag)
-  expect_false(report$ok[report$item == "file coverage"])
-  expect_true(all(report$ok[report$item != "file coverage"]))
+  expect_identical(frag$coverage, "complete")
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
   expect_false(file.exists(file.path(proj, "key.pem")))
   expect_identical(readLines(file.path(proj, "secret.txt")), "s")
@@ -1024,6 +1049,21 @@ test_that("checkpoint changed FIFOs and links stay listed without capture or res
   expect_identical(readLines(file.path(proj, "source.R")), "answer = 42")
 })
 
+test_that("unchanged links and FIFOs are not reported by later scans", {
+  skip_on_os("windows")
+  proj = local_project(files = list("a.R" = "a = 1", "notes.md" = "notes"))
+  expect_true(file.symlink(file.path(proj, "notes.md"), file.path(proj, "link.md")))
+  fifo = processx::conn_create_fifo(file.path(proj, "pipe"), read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  ck = ckpt_ck_new("s0000000093")
+  call = list(id = "c1", name = "r", input = list(code = "writeLines('a = 2', 'a.R')"))
+  tok = ckpt_files_before(ck, call, 1L)
+  writeLines("a = 2", file.path(proj, "a.R"))
+  expect_identical(paths_status(ckpt_files_after(ck, call, tok)), c(a.R = "modified"))
+  tok = ckpt_files_before(ck, call, 1L)
+  expect_null(ckpt_files_after(ck, call, tok))
+})
+
 test_that("checkpoint racy scans reject a tracked regular file replaced by a FIFO", {
   skip_on_os("windows")
   proj = local_project(files = list("empty.txt" = character()))
@@ -1031,7 +1071,6 @@ test_that("checkpoint racy scans reject a tracked regular file replaced by a FIF
   tr = ckpt_files_tr(ck)
   ckpt_files_sync(tr)
   observed = tr$stat
-  tr$walk_time = observed$mtime[1L]
   pipe = file.path(proj, "empty.txt")
   expect_true(file.remove(pipe))
   fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
@@ -1041,7 +1080,7 @@ test_that("checkpoint racy scans reject a tracked regular file replaced by a FIF
   local_mocked_bindings(ckpt_scan_run = function(...) {
     list(walk = observed, hash = character(), mode = integer(), absent = character(),
          not_files = character(), uncaptured = c(empty.txt = "not a regular file"),
-         complete = TRUE, capture_capped = FALSE, reason = "", seconds = 0, walk_seconds = 0)
+         complete = TRUE, reason = "", seconds = 0)
   }, hash_file = function(path) {
     if (any(path == pipe)) {
       stop(structure(list(message = "FIFO hash refused", call = NULL),

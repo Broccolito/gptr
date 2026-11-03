@@ -10,8 +10,9 @@ gptr_risk(code, envir = NULL, root = NULL)
 \item{code}{R code: a character vector, a call or an expression.}
 
 \item{envir}{\code{NULL} or the environment the code would run in. When given, assignments to
-existing bindings (of \code{envir} itself for a plain assignment evaluated in \code{envir}; for
-\verb{<<-}, \code{assign()}, replacement calls and an assignment inside \code{local()}, \code{with()} or
+existing bindings (of \code{envir} itself for a plain assignment evaluated in \code{envir}; none for
+one in the code of \code{local()} without \code{envir}, which binds in its own environment; for
+\verb{<<-}, \code{assign()}, replacement calls and an assignment inside \code{local(envir =)}, \code{with()} or
 \code{within()} also of its enclosing environments up to the global environment) are
 reported as overwrites with their size (the workspace's size rule in a leaf: each part
 once, without code or shared environments; promises and active bindings are never forced)

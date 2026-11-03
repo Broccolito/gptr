@@ -441,14 +441,10 @@ bg_callback = function() {
   if (!is.null(pending)) pending()
   on.exit(bg_ensure_pump(), add = TRUE)
   idle = reactor_depth() == 0L
-  row = idle
-  withCallingHandlers({
+  message_row({
     if (idle) bg_guard("tick", bg_tick())
     bg_guard("sweep", bg_sweep(idle))
-  }, gptr_message = function(m) {
-    if (row) cat("\n")
-    row <<- FALSE
-  })
+  }, row = idle)
   invisible(NULL)
 }
 

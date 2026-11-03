@@ -9,15 +9,42 @@ test_that("sessions knit as their answer, plus the code of a live turn", {
   out = knit_print.gptr_session(s)
   expect_s3_class(out, "knit_asis")
   expect_identical(as.character(out),
-                   "There are 32 rows.\n\n```r\nn = nrow(mtcars)\n```")
+                   "\n\nThere are 32 rows.\n\n```r\nn = nrow(mtcars)\n```\n\n")
   r = doc_test_session(list(doc_test_turn("n = 1")), kind = "replayed")
   dr = session_data(r)
   dr$last_text = "There are 32 rows."
-  expect_identical(as.character(knit_print.gptr_session(r)), "There are 32 rows.")
+  expect_identical(as.character(knit_print.gptr_session(r)), "\n\nThere are 32 rows.\n\n")
+  # a replayed session without its answer shows nothing (Quarto would wrap "" in an empty div)
+  dr$last_text = NA_character_
+  expect_null(knit_print.gptr_session(r))
   x = structure(c(TRUE, TRUE, FALSE), class = c("gptr_decision", "gptr_s1", "logical"),
                 meta = list(model = "jev-1.13.0", date = "2026-09-29"))
   expect_identical(as.character(knit_print.gptr_s1(x)),
-                   "`gptr_decision: 2 TRUE / 1 FALSE (jev-1.13.0, 2026-09-29)`\n")
+                   "\n\n`gptr_decision: 2 TRUE / 1 FALSE (jev-1.13.0, 2026-09-29)`\n\n")
+})
+
+test_that("an answer after a plot the turn drew is its own Markdown paragraph", {
+  skip_if_not_installed("knitr")
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto")
+  rmd = file.path(getwd(), "plot.Rmd")
+  writeLines(c("```{r ask}", "peter(\"plot it\")", "```"), rmd)
+  e = doc_stand_in(code = "plot(1:3)")
+  e$peter = local({
+    inner = e$peter
+    function(...) {
+      s = inner(...)
+      d = session_data(s)
+      d$last_text = "Plotted."
+      s
+    }
+  })
+  out = file.path(getwd(), "plot.md")
+  knitr::knit(rmd, output = out, envir = e, quiet = TRUE)
+  md = readLines(out)
+  at = match("Plotted.", md)
+  expect_false(is.na(at))
+  expect_identical(md[at - 1L], "")
 })
 
 test_that("the label hook skips a chunk for one knit and is removed afterwards", {
@@ -58,6 +85,60 @@ test_that("knitr records an agent chunk on the first knit and replays it on the 
   expect_identical(tools::md5sum(rmd), md5)
 })
 
+test_that("a calling chunk that uses the block's objects after the call is told so, once", {
+  skip_if_not_installed("knitr")
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto", quiet = FALSE)
+  rmd = file.path(getwd(), "local.Rmd")
+  writeLines(c("```{r ask}", "s = peter(\"make top3\")", "top3", "s", "```", "",
+               "```{r later}", "top3 + 1", "```"), rmd)
+  e = doc_stand_in(code = "top3 = 3\nother = 1")
+  out = file.path(getwd(), "local.md")
+  # the first knit works (the run assigns into the knit's environment) but says, in the report,
+  # what the next one will do
+  knitr::knit(rmd, output = out, envir = e, quiet = TRUE)
+  md = paste(readLines(out), collapse = " ")
+  expect_match(md, "makes top3, which its calling chunk uses after the call.*later chunk")
+  expect_false(grepl("not found", md, fixed = TRUE))
+  id = doc_find_blocks(readLines(rmd))$id
+  # the next knit replays: the block's chunk runs after `ask`, so `top3` is not there yet
+  forget = function() {
+    for (k in grep("doc_used_early", ls(the$once), value = TRUE)) the$once[[k]] = NULL
+  }
+  forget()
+  err = utils::capture.output(invisible(knitr::knit(rmd, output = out, envir = doc_stand_in(),
+                                                    quiet = TRUE)), type = "message")
+  md = paste(readLines(out), collapse = " ")
+  expect_match(md, paste0("Block ", id, " of local.Rmd makes top3.*object 'top3' not found"))
+  # knitr drops a failing chunk's messages unless error = TRUE (rmarkdown::render, Quarto): the
+  # console still has it
+  expect_match(paste(err, collapse = " "), paste0("Block ", id, " of local.Rmd makes top3"))
+  forget()
+  error = knitr::opts_chunk$get("error")
+  knitr::opts_chunk$set(error = FALSE)
+  withr::defer(knitr::opts_chunk$set(error = error))
+  err = utils::capture.output(expect_error(knitr::knit(rmd, output = out, envir = doc_stand_in(),
+                                                       quiet = TRUE), "top3"), type = "message")
+  expect_match(paste(err, collapse = " "), paste0("Block ", id, " of local.Rmd makes top3"))
+  # a chunk that ends with the call (or only prints the session) is not mentioned
+  writeLines(c("```{r ask}", "s = peter(\"count\")", "s", "```"), rmd)
+  knitr::knit(rmd, output = out, envir = doc_stand_in(code = "top3 = 3"), quiet = TRUE)
+  expect_false(any(grepl("calling chunk", readLines(out), fixed = TRUE)))
+  # in a notebook, the lines after the call in its cell
+  withr::local_options(jupyter.in_kernel = TRUE)
+  nb = file.path(getwd(), "nb.ipynb")
+  writeLines(c("{", " \"cells\": [", "  {", "   \"cell_type\": \"code\",",
+               "   \"execution_count\": null,", "   \"metadata\": {},", "   \"outputs\": [],",
+               "   \"source\": [\"x = peter(\\\"make fit\\\")\\n\", \"summary(fit)\"]", "  }",
+               " ],", " \"metadata\": {},", " \"nbformat\": 4,", " \"nbformat_minor\": 4", "}"),
+             nb)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  site = doc_locate(call_new("make fit", "make fit", sys_call = quote(peter("make fit")),
+                             nframe = 0L))
+  expect_message(doc_used_early(site, "abc123", "fit = lm(mpg ~ wt, mtcars)", character()),
+                 "Block abc123 of nb.ipynb makes fit, which its calling cell uses")
+})
+
 test_that("a stale agent chunk is regenerated during the knit without running the old code", {
   skip_if_not_installed("knitr")
   local_project()
@@ -76,6 +157,9 @@ test_that("a stale agent chunk is regenerated during the knit without running th
   expect_identical(b$id, "abc123")
   expect_identical(doc_block_body(readLines(rmd), b[1, ]), "n = 7")
   expect_null(knitr::opts_hooks$get("label"))
+  # the skipped chunk is left out of the output: its old code never ran
+  md = readLines(file.path(getwd(), "report.md"))
+  expect_false(any(grepl("old_ran|gptr:abc123", md)))
 })
 
 # ---- additions (D-130): redaction, the hook scope on failed knits and child knits, and the
@@ -105,12 +189,13 @@ test_that("knit_print output is redacted like the recorded blocks (IC-74)", {
   d$last_text = paste("The token is", key)
   out = as.character(knit_print.gptr_session(s))
   expect_false(grepl(key, out, fixed = TRUE))
-  expect_identical(out, paste0("The token is [secret:KNIT_TOKEN]\n\n```r\n",
-                               "token = Sys.getenv(\"KNIT_TOKEN\")\n```"))
+  expect_identical(out, paste0("\n\nThe token is [secret:KNIT_TOKEN]\n\n```r\n",
+                               "token = Sys.getenv(\"KNIT_TOKEN\")\n```\n\n"))
   x = structure(c(key, "other", key), class = c("gptr_choice", "gptr_s1", "character"),
                 meta = list(model = "ollama/qwen3:8b", date = "2026-10-05"))
   expect_identical(as.character(knit_print.gptr_s1(x)),
-                   "`gptr_choice: [secret:KNIT_TOKEN] 2, other 1 (ollama/qwen3:8b, 2026-10-05)`\n")
+                   paste0("\n\n`gptr_choice: [secret:KNIT_TOKEN] 2, other 1 (ollama/qwen3:8b, ",
+                          "2026-10-05)`\n\n"))
 })
 
 test_that("a knit that fails still removes the label hook, so the next knit runs the chunk", {
@@ -221,7 +306,7 @@ test_that("the code of a live turn gets a fence longer than any backtick line it
   d = session_data(s)
   d$last_text = "Done."
   expect_identical(as.character(knit_print.gptr_session(s)),
-                   paste0("Done.\n\n````r\n", code, "\n````"))
+                   paste0("\n\nDone.\n\n````r\n", code, "\n````\n\n"))
 })
 
 test_that("a live turn's gptr_return(<expression>) knits with its block id, or as written", {
@@ -231,12 +316,12 @@ test_that("a live turn's gptr_return(<expression>) knits with its block id, or a
   d = session_data(s)
   d$last_text = "Fitted."
   expect_identical(as.character(knit_print.gptr_session(s)),
-                   paste0("Fitted.\n\n```r\n", code, "\n```"))
+                   paste0("\n\nFitted.\n\n```r\n", code, "\n```\n\n"))
   session_append(s, list(type = "custom", custom_type = "gptr.doc_block",
                          data = list(doc = "report.Rmd", block = "c5b47c", action = "insert")))
   expect_identical(as.character(knit_print.gptr_session(s)),
-                   paste0("Fitted.\n\n```r\nfit = lm(mpg ~ wt, mtcars)\n",
-                          ".gptr_value_c5b47c = (coef(fit))\n```"))
+                   paste0("\n\nFitted.\n\n```r\nfit = lm(mpg ~ wt, mtcars)\n",
+                          ".gptr_value_c5b47c = (coef(fit))\n```\n\n"))
 })
 
 test_that("knitr's generic dispatches to the lazily registered methods", {
@@ -244,10 +329,44 @@ test_that("knitr's generic dispatches to the lazily registered methods", {
   s = doc_test_session(list(doc_test_turn("n = 1")))
   d = session_data(s)
   d$last_text = "One."
-  expect_identical(as.character(knitr::knit_print(s)), "One.\n\n```r\nn = 1\n```")
+  expect_identical(as.character(knitr::knit_print(s)), "\n\nOne.\n\n```r\nn = 1\n```\n\n")
   x = structure(c(1, 2), class = c("gptr_score", "gptr_s1", "numeric"),
                 meta = list(model = "m", date = "2026-10-05"))
-  expect_identical(as.character(knitr::knit_print(x)), "`gptr_score: mean 1.5 (m, 2026-10-05)`\n")
+  expect_identical(as.character(knitr::knit_print(x)),
+                   "\n\n`gptr_score: mean 1.5 (m, 2026-10-05)`\n\n")
+})
+
+test_that("System 1 vectors show their probabilities and provenance in a notebook", {
+  testthat::local_reproducible_output(width = 80, crayon = TRUE)
+  meta = list(model = "jev-1.14.0", calibrated = NA, date = "2026-11-02")
+  vecs = list(
+    new_gptr_decision(c(Corolla = TRUE, Civic = FALSE), c(0.95, 0.06), meta = meta),
+    new_gptr_choice(c("liver", "<b>lung</b>"), levels = c("liver", "<b>lung</b>"),
+                    probabilities = rbind(c(0.8, 0.2), c(0.3, 0.7)), confidence = c(0.6, 0.4),
+                    meta = meta),
+    new_gptr_score(1.5, levels = c("low", "high"), probabilities = rbind(c(0.5, 0.5)),
+                   confidence = 0.2, meta = meta))
+  for (x in vecs) {
+    plain = doc_s1_repr_text(x)
+    expect_false(grepl("\033", plain, fixed = TRUE))
+    expect_identical(plain, paste(cli::ansi_strip(utils::capture.output(print(x))),
+                                  collapse = "\n"))
+    for (text in c(plain, doc_s1_repr_html(x), doc_s1_repr_markdown(x))) {
+      expect_match(text, if (inherits(x, "gptr_score")) "(conf 0.20)" else "(p=0.", fixed = TRUE)
+      expect_match(text, "jev-1.14.0 . calibration unknown . 2026-11-02", fixed = TRUE)
+    }
+  }
+  expect_match(doc_s1_repr_html(vecs[[2L]]), "&lt;b&gt;lung&lt;/b&gt;", fixed = TRUE)
+  hooks = getHook(packageEvent("repr", "onLoad"))
+  methods = vapply(hooks, function(h) {
+    if (identical(get0("class", environment(h), inherits = FALSE), "gptr_s1")) {
+      get0("name", environment(h), inherits = FALSE)
+    } else {
+      NA_character_
+    }
+  }, "")
+  expect_setequal(methods[!is.na(methods)],
+                  c("repr_text", "repr_html", "repr_markdown", "repr_latex"))
 })
 
 # ---- knitr and Quarto through peter() and the fake provider (05 P15 acceptance 2) ---------------

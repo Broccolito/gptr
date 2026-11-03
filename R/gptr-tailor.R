@@ -17,7 +17,8 @@
 #' Arguments you give in a call win over the fixed ones, except that `tools`, `extensions`,
 #' `plugins` and `skills` add to the fixed values and `.opts` entries replace them by name. The
 #' same rule applies when you tailor a harness again; `NULL` drops a fixed single value.
-#' A call from model code requires human approval; otherwise it signals
+#' From model code during a run, `gptr_tailor()` needs an allowing permission decision (a person's,
+#' in every mode but `yolo`; see [gptr_security]); otherwise it signals
 #' `gptr_error_permission`.
 #'
 #' To share a harness, save it with [saveRDS()]. Treat a harness from someone else like an R

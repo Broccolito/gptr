@@ -33,6 +33,7 @@ UI
 Wanjun
 Wason
 Wason's
+WebP
 aarch
 aisdk
 api
@@ -72,6 +73,7 @@ stdin
 testthat
 tidyllm
 tokenizer
+unactivated
 unapplied
 uncalibrated
 unreferenced

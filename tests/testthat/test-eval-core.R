@@ -503,6 +503,14 @@ test_that("added promises and active bindings are reported by kind and never for
   expect_true(rlang::env_binding_are_lazy(e, "p"))
 })
 
+test_that("an object local()'s code only reads is not reported as modified (D-346)", {
+  e = new.env()
+  e$x = data.frame(a = 1:3)
+  res = eval_r("local({ x = nrow(x) * 2; x })", e)
+  expect_identical(res$changes$objects$modified, character())
+  expect_identical(e$x, data.frame(a = 1:3))
+})
+
 test_that("non-ASCII and invalid object names are reported as valid UTF-8, never an R error", {
   skip_on_cran()
   # ls() returns a name parsed from code (donn<e9>es) with unknown encoding, which R's radix

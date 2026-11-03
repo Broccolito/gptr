@@ -24,12 +24,15 @@ gptr_logout(provider)
 
 \item{slot}{For a stdio MCP server, the name of a declared secret environment entry such as
 \code{"SERVICE_API_TOKEN"}. The credential is passed only to that server's child environment,
-bound to its reviewed configuration and resolved executable. Leave \code{NULL} for providers
-and HTTP MCP servers.}
+bound to its configuration as written and its resolved executable (an edit of either or an
+update of the executable asks for login again; changing R's working directory or an
+environment variable does not).
+Leave \code{NULL} for providers and HTTP MCP servers.}
 }
 \value{
 \code{gptr_login()} returns \code{TRUE} invisibly on success, or \code{FALSE} invisibly with a
-\code{status} attribute of \code{"skipped"} or \code{"cancelled"}; no credential value is returned.
+\code{status} attribute of \code{"skipped"} or \code{"cancelled"}, and says which in a message that names
+the store used; no credential value is returned or shown.
 \code{gptr_logout()} removes the stored
 credential and forgets the access token held in memory, and returns \code{TRUE} invisibly when
 it removed something, else \code{FALSE}.
@@ -41,8 +44,12 @@ get the authorization-code flow with PKCE (S256): a page on 127.0.0.1 receives t
 when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
 on. A login inside a tool also uses hidden paste entry because loopback callbacks cannot run
 recursively. Key entry requires a UI with hidden input; it never falls back to visible typing.
+Hidden entry works in RStudio and Positron (through 'rstudioapi') and in terminal R on Unix;
+where the UI has none (Windows Rgui or Rterm, R.app, Jupyter, Emacs ESS), load keys with
+\code{\link[=gptr_env]{gptr_env()}} instead, or log in once elsewhere with a remembering \code{scope}.
 The host prompt shows the destination and storage before entry. For key entry, leave it blank
-to skip, or dismiss or interrupt it to cancel. The initial OAuth review offers Skip and Cancel.
+(in a terminal, Ctrl-D counts as blank) or type \verb{/skip} to skip; type \verb{/cancel}, dismiss or
+interrupt (Ctrl-C) it to cancel. The initial OAuth review offers Skip and Cancel.
 Secret answers are not returned to the model.
 \code{scope = "session"} keeps credentials in this R process until logout or exit; it does not
 export an environment variable or create a credential file. For assisted setup, use this scope.

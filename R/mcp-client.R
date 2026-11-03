@@ -1065,7 +1065,9 @@ mcp_stdio_command = function(command) {
   command
 }
 
-#' Bind stdio consent to the reviewed configuration and the resolved executable's contents
+#' Bind stdio consent to the configuration as written and the executable that receives the value
+#' (its resolved path and contents). What placeholders expand to and getwd() are the user's
+#' environment, trusted like the allowlisted variables the server inherits
 #' @noRd
 mcp_stdio_binding = function(spec, ex) {
   command = mcp_stdio_command(ex$command)
@@ -1076,18 +1078,19 @@ mcp_stdio_binding = function(spec, ex) {
   }
   command = normalizePath(command, winslash = "/", mustWork = TRUE)
   identity = list(spec = mcp_cache_key(spec), command = command, binary = hash_file(command),
-                   args = ex$args, env = as.list(ex$env), cwd = ex$cwd %||% getwd(),
                    source = spec$source, path = spec$path)
   id = hash_sha256(canonical_json(identity))
   list(id = id, command = command, origin = paste0("https://", id, ".stdio.invalid"))
 }
 
-#' Insert reviewed credential handles only into this server's owned child environment
+#' Insert reviewed credential handles only into this server's owned child environment; an
+#' unreadable credential store leaves the session's credentials, like provider_credential()
 #' @noRd
 mcp_stdio_credentials = function(spec, ex) {
   env = as.list(ex$env %||% character())
   prefix = paste0("mcp:", spec$name, ":env:")
-  keys = auth_store_keys()
+  keys = tryCatch(auth_store_keys(),
+                  gptr_error = function(e) as.character(names(secrets_state()$auth)))
   keys = keys[startsWith(keys, prefix)]
   if (!length(keys)) return(env)
   binding = mcp_stdio_binding(spec, ex)
@@ -1197,12 +1200,11 @@ mcp_http_auth = function(conn, force = FALSE) {
   tryCatch({
     rec = auth_store_get(conn$auth_key)
     if (!is.null(rec$binding)) {
-      binding = conn$auth_binding %||% mcp_http_binding(conn$spec, mcp_expand_spec(conn$spec))
-      if (!identical(rec$binding, binding)) return(NULL)
+      if (!identical(rec$binding, conn$auth_binding)) return(NULL)
     }
     if (rlang::is_string(rec$resource) &&
           !identical(url_for_log(rec$resource), url_for_log(conn$url))) return(NULL)
-    oauth_access(conn$auth_key, conn$origin, force = force)
+    oauth_access(conn$auth_key, conn$origin, force = force, rec = rec)
   },
            gptr_error = function(e) {
              registry_diagnostic("builtin:mcp", "mcp_auth", class(e)[1L], conditionMessage(e))

@@ -902,6 +902,8 @@ test_that("the shiny-bslib skill has its catalog line, house style and a valid e
   expect_false(grepl("<\\-", txt))
   expect_true(all(utf8ToInt(txt) < 128L))
   expect_match(txt, "peter$app(\"<id>\", data = c(\"obj\"))", fixed = TRUE)
+  expect_false(grepl("same URL", txt, fixed = TRUE))
+  expect_match(txt, "fresh access token", fixed = TRUE)
   open = which(lines == "```r")
   expect_length(open, 1L)
   expect_match(paste(lines[seq_len(open - 1L)], collapse = "\n"),

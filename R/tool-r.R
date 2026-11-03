@@ -8,8 +8,9 @@ r_tool_description = paste(
   "Returns printed output, messages, warnings, errors with a traceback, and plots as images.",
   "Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and",
   "last 60% and names a peter$out(id) handle for the rest.",
-  "For harness APIs, use peter$search(\"words\") and peter$help(\"gptr\") inside r;",
-  "peter$help(\"gptr::name\") gives docs, source = TRUE gives its function definition."
+  "To set up MCP servers, skills or settings in gptr itself, or find its APIs, use",
+  "peter$search(\"words\") and peter$help(\"gptr\") inside r; peter$help(\"gptr::name\") gives",
+  "docs, source = TRUE its definition."
 )
 r_tool_snippet =
   "Run R code in the user's live session (objects persist; plots come back as images)"

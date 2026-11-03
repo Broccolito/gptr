@@ -675,8 +675,8 @@ plugin_api_req = function(manifest) {
 #' A resolved plugin from a directory, or NULL when the directory is not a plugin
 #'
 #' `plugin.json` makes a gptr directory plugin; `.claude-plugin/plugin.json` (or an empty
-#' `.claude-plugin/`) a Claude bundle; a marketplace-only root is not a plugin. A directory
-#' without a manifest counts when it has
+#' `.claude-plugin/`) a Claude bundle; a marketplace-only root is not a plugin unless `kind` is
+#' given. A directory without a manifest counts when it has
 #' `skills/`, `prompts/`, `agents/`, `extensions/`, `commands/` or `mcp.json`. Without a manifest
 #' name the plugin is named `name`. A given `kind` always resolves: an installed Claude Code plugin
 #' is `kind = "claude-plugin"` named by its key, never by its version directory (D-088).
@@ -694,7 +694,7 @@ plugin_from_dir = function(path, name = basename(path), kind = NULL) {
     kind = kind %||% "claude-plugin"
     man = plugin_manifest_read(cp) %||% list()
   } else if (dir.exists(file.path(path, ".claude-plugin"))) {
-    if (file.exists(file.path(path, ".claude-plugin", "marketplace.json")) &&
+    if (is.null(kind) && file.exists(file.path(path, ".claude-plugin", "marketplace.json")) &&
         !has_dirs && !any(file.exists(file.path(path, c("mcp.json", ".mcp.json"))))) {
       return(NULL)
     }
@@ -791,42 +791,40 @@ plugin_resolve = function(name) {
     p = plugin_from_dir(full)
     if (!is.null(p)) return(p)
   }
-  if (looks_path || dir.exists(full)) {
-    if (file.exists(file.path(full, ".claude-plugin", "marketplace.json"))) {
-      gptr_abort(paste0("This path is a plugin marketplace, not a plugin directory. ",
-                        "Choose an individual plugin directory from its marketplace.json ",
-                        "and pass that path in plugins = ."),
-                 "invalid_argument", arg = "name", expected = "an individual plugin directory")
+  if (!looks_path) {
+    ws = workspace_dir()
+    if (!is.null(ws)) {
+      dirs = list.dirs(file.path(ws, "plugins"), recursive = FALSE)
+      hit = res_match(name, basename(dirs), "plugin")
+      if (length(hit)) {
+        p = plugin_from_dir(dirs[basename(dirs) == hit][1L])
+        if (!is.null(p)) return(p)
+      }
     }
+    p = plugin_from_package(name)
+    if (!is.null(p)) return(p)
+    if (!grepl("^[A-Za-z][A-Za-z0-9.]*$", name) || !length(find.package(name, quiet = TRUE))) {
+      pk = unique(basename(list.dirs(.libPaths(), recursive = FALSE)))
+      hit = res_match(name, pk, "plugin")
+      if (length(hit)) {
+        p = plugin_from_package(hit)
+        if (!is.null(p)) return(p)
+      }
+    }
+    cl = plugin_claude_installed()
+    hit = res_match(name, names(cl), "plugin")
+    if (length(hit)) return(plugin_from_dir(cl[[hit]], hit, "claude-plugin"))
+  }
+  if (file.exists(file.path(full, ".claude-plugin", "marketplace.json"))) {
+    gptr_abort(paste0("This path is a plugin marketplace, not a plugin directory. ",
+                      "Choose an individual plugin directory from its marketplace.json ",
+                      "and name that path in `plugins`."),
+               "invalid_argument", arg = "name", expected = "an individual plugin directory")
+  }
+  if (looks_path) {
     gptr_abort(paste0("This path is not a plugin directory (no plugin.json, .claude-plugin/ ",
                       "or resource directories)."), "invalid_argument", arg = "name",
                expected = "a plugin directory")
-  }
-  ws = workspace_dir()
-  if (!is.null(ws)) {
-    dirs = list.dirs(file.path(ws, "plugins"), recursive = FALSE)
-    hit = res_match(name, basename(dirs), "plugin")
-    if (length(hit)) {
-      p = plugin_from_dir(dirs[basename(dirs) == hit][1L])
-      if (!is.null(p)) return(p)
-    }
-  }
-  p = plugin_from_package(name)
-  if (!is.null(p)) return(p)
-  if (!grepl("^[A-Za-z][A-Za-z0-9.]*$", name) || !length(find.package(name, quiet = TRUE))) {
-    pk = unique(basename(list.dirs(.libPaths(), recursive = FALSE)))
-    hit = res_match(name, pk, "plugin")
-    if (length(hit)) {
-      p = plugin_from_package(hit)
-      if (!is.null(p)) return(p)
-    }
-  }
-  cl = plugin_claude_installed()
-  hit = res_match(name, names(cl), "plugin")
-  if (length(hit)) {
-    p = plugin_from_dir(cl[[hit]], hit, "claude-plugin")
-    if (!is.null(p)) return(p)
-    return(plugin_resolve(cl[[hit]]))
   }
   gptr_abort(paste0("No plugin with this name was found: install a package with inst/gptr/, ",
                     "or use a directory with plugin.json or .claude-plugin/, or ",
@@ -1346,12 +1344,9 @@ gptr_plugins = function(installed = FALSE) {
   }
   skipped = character()
   set = lapply(plugins_setting(), function(n) {
-    tryCatch(plugin_resolve(n), error = function(e) {
+    tryCatch(if (is.null(extension_resolve(n))) plugin_resolve(n), error = function(e) {
       skipped <<- unique(c(skipped, n))
-      problem = redact_hook(paste0(n, ": ", conditionMessage(e)), "persist")
-      if (!problem %in% gptr_registry(diagnostics = TRUE)$message) {
-        registry_diagnostic("user", "plugin", class(e)[1L], problem)
-      }
+      plugin_entry_failed(n, e)
       NULL
     })
   })
@@ -1372,6 +1367,15 @@ gptr_plugins = function(installed = FALSE) {
 }
 
 # ---- process-level sync ----------------------------------------------------------------------
+
+#' Record why a configured entry of the `plugins` setting failed, once, with the entry named
+#' @noRd
+plugin_entry_failed = function(entry, e) {
+  problem = redact_hook(paste0(entry, ": ", conditionMessage(e)), "persist")
+  if (!problem %in% gptr_registry(diagnostics = TRUE)$message) {
+    registry_diagnostic("user", "plugin", class(e)[1L], problem)
+  }
+}
 
 #' Extension files (`*.R`) of a directory, in radix order
 #' @noRd
@@ -1398,9 +1402,7 @@ plugins_sync = function() {
   st$sync_gen = gen
   st$sync_root = root
   for (n in plugins_setting()) {
-    tryCatch(plugin_enable(n, 5L), error = function(e) {
-      registry_diagnostic("user", "plugin", class(e)[1L], conditionMessage(e))
-    })
+    tryCatch(plugin_enable(n, 5L), error = function(e) plugin_entry_failed(n, e))
   }
   enable_dir = function(dir, scope, rank) {
     for (f in ext_files(dir)) {

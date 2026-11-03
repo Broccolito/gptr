@@ -294,8 +294,8 @@ doc_rmd_refence = function(text, chunk, lines) {
 
 #' The rmd/qmd formats' upsert(): replace inside an agent chunk, else add an agent chunk after
 #' the owning chunk (fence and prefix copied, the fence lengthened when the body holds a fence
-#' line); console sites append a prompt chunk first. An unterminated chunk is never written into
-#' or after.
+#' line); console sites append a prompt chunk first, after the preamble chunk in a new document.
+#' An unterminated chunk is never written into or after.
 #' @noRd
 doc_rmd_upsert_fn = function(style) {
   force(style)
@@ -317,6 +317,7 @@ doc_rmd_upsert_fn = function(style) {
         gptr_abort("The last chunk of the document is not terminated.", "doc_write",
                    path = site[["path"]], reason = "malformed")
       }
+      if (!length(text)) text = doc_transcript_preamble(site[["path"]])
       text = doc_rmd_append_chunk(text, site[["statement"]] %||% doc_console_statement(text, site))
       after = length(text)
       prefix = ""
@@ -482,9 +483,11 @@ doc_transcript_header = function(text, site) {
 }
 
 #' The lines that make the transcript at `path` re-source (IC-49): how to replay it, then
-#' `library(gptr)`, which every transcript has before its first block, whichever that is
+#' `library(gptr)`, which every transcript has before its first block, whichever that is; an
+#' R Markdown or Quarto transcript, which is rendered, opens with a chunk loading gptr (D-342)
 #' @noRd
 doc_transcript_preamble = function(path) {
+  if (!identical(doc_format_of(path), "r")) return(c("```{r}", "library(gptr)", "```"))
   c("# source() this file to replay the recorded code without calling a model;",
     paste0("# gptr_source(", doc_str_literal(doc_rel(path)),
            ", replay = \"live\") re-asks the model."),

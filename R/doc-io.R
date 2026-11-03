@@ -1216,9 +1216,10 @@ doc_recover = function(path, defer = FALSE) {
 
 #' Is this notebook open in the Jupyter kernel of this process? (IC-50: never written then) The
 #' kernel runs the notebook `JPY_SESSION_NAME` names; when that names no existing file,
-#' doc_site_jupyter() finds the notebook by content among those in the working directory, so
-#' each of them may be the open one, and so is a notebook this kernel queued pending blocks for
-#' (a cell may have changed the working directory since). Only `.ipynb` files are notebooks.
+#' doc_site_jupyter() takes the bound notebook or finds one by content among those in the working
+#' directory, so each of them may be the open one, and so is a notebook this kernel queued pending
+#' blocks for (a bound one elsewhere, or a cell changed the working directory since). Only
+#' `.ipynb` files are notebooks.
 #' @noRd
 doc_notebook_attached = function(path) {
   if (!isTRUE(getOption("jupyter.in_kernel")) || !identical(doc_format_of(path), "ipynb")) {
@@ -1395,20 +1396,34 @@ doc_ide_upsert = function(fmt, site, up) {
 }
 
 #' Append lines to a console transcript (direct R lines, slash commands, rewind notes) under
-#' write consent, the `document_write` event (kind "transcript") and doc_rewrite(). Only an
-#' `.R` transcript takes raw lines (contract 11.5): a notebook would no longer be JSON and an
-#' R Markdown or Quarto document would read them as prose, so other paths are refused (FALSE).
-#' The lines are redacted with the persist profile before the event (IC-74).
+#' write consent, the `document_write` event (kind "transcript") and doc_rewrite(). An `.R`
+#' transcript takes raw lines (contract 11.5); an R Markdown or Quarto one takes them as one R
+#' chunk, as they are R code and comments (D-342); a notebook would no longer be JSON, so it is
+#' refused (FALSE), and so is an R Markdown or Quarto one whose last chunk is unterminated, which
+#' would read the new chunk as its body (a notice says so). The lines are redacted with the persist
+#' profile before the event (IC-74).
 #' @noRd
 doc_transcript_append = function(path, lines, session = NULL) {
-  if (!identical(doc_format_of(path), "r")) return(invisible(FALSE))
+  fmt = doc_format_of(path)
+  if (!isTRUE(fmt %in% c("r", "rmd", "qmd"))) return(invisible(FALSE))
   if (!doc_consent(path, ask = FALSE)) return(invisible(FALSE))
   lines = redact(as_utf8(as.character(lines)), "persist")
-  ev = doc_event(path, "r", "transcript", NULL, lines, session)
+  if (!identical(fmt, "r")) {
+    lines = lines[cumsum(nzchar(trimws(lines))) > 0L]
+    fence = doc_rmd_fence("```", lines)
+    lines = c("", paste0(fence, "{r}"), lines, fence)
+  }
+  ev = doc_event(path, fmt, "transcript", NULL, lines, session)
   if (isTRUE(ev$block)) return(invisible(FALSE))
   lines = ev$lines %||% lines
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   invisible(isTRUE(doc_rewrite(path, function(doc) {
+    ch = if (!identical(fmt, "r")) doc_rmd_chunks(doc$lines)
+    if (NROW(ch) && !ch$closed[nrow(ch)]) {
+      gptr_inform(paste0("gptr did not record into ", doc_rel(path), ": its last chunk is not ",
+                         "terminated."), "notice", .once = paste0("doc_failed:", path_key(path)))
+      return(list(value = FALSE))
+    }
     first = if (!length(doc$lines)) doc_transcript_preamble(path)
     list(lines = c(first, doc$lines, as.character(lines)), value = TRUE)
   })))

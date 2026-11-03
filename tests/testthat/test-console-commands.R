@@ -606,6 +606,8 @@ test_that("commands of later plans answer when their plan is absent", {
   expect_identical(run_command(rs, "/mcp")$out, "MCP is not available.")
   expect_identical(run_command(rs, "/doc analysis.R")$out,
                    "Binding a document needs gptr_doc(), which is not available.")
+  local_mocked_bindings(ns_fun = function(name) function(path) invisible(NULL))
+  expect_match(run_command(rs, "/doc nb.ipynb")$out, "console turns are not recorded into it")
   expect_identical(run_command(rs, "/retry")$out, "There is no answer to retry.")
 })
 
