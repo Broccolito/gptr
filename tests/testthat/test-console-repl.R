@@ -914,6 +914,25 @@ test_that("a prompt to a session that runs, in the background, says it steers (s
   expect_no_match(written(function() repl_turn(rs, "x")), "steer")
 })
 
+test_that("a chat prompt that steers a running session is the console's own item (P30 review)", {
+  local_console_test()
+  s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  rs = repl_state(s, new.env())
+  d = session_data(s)
+  d$status = "running"
+  withr::defer({
+    d$status = "idle"
+    d$queue = list(steer = list(), follow_up = list())
+  })
+  expect_identical(written(function() repl_turn(rs, "now compare the groups")),
+                   paste0(receipt_line("steer", "now compare the groups"), "\n"))
+  # source repl: its receipt was written as it was sent, so its take writes nothing again (D-301);
+  # `s |> peter()` in code stays a pipe, shown as the loop takes it
+  expect_identical(vapply(d$queue$steer, function(it) it$source, ""), "repl")
+  peter(s, "and log2")
+  expect_identical(vapply(d$queue$steer, function(it) it$source, ""), c("repl", "pipe"))
+})
+
 test_that("console_send() keeps the session of a failed call and reports the error", {
   skip_on_cran()
   local_project()
