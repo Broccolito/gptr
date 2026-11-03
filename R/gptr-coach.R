@@ -317,7 +317,7 @@ coach_task = function(sc, caller, ...) {
   }
   objects = list(dot = keep[sel$context], site = sites[sel$context], label = labels[sel$context])
   list(prompt = prompt, template = template, interp = interp, objects = objects, args = args,
-       items = gateway_context_items(sel$context, kinds, sites, labels, facts, addrs))
+       items = gateway_context_items(sel$context, kinds, sites, labels, facts, addrs, nms[keep]))
 }
 
 #' Writes the task's objects to `path` once, as the named list every run reads, each read by name

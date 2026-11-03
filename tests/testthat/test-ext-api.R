@@ -297,6 +297,22 @@ test_that("ctx services: ui, risk, secret, tokens, eval, describe, decide, add_t
   expect_null(ctx_new("s2")$get("command", "mine"))
 })
 
+test_that("ctx$decide() gives .session only to an s1.decide service that declares it", {
+  skip_on_cran()
+  local_registry()
+  local_no_bootstrap_services()
+  ctx = ctx_new("s1")
+  # the documented signature, function(question, x, ...), gets no owner in its dots
+  local_service("s1.decide", function(question, x, choices = NULL) choices)
+  expect_identical(ctx$decide("Which?", 1, choices = c("a", "b")), c("a", "b"))
+  # the builtin declares .session and gets the ctx's session, or its id
+  expect_true(".session" %in% names(formals(s1_decide)))
+  local_registry()
+  local_no_bootstrap_services()
+  local_service("s1.decide", function(question, x, ..., .session = NULL) .session)
+  expect_identical(ctx$decide("Is it?", 1), "s1")
+})
+
 test_that("ctx refuses assignment, reports unknown members and prints", {
   skip_on_cran()
   local_registry()

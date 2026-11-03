@@ -286,6 +286,12 @@ test_that("workers freeze the effective System 1 role and its bounded policy", {
   w = build()
   expect_identical(w$settings$system1, paste0("emulate:", model_resolve("sonnet")$ref))
   expect_identical(w$key_provider, "anthropic")
+  # an unresolvable setting a chat worker never uses ships as written and starts it (D-323)
+  for (bad in c("typesafe/jev-typo", "emulate:nosuchmodelxyz")) {
+    expect_warning(gptr_config(system1 = bad, .scope = "session"),
+                   class = "gptr_warning_unknown_model_setting")
+    expect_identical(build()$settings$system1, bad)
+  }
 })
 
 # The text of the tool results of a session
@@ -561,7 +567,7 @@ worker_script = function(fn) {
   fn
 }
 
-test_that("a worker composes native typed decisions with provenance and one proxy charge", {
+test_that("a worker composes native typed decisions with provenance and their own charges", {
   local_worker_lib()
   local_team_fake(worker_script(function(request) {
     if (length(request$last_results)) {
@@ -590,11 +596,17 @@ test_that("a worker composes native typed decisions with provenance and one prox
   expect_identical(meta$execution, "native")
   expect_identical(meta$locality, "local")
   expect_identical(meta$usage$output, 20)
+  # the chat row keeps the chat model's tokens; each decision request is its own row, priced
+  # with the System 1 model (D-321)
   rows = session_data(child)$usage
-  expect_identical(nrow(rows), 1L)
-  expect_identical(rows$input, 24 + meta$usage$input)
-  expect_identical(rows$output, 27)
-  expect_identical(session_data(team)$usage$request_id, rows$request_id)
+  s1 = rows[rows$route == "system-one", , drop = FALSE]
+  chat = rows[rows$route != "system-one", , drop = FALSE]
+  expect_identical(c(nrow(chat), nrow(s1)), c(1L, 2L))
+  expect_identical(c(chat$provider, chat$input, chat$output), c("fake", "24", "7"))
+  expect_identical(unique(paste0(s1$provider, "/", s1$model)), "workerjudge/workerjudge-s1")
+  expect_identical(c(sum(s1$input), sum(s1$output)), c(meta$usage$input, 20))
+  expect_identical(unique(c(s1$session, s1$agent)), c(session_data(child)$id, "s1"))
+  expect_setequal(session_data(team)$usage$request_id, rows$request_id)
   expect_identical(gptr_usage(list(team, child, team)), gptr_usage(team))
   expect_identical(nrow(usage_log()), before)
   expect_length(child$children, 0L)

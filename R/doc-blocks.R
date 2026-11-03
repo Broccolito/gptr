@@ -1542,10 +1542,10 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
     tag = ifelse(basename(art) == "app.R", "#> [app] ", "#> [plot] ")
     lines = c(lines, paste0(tag, art))
   }
+  # a note that repeats the marker keeps one (D-320)
   note = det$note %||% args$note
-  if (length(note) && nzchar(doc_one_line(note))) {
-    lines = c(lines, paste0("## Decision: ", doc_one_line(note)))
-  }
+  note = if (length(note)) sub("^#*\\s*decision:\\s*", "", doc_one_line(note), ignore.case = TRUE)
+  if (length(note) && nzchar(note)) lines = c(lines, paste0("## Decision: ", note))
   out$body = c(out$body, lines)
   out$code = c(out$code, hist)
   out

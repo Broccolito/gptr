@@ -71,7 +71,7 @@ test_that("a System 2 child composes a thousand durable typed leaves without mor
   s1_fresh(gptr = TRUE)
   local_gptr_options(unsafe_no_permissions = TRUE)
   judge = local_fake_provider(function(state, question) {
-    if (as.integer(state$items) %% 2L == 0L) 0.9 else 0.1
+    if (as.integer(state$input) %% 2L == 0L) 0.9 else 0.1
   }, name = "largejudge", type = "classifier")
   code = paste0("items = setNames(as.character(seq_len(1000)), paste0('item', seq_len(1000))); ",
                 "answers = peter('Is it even?', items, model = 'largejudge/largejudge-s1'); ",
@@ -320,8 +320,11 @@ test_that("decision launch notices identify real cache misses and respect quiet 
   }
   collect(peter("Pass?", c("a", "a", "b"), model = judge))
   expect_true(any(grepl("visiblejudge/visiblejudge-s1", messages, fixed = TRUE)))
-  expect_true(any(grepl("2 requests", messages, fixed = TRUE)))
+  expect_true(any(grepl("3 uncached inputs (2 requests)", messages, fixed = TRUE)))
   expect_true(any(grepl("3 TRUE", messages, fixed = TRUE)))
+  messages = character()
+  collect(peter("Pass?", item = "single", model = judge))
+  expect_true(any(grepl("1 uncached input (1 request)", messages, fixed = TRUE)))
   messages = character()
   collect(peter("Pass?", c("a", "a", "b"), model = judge))
   expect_false(any(grepl("requests", messages, fixed = TRUE)))

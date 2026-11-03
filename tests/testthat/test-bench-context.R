@@ -19,8 +19,8 @@ test_that("each preset's estimated prefix is within 5% of prefix-baseline.json",
 
 test_that("the measured o200k baselines are pinned (architecture 12.1, IC-68)", {
   expect_identical(unlist(prefix_fixture()$preset),
-                   c(minimal = 1317L, standard_core = 2502L, standard_all = 2979L,
-                     standard_interactive = 3122L))
+                   c(minimal = 1317L, standard_core = 2502L, standard_all = 2997L,
+                     standard_interactive = 3140L))
 })
 
 test_that("every section is within its budget", {
@@ -49,7 +49,7 @@ test_that("the standard composition is architecture 7.3 byte for byte (with stan
   fr = compose_case("standard_interactive")
   st = prefix_fixture()$standins$sections
   names(st) = vapply(st, function(x) x$name, "")
-  s1 = function(x) gsub("{s1}", "jev", x, fixed = TRUE)
+  s1 = function(x) gsub("{s1}", "\"jev\"", x, fixed = TRUE)
   t0 = paste(prompt_text("preamble"), rd$tools_standard_ask, rd$rules_standard, rd$r_session,
              wrap("r_performance", prompt_text("r_performance")),
              wrap("documents", s1(st$documents$text)), wrap("artifacts", st$artifacts$text),
@@ -87,7 +87,7 @@ test_that("the composed T0 and skills equal the text block of architecture 7.3",
                            exclusive = TRUE)
   doc = if (isTRUE(cs$document)) list(path = file.path(project_root(), "analysis.R"), format = "R")
   fr = prompt_compose(session, list(interactive = cs$human, doc = doc))
-  jev = function(x) gsub("{s1}", "jev", x, fixed = TRUE)
+  jev = function(x) gsub("{s1}", "\"jev\"", x, fixed = TRUE)
   expect_identical(fr$t0, jev(paste(sp[1:t0_end], collapse = "\n")))
   expect_true(startsWith(fr$t1, paste(sp[sk[1]:sk[2]], collapse = "\n")))
 })

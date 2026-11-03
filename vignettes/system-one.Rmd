@@ -78,7 +78,9 @@ the probability of a positive answer.
 A data frame supplies one record per row. An atomic vector or an unnamed list supplies one
 state per element. A fully named list supplies one structured state; `I(x)` also requests one
 state for the whole object. Multiple inputs must have compatible batch sizes: a single state
-can accompany every item in a batch.
+can accompany every item in a batch. The model reads a named input under its name, such as
+`text = x`, and any other as `input`, so renaming or subsetting a variable reuses cached
+answers.
 
 
 ``` r
@@ -291,7 +293,7 @@ The following examples can contact real providers and are not executed here. Jev
 
 ``` r
 gptr_env("~/keys/jev.env")
-peter("Is this a randomized trial?", abstracts, model = jev)
+peter("Is this a randomized trial?", abstracts, model = "jev")
 
 # Prepare an installed native decision model on your local Ollama server first.
 peter("Is this a randomized trial?", abstracts, model = "ollama/clef-flash")

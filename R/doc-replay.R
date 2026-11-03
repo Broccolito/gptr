@@ -1878,7 +1878,8 @@ doc_blocks_ipynb = function(text) {
 #' @param action `"info"`, `"prune"` or `"clear"`.
 #' @param kind `"all"`, `"s1"`, `"s2"` or `"tmp"`.
 #' @return `info`: a `gptr_cache_info` data frame with columns `kind`, `entries`, `bytes`,
-#'   `oldest`, `path`. `prune` and `clear`: the number of entries removed, invisibly.
+#'   `oldest`, `path` (`"memory"` for System 1 answers held without a `.gptr/` workspace).
+#'   `prune` and `clear`: the number of entries removed, invisibly.
 #' @export
 #' @examples
 #' proj = tempfile("proj")
@@ -1939,8 +1940,10 @@ doc_cache_info = function(kinds) {
   row = function(k, f, path) {
     info = file.info(f, extra_cols = FALSE)
     mtime = info$mtime[!is.na(info$mtime)]
-    n = length(f) + if (identical(k, "s1")) length(doc_s1_memory()) else 0L
-    data.frame(kind = k, entries = n, bytes = sum(info$size, na.rm = TRUE),
+    mem = if (identical(k, "s1")) length(doc_s1_memory()) else 0L
+    # answers held only in memory (no .gptr/) have no directory to show
+    if (mem && !length(f)) path = "memory"
+    data.frame(kind = k, entries = length(f) + mem, bytes = sum(info$size, na.rm = TRUE),
                oldest = if (length(mtime)) min(mtime) else with_calendar_preserved(as.POSIXct(NA)),
                path = path, stringsAsFactors = FALSE)
   }

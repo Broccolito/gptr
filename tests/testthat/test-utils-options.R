@@ -98,7 +98,7 @@ test_that("a Jupyter request with allow_stdin = false asks nothing, said once (I
                        knitr.in.progress = NULL)
   withr::local_envvar(TESTTHAT = "false", `_R_CHECK_PACKAGE_NAME_` = "")
   local_mocked_bindings(gptr_is_interactive = function() FALSE,
-                        jupyter_stdin = function() FALSE)
+                        jupyter_stdin = function() FALSE, .package = "gptr")
   expect_false(gptr_can_prompt())
   expect_false(gptr_confirm("Record gptr blocks into nb.ipynb?", default = FALSE))
 })

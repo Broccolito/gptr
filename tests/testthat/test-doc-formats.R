@@ -840,12 +840,12 @@ test_that("the documents section is the text of architecture 7.3 and needs a bou
     "in a block below the peter() call that asked for it, so the document re-runs from top to ",
     "bottom. Therefore:\n- Make recorded code the clean final version: named objects, no ",
     "exploratory prints. Pass record = false for throwaway checks (head(), summaries, tests).\n",
-    "- Record key modelling decisions with note (one line, written as \"## Decision: ...\"); key ",
-    "printed outputs are added as #> comments automatically.\n- To change code you wrote earlier, ",
-    "edit that block in the document instead of appending a second version.\n- In the document, ",
-    "prompts are quoted strings in peter(\"...\"), and System 1 decisions are peter(..., model = ",
-    "{s1}) inside if, for or while. Add such calls only when the user asks for an agent step in ",
-    "the script."))
+    "- Record key modelling decisions with note (one line, recorded as a \"## Decision:\" ",
+    "comment); key printed outputs are added as #> comments automatically.\n- To change code ",
+    "you wrote earlier, edit that block in the document instead of appending a second ",
+    "version.\n- In the document, prompts are quoted strings in peter(\"...\"), and System 1 ",
+    "decisions are peter(..., model = {s1}) inside if, for or while. Add such calls only when ",
+    "the user asks for an agent step in the script."))
 })
 
 test_that("blocks are made inert on disk and revived, through the document_write event", {

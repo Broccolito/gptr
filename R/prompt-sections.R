@@ -502,13 +502,14 @@ prompt_section_wrap = function(name, txt) {
   if (identical(name, "preamble")) txt else paste0("<", name, ">\n", txt, "\n</", name, ">")
 }
 
-#' The System 1 alias written for {s1} (contract section 9.3; default `jev`)
+#' The System 1 alias written for {s1} as an R string (contract section 9.3; default `"jev"`), so
+#' the agent never looks for an object of that name
 #' @noRd
 prompt_s1_alias = function(session = NULL) {
   v = setting_get("system1", session = session)
   unset = !rlang::is_string(v) || !nzchar(v)
-  if (unset || startsWith(v, "typesafe/") || startsWith(v, "emulate:")) return("jev")
-  if (grepl("[/:]", v)) paste0("\"", v, "\"") else v
+  if (unset || startsWith(v, "typesafe/") || startsWith(v, "emulate:")) v = "jev"
+  paste0("\"", v, "\"")
 }
 
 #' Render every included section in `order`: data.frame `name`, `tier`, `order`, `text`
@@ -554,7 +555,7 @@ prompt_sections_render = function(ctx, input, session_id, overrides = list()) {
       }
       txt = prompt_insert_fragments(txt, fr)
     }
-    txt = gsub("{s1}", input$s1_alias %||% "jev", txt, fixed = TRUE)
+    txt = gsub("{s1}", input$s1_alias %||% "\"jev\"", txt, fixed = TRUE)
     budget = as.numeric(sp$budget %||% 300L)
     if (!core && prompt_est(txt, "prose", session_id) > budget) {
       registry_diagnostic("builtin:prompt", "freeze", "section_budget",

@@ -129,14 +129,17 @@ s1_binding_env = function(name, envir) {
 }
 
 #' The describer text of a value: describe_binding() for a symbol read from a known environment
-#' (it never forces promises), else the gptr_describe() generic (both P09, rule R4)
+#' (it never forces promises), without the binding's name, else the gptr_describe() generic (both
+#' P09, rule R4)
 #' @noRd
 s1_describe = function(x, name = NULL, envir = NULL) {
   home = if (!is.null(name) && is.environment(envir)) s1_binding_env(name, envir) else NULL
   lines = if (is.null(home)) {
     gptr_describe(x, budget = 150L)
   } else {
-    describe_binding(name, home, 150L)
+    d = describe_binding(name, home, 150L)
+    d[1L] = substring(d[1L], nchar(env_text(name)) + 3L)
+    d
   }
   paste(lines, collapse = "\n")
 }
@@ -330,7 +333,7 @@ s1_part = function(value, label, display = label, name = NULL, envir = NULL) {
        states = s1_states(value, label, name = name, envir = envir))
 }
 
-#' A state key from a context label ("samples$description" -> "samples_description")
+#' A state key from a named context label ("my.data" -> "my_data")
 #' @noRd
 s1_key_name = function(label) {
   key = gsub("[.$]", "_", label %||% "")
@@ -338,7 +341,8 @@ s1_key_name = function(label) {
 }
 
 #' The inputs of a gateway call: the context objects (symbols read by name from the call's
-#' environment, other values through call_value()) and the piped session, last
+#' environment, other values through call_value()) and the piped session, last. A named input is
+#' keyed by its name, any other by `input`, so how a value is spelled never changes the request.
 #' @noRd
 s1_inputs = function(call) {
   items = call$context
@@ -346,7 +350,7 @@ s1_inputs = function(call) {
   labels = character(n)
   k = 1L
   while (k <= n) {
-    labels[k] = s1_key_name(items[[k]]$label)
+    labels[k] = if (isTRUE(items[[k]]$named)) s1_key_name(items[[k]]$label) else "input"
     k = k + 1L
   }
   has_session = !is.null(call$session)
@@ -374,7 +378,7 @@ s1_zip = function(parts) {
   if (!length(parts)) {
     gptr_abort(c("A System 1 call needs an input to judge.",
                  paste0("Pass it after the question, for example ",
-                        "peter(\"Is it urgent?\", ticket, model = jev).")),
+                        "peter(\"Is it urgent?\", ticket, model = \"jev\").")),
                "invalid_argument", arg = "...", expected = "an input to judge")
   }
   ns = vapply(parts, function(p) length(p$states), 1L)
@@ -510,16 +514,23 @@ s1_safety = function() {
 #' Preflight a target before the call's values are read or a credential is looked up (07 section
 #' 2.1; IC-74): the checked model replaces the resolved one, and the safety record travels with it
 #'
-#' A native Ollama model named by reference is prepared on a live call; under replay it is
-#' `frozen`: no discovery, preflight or request (D-120).
+#' A native Ollama model named by reference, and an emulation's Ollama chat model, are prepared
+#' on a live call, as a chat call's model is (D-323); under replay a native one is `frozen`: no
+#' discovery, preflight or request (D-120).
 #' @noRd
 s1_ready = function(target, safety = s1_safety(), replay = NULL) {
   emulated = identical(target$engine, "emulated:structured")
   native = !emulated && s1_ollama_native(target$model)
-  if (native && identical(replay_mode(replay), "replay")) {
+  live = !identical(replay_mode(replay), "replay")
+  if (native && !live) {
     target$frozen = TRUE
   } else if (emulated) {
-    target$model = s1_emu_ready(target$model, safety)
+    m = target$model
+    if (live && s1_ollama_route(m, target$provider)) {
+      egress_check(m[["provider"]], target$provider, safety)
+      m = s1_prepare(m[["ref"]], safety = safety)
+    }
+    target$model = s1_emu_ready(m, safety)
   } else if (native && isTRUE(target$by_ref)) {
     egress_check(target$model[["provider"]], target$provider, safety)
     target$model = s1_ollama_ready(s1_prepare(target$ref, safety = safety))
@@ -716,7 +727,8 @@ s1_json_values = function(v) {
 }
 
 #' The failure policy (contract 2.2): a scalar call signals its element's condition; a
-#' vectorised call keeps NA for failed elements and warns once with class s1_errors
+#' vectorised call keeps NA for failed elements and warns once with class s1_errors, quoting its
+#' most common failure
 #' @noRd
 s1_failures = function(conditions, n) {
   errors = s1_errors_df(conditions)
@@ -728,8 +740,11 @@ s1_failures = function(conditions, n) {
                error_type = e[["error_type"]], request_id = e[["request_id"]],
                model = e[["model"]])
   }
-  gptr_warn(paste0(nrow(errors), " of ", n, " System 1 elements failed and are NA; ",
-                   "see attr(x, \"meta\")$errors."), "s1_errors", errors = errors)
+  m = errors$message
+  top = names(sort(table(m), decreasing = TRUE))[1L]
+  gptr_warn(paste0(nrow(errors), " of ", n, " System 1 elements failed and are NA (",
+                   sum(m == top), " with: ", top, "); see attr(x, \"meta\")$errors."),
+            "s1_errors", errors = errors)
 }
 
 #' Write the one-line block of a statement through P15's doc.s1_block service, when registered and
@@ -758,24 +773,17 @@ s1_session = function(session = NULL) {
   if (inherits(run$shell, "gptr_session")) run$shell else NULL
 }
 
-#' The session a System 1 call is charged to: the piped session, else the running session
+#' Append the process System 1 accounting row of a call no session owns (contract 4.3 and 7.5):
+#' one row per call that made requests; token counts the service did not report stay unknown
+#' (NA, IC-74)
 #' @noRd
-s1_session_id = function(session) {
-  if (!is.null(session)) return(session_data(session)$id)
-  run = run_current()
-  if (is.null(run) || is.null(run$session)) NA_character_ else as.character(run$session)
-}
-
-#' Append the process System 1 accounting row (contract 4.3 and 7.5): one row per call that
-#' made requests; token counts the service did not report stay unknown (NA, IC-74)
-#' @noRd
-s1_log_usage = function(target, res, session, started) {
+s1_log_usage = function(target, res, started) {
   route = if (identical(target$engine, "emulated:structured")) "emulated" else "system-one"
   rids = res[["request_ids"]]
   rid = if (length(rids)) rids[1L] else NULL
   u = res[["usage"]]
-  s1_usage_log(target$model, route, u[["input"]], u[["output"]], rid, s1_session_id(session),
-               started, max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))))
+  s1_usage_log(target$model, route, u[["input"]], u[["output"]], rid, NA_character_, started,
+               max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))))
   invisible(NULL)
 }
 
@@ -792,6 +800,12 @@ s1_charge = function(target, outcome, session, started) {
                      rid, d$id, started,
                      max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))),
                      d$parent_id %||% NA_character_)
+  s1_charge_row(session, row)
+}
+
+#' Record one System 1 usage row on its owning session, its ancestors and its journal
+#' @noRd
+s1_charge_row = function(session, row) {
   row = usage_add_durable(session, row)
   session_append(session, list(type = "custom", custom_type = "gptr.s1_usage",
                                data = list(row = usage_row_store(row))))
@@ -916,7 +930,8 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
     requests = length(unique(vapply(states[miss], canonical_json, "")))
     if (verbosity() >= 1L) {
       gptr_inform(ui_escape(paste0("System 1 ", target$ref, ": ", length(miss),
-                                   " uncached inputs (", requests,
+                                   if (length(miss) == 1L) " uncached input (" else
+                                     " uncached inputs (", requests,
                                    if (requests == 1L) " request)." else " requests).")),
                    "progress")
     }
@@ -961,7 +976,7 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
       answers[i] = list(got[["answer"]])
     }
     version = res$model_version %||% version
-    if (is.null(session)) s1_log_usage(target, res, session, started)
+    if (is.null(session)) s1_log_usage(target, res, started)
   }
   list(answers = answers, conditions = conditions, cached = cached, version = version, res = res,
        identity = identity)
