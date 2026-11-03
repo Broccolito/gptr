@@ -390,7 +390,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `gptr.undo_turns` | `int(1)` | `20L` | P16 | G7 §3.7 |
 | `gptr.checkpoint` | `chr(1)` | `"on"` | P16 | `"on"`, `"files"`, `"off"` |
 | `gptr.checkpoint_disk_bytes`, `gptr.checkpoint_days`, `gptr.checkpoint_turns`, `gptr.checkpoint_track_file_max`, `gptr.checkpoint_track_total`, `gptr.checkpoint_capture_max`, `gptr.checkpoint_scan_budget`, `gptr.checkpoint_rng`, `gptr.checkpoint_close_devices` | as G7 §3.7 | `2e9`, `30`, `100`, `1e6`, `1e8`, `5e7`, `0.25`, `TRUE`, `FALSE` | P16 | G7 §3.7 |
-| `gptr.checkpoint_scan_timeout` | `num(1)` | `2` | P16 | worker wait deadline in seconds for an automatic file scan, including startup; bounded result collection follows; partial coverage and fixed entry/file limits are described in §7.16 |
+| `gptr.checkpoint_scan_timeout` | `num(1)` | `2` | P16 | longest run in seconds of an automatic file scan, checked between entries and before each capture; partial coverage and fixed entry/file limits are described in §7.16 |
 | `gptr.redact_min_chars` | `int(1)` | `8L` | P03 | shortest value-redacted secret |
 | `gptr.redact_patterns` | `lgl(1)` | `TRUE` | P03 | pattern layer (values are always redacted) |
 | `gptr.stream_hold_max` | `int(1)` | `4096L` | P03 | streaming hold-back cap (characters) |
@@ -3041,9 +3041,10 @@ doc_upsert(site, doc_block_lines(s, 1L, site, 1L))
 
 The `checkpointer` contract used by the dispatcher (P06) is §10.2.
 
-Automatic file scans use a supervised R worker with a worker wait deadline of
-`gptr.checkpoint_scan_timeout` (default 2 s), including startup; bounded result collection
-follows. Limits are 2,000 inspected entries and 256 captured files, plus the existing per-file
+Automatic file scans run in the R session for at most `gptr.checkpoint_scan_timeout` (default
+2 s), checked between entries and before each capture; an interrupt the person continues from
+also ends one, and a scan keeps the records it completed; a filesystem call that blocks cannot be
+cut short (D-310). Limits are 2,000 inspected entries and 256 captured files, plus the existing per-file
 and total byte limits. Apply this policy to initial baselines, tool scans and CLI/turn/agent
 boundary scans. There is no unlimited catch-up
 scan. Completed observations distinguish known contents, verified absence and unknown paths;

@@ -616,10 +616,12 @@ ckpt_ext_state = function(s = NULL) {
 #' - `gptr.checkpoint_days` (`30`): unreferenced blobs older than this many days are deleted.
 #' - `gptr.checkpoint_turns` (`100`): file checkpoints older than this many turns are not
 #'   restored.
-#' - `gptr.checkpoint_track_file_max` (`1e6`), `gptr.checkpoint_track_total` (`1e8`): bytes per
-#'   file and in all of the baseline taken at the first mutating call.
+#' - `gptr.checkpoint_track_file_max` (`1e6`): bytes; the largest file the first scan stores.
+#' - `gptr.checkpoint_track_total` (`1e8`): bytes one automatic scan stores in all.
 #' - `gptr.checkpoint_capture_max` (`5e7`): bytes; a larger changed file gets no stored copy.
-#' - `gptr.checkpoint_scan_budget` (`0.25`): seconds; slower walks switch to one scan per turn.
+#' - `gptr.checkpoint_scan_budget` (`0.25`): seconds; slower scans switch to one scan per turn.
+#' - `gptr.checkpoint_scan_timeout` (`2`): seconds; the longest an automatic scan runs. An
+#'   incomplete scan also switches to one scan per turn.
 #' - `gptr.checkpoint_rng` (`TRUE`): report changes of the random-number state.
 #' - `gptr.checkpoint_close_devices` (`FALSE`): close graphics devices an undone turn opened.
 #' @export

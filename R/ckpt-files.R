@@ -186,7 +186,7 @@ ckpt_is_link = function(path) {
 }
 
 #' The session's file tracker, made on first use at project_root(): `prune`, what its walks prune;
-#' `stat`, the last walk, taken at `walk_time`; `walk_secs`, how long the last scan's walk took;
+#' `stat`, the last walk, taken at `walk_time`; `walk_secs`, how long the last scan took;
 #' `hash` and `mode`, the content hash and mode bits of each captured relative path; `explicit`
 #' and `explicit_mode`, predicted absolute paths the walk does not cover, or every predicted path
 #' in per-turn mode ("" absent, "?" not capturable); `per_turn`, one scan per turn
@@ -262,10 +262,10 @@ ckpt_files_observe = function(tr, s) {
   gone = c(w$path, s$absent, s$not_files)
   retained = tr$stat[!tr$stat$path %in% gone, , drop = FALSE]
   w = rbind(w, retained)
-  fits = nrow(w) <= 2000L
+  fits = nrow(w) <= ckpt_entry_max
   # Keep automatic state bounded across turns as well as within an individual scan.
   priority = w$path %in% c(names(s$hash), names(tr$hash))
-  w = w[utils::head(order(!priority), 2000L), , drop = FALSE]
+  w = w[utils::head(order(!priority), ckpt_entry_max), , drop = FALSE]
   drop = c(s$absent, s$not_files, setdiff(s$walk$path, names(s$hash)))
   tr$hash = tr$hash[!names(tr$hash) %in% drop]
   tr$mode = tr$mode[!names(tr$mode) %in% drop]
@@ -273,12 +273,13 @@ ckpt_files_observe = function(tr, s) {
   tr$mode[names(s$mode)] = s$mode
   tr$hash = tr$hash[names(tr$hash) %in% w$path]
   tr$mode = tr$mode[names(tr$mode) %in% w$path]
-  tr$absent = utils::head(setdiff(unique(c(s$absent, tr$absent)), c(w$path, s$not_files)), 2000L)
+  tr$absent = utils::head(setdiff(unique(c(s$absent, tr$absent)), c(w$path, s$not_files)),
+                          ckpt_entry_max)
   tr$stat = w
   tr$complete = isTRUE(s$complete) && fits
   tr$coverage = tr$complete && !isTRUE(s$capture_capped)
   tr$last_coverage = s$coverage %||% tr$coverage
-  tr$walk_secs = s$walk_seconds %||% s$seconds
+  tr$walk_secs = s$seconds
   tr$walk_time = s$time
   if (!isTRUE(s$complete)) tr$per_turn = TRUE
   if (!isTRUE(s$complete) || isTRUE(s$capture_capped)) {
@@ -290,7 +291,7 @@ ckpt_files_observe = function(tr, s) {
   }
 }
 
-#' The first automatic baseline: bounded enumeration and capture in a supervised R child
+#' The first automatic baseline: one bounded scan (ckpt_scan_run())
 #' @noRd
 ckpt_files_baseline = function(tr) {
   tr$stat = ckpt_empty_walk()
@@ -496,7 +497,7 @@ ckpt_files_explicit = function(tr, paths) {
   rows
 }
 
-#' Files checkpointer, after the call: a walk (when the walk alone takes longer than
+#' Files checkpointer, after the call: a scan (when one takes longer than
 #' gptr.checkpoint_scan_budget seconds, the session switches to one scan per turn) and the
 #' explicit paths
 #' @return `list(id, turn, root, files = list(<row>))`, or NULL when nothing changed.

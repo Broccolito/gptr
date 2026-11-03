@@ -1,14 +1,9 @@
-# Real children, real filesystem changes and the public fake-provider Peter flow.
-scan_integration_library = function(.env = parent.frame()) {
-  path = getNamespaceInfo(asNamespace("gptr"), "path")
-  if (file.exists(file.path(path, "R", "aaa-state.R"))) local_worker_lib(.env)
-}
+# Real scans, real filesystem changes and the public fake-provider Peter flow.
 
 scan_integration_bytes = function(path) readBin(path, "raw", file.size(path))
 
 test_that("real partial checkpoints preserve targeted writes and report native coverage honestly", {
   skip_on_cran()
-  scan_integration_library()
   root = local_project(files = list("a-known.R" = "known = 1", "b-delete.R" = "delete = 1",
     "zz-target/deep/target.R" = "before", "zz-target/deep/preexisting.txt" = "keep me"))
   local_gptr_options(checkpoint_scan_timeout = 20, checkpoint_scan_budget = 1000, quiet = TRUE)
@@ -115,7 +110,6 @@ test_that("real partial checkpoints preserve targeted writes and report native c
 })
 
 test_that("real complete scans detect same-size edits with an unchanged timestamp", {
-  scan_integration_library()
   root = local_project(files = list("racy.R" = "AAAA"))
   local_gptr_options(checkpoint_scan_timeout = 15, checkpoint_scan_budget = 1000)
   path = file.path(root, "racy.R")
@@ -144,7 +138,6 @@ test_that("real complete scans detect same-size edits with an unchanged timestam
 
 test_that("real scans retain old files behind a replaced directory link without reading outside", {
   skip_on_os("windows")
-  scan_integration_library()
   root = local_project(files = list("inside/known.R" = "original"))
   local_gptr_options(checkpoint_scan_timeout = 15, checkpoint_scan_budget = 1000)
   outside = withr::local_tempdir()
@@ -175,7 +168,6 @@ test_that("real scans retain old files behind a replaced directory link without 
 
 test_that("a real unreadable baseline stays partial until readable contents are backed up", {
   skip_on_os("windows")
-  scan_integration_library()
   root = local_project(files = list("permission.R" = "AAAA"))
   local_gptr_options(checkpoint_scan_timeout = 15, checkpoint_scan_budget = 1000, quiet = TRUE)
   path = file.path(root, "permission.R")

@@ -805,7 +805,7 @@ scan_notices = function(expr) {
   grep("gptr.checkpoint_scan_budget", seen$text, fixed = TRUE, value = TRUE)
 }
 
-test_that("only the walk counts against gptr.checkpoint_scan_budget, not root lookups", {
+test_that("only the scan counts against gptr.checkpoint_scan_budget, not root lookups", {
   skip_on_cran()
   local_project(gptr = FALSE)
   local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
@@ -825,13 +825,13 @@ test_that("only the walk counts against gptr.checkpoint_scan_budget, not root lo
   expect_false(isTRUE(ck$files$per_turn))
 })
 
-test_that("a walk slower than gptr.checkpoint_scan_budget switches to per-turn scans once", {
+test_that("a scan slower than gptr.checkpoint_scan_budget switches to per-turn scans once", {
   local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
   proj = local_project(files = list("a.R" = "a = 1"))
   scan = ckpt_scan_run
   local_mocked_bindings(ckpt_scan_run = function(...) {
     result = scan(...)
-    result$walk_seconds = 0.3
+    result$seconds = 0.3
     result
   })
   ck = ckpt_ck_new("s0000000096")
@@ -1041,7 +1041,7 @@ test_that("checkpoint racy scans reject a tracked regular file replaced by a FIF
   local_mocked_bindings(ckpt_scan_run = function(...) {
     list(walk = observed, hash = character(), mode = integer(), absent = character(),
          not_files = character(), uncaptured = c(empty.txt = "not a regular file"),
-         complete = TRUE, capture_capped = FALSE, reason = "", seconds = 0, walk_seconds = 0)
+         complete = TRUE, capture_capped = FALSE, reason = "", seconds = 0)
   }, hash_file = function(path) {
     if (any(path == pipe)) {
       stop(structure(list(message = "FIFO hash refused", call = NULL),

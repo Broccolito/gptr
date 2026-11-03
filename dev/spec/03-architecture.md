@@ -430,7 +430,7 @@ declares, if any.
 | `doc-knitr.R` | L5 | `knit_print` methods, stale-chunk label hooks | - | P15 |
 | `ckpt-objects.R` | L4 | copy-safe object pre-images, capture policy, settle, spill [G7]; the exported `gptr_preimage()` S3 generic | - | P16 |
 | `ckpt-files.R` | L4 | content-addressed file store, baseline and walk, 3-way restore | - | P16 |
-| `ckpt-scan.R` | L4 | bounded filesystem scan and capture in a supervised R child | - | P16 |
+| `ckpt-scan.R` | L4 | bounded filesystem scan and capture in the R session | - | P16 |
 | `ckpt-rewind.R` | L4 | checkpoint records, `gptr_rewind()`, `gptr_checkpoints()`, `/undo`, `/redo`, `/rewind` | checkpoints | P16 |
 | `skill-discover.R` | L4 | skill discovery, lenient frontmatter (yaml), compact budgeted catalog, activation, `gptr_skills()` | skills | P17 |
 | `skill-templates.R` | L4 | prompt templates, `/name args` expansion | prompts | P17 |
@@ -2109,10 +2109,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   address change means modified; release the rest. At turn end spill the largest held images or drop the
   oldest (defuse + `rm()`), and drop images older than `gptr.undo_turns` (20).
 - **Files.** A content-addressed store (XXH128 via rlang, gzip level 1, deduplicated). Automatic
-  baseline and subsequent scans run in an owned R worker, with a worker wait deadline of
-  `gptr.checkpoint_scan_timeout` (2 s by default), including startup; bounded result collection
-  follows. Limits are 2,000 inspected entries and 256 captured files plus the existing per-file
-  and total byte caps. The
+  baseline and subsequent scans run in the R session for at most `gptr.checkpoint_scan_timeout`
+  (2 s by default), checked between entries and before each capture; an interrupt the person
+  continues from also ends one, and a scan keeps what it completed; a filesystem call that blocks
+  cannot be cut short [D-310]. Limits are 2,000 inspected entries and 256 captured files plus the
+  existing per-file and total byte caps. The
   same policy applies before and after tools and at CLI, turn and agent boundaries; there is no
   unlimited catch-up scan. Partial inventories retain unvisited observations and never infer
   creation or deletion from an unobserved path. Automatic file undo covers only changes with

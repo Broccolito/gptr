@@ -9564,3 +9564,36 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   08 sections 3.3 and 3.5 (limit 8) and Part 4; `cran-comments.md`; dev/HANDOFF.md's Remaining.
 - Tests: none (no code change). Evidence: progress/fixes.md FIX-40, FIX-43, FIX-44, FIX-45 and
   FIX-48; progress/open-findings.md.
+
+## D-310 - P16 Automatic file scans run in the R session (2026-11-02)
+- Rule (amends #98's record, progress/first-response-bounded-scans.md, "an owned R worker"): the
+  bounded scan (`ckpt_scan_run()`) runs in the R session, not in a supervised `Rscript` worker. It
+  keeps #98's limits and semantics: at most 2,000 inspected entries (`ckpt_entry_max`, also the
+  tracker's retention bound) and 256 captures within the byte limits; known paths first (a
+  readable parent proves one absent), then breadth first, source-like names first, with the
+  prune rules; at most `gptr.checkpoint_scan_timeout` seconds (2), checked between entries and
+  before each capture. An interrupt the person continues from (the pause menu's continue) ends the
+  scan too (reason "interrupted"); one that aborts keeps unwinding (no exiting handler, G3) and
+  leaves the tracker as it was. A scan keeps the records it completed.
+  `gptr.checkpoint_scan_budget` compares the scan's own time.
+- Why: every mutating call paid two R process launches (0.6-0.9 s each, more under load); the
+  deadline included start-up, so a busy machine reported "coverage incomplete (time limit)" and
+  lost file undo even in an empty project; killed workers left their R temp directories; the
+  worker loaded the installed gptr, not the loaded namespace; and its per-entry record files kept
+  the 2,000-entry limit out of reach. In the session a 2,000-entry scan takes about 0.5 s (path
+  classes are computed per directory in one call) and a small project's a few milliseconds.
+- Trade-off: a filesystem call that blocks (a hung network mount, a slow listing of one huge
+  directory) cannot be cut short in the session, as in 1.0.0; the timeout bounds the work between
+  such calls.
+- Removed: `ckpt_scan_main()`, the worker's spec and record files, `ckpt_scan_cleanup()`,
+  `ckpt_scan_reap()` and the pending-child guard, the `ckpt_scan` entry of `proc_rscript()`, and
+  test-ckpt-scan-lifecycle.R (its byte-cap and startup-path cases moved to test-ckpt-scan.R).
+- Contract-visible: 04 sections 3.1 (options row) and 7.16; 03 sections 3.2 (`ckpt-scan.R` row)
+  and 6.16 Files; `?gptr_options`; `?gptr_rewind` (its option list gains the timeout); vignette
+  teams-and-background (.Rmd.orig now holds the paragraph too).
+- Tests: test-ckpt-scan.R "the time budget stops a scan between entries and keeps what it
+  completed", "a zero budget scans nothing and invalid budgets are refused", "an interrupt the
+  person continues from stops the scan and keeps its records", "scans never capture protected
+  paths, startup files, links or FIFOs"; test-ckpt-files.R "a scan slower than
+  gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
+  progress/fixes-1.0.1/lane-A.md.
