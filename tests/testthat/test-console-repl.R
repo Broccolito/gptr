@@ -901,9 +901,9 @@ test_that("a prompt to a session that runs, in the background, says it steers (s
   d = session_data(s)
   d$status = "running"
   expect_identical(written(function() repl_turn(rs, "now compare the groups")),
-                   paste0(queue_line("steer", "now compare the groups"), "\n"))
+                   paste0(receipt_line("steer", "now compare the groups"), "\n"))
   d$status = "waiting"
-  expect_match(written(function() repl_turn(rs, "x")), queue_line("steer", "x"), fixed = TRUE)
+  expect_match(written(function() repl_turn(rs, "x")), receipt_line("steer", "x"), fixed = TRUE)
   # a refused send shows its error alone
   sent = list(status = "error", error = simpleError("refused"))
   out = written(function() utils::capture.output(repl_turn(rs, "x"), type = "message"))
@@ -1679,10 +1679,9 @@ test_that("a terminal: a run sent to the background shows again while the consol
   pty$send("use base")
   expect_true(pty$wait(paste0(person, " use base")))
   pty$send(" R\r")
-  expect_true(pty$wait(queue_line("steer", "use base R", utf8)))
-  # in the console's palette, as before the wait: the steer on the band, the status line grey
-  # (visual round 2)
-  expect_true(pty$wait(paste0("\033[48;5;237m", person, " use base R")))
+  # its receipt at once, in the console's palette, as before the wait: on the band (visual round 2),
+  # the status line grey
+  expect_true(pty$wait(paste0("\033[48;5;237m", receipt_line("steer", "use base R"))))
   expect_true(pty$wait("use base R END"))
   expect_true(pty$wait("\033[38;5;244mdone"))
   expect_true(pty$wait("peter[auto]> "))

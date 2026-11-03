@@ -114,10 +114,11 @@ test_that("RStudio's console offers the pause menu; its s steers the run (steeri
   msgs = fake_requests(fake)[[2L]]$messages
   expect_identical(msg_text(msgs[[length(msgs)]]),
                    "The user sent this message while you were working: use mpg")
-  # delivered as the person's line at the boundary, right before the next request's output
-  shown = which(out == paste(person, "use mpg"))
+  # its receipt when it was sent, before the next request's output; nothing at the boundary
+  shown = which(out == receipt_line("steer", "use mpg"))
   expect_length(shown, 1L)
-  expect_identical(out[shown + 1L], "ack")
+  expect_true(shown < which(out == "ack"))
+  expect_false(paste(person, "use mpg") %in% out)
 })
 
 test_that("a block pasted at the pause menu's steer question is one steer (review round 1)", {
@@ -341,16 +342,13 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
   texts = vapply(q$follow_up, function(i) i$text, "")
   expect_true("then plot it" %in% texts)
   expect_true(any(grepl("s steer - f follow-up - c continue - a abort", err, fixed = TRUE)))
-  # [s] and [f] read their text at the chevron of their own question, whose queue line leaves the
-  # text out, as it shows right above it (review)
+  # [s] and [f] read their text at the chevron of their own question, their receipts right under it
   expect_identical(log$prompts, rep(">> ", 4L))
-  sym = console_style()
   steer = which(err == "  ? Steer")
   follow = which(err == "  ? Follow-up")
   expect_length(c(steer, follow), 2L)
-  expect_identical(err[steer + 1L], paste0(sym$queued, " steer"))
-  expect_identical(err[follow + 1L], paste0(sym$queued, " follow-up"))
-  expect_false(any(grepl("use only mpg", err, fixed = TRUE)))
+  expect_identical(err[steer + 1L], receipt_line("steer", "use only mpg"))
+  expect_identical(err[follow + 1L], receipt_line("follow_up", "then plot it"))
   expect_false(any(grepl("[gptr] steering", err, fixed = TRUE) |
                      grepl("follow-up queued", err, fixed = TRUE)))
 })
@@ -381,10 +379,10 @@ test_that("in the console margin the menu's rows are an approval's, its prompt a
   log = local_menu_answers(c("s", "use only mpg"))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
   # the menu starts on a line of its own (a terminal may have echoed ^C); its [s] asks for the text
-  # under a title, and the queue line is right under that, as under any question
+  # under a title, and the receipt is right under that, as under any question
   expect_identical(err, c("", "  ? Paused",
                           "    s steer - f follow-up - c continue - a abort - b background",
-                          "  ? Steer", "-> steer"))
+                          "  ? Steer", receipt_line("steer", "use only mpg")))
   expect_identical(log$prompts, c(">> ", ">> "))
 })
 

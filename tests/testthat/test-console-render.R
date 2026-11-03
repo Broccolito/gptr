@@ -1957,16 +1957,61 @@ test_that("a line routed at a question sits under it; a later person's line open
   withr::defer(console_drop("u0000test"))
   render_events(s, list(hook_event("agent_start", s)))
   rec = console_record(list(run = "u0000test"))
-  # a line the question's read routes sits right under its rows
+  # a line the question's read routes sits right under its rows, its receipt (P30)
   rec$last = "prompt"
-  expect_identical(utils::capture.output(console_queue_line(s, "use base R", "steer")),
-                   queue_line("steer", "use base R"))
-  # the steer delivered after the call the question approved, which printed only output (no
-  # result line closed the block), opens its own block (visual review)
+  expect_identical(utils::capture.output(console_receipt(s, "use base R", "steer")),
+                   receipt_line("steer", "use base R"))
+  # a steer without a receipt (gptr_steer(), a pipe) delivered after the call the question
+  # approved, which printed only output (no result line closed the block), opens its own block
+  # (visual review), in the receipt's words
   rec$last = "prompt"
   took = render_events(s, list(hook_event("queue_update", s, op = "take", which = "steer",
-                                          text = "use base R", source = "repl")))
-  expect_identical(took, c("", ">> use base R"))
+                                          text = "use base R", source = "api_user")))
+  expect_identical(took, c("", receipt_line("steer", "use base R")))
+})
+
+test_that("a message with a receipt is not shown again when the loop takes it (P30, D-301)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  local_mocked_bindings(front_end = function() "terminal")
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  render_events(s, list(hook_event("agent_start", s)))
+  take = function(which, source) {
+    render_events(s, list(hook_event("queue_update", s, op = "take", which = which,
+                                     text = "use base R\nand log2", source = source)))
+  }
+  # typed or sent from the pause menu: its receipt said it when it was sent
+  expect_identical(take("steer", "repl"), character())
+  expect_identical(take("follow_up", "pause_menu"), character())
+  # a pipe into the running session: shown as it is delivered, its later rows under its text
+  expect_identical(take("follow_up", "pipe"), c("", receipt_line("follow_up", "use base R"),
+                                                "      and log2"))
+})
+
+test_that("a receipt is the person's rows: wrapped under the text, a CLI steer says so (D-301)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = TRUE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  long = paste(rep("use base R", 6L), collapse = " ")
+  rows = utils::capture.output(console_receipt(s, long, "follow_up"))
+  expect_identical(substr(rows, 1L, 6L), c("next> ", rep("      ", length(rows) - 1L)))
+  expect_identical(paste(substring(rows, 7L), collapse = " "), long)
+  expect_true(all(nchar(rows, type = "width") <= 39L))
+  # on a CLI route a steer waits for the CLI's answer: said dim after the text, or under it where
+  # its last row is full
+  local_cli_run(s)
+  expect_identical(utils::capture.output(console_receipt(s, "use R", "steer")),
+                   paste(receipt_line("steer", "use R"), "(after the CLI's answer)"))
+  full = strrep("x", 32L)
+  expect_identical(utils::capture.output(console_receipt(s, full, "steer")),
+                   c(receipt_line("steer", full), "       (after the CLI's answer)"))
+  # its follow-up runs after the answer anyway
+  expect_identical(utils::capture.output(console_receipt(s, "then plot", "follow_up")),
+                   receipt_line("follow_up", "then plot"))
 })
 
 test_that("a foreground run separates text, tool and status blocks once (D-186, D-245)", {

@@ -688,17 +688,9 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
 #' where lines keep the margin, written on a finished line; blocks of one kind group, so the tool
 #' rows of consecutive requests group as those of one response (D-245), except prompts, and a
 #' question and the tool block it is asked in are one (it asks under the call it gates, D-243).
-#' The live row below them is no block. Queue lines held while the answer's text block was open
-#' (`rec$queued`, console_queue_line()) are written first, as the person's block, when any other
-#' block starts
+#' The live row below them is no block
 #' @noRd
 console_gap = function(rec, kind) {
-  if (length(rec$queued) && !identical(kind, "text")) {
-    rows = unlist(lapply(rec$queued, `[[`, "rows"))
-    rec$queued = NULL
-    console_gap(rec, "person")
-    console_write(rows)
-  }
   same = identical(rec$last, kind) && !identical(kind, "prompt")
   join = paste(rec$last, kind) %in% c("tool prompt", "prompt tool")
   if (!same && !join && nzchar(console_pad())) console_cat("\n")
@@ -1430,8 +1422,6 @@ console_on_agent_end = function(event, ctx) {
   if (v < 2L) return(NULL)
   if (!is.null(rec$think)) rec$think$finish()
   if (!is.null(rec$md)) rec$md$finish(cut = !identical(event$status, "idle"))
-  # a held steer's row gives way: the kept list, the next prompt's echo or its delivery names it
-  rec$queued = Filter(function(x) !x$drop, rec$queued)
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
   # in rows ending at whole terms (console_terms()), at the content width; a status with its reason
@@ -1547,18 +1537,18 @@ console_on_shutdown = function(event, ctx) {
   NULL
 }
 
-#' queue_update: a user's message the loop takes (a steer at its step boundary) is the person's line
-#' at column 0, the person's glyph and the text (ASCII `>> <text>`), on the band, before the next
-#' request's output (D-242). The steers' queue lines still held (console_queue_line()) are dropped:
-#' the loop takes every queued steer at once, and the deliveries say what they said
+#' queue_update: a user's message the loop takes (a steer at its step boundary) that showed no
+#' receipt when it was sent (D-301: a pipe into the running session, gptr_steer()) is the person's
+#' rows as a receipt's, `steer> <text>` (`next> ` for a follow-up), on the band, before the next
+#' request's output (D-242); the console's own sources (`repl`, `pause_menu`) showed theirs
+#' (console_receipt())
 #' @noRd
 console_on_queue_update = function(event, ctx) {
   rec = console_record(event)
-  if (is.null(rec) || !identical(event$op, "take") || !(event$source %in% queue_user_sources) ||
+  if (is.null(rec) || !identical(event$op, "take") || !(event$source %in% c("pipe", "api_user")) ||
       !console_render_on(rec)) return(NULL)
-  rows = console_person_rows(console_style()$person, event$text)
+  rows = console_person_rows(if (identical(event$which, "steer")) "steer>" else "next>", event$text)
   console_pause_one(rec)
-  if (identical(event$which, "steer")) rec$queued = Filter(function(x) !x$drop, rec$queued)
   console_gap(rec, "person")
   console_write(console_band(rows))
   NULL

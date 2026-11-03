@@ -101,6 +101,12 @@ queue_line = function(kind, text, utf8 = cli::is_utf8_output()) {
   paste0(sym$queued, " ", kind, sym$sep, text)
 }
 
+# The first row of a message's receipt (P30, D-301): `steer> <text>` or `next> <text>`, the same
+# words in every console
+receipt_line = function(kind, text) {
+  paste0(c(steer = "steer>", follow_up = "next>")[[kind]], " ", text)
+}
+
 # The line that lists the person's text gptr will not send (console_keep()): a queue line whose
 # kind says it was kept in the history (the Up key recalls it) or not kept
 kept_line = function(texts, kept = TRUE, utf8 = cli::is_utf8_output()) {

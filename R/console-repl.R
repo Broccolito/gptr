@@ -814,12 +814,12 @@ typed_answer = function(lines, accept) {
 
 #' Route the lines typed for a run of session `s` (IC-76, D-242): /command and !code lines, and the
 #' lines that continue a held !code line still incomplete (typed_code_open()), wait in the reader
-#' for the next prompt, each entry (a !code line with its continuation) shown as a follow-up's
-#' queue line; the others become one message queued on `s` as the `type_ahead` setting says (a
-#' follow-up waits with the held lines, after those typed before its first line); a partial line
-#' `part` goes to the console history. Their lines go between the answer's whole rows, above the
-#' live row (D-245). A cursor key's escape sequence (CSI, SS3) is dropped, as the composer drops it,
-#' and a line it alone made with it
+#' for the next prompt, each entry (a !code line with its continuation) shown by a follow-up's
+#' receipt (console_receipt()); the others become one message queued on `s` as the `type_ahead`
+#' setting says (a follow-up waits with the held lines, after those typed before its first line); a
+#' partial line `part` goes to the console history. Their receipts go between the answer's whole
+#' rows, above the live row (D-245). A cursor key's escape sequence (CSI, SS3) is dropped, as the
+#' composer drops it, and a line it alone made with it
 #' @noRd
 console_typed_route = function(rd, s, lines, part = "") {
   esc = "\033(\\[[0-?]*[ -/]*[@-~]|O.)"
@@ -835,7 +835,7 @@ console_typed_route = function(rd, s, lines, part = "") {
   if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(invisible(NULL))
   hold = function(k) {
     for (x in split(lines[k], cumsum(!cont[k]))) {
-      console_queue_line(s, paste(x, collapse = "\n"), "follow_up")
+      console_receipt(s, paste(x, collapse = "\n"), "follow_up")
     }
     rd$typed = c(rd$typed, lines[k])
   }
@@ -1053,7 +1053,7 @@ mention_line = function(said) {
 #' (mention_line()); the answer is printed here when the renderer hooks did not stream it
 #' (verbosity < 2), any other value is printed. A prompt to a session that runs (in the
 #' background: after the pause menu's `[b]`, or `background = TRUE`) steers it (route_continue()),
-#' so its queue line says so, `<queued glyph> steer<sep><text>` (console_queue_line()), once sent
+#' so once sent its receipt says so, `steer> <text>` (console_receipt())
 #' @noRd
 repl_turn = function(rs, text) {
   men = repl_mentions(text, repl_eval_env(rs))
@@ -1074,7 +1074,7 @@ repl_turn = function(rs, text) {
     return(invisible(NULL))
   }
   if (!identical(res$status, "ok")) return(invisible(NULL))
-  if (steer) return(console_queue_line(s, text, "steer"))
+  if (steer) return(console_receipt(s, text, "steer"))
   value = res$value
   if (!inherits(value, "gptr_session")) {
     console_out(print_lines(value))

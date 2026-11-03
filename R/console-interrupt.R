@@ -171,8 +171,8 @@ console_ahead = function(rd, accept) {
 #' so and names the keys (ui_reask()); so is a pasted block, whatever its first line (the lines a
 #' macOS terminal leaves waiting after it). `[s]` and `[f]` read their text at the chevron of their
 #' own question, `? Steer` or `? Follow-up` (a pasted block's later lines, which a macOS terminal
-#' leaves waiting, are part of it), and queue it as Enter and Tab do (policy_enqueue()), their
-#' queue line, without the text it shows under, right under it, as under any question. `[b]` closes
+#' leaves waiting, are part of it), and queue it as Enter and Tab do (policy_enqueue()), its
+#' receipt right under it, as under any question. `[b]` closes
 #' the answer's cut row, then says in dim terms (console_terms()) that the run went to the
 #' background, the service's notice one of them, then lists what the REPL held for after the run as
 #' kept (console_background_settle()), or in red why not.
@@ -251,14 +251,7 @@ policy_menu = function(cnd, pol) {
       if (is.na(text)) return(invisible(NULL))
       # a block pasted here is one message, as at the prompt
       text = paste(c(text, if (!is.null(rd)) rd$waiting()), collapse = "\n")
-      enqueue = function() {
-        the$echoed = ""
-        on.exit({
-          the$echoed = NULL
-        }, add = TRUE)
-        policy_enqueue(s, text, if (identical(key, "s")) "steer" else "follow_up")
-      }
-      enqueue()
+      policy_enqueue(s, text, if (identical(key, "s")) "steer" else "follow_up")
       go()
     }
     if (identical(key, "b")) {
@@ -322,29 +315,29 @@ console_repl_prompt = function() {
 }
 
 #' Queue pause-menu or typed text on the session (IC-49, IC-55: source "pause_menu" or "repl",
-#' IC-76) after the `input` event (source "steer"), with its queue line (console_queue_line());
-#' blank text queues nothing. While a REPL prompt runs (console_repl_prompt()), a follow-up, and
-#' text starting with / or !, is the next prompt instead (D-242): it waits in the reader's `typed`
-#' lines, and its `input` event comes when it is sent; the reader's `sent` is the kind queued last
-#' (console_newest()).
+#' IC-76) after the `input` event (source "steer"), with its receipt (console_receipt()) unless the
+#' read that took it shows it already in the receipt of kind `shown`; blank text queues nothing.
+#' While a REPL prompt runs (console_repl_prompt()), a follow-up, and text starting with / or !, is
+#' the next prompt instead (D-242): it waits in the reader's `typed` lines, and its `input` event
+#' comes when it is sent; the reader's `sent` is the kind queued last (console_newest()).
 #'
 #' P06 refuses an enqueue from the session's own tool frames, which are on the stack when the
 #' interrupt hit a tool; the item then waits in the console state for policy_flush().
 #' @noRd
-policy_enqueue = function(s, text, as, source = "pause_menu") {
+policy_enqueue = function(s, text, as, source = "pause_menu", shown = NULL) {
   text = as_utf8(text)
   if (!nzchar(trimws(text))) return(invisible(FALSE))
   rs = console_repl_prompt()
   later = identical(as, "follow_up") || grepl("^\\s*[/!]", text)
   if (!is.null(rs)) rs$reader$sent = if (later) "follow_up" else "steer"
   if (!is.null(rs) && later) {
-    console_queue_line(s, text, "follow_up")
+    if (!identical(shown, "follow_up")) console_receipt(s, text, "follow_up")
     rs$reader$typed = c(rs$reader$typed, text)
     return(invisible(TRUE))
   }
   ev = ev_dispatch("input", ev_new("input", text = text, source = "steer"), session = s)
   if (identical(ev$action, "handled")) return(invisible(FALSE))
-  console_queue_line(s, ev$text, as)
+  if (!identical(shown, as)) console_receipt(s, ev$text, as)
   st = console_state()
   st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, source = source)))
   policy_flush()
@@ -352,59 +345,45 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
   invisible(TRUE)
 }
 
-#' The dim line at column 0 that shows a message queued for session `s` (D-242): the queued
-#' glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`), its lines
-#' joined, on one row as the live row's queue view; a steer on a CLI route adds `after the CLI's
-#' answer`. A message taken back (`taken`)
-#' says `taken back` in place of its kind where its queue line shows, so no line of a withdrawn
-#' steer reads as if it will be sent. A line whose text is on screen
-#' already, right above it, says `the$echoed` in its place: `not an answer` for a line a question
-#' read past (console_typed_ahead()), nothing for the pause menu's `[s]` and `[f]` text, which their
-#' question's title names (policy_menu()). Inside an evaluation it has the console's
-#' colours. It is a block of the person's lines (console_gap()), except right under a question
-#' whose read routed it; while an answer of the session's foreground run streams, it waits in the
-#' run's record (`rec$queued`) for the answer's block to end, so it never splits a sentence (D-245);
-#' a steer's line still held when the steer is delivered is dropped, its delivery saying the same
-#' (a CLI route's kept). Where a T console's composer reads keys, the live row shows the queue
-#' while it is up (D-243), so only a CLI route's steer prints its line then.
+#' The receipt of a message the person sent to session `s` while it runs (D-301), written at once:
+#' the person's rows at column 0 on the input band (console_band()), `steer> <text>` (the agent
+#' reads it at its next step boundary) or `next> <text>` (after this answer), its word as the
+#' prompt `peter> ` reads, the text wrapped under itself (console_person_rows()); a steer on a CLI
+#' route ends with a dim `(after the CLI's answer)`, on a row of its own where the last is full. A
+#' block of the person's lines (console_gap()), except right under a question whose read routed it,
+#' written between whole rows: the live row is cleared and drawn again under it
+#' (gptr_message_write()), and a streamed answer's held row continues after it (D-245). Inside an
+#' evaluation it has the console's colours.
 #' @noRd
-console_queue_line = function(s, text, as, taken = FALSE) {
-  steer = identical(as, "steer")
-  on_cli = steer && identical(session_live(s)$run$model[["type"]], "cli")
-  # the live row shows the queue, but not that a CLI route's steer waits for the CLI's answer
-  if (!on_cli && isTRUE(the$tty$keys) && isTRUE(the$live_row$shown)) return(invisible(NULL))
+console_receipt = function(s, text, as) {
   rlang::local_options(cli.num_colors = console_colors())
   sym = console_style()
-  text = the$echoed %||% text
-  rows = sym$dim(console_person_rows(sym$queued, paste0(
-    if (taken) "taken back" else if (steer) "steer" else "follow-up",
-    if (nzchar(text)) paste0(sym$sep, text),
-    if (on_cli && !taken) paste0(sym$sep, "after the CLI's answer")
-  ), n = 1L))
+  steer = identical(as, "steer")
+  rows = console_person_rows(if (steer) "steer>" else "next>", text)
+  if (steer && identical(session_live(s)$run$model[["type"]], "cli")) {
+    grey = if (nzchar(sym$band)) sym$band_dim else sym$dim
+    note = "(after the CLI's answer)"
+    n = length(rows)
+    if (live_fit(rows[[n]]) + 1L + nchar(note) < cli::console_width()) {
+      rows[[n]] = paste(rows[[n]], grey(note))
+    } else {
+      rows = c(rows, paste0(strrep(" ", 7L), grey(note)))
+    }
+  }
   rec = Find(function(rec) identical(rec$session, s) && console_foreground(rec, tools = TRUE),
              as.list(console_state()$active))
-  if (!is.null(rec$md) && identical(rec$last, "text")) {
-    # a held steer's line gives way to its delivery (console_on_queue_update())
-    rec$queued = c(rec$queued, list(list(rows = rows, drop = steer && !on_cli)))
-    return(invisible(NULL))
-  }
   if (!is.null(rec) && !identical(rec$last, "prompt")) console_gap(rec, "person")
-  console_write(rows)
+  console_write(console_band(rows))
 }
 
 #' A line typed before a console question (readline_answer()): routed as a line typed during the
 #' run of this call (console_typed_route(): /command and !code wait for the next prompt, the
 #' others are queued as `type_ahead` says), else added to the console history; never an answer
-#' (IC-75, D-243). Without a REPL reader it is queued. The console echoed it after the question's
-#' chevron, so its queue line does not repeat it (`the$echoed`).
+#' (IC-75, D-243). Without a REPL reader it is queued; either way its receipt says where it went.
 #' @noRd
 console_typed_ahead = function(text) {
   target = Find(function(t) !is.null(t$session), policy_targets(policy_find()$runs))
   if (is.null(target)) return(console_history_add(text))
-  the$echoed = "not an answer"
-  on.exit({
-    the$echoed = NULL
-  }, add = TRUE)
   rd = console_repl_find()$reader
   if (is.null(rd)) {
     policy_enqueue(target$session, text, setting_get("type_ahead", target$session),
