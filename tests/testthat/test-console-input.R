@@ -442,8 +442,10 @@ test_that("the live row shows from the run's start, its clock from the prompt's 
     console_drop(run$id)
     live$run = NULL
   })
-  # the console's send of a prompt: Enter was 5 s ago (provider checks, a CLI's model listing)
+  # the console's send of a prompt: Enter was 5 s ago (provider checks, a CLI's model listing); its
+  # row shows from then
   rs = list2env(list(started = as.numeric(Sys.time()) - 5))
+  written(function() console_live_start(list2env(list(t0 = rs$started, sent = TRUE))))
   send = function() {
     .gptr_repl = rs
     force(.gptr_repl)
@@ -454,6 +456,8 @@ test_that("the live row shows from the run's start, its clock from the prompt's 
   expect_identical(the$live_row$rec, rec)
   expect_match(out, "thinking 5s", fixed = TRUE)
   expect_null(rs$started)
+  # the run's row is drawn over the prompt's, never cleared first: no blank row between (#108)
+  expect_match(out, "^\r[^\r]*$")
 })
 
 test_that("a prompt's live row shows from Enter, before its run starts; a refusal ends it (#98)", {
