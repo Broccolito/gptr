@@ -620,24 +620,13 @@ doc_history_repr_text = function(x, ...) {
 
 #' Keep history text inert in the notebook's HTML representation
 #' @noRd
-doc_history_repr_html = function(x, ...) {
-  text = doc_history_repr_text(x)
-  text = gsub("&", "&amp;", text, fixed = TRUE)
-  text = gsub("<", "&lt;", text, fixed = TRUE)
-  text = gsub(">", "&gt;", text, fixed = TRUE)
-  paste0("<pre>", text, "</pre>")
-}
+doc_history_repr_html = function(x, ...) doc_repr_pre(doc_history_repr_text(x))
 
 #' A literal fence preserves the compact preview without interpreting its markup
 #' @noRd
-doc_history_repr_markdown = function(x, ...) {
-  text = doc_history_repr_text(x)
-  runs = regmatches(text, gregexpr("`+", text))[[1L]]
-  fence = strrep("`", max(3L, nchar(runs) + 1L))
-  paste(c(fence, text, fence), collapse = "\n")
-}
+doc_history_repr_markdown = function(x, ...) doc_repr_fence(doc_history_repr_text(x))
 
-#' Suppress the inherited data-frame LaTeX representation of the complete history
+#' Suppress the inherited data-frame (or bare-vector) LaTeX representation
 #' @noRd
 doc_history_repr_latex = function(x, ...) NULL
 

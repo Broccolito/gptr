@@ -132,22 +132,40 @@ doc_site_knitr = function(call, ph, call0) {
          NA_character_)
 }
 
-#' Site in IRkernel: JPY_SESSION_NAME, else a content match over the notebooks in getwd()
+#' Site in IRkernel: the notebook JPY_SESSION_NAME names, else the gptr_doc() binding when it
+#' holds the call, else the one notebook in getwd() that does. When several do (a copy saved by
+#' JupyterLab's Duplicate or nbconvert --output), the notebook this kernel runs is unknown: a
+#' notice says so once and the site has no path, so the call is neither recorded nor replayed
+#' (doc_locate()'s nested path, not a console turn). A notebook whose bytes lack an ASCII word of
+#' the strings in `call0`, which its cell would hold as written, is neither decoded nor parsed
 #' @noRd
 doc_site_jupyter = function(call, ph, call0) {
   if (!isTRUE(getOption("jupyter.in_kernel"))) return(NULL)
+  strs = function(x) if (is.character(x)) x else if (is.call(x)) unlist(lapply(as.list(x), strs))
+  s = as.character(strs(call0))
+  words = unique(unlist(regmatches(s, gregexpr("[A-Za-z0-9]+", s, perl = TRUE))))
+  hit = function(p) {
+    cell = tryCatch({
+      raw = readBin(p, "raw", file.size(p))
+      held = all(vapply(words, function(w) length(grepRaw(w, raw, fixed = TRUE)) > 0L, NA))
+      if (!held) NA_integer_ else
+        doc_nb_cell(nb_parse(doc_read(p)$lines), ph, call0, doc_harness_attr(call)$fn)
+    }, error = function(e) NA_integer_)
+    if (!is.na(cell)) list(kind = "jupyter", path = path_norm(p), cell = cell)
+  }
   jpy = Sys.getenv("JPY_SESSION_NAME")
-  cands = if (nzchar(jpy) && file.exists(jpy)) {
-    jpy
-  } else {
-    list.files(getwd(), pattern = "[.]ipynb$", full.names = TRUE)
-  }
-  for (p in cands) {
-    cell = tryCatch(doc_nb_cell(nb_parse(doc_read(p)$lines), ph, call0, doc_harness_attr(call)$fn),
-                    error = function(e) NA_integer_)
-    if (!is.na(cell)) return(list(kind = "jupyter", path = path_norm(p), cell = cell))
-  }
-  NULL
+  if (nzchar(jpy) && file.exists(jpy)) return(hit(jpy))
+  bound = the$doc_binding$path
+  site = if (identical(doc_format_of(bound), "ipynb")) hit(bound)
+  if (!is.null(site)) return(site)
+  sites = Filter(Negate(is.null), lapply(list.files(getwd(), "[.]ipynb$", full.names = TRUE), hit))
+  if (length(sites) < 2L) return(if (length(sites)) sites[[1L]])
+  names = vapply(sites, function(s) basename(s$path), "")
+  gptr_inform(paste0("gptr did not record or replay this call: several notebooks in the working ",
+                     "directory hold it (", paste(names, collapse = ", "), "). Run ",
+                     "gptr_doc(\"<notebook>.ipynb\") in this kernel to name the one it runs."),
+              "notice", .once = paste0("doc_jupyter_many:", path_key(getwd())))
+  list(kind = "jupyter", path = NULL)
 }
 
 #' The command line of this R process (mockable wrapper of commandArgs(FALSE))

@@ -1826,7 +1826,8 @@ nothing (the user's control-flow code is the REQ-26(c) record). Undone turns bec
 **Locating and writing.** `doc_locate()` precedence: validated srcref (text must contain this prompt; reject
 `.active-rstudio-document`) > `source()`/`sys.source()` frame (identical-expression match, read inside
 `tryCatch` with an off switch: CRAN grey zone [14 fact-check]) > knitr/Quarto (`QUARTO_DOCUMENT_PATH`) >
-IRkernel (`JPY_SESSION_NAME`, then content) > `Rscript --file=` > IDE (rstudioapi, guarded) > console. Calls
+IRkernel (`JPY_SESSION_NAME`, then the bound notebook, then the one notebook in the working directory holding the
+call; several such notebooks: no site and a notice, D-341) > `Rscript --file=` > IDE (rstudioapi, guarded) > console. Calls
 are matched by content and ordinal, never stale line numbers. Writes use raw bytes preserving EOL, BOM and the
 final newline, a temp file in the same directory then `file.rename()`, an md5 conflict check with re-locate and
 retry (with rename retries and an in-place fallback on Windows, and case-insensitive path keys on Windows and
@@ -1846,7 +1847,7 @@ never executes a recorded block: in replay a piped session is advanced **in plac
 `identical()` holds along a replayed pipe chain), otherwise it returns a replayed session with zero tokens whose
 history comes from the session file truncated at the recorded turn, or is reconstructed from the document when the
 file is absent (a fresh clone; `history_source = "reconstructed"`) [IC-46]; the document's own code runs next. Live regeneration without double execution works under `gptr_source()`, knitr
-(scoped label hook) and line-by-line IDE runs; under base `source()`/Rscript, `live` and stale regeneration
+(scoped label hook: the old agent chunk neither runs nor shows) and line-by-line IDE runs; under base `source()`/Rscript, `live` and stale regeneration
 downgrade to replay with a warning. Replay is forced when `_R_CHECK_PACKAGE_NAME_` is set outside testthat (the
 examples of R CMD check; tests use offline fake and mock providers and may pass `replay =`) [13, 14 §4.4.2; IC-45].
 Calls nested in loops and functions have no block: they run live on re-source, or fail with "not recorded" under
@@ -2341,12 +2342,14 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   Ctrl-C notices at the prompt and of the pause menu start with a line end (D-225).
 - **UI backends** (`ui` specs): `console`, `none`, `scripted` (tests), `rstudio` (dialogs; a timed-out dialog
   is a denial with a notice). The UI abstraction is how Shiny or RPC front ends replace the console. Whether anyone
-  can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works
-  [18 §2; IC-43].
+  can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works,
+  unless the client takes no input (`allow_stdin = false`: nbconvert, papermill) [18 §2; IC-43; D-340].
   Console selector titles intentionally preserve line feeds for setup and question text; option
   labels, details and other control/bidi/zero-width characters remain escaped. Permission approval
   rendering retains its separate escaping contract.
-- **Other front ends**: `knit_print` for sessions and System 1 vectors; the JSONL event sink (`frontend`
+- **Other front ends**: `knit_print` for sessions and System 1 vectors, and Jupyter `repr` methods for sessions,
+  histories and System 1 vectors (a System 1 vector shows what `print()` shows: each value's p or conf and the
+  model, calibration and date footer); the JSONL event sink (`frontend`
   "jsonl": redacted Pi-named events on a connection, used by worker children and by agentic layers written in
   other languages) [P-B graft].
 

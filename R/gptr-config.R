@@ -1093,7 +1093,9 @@ replay_provider_id = function(model) {
 
 #' In replay `mode` (a call's `replay =` overrides the process mode, contract 3.1), refuses a
 #' request to a provider whose record is not `offline = TRUE` (a local server is not); never
-#' contacts a provider (07 sections 2.1 and 4)
+#' contacts a provider (07 sections 2.1 and 4). Outside a `.gptr/` workspace the answer caches
+#' live in this process only, so the refusal says so and how to keep them, as
+#' doc_replay_no_answer() does
 #' @noRd
 replay_guard = function(model, what = "model call", mode = replay_mode()) {
   check_string(what, "what")
@@ -1103,6 +1105,10 @@ replay_guard = function(model, what = "model call", mode = replay_mode()) {
   if (isTRUE(rec[["offline"]])) return(invisible(TRUE))
   gptr_abort(c(paste0("Replay mode: gptr may not make a ", what, " to ", pid,
                       " because nothing is recorded for it."),
+               if (is.null(workspace_dir())) {
+                 paste0("Outside a .gptr/ workspace, recorded answers last only for the R ",
+                        "session that made them; gptr_init(\".\") keeps them for later sessions.")
+               },
                "Unset GPTR_REPLAY or pass replay = \"auto\" to call the model."),
              "not_recorded", document = NA_character_, prompt = NA_character_)
 }

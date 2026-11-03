@@ -10026,3 +10026,70 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `gptr_runtime` joins the context kinds of section 4.1.1.
 - Tests: test-session-history-display.R ("a context-only message previews and estimates its
   context text").
+
+## D-340 - v1.0.1 lane G A Jupyter client that takes no input gets no question (2026-11-02)
+- Rule (headless notebooks; live findings disc, start, docs): `gptr_can_prompt()` counts an
+  IRkernel as able to ask only when its current execute request does not say
+  `allow_stdin = false`, the flag nbconvert, papermill and Quarto's jupyter engine send. IRkernel
+  1.3.2 sends an input request whatever the flag says and waits forever, so record consent,
+  project trust, approvals and every other question hung the cell. The flag is read from the
+  executor that IRkernel installs as `base::readline()`; only an explicit false says no, so a
+  missing request or another kernel keeps today's behaviour. The first time it says no, one
+  notice tells that each question takes its unattended answer (recording only with consent given
+  beforehand, as `gptr_doc()` gives it; untrusted project resources not loaded; approvals refused).
+- Contract-visible: 04 section 3 (`jupyter.in_kernel` row), 7.1 (`gptr_can_prompt()` row) and 15.2
+  IC-43; 03 section 6 (UI backends); vignette("script-as-history").
+- Tests: test-utils-options.R "a Jupyter request with allow_stdin = false asks nothing, said once
+  (IC-43)". Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-341 - v1.0.1 lane G A kernel records into the bound notebook, never a look-alike (2026-11-02)
+- Rule (notebook site; live findings disc, docs): without a `JPY_SESSION_NAME` that names a file
+  (nbconvert, papermill, VS Code), `doc_site_jupyter()` takes the `gptr_doc()` binding when that
+  notebook holds the call, else the one notebook in the working directory that does. When several
+  do (JupyterLab's `-Copy1`, an `nbconvert --output` notebook), the notebook the kernel runs is
+  unknown: one notice per folder names them and says to call `gptr_doc()`, and the call goes the
+  nested path (no site path: neither recorded nor replayed, and no console turn). Before, the
+  first match by file name won, so a copy that sorts first took the blocks or failed the replay.
+  Every notebook is now looked at, so one whose bytes lack an ASCII word of the call's strings
+  (which its cell holds as written) is skipped before it is decoded or parsed: a folder of large
+  notebooks costs about one read each, not one JSON parse each.
+- Contract-visible: 03 section 6.9 (locate precedence); `?gptr_doc` (unchanged: a binding already
+  names the document).
+- Tests: test-doc-locate.R "a kernel without JPY_SESSION_NAME picks the bound notebook, else the
+  one match". Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-342 - v1.0.1 lane G R Markdown and Quarto console transcripts replay (2026-11-02)
+- Rule (console into .Rmd/.qmd; live finding docs): a console target in R Markdown or Quarto
+  opens with a chunk holding `library(gptr)` (`doc_transcript_preamble()`), the rule .R
+  transcripts already had, and takes each direct R line, slash command and rewind note as an R
+  chunk of those lines (fence lengthened past any backtick line in them). A direct R line's `#>`
+  output is left out there, as agent chunks leave theirs: rendering prints it. Before, the first
+  turn wrote a bare `s_<id> = peter(...)` chunk and every other console line was dropped, so the
+  document did not render (`could not find function "peter"`) and a turn using a `!` object
+  failed. The `#~` switching of direct R lines after an undo stays `.R`-only (a line using an
+  undone object then fails on render, as it would at the console). A document whose last chunk
+  is unterminated takes no such chunk (knitr would read it as that chunk's body): a notice says
+  so once, as for a block there.
+- Contract-visible: 04 section 15.3 (the transcript paragraph of IC-49); vignette
+  ("script-as-history").
+- Tests: test-doc-replay.R "an R Markdown transcript loads gptr and keeps direct R lines as chunks
+  that knit"; test-doc-io.R "transcript lines are appended raw to an .R transcript, as a chunk to
+  Rmd and qmd". Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-343 - v1.0.1 lane G A calling chunk that uses the agent's objects early is told so (2026-11-02)
+- Rule (re-render; live finding local): in R Markdown, Quarto and notebooks a block's code stays
+  in its own chunk or cell after the calling one, and replay stays as IC-46 has it: it rebuilds
+  the session and never runs the recorded code, which runs as document code. So the lines after
+  `peter()` in the calling chunk see the agent's objects on the first render (the live run made
+  them) but not on a re-render. gptr says so once per block, when the block is recorded (in the
+  first report) and when it replays (just before the error), naming the objects: those of the
+  `created=` key and the names the block's top-level code assigns that the rest of the chunk or
+  cell uses. While knitting, the replay's notice also goes to stderr: knitr drops the messages of
+  a chunk that fails (`rmarkdown::render()` and Quarto default to `error = FALSE`), so the
+  report would never show it. Not taken: running the recorded code at the call and skipping its chunk (knitr only:
+  a notebook cannot skip a later cell, so the code would run twice there; it would also move the
+  block's plots and output and override a chunk the person turned off).
+- Contract-visible: 04 section 15.3 IC-46 (Used early); `?gptr_doc`; vignette
+  ("script-as-history").
+- Tests: test-doc-knitr.R "a calling chunk that uses the block's objects after the call is told
+  so, once" (also with `error = FALSE`). Evidence: progress/fixes-1.0.1/lane-G.md.

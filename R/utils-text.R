@@ -332,7 +332,8 @@ print.gptr_listing = function(x, ...) {
   invisible(x)
 }
 
-#' A width-bounded display copy: provenance/state first, at most two column groups, no row loss
+#' A width-bounded display copy: provenance/state first, at most two column groups, no row loss;
+#' identifier, state and date columns are never shortened, so free text gives way first
 #' @noRd
 listing_print_lines = function(x, width = cli::console_width()) {
   if (!ncol(x)) return(character())
@@ -360,7 +361,8 @@ listing_print_lines = function(x, width = cli::console_width()) {
     min(budget, caps[[j]], max(nchar(c(headers[[j]], values[[j]]), type = "width")))
   }, 0)
   minimum = pmax(nchar(headers, type = "width"), pmin(wanted, 8L))
-  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status", "branch")
+  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status", "branch",
+                                        "date", "created", "updated")
   minimum[state] = wanted[state]
   groups = list()
   group = integer()
@@ -428,6 +430,23 @@ doc_rmd_fence = function(fence, lines) {
   runs = regmatches(lines, regexpr("^[\t >]*`{3,}", lines))
   n = if (length(runs)) max(nchar(gsub("[^`]", "", runs))) else 0L
   if (n >= nchar(fence)) strrep("`", n + 1L) else fence
+}
+
+#' Display text as inert HTML: escaped, in a `<pre>`
+#' @noRd
+doc_repr_pre = function(text) {
+  text = gsub("&", "&amp;", text, fixed = TRUE)
+  text = gsub("<", "&lt;", text, fixed = TRUE)
+  text = gsub(">", "&gt;", text, fixed = TRUE)
+  paste0("<pre>", text, "</pre>")
+}
+
+#' Display text as literal Markdown: in a fence longer than any backtick run it holds
+#' @noRd
+doc_repr_fence = function(text) {
+  runs = regmatches(text, gregexpr("`+", text))[[1L]]
+  fence = strrep("`", max(3L, nchar(runs) + 1L))
+  paste(c(fence, text, fence), collapse = "\n")
 }
 
 #' Safe notebook Markdown: keep fenced code and matched backtick spans literal, while prose

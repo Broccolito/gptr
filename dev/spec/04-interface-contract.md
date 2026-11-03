@@ -427,7 +427,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `_R_CHECK_PACKAGE_NAME_`, `_R_CHECK_LIMIT_CORES_` | P01 `check_running()` | forced replay outside testthat (examples; IC-45), child pools capped at 2, no supervision, process-tree markers under `tempdir()/gptr-procs` outside testthat (D-285) |
 | `GPTR_PROJECT_ROOT` | P01 `project_root()` | overrides the project root (tests; IC-63) |
 | `TESTTHAT` | P08 `replay_mode()` | `"true"` under testthat: no forced replay |
-| `jupyter.in_kernel` (option) | P01 `gptr_can_prompt()` | IRkernel answers `readline()` (IC-43) |
+| `jupyter.in_kernel` (option) | P01 `gptr_can_prompt()` | IRkernel answers `readline()` unless the request has `allow_stdin = false` (IC-43, D-340) |
 | `QUARTO_DOCUMENT_PATH`, `QUARTO_DOCUMENT_FILE`, `JPY_SESSION_NAME`, `RSTUDIO`, `POSITRON`, `TERM_PROGRAM` | P01 `front_end()`, P15 | front-end and document detection (14 §3.9) |
 | `NO_COLOR` | cli | colours off |
 
@@ -1564,7 +1564,9 @@ gptr_doc(path = NULL, format = NULL, sync = FALSE)
 
 `path = NULL`: returns the current binding `list(path, format)` or `NULL`, visibly. A path binds that document to
 this R process, which is explicit consent to write it (IC-45): calls located in it record below themselves, and
-calls located in no document (console, `Rscript -e`, stdin) are appended to it unless it is a notebook (IC-49). A
+calls located in no document (console, `Rscript -e`, stdin) are appended to it unless it is a notebook (IC-49; outside a
+Jupyter kernel such a call then says once that console calls are not recorded into a notebook, and `/doc <file>.ipynb`
+says so too). A
 call located in another document needs that document's consent; when it cannot be asked, the call is not recorded
 and a `notice` names both documents, once per document (D-249). `FALSE` unbinds. `sync = TRUE` applies the pending
 blocks recorded for that document (a Jupyter notebook that was open while recording, or unapplied deferred-write
@@ -2331,7 +2333,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `s1.decide` | P13 | `ctx$decide()` | `function(question, x, ...) <gptr_s1>` |
 | `doc.site` | P15 | `r` tool record flag (P10), `documents` section (P07), `/doc` and `/status` (P14) | `function(session) list(path, format) or NULL`; outside a run where a person can answer, without a document or binding, the transcript the project remembers (cheat-sheet review R10) |
 | `doc.edit` | P15 | `edit` tool (P10) | `function(path, edits, session) <gptr_tool_result> or NULL` (NULL: not a bound document) |
-| `doc.s1_block` | P15 | top-level System 1 calls (P13) | `function(call, summary) invisible(NULL)` (writes the one-line block) |
+| `doc.s1_block` | P15 | top-level System 1 calls (P13) | `function(call, summary) invisible(lgl(1))` (writes the one-line block; TRUE when it showed it, as a notebook's pending block in the cell output, so the caller does not say the summary again) |
 | `doc.replay` | P15 | `team` and `fanout` routes (P19) | `function(call) <session> or NULL`: the replayed team or fan-out session for a fresh block, else `NULL` (IC-47) |
 | `doc.coach` | P29 (`doc_coach_service()`, `doc-replay.R`; owned by `builtin:documents`) | `gptr_coach()` (P29), before anything else | `function(call) list(action, site, harness)`: `call` is a `call_new()` record of the coaching call with `start_hash` and `offline` (`TRUE` when `replay_guard()` accepts every model of the call); `action` is `"replay"` (a fresh block; `harness` is the one it builds), `"ask"` (a stale block under `auto` while a person can answer; `harness` is the block's), `"record"` (pass `site` to `doc.coach_block`) or `"none"`; under `replay` a recordable call without a fresh block signals `not_recorded` or `stale_block`, except an `offline` call without a block, which gives `"none"` (IC-87, D-287) |
 | `doc.coach_block` | P29 (`doc_coach_block_service()`, `doc-replay.R`; owned by `builtin:documents`) | `gptr_coach()` (P29) | `function(site, harness, record) <gptr_harness>`: writes the coach block (a console transcript: the harness's `h_<id>` definition) through `doc_upsert()` and returns the harness the written body defines (IC-87) |
@@ -2371,7 +2373,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 |---|---|---|
 | `gptr_opt(name)` | the option value or the §3.1 default (`NULL` for settings-backed options) | all |
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
-| `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
+| `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, a kernel whose request has `allow_stdin = false` not counting (D-340), excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
 | `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `paste` and `-paste` among `modes` are gptr's own (D-263): bracketed paste's `ESC [ ? 2004 h` after stty, `ESC [ ? 2004 l` before it, through `gptr_message_write()`, never into a tool's output, and alone they run no stty; `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`; bracketed paste off first, D-263), then sets the call's again (IC-76) | P11, P14, P26 |
 | `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0 paste` (bracketed paste on, D-263) for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` (a Ctrl-C byte in a batch holding a bracketed-paste marker, read while a paste is open up to 2 s after its last read, or read on the polling beat right after such a batch with no empty read between, is pasted text, FIX-28 review rounds 1, 3, 4 and 6) and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; every switch to the saved modes (`tty_restore()`, `tty_question(TRUE)`, `gptr_readline()`) adds `-paste` where the call's set has `paste`, so readline never reads with the mode on, and `tty_isig_on()` and `tty_isig_off()` leave it on, while `eval_restore()` turns it on again after the code of an evaluation that turned isig on, once its capture is lifted, as GNU readline 8.1+ turns it off when a read of the code ends (FIX-28); `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment, so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
@@ -2832,7 +2834,7 @@ Functions (P08):
 | `trust_get(path = getwd())` | `lgl(1)`: `TRUE` only when recorded and the trust fingerprint still matches (IC-52); L0 and L3 callers use the `trust.get` service (IC-33) | P08; P03, P07, P15, P17, P18 through `trust.get` |
 | `home_address(envir)` | chr(1) `rlang::obj_address(envir)` for the pending-plan key (an address string, never a reference) [R2] | P11 |
 | `replay_mode(arg = NULL)` | `chr(1)`: `arg` > `gptr.replay` > `GPTR_REPLAY` > settings > `"auto"`; `"replay"` is forced when `check_running()` and `Sys.getenv("TESTTHAT") != "true"` (examples), unless `arg` is given (IC-45) | P08, P13, P15, P19 |
-| `replay_guard(model, what = "model call")` | in replay mode, signals `gptr_error_not_recorded` before any request to a provider whose record is not `offline = TRUE` (`offline` = no remote model is called: the fake provider and the mock-server and fake-CLI test providers, so tests and examples still run); `invisible(TRUE)` otherwise | P08 (`gateway_run()`), P13 (cache misses), P19 (team and fan-out children) |
+| `replay_guard(model, what = "model call")` | in replay mode, signals `gptr_error_not_recorded` before any request to a provider whose record is not `offline = TRUE` (`offline` = no remote model is called: the fake provider and the mock-server and fake-CLI test providers, so tests and examples still run); outside a `.gptr/` workspace its message adds that recorded answers last only for the R session that made them and that `gptr_init(".")` keeps them; `invisible(TRUE)` otherwise | P08 (`gateway_run()`), P13 (cache misses), P19 (team and fan-out children) |
 | `egress_check(provider_id, provider, safety, asker = NULL, context = NULL)` | `invisible(TRUE)` if acknowledged (user settings `egress`), local or offline; acknowledgment is required even with `context = "none"`, which can still send prompts, tool results, `<r_env>` and project instructions. When `gptr_can_prompt()`: shows what automatic context is sent and records the acknowledgement at user scope (an `ask_human`, IC-53); otherwise `gptr_error_egress`. Inside a run (`run_current()` non-`NULL`), when `asker` is given (`gateway_guards()`, `subagent_guards()`), the question starts "The agent's code starts a sub-agent on `<asker>`, which sends its prompt to `<id>`", `asker` being the model of the session that model code starts (D-210) | P08 (`gateway_run()`), P13, P19 |
 
 
@@ -4732,7 +4734,9 @@ resolves to `single-cell` and `skills = high_performance_r` to the built-in; an 
 
 **IC-43 Human predicates.** (req-11, cran-6) `gptr_can_prompt()` (P01): the `gptr.interactive` option if set,
 else `interactive() || isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and
-`check_running()`. It decides every question: `perm_check()` asks, the `ask` tool, `gptr_confirm()`,
+`check_running()`. A kernel whose current execute request has `allow_stdin = false` (nbconvert, papermill,
+Quarto's jupyter engine) cannot prompt: IRkernel's `readline()` would wait forever, so a notice says once that
+every question takes its unattended answer (D-340). It decides every question: `perm_check()` asks, the `ask` tool, `gptr_confirm()`,
 `gptr_init()`, the egress acknowledgement, the `console` route and the mode-block variant. `gptr_has_human()`
 keeps deciding streaming and verbosity. `builtin_ui`'s resolution uses `gptr_can_prompt()`.
 
@@ -4799,6 +4803,12 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   value of its turn (the live session that recorded it holds one), informs one `notice` per block and process:
   "No recorded value for block <id> of <doc>: a document records gptr_return() only as a top-level call, so
   $value is not replayed."
+- **Used early** (D-343): in `.Rmd`, `.qmd` and `.ipynb` a block's code is in its own chunk or cell after the
+  calling one, so on a replay the lines after the call in the calling chunk or cell run before it. When those
+  lines use a name of the block's `created=` key or a name its top-level code assigns, one `notice` per block and
+  process says so, when the block is recorded and when it replays ("Block <id> of <doc> makes <names>, which its
+  calling chunk uses after the call. ..."); while knitting, the replay's notice also goes to stderr, as knitr drops
+  the messages of a chunk that fails unless it has `error = TRUE`. Replay still never runs the recorded code itself.
 - **Fork blocks** (`fork=` header): the replay result is bound to the block id with `session_replay_bind(block,
   s)` in a process table `the$replay_blocks` (gptr-created sessions only, never user frames; replaced on
   re-source). Recorded fork turns are wrapped `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`;
@@ -4880,7 +4890,10 @@ A REPL turn is a console turn whatever started the console: a sourced script, an
 buffer holding the `peter()` statement that started it locates none of its turns (P28 Task 29: the REPL marks
 its gateway calls `gptr_console`, and `doc_locate()` runs no finder for them).
 Every transcript file opens with the replay note and `library(gptr)` (`doc_transcript_preamble()`), whatever its
-first block, a direct R line or a command too; while a session runs in the background (the pause menu's [b]),
+first block, a direct R line or a command too; an `.Rmd` or `.qmd` console target opens with a chunk loading gptr
+and gets each direct R line, slash command and rewind note as an R chunk of those lines, without `#>` output, which
+knitr prints (no `#~` switching after an undo there; after an unterminated last chunk nothing is appended and a
+`notice` says so, as a block is not; D-342); while a session runs in the background (the pause menu's [b]),
 whose block is written when its run ends, the console's direct R and command lines for it wait in its live handle
 and follow that block, in the order typed (`doc_console_append()`, P28 Task 76, visual round 3: a record opened
 with `x = 1` had no `library(gptr)`, and `!gptr_last()$status` and `# /exit` came before the `peter("go bg")` they

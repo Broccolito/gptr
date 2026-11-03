@@ -301,6 +301,46 @@ doc_replay_no_value = function(site, block, code, s) {
               .once = paste0("doc_no_value:", path_key(site$path), ":", block$id))
 }
 
+#' Say once per block that, in R Markdown, Quarto or a notebook, the lines after its call in the
+#' calling chunk or cell use what the block makes: an object of its `created=` key or a name its
+#' top-level code assigns. The block's code is in its own chunk or cell after that one, so when the
+#' document runs again (its block replays) those lines run before it (D-343). At `replay` while
+#' knitting the notice also goes to stderr, the console rendering the document: knitr drops the
+#' messages of a chunk that fails, as this one does, unless the chunk has `error = TRUE`
+#' @noRd
+doc_used_early = function(site, id, body, created, replay = FALSE) {
+  if (!isTRUE(site$format %in% c("rmd", "qmd", "ipynb")) || isTRUE(site$console) ||
+        !rlang::is_string(id)) {
+    return(invisible(NULL))
+  }
+  used = tryCatch({
+    text = doc_read(site$path)$lines
+    hit = doc_format_get(site$format)$locate(text, site)$hit
+    rest = if (identical(site$format, "ipynb")) {
+      utils::tail(nb_cell_lines(nb_parse(text)[["cells"]][[site$stmt[1L]]]), -hit$stmt2)
+    } else {
+      ch = doc_rmd_chunks(text)[hit$chunk, ]
+      doc_rmd_unprefix(doc_lines_between(text, hit$stmt2, ch$end), ch$prefix)
+    }
+    made = c(created, unlist(lapply(doc_parse_text(body, keep_source = FALSE),
+                                    function(e) doc_assign_parts(e)$name)))
+    intersect(made, all.names(doc_parse_text(rest, keep_source = FALSE)))
+  }, error = function(e) character())
+  if (!length(used)) return(invisible(NULL))
+  where = if (identical(site$format, "ipynb")) "cell" else "chunk"
+  withCallingHandlers(
+    gptr_inform(paste0("Block ", id, " of ", doc_rel(site$path), " makes ",
+                       paste(used, collapse = ", "), ", which its calling ", where, " uses after ",
+                       "the call. The block's code is in the ", where, " after that one, so when ",
+                       "the document runs again those lines run before it: use what it makes ",
+                       "from a later ", where, "."), "notice",
+                .once = paste0("doc_used_early:", path_key(site$path), ":", id)),
+    gptr_message_notice = function(m) {
+      if (replay && is_knitting()) cat(conditionMessage(m), file = stderr())
+    }
+  )
+}
+
 #' Block `block_id` as the site's document holds it (doc_block_get()), with `sent`, what its
 #' prompt was sent with (doc_block_sent()); NULL when unreadable
 #' @noRd
@@ -385,6 +425,7 @@ doc_replay_call = function(call, site, mode = "replay") {
   if (!is.null(h$fork)) session_replay_bind(b$id, s)
   doc_replay_no_answer(site, s)
   doc_replay_no_value(site, b, doc$code, s)
+  doc_used_early(site, b$id, doc$code, doc_created(h$created), replay = TRUE)
   doc_source_log(site$path, b$id, "replayed")
   assign("doc", NULL, envir = call)
   s
@@ -506,7 +547,8 @@ doc_touch = function(call, site, where, keep) {
 #' answer and the call could be recorded); never a call made from model code. Recovers a dead
 #' process's deferred writes for that document first (doc_touch()) and keeps the site in
 #' `call$doc` for run(); a console site gets `default_model`, TRUE when the call starts a session
-#' naming no model by name (D-265).
+#' naming no model by name (D-265). Outside a Jupyter kernel, a call in no document while
+#' gptr_doc() binds a notebook, which takes only its own cells' calls (IC-49), says so once.
 #' @noRd
 doc_route_match = function(call) {
   if (!is.null(run_current())) return(FALSE)
@@ -519,6 +561,14 @@ doc_route_match = function(call) {
                             ask = doc_console_may_record(call),
                             harness = doc_console_harness(call), args = args_hash(call$interp))
     if (!is.null(site)) assign("top_level", TRUE, envir = call)
+  }
+  b = the$doc_binding$path
+  if (is.null(site) && identical(doc_format_of(b), "ipynb") &&
+        !isTRUE(getOption("jupyter.in_kernel"))) {
+    gptr_inform(paste0("gptr did not record this call: console calls are not recorded into a ",
+                       "notebook (", doc_rel(b), "). Bind an .R, .Rmd or .qmd file with ",
+                       "gptr_doc() for a transcript."), "notice",
+                .once = paste0("doc_console_notebook:", path_key(b)))
   }
   if (is.null(site) || is.null(site$path)) return(FALSE)
   if (!isTRUE(site$top_level) && is.null(site$in_block)) return(FALSE)
@@ -779,16 +829,17 @@ doc_s1_summary = function(x) {
 
 #' doc.s1_block: the one-line block of a top-level System 1 call (contract 11.5), redacted with
 #' the persist profile (free-text choice levels reach it; IC-74); nothing in replay mode, for
-#' nested calls, for calls in no document or with `.opts$record = FALSE`
+#' nested calls, for calls in no document or with `.opts$record = FALSE`. Invisibly TRUE when the
+#' block was shown, as a notebook's pending block is in the cell output (doc_pending_add())
 #' @noRd
 doc_s1_block_service = function(call, summary) {
   if (isFALSE(call$args$opts$record) || !is.null(run_current()) ||
       identical(replay_mode(call$args$replay), "replay")) {
-    return(invisible(NULL))
+    return(invisible(FALSE))
   }
   site = tryCatch(doc_locate(call), error = function(e) NULL)
   if (is.null(site) || !isTRUE(site$top_level) || is.null(site$stmt) || isTRUE(site$console)) {
-    return(invisible(NULL))
+    return(invisible(FALSE))
   }
   txt = if (inherits(summary, "gptr_s1")) doc_s1_summary(summary) else as.character(summary)[1L]
   meta = attr(summary, "meta") %||% list()
@@ -800,12 +851,14 @@ doc_s1_block_service = function(call, summary) {
     site$regenerate = TRUE
   }
   line = redact(paste0("#> ", doc_one_line(txt)), "persist")
-  tryCatch(doc_upsert(site, structure(line, header = header)),
-           error = function(e) {
-             registry_diagnostic("builtin:documents", "doc.s1_block", class(e)[1L],
-                                 conditionMessage(e))
-           })
-  invisible(NULL)
+  res = tryCatch(doc_upsert(site, structure(line, header = header)),
+                 error = function(e) {
+                   registry_diagnostic("builtin:documents", "doc.s1_block", class(e)[1L],
+                                       conditionMessage(e))
+                   NULL
+                 })
+  invisible(identical(res$backend, "pending") &&
+              isTRUE(res$action %in% c("insert", "replace", "stale-regenerate")))
 }
 
 #' doc.replay: the replayed team or fan-out session of a fresh (or undone) block, else NULL with
@@ -1199,7 +1252,8 @@ doc_on_agent_end = function(event, ctx) {
     lines[length(lines) + 1L] = paste0("## Run: ", status)
     attr(lines, "answer") = NA_character_
   }
-  doc_upsert(site, lines, block_id = site$block_id)
+  res = doc_upsert(site, lines, block_id = site$block_id)
+  doc_used_early(site, res$block_id, lines, doc_created(attr(lines, "header")$created))
   NULL
 }
 
@@ -1327,14 +1381,15 @@ doc_on_console_direct = function(event, ctx) {
   code = doc_direct_code(doc_split_lines(code))
   st = data$status
   created = as_utf8(as.character(data$created %||% character()))
-  lines = if (is.null(st) || identical(st, "ok")) {
-    c("", doc_direct_header(NULL, created), code,
-      doc_output_lines(as.character(data$output %||% character())))
+  ok = is.null(st) || identical(st, "ok")
+  lines = if (ok) {
+    c("", doc_direct_header(NULL, created), code)
   } else {
     named = rlang::is_string(st) && grepl("^[a-z_]{1,20}\\z", st, perl = TRUE)
     c("", doc_direct_header(if (named) st else "failed", created), paste0("#~ ", code))
   }
-  doc_console_append(lines, ctx$session)
+  doc_console_append(lines, ctx$session,
+                     if (ok) doc_output_lines(as.character(data$output %||% character())))
 }
 
 # a direct R line's header (doc_direct_header()): its reason and its key=value pairs
@@ -1476,22 +1531,27 @@ doc_on_console_command = function(event, ctx) {
   doc_console_append(paste0("# ", doc_one_line(txt[1L])), ctx$session)
 }
 
-#' Append console lines to the console transcript target (an .R transcript; the writer redacts
-#' them with the persist profile under write consent), then rescan it (doc_transcript_rescan());
-#' always NULL (notify channels). While `session` runs in the background (the pause menu's `[b]`),
+#' Append console lines to the console transcript target (the writer redacts them with the
+#' persist profile under write consent): an .R transcript, then rescanned
+#' (doc_transcript_rescan()), gets `out`, a direct R line's `#>` output, after them; an R Markdown
+#' or Quarto one gets them as a chunk without it, as knitr prints the output itself (D-342).
+#' Always NULL (notify channels). While `session` runs in the background (the pause menu's `[b]`),
 #' whose block is written when the run ends, they wait in its live handle until
 #' doc_on_agent_end() has written that block, so the record keeps the order typed
 #' @noRd
-doc_console_append = function(lines, session = NULL) {
+doc_console_append = function(lines, session = NULL, out = NULL) {
   live = if (inherits(session, "gptr_session")) session_live(session)
   if (!is.null(live$background) && !is.null(live$run)) {
-    live$held = c(live$held, list(lines))
+    live$held = c(live$held, list(list(lines, out)))
     return(NULL)
   }
   target = doc_transcript_target(ask = FALSE)
-  if (!is.null(target) && identical(doc_format_of(target), "r")) {
-    doc_transcript_append(target, lines, session = session)
+  fmt = doc_format_of(target)
+  if (identical(fmt, "r")) {
+    doc_transcript_append(target, c(lines, out), session = session)
     doc_transcript_rescan(target, session)
+  } else if (isTRUE(fmt %in% c("rmd", "qmd"))) {
+    doc_transcript_append(target, lines, session = session)
   }
   NULL
 }
@@ -1504,7 +1564,7 @@ doc_console_held = function(s) {
   held = live$held
   if (!length(held)) return(invisible(NULL))
   live$held = NULL
-  for (lines in held) doc_console_append(lines, s)
+  for (h in held) doc_console_append(h[[1L]], s, h[[2L]])
   invisible(NULL)
 }
 
@@ -1534,11 +1594,14 @@ doc_console_held = function(s) {
 #' killed. Such blocks wait in the `.gptr/` of the document's project, else in
 #' `tools::R_user_dir("gptr", "cache")`, so any R process of the same user can apply them.
 #'
-#' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
-#' or functions do not. Only blank lines may separate a call's statement from its blocks: after a
+#' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops or
+#' functions do not. In R Markdown, Quarto and notebooks a call's blocks are a chunk or cell after
+#' its calling one, so when the document runs again, code after the call in that chunk or cell runs
+#' before them: use what the agent made from a later chunk or cell (gptr says so once when a calling
+#' chunk or cell does). Only blank lines may separate a call's statement from its blocks: after a
 #' comment or code line between them the blocks belong to no call, so the call is asked again and
-#' gets a new block while the old block's code still runs. A block records the R code the agent
-#' ran: of a call that stopped part-way,
+#' gets a new block while the old block's code still runs. A block records the R code the agent ran:
+#' of a call that stopped part-way,
 #' the expressions that ran, and code that changed your objects even where the model passed
 #' `record = false`, which leaves out only inspection. Binding supplies recording consent even
 #' when automatic recording is off, but `.opts = list(record = FALSE)` suppresses recording for
@@ -1652,7 +1715,9 @@ doc_bind_format = function(full, format) {
 #' status: `fresh` (the owning call's prompt matches), `stale` (the prompt changed, or no call
 #' owns the block), `user-edited` (the body no longer matches its `sha`) or `undone` (made inert
 #' by a rewind). Interpolated values are only known when the call runs, so they are not checked
-#' here. It reads the document; the only write is that blocks an `Rscript` run queued before it
+#' here, nor are the answer caches: a fresh System 1 block replays from its cached answers, which
+#' outside a `.gptr/` workspace last only for the R session that made them ([gptr_init()] keeps
+#' them). It reads the document; the only write is that blocks an `Rscript` run queued before it
 #' was killed are applied first (never over your edits).
 #'
 #' @param file Path of the document.
@@ -1667,8 +1732,7 @@ doc_bind_format = function(full, format) {
 #'              "x = 1 + 1", "# <<< gptr:7f3a21"), f)
 #' gptr_blocks(f)
 gptr_blocks = function(file) {
-  path = doc_file_arg(file, c("r", "rmd", "qmd", "ipynb"),
-                      "an existing .R, .Rmd, .qmd or .ipynb file")
+  path = doc_file_arg(file, c("r", "rmd", "qmd", "ipynb"), "an .R, .Rmd, .qmd or .ipynb file")
   fmt = doc_format_of(path)
   doc_recover(path)
   text = doc_read(path)$lines
@@ -1677,14 +1741,16 @@ gptr_blocks = function(file) {
 }
 
 #' The normalised path of `file` when it is an existing document of one of `formats`; anything
-#' else is `invalid_argument` (gptr_blocks(), gptr_source())
+#' else is `invalid_argument` (gptr_blocks(), gptr_source(), gptr_export()): "Not <expected>" for
+#' another format, "No such file" for a missing file or a directory of a fitting name
 #' @noRd
 doc_file_arg = function(file, formats, expected) {
   check_string(file, "file")
   path = path_norm(file)
-  if (!isTRUE(doc_format_of(path) %in% formats) || !path_info(path)$isdir %in% FALSE) {
-    gptr_abort(paste0("Not ", expected, ": ", path), "invalid_argument", arg = "file",
-               expected = expected)
+  fits = isTRUE(doc_format_of(path) %in% formats)
+  if (!fits || !path_info(path)$isdir %in% FALSE) {
+    gptr_abort(paste0(if (fits) "No such file" else paste("Not", expected), ": ", path),
+               "invalid_argument", arg = "file", expected = expected)
   }
   path
 }
@@ -2039,7 +2105,7 @@ doc_catalog_prune = function() {
 gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(),
                        echo = FALSE, model = NULL) {
   scoped = !missing(replay)
-  path = doc_file_arg(file, "r", "an existing .R file (knit .Rmd and .qmd documents)")
+  path = doc_file_arg(file, "r", "an .R file (render .Rmd and .qmd documents)")
   replay = check_choice(replay, c("auto", "replay", "live", "record"), "replay")
   check_env(envir, "envir")
   check_flag(echo, "echo")
