@@ -101,22 +101,23 @@ console_repl_find = function() {
   NULL
 }
 
-#' Read one menu answer at the person's chevron at column 0, as a console question reads (D-243):
-#' from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while waiting (no resume
-#' restart there) gives NA, and in a terminal ends the person's row, as ui_console_read() does. With
-#' `accept` (readline_answer()) a line typed before the chevron showed answers when
+#' Read one menu answer at `prompt`, the answer's under the menu's question (ui_answer_prompt()) or
+#' the receipt's word of the menu's `[s]` and `[f]` text, as a console question reads (D-243,
+#' D-301): from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while waiting (no
+#' resume restart there) gives NA, and in a terminal ends the person's row, as ui_console_read()
+#' does. With `accept` (readline_answer()) a line typed before the prompt showed answers when
 #' `accept(line)` takes it, and another such line is kept in the history (console_keep()), never
 #' sent to the agent; the keys a T console read with its Ctrl-C are such lines, read first
 #' (console_ahead()), and a line they begin without ending begins the answer: shown after the
-#' chevron, the read's text after it
+#' prompt, the read's text after it
 #' @noRd
-console_ask = function(accept = NULL) {
+console_ask = function(accept = NULL, prompt = ui_answer_prompt()) {
   rs = console_repl_find()
-  x = console_ahead(rs$reader, accept)
+  x = console_ahead(rs$reader, accept, prompt)
   if (!is.null(x)) return(x)
   part = rs$reader$after_interrupt %||% ""
   if (nzchar(part)) rs$reader$after_interrupt = ""
-  prompt = paste0(console_style()$person, " ", part)
+  prompt = paste0(prompt, part)
   x = tryCatch({
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
@@ -132,12 +133,12 @@ console_ask = function(accept = NULL) {
 
 #' The answer among the keys a T console's composer read with its Ctrl-C (`rd$after_interrupt`,
 #' console_keys()), or NULL: the first whole line, its edit keys applied (console_compose()), that
-#' `accept(line)` takes, echoed after the person's chevron as
-#' readline() leaves a line. The lines before it, or with no answer the whole lines, go to the
-#' console history (console_keep()), never to the agent; the text after it waits for the next
-#' question, and with no answer a line not ended begins this question's (console_ask())
+#' `accept(line)` takes, echoed after `prompt` on the band as readline() leaves a line. The lines
+#' before it, or with no answer the whole lines, go to the console history (console_keep()), never
+#' to the agent; the text after it waits for the next question, and with no answer a line not
+#' ended begins this question's (console_ask())
 #' @noRd
-console_ahead = function(rd, accept) {
+console_ahead = function(rd, accept, prompt = ui_answer_prompt()) {
   x = rd$after_interrupt %||% ""
   if (!nzchar(x)) return(NULL)
   edit = console_line_text
@@ -155,24 +156,24 @@ console_ahead = function(rd, accept) {
   n = hit[[1L]]
   rd$after_interrupt = paste0(paste(c(whole[-seq_len(n)], ""), collapse = "\n"), part)
   keep(typed[seq_len(n - 1L)])
-  console_write(paste0(console_style()$person, " ", console_escape(typed[[n]], FALSE)))
+  console_write(console_band(paste0(prompt, console_escape(typed[[n]], FALSE))))
   typed[[n]]
 }
 
 #' The pause menu (calling handler for `interrupt`), a console question wherever it is offered
 #' (D-243): after a blank row, `? Paused` and under its text the keys as an approval's (ui_keys()):
 #' `s steer`, `f follow-up`, `c continue`, `a abort` and, for a foreground call, `b background`,
-#' read at the person's chevron
+#' read at the answer's prompt under them
 #' (console_ask()), in the saved modes from before its rows (tty_question()), after a drain as at
 #' any question (ui_drain(): a D console's line SIGINT left is kept), a T console's draft said to
 #' be kept above the chevron (ui_draft_kept()). A key or its word
 #' answers, also one typed before the chevron showed or with the Ctrl-C (console_ahead()), an empty
 #' answer continues, anything else is kept in the history, never sent, under a dim row that says
 #' so and names the keys (ui_reask()); so is a pasted block, whatever its first line (the lines a
-#' macOS terminal leaves waiting after it). `[s]` and `[f]` read their text at the chevron of their
-#' own question, `? Steer` or `? Follow-up` (a pasted block's later lines, which a macOS terminal
-#' leaves waiting, are part of it), and queue it as Enter and Tab do (policy_enqueue()), its
-#' receipt right under it, as under any question. `[b]` closes
+#' macOS terminal leaves waiting after it). `[s]` and `[f]` read their text at their receipt's
+#' word, `steer> ` or `next> `, at column 0 on the band, so the line read is the receipt (D-301; a
+#' pasted block's later lines, which a macOS terminal leaves waiting, are part of it and get the
+#' receipt written whole), and queue it as Enter and Tab do (policy_enqueue()). `[b]` closes
 #' the answer's cut row, then says in dim terms (console_terms()) that the run went to the
 #' background, the service's notice one of them, then lists what the REPL held for after the run as
 #' kept (console_background_settle()), or in red why not.
@@ -215,7 +216,7 @@ policy_menu = function(cnd, pol) {
   answers = function(x) tolower(trimws(x)) %in% c("", k, keys)
   # what was typed as the pause key came, drained as at any question: a D console's line SIGINT
   # left (tty_call()) is kept, and a key among it answers
-  ahead = ui_drain(paste0(console_style()$person, " "), answers)
+  ahead = ui_drain(ui_answer_prompt(), answers)
   ui_draft_kept()
   go = function() {
     # resumed code's output (the evaluator's tee writes no block gap) and its result line are its
@@ -243,15 +244,13 @@ policy_menu = function(cnd, pol) {
     if (identical(key, "c")) go()
     if (identical(key, "a")) return(invisible(NULL))
     if (key %in% c("s", "f")) {
-      # the text's own question, so its chevron hangs under a title as every other does
-      console_write(paste0("  ", ui_question(c(s = "Steer", f = "Follow-up")[[key]],
-                                             ui_width() - 2L)))
-      ui_draft_kept()
-      text = console_ask(function(x) TRUE)
+      kind = if (identical(key, "s")) "steer" else "follow_up"
+      text = console_ask(function(x) TRUE, c(s = "steer> ", f = "next> ")[[key]])
       if (is.na(text)) return(invisible(NULL))
-      # a block pasted here is one message, as at the prompt
-      text = paste(c(text, if (!is.null(rd)) rd$waiting()), collapse = "\n")
-      policy_enqueue(s, text, if (identical(key, "s")) "steer" else "follow_up")
+      # a block pasted here is one message, as at the prompt, its receipt written whole
+      more = if (!is.null(rd)) rd$waiting()
+      policy_enqueue(s, paste(c(text, more), collapse = "\n"), kind,
+                     shown = if (!length(more)) kind)
       go()
     }
     if (identical(key, "b")) {

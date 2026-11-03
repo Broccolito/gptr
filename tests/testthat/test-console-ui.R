@@ -82,8 +82,8 @@ test_that("questions share one frame: ? and the title, numbered choices, a dim h
   })
   expect_identical(k, "fit")
   expect_identical(out, c("  ? Name?", "    Enter = fit"))
-  # the answer is read after the person's chevron at column 0 (D-245 glyphs)
-  expect_identical(prompts, rep("\u203a ", 2L))
+  # the answer is read after the person's chevron under the question (D-245 glyphs, D-301)
+  expect_identical(prompts, rep("  \u203a ", 2L))
   # ? blue, the title bold, the numbers bold, the hint dim
   withr::local_options(cli.num_colors = 256L)
   out = utils::capture.output(ui_console_select("Pick", c("a", "b"), read = function(...) "1"))
@@ -615,7 +615,8 @@ test_that("an approval asks under the call it gates; a call not shown is printed
   # prints it, and the question names who asks
   at = match("  | r  x = 1", out)
   expect_identical(out[at + 1:2], c("  ? sub-agent 'count' #1: allow r?", keys))
-  expect_identical(prompts, c(">> ", ">> "))
+  # each answer read under its question (D-301)
+  expect_identical(prompts, c("  >> ", "  >> "))
 })
 
 test_that("a remembered answer adds one dim line naming the rule and its scope (D-243)", {
@@ -665,7 +666,8 @@ test_that("a T console's answers are read on the input band, as its prompts are 
     ui_console_read("Key: ", secret = TRUE)
   })
   # readline counts only the chevron (\001 \002); after the read the band is erased below it
-  expect_identical(rl$prompts[[1L]], paste0("\001\033[48;5;237m\002", "\u203a ", "\001\033[K\002"))
+  expect_identical(rl$prompts[[1L]],
+                   paste0("\001\033[48;5;237m\002", "  \u203a ", "\001\033[K\002"))
   expect_match(out, "\033[0m\033[K", fixed = TRUE)
   # a secret is read off the band, as typed with the echo off
   expect_identical(rl$prompts[[2L]], "Key: ")
@@ -857,7 +859,7 @@ test_that("during a run a line typed before the approval prompt is queued, then 
   out = utils::capture.output(repl_main(rs))
   expect_identical(e$zz, 2)
   expect_identical(queued, list(list(text = "use base R", as = "steer", source = "repl")))
-  expect_identical(sum(rl$prompts == ">> "), 2L)
+  expect_identical(sum(rl$prompts == "  >> "), 2L)
   expect_identical(rl$kept, character())
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
@@ -933,7 +935,7 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   rs$mode = "manual"
   out = utils::capture.output(repl_main(rs))
   expect_null(e$zz)
-  expect_identical(sum(fd0$prompts == ">> "), 2L)
+  expect_identical(sum(fd0$prompts == "  >> "), 2L)
   expect_identical(sum(out == "    a pasted block is not an answer - kept in history Up"), 1L)
   expect_identical(kept, '"""\ny\npasted line two\npasted line three\n"""')
   expect_false(any(grepl("^ *not an answer", out)))

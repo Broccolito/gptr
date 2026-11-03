@@ -355,8 +355,10 @@ test_that("the pause menu's [f] in the REPL is the next prompt; a /, ! draft nev
   expect_identical(msg_text(last_message(reqs[[2L]])), "then plot it")
   expect_match(json_encode(last_message(reqs[[2L]])), "> zz = 5", fixed = TRUE)
   expect_identical(e$zz, 5)
-  # each text's receipt says where it goes
-  expect_true(all(receipt_line("follow_up", c("!zz = 5", "then plot it")) %in% res$out))
+  # each text is read at its receipt's word (D-301): the `!` line read at `steer> ` runs next, so
+  # its receipt says so; the follow-up read at `next> ` is its own receipt
+  expect_true(receipt_line("follow_up", "!zz = 5") %in% res$out)
+  expect_false(receipt_line("follow_up", "then plot it") %in% res$out)
   at = match(paste0("peter[auto]> ", c("!zz = 5", "then plot it")), res$out)
   expect_false(anyNA(at) || is.unsorted(at))
 })
@@ -613,7 +615,7 @@ test_that("Ctrl-C at an approval prompt aborts the run and keeps the held lines 
   kept = character()
   local_mocked_bindings(readline_answer = function(prompt, ...) {
     asks <<- asks + 1L
-    if (identical(prompt, ">> ")) {
+    if (identical(prompt, "  >> ")) {
       signalCondition(structure(class = c("interrupt", "condition"),
                                 list(message = "", call = NULL)))
     }
@@ -936,7 +938,7 @@ test_that("keys read with Ctrl-C that no question took wait at the prompt (steer
   local_keys(keys_once("\003a\rnext please", function() length(fake_requests(fake)) == 1L))
   res = typing_console(fake, c("go", "/exit"))
   expect_length(fake_requests(fake), 1L)
-  expect_true(paste0(console_style()$person, " a") %in% res$out)
+  expect_true(paste0("  ", console_style()$person, " a") %in% res$out)
   # the prompt's editor showed it, then handed it to readline, kept in the history
   expect_true(any(endsWith(res$out, paste0("peter[auto]> next please\033[K\r\033[K",
                                            kept_line("next please")))))
@@ -1751,11 +1753,11 @@ test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering rev
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   # Ctrl-C, s and Enter in one read, as under load: the s answers the menu, echoed at its chevron
+  # under the question; [s] reads the text at its receipt's word, so the line read is the receipt
   pty$send("\003s\r")
   expect_true(pty$wait("? Paused"))
-  expect_true(pty$wait(paste0(person, " s\r\n")))
-  expect_true(pty$wait("? Steer"))
-  expect_true(endsWith(pty$pending(), pty_asked()))
+  expect_true(pty$wait(paste0("  ", person, " s\r\n")))
+  expect_true(endsWith(pty$pending(), "steer> "))
   pty$send("use the median\r")
   expect_true(pty$wait(paste0(receipt_line("steer", "use the median"), "\r\n")))
   expect_true(pty$wait("END"))
@@ -1764,6 +1766,7 @@ test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering rev
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("not a key"), 0L)
+  expect_identical(pty$seen(receipt_line("steer", "use the median")), 1L)
 })
 
 test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (visual round 2)", {

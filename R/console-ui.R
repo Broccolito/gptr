@@ -179,6 +179,12 @@ ui_who = function(request) {
 #' @noRd
 ui_width = function() max(20L, cli::console_width() - nchar(console_pad()))
 
+#' The prompt of an answer to a console question (D-301): the person's chevron two columns in,
+#' under the question's `? `, `  › ` (ASCII `  >> `), so column 0 holds only the person's messages
+#' to the agent (`peter> `, `steer> `, `next> `)
+#' @noRd
+ui_answer_prompt = function() paste0("  ", console_style()$person, " ")
+
 #' The rows that open a console question (D-243): `?` (blue) and the title in bold, its lines
 #' word-wrapped to `width` columns with the later rows under its text; escaped
 #' @noRd
@@ -453,9 +459,9 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 }
 
 #' Console select() (D-243): `? <title>`, then under its text its details dim, the numbered
-#' choices and a dim hint, then the person's chevron at column 0, each word-wrapped under its own
-#' text; NA = cancelled, also by a fifth invalid answer, which a dim row says; attr "other" = free
-#' text, unless a console command (ui_console_command())
+#' choices and a dim hint, each word-wrapped under its own text, then the answer's prompt
+#' (ui_answer_prompt()); NA = cancelled, also by a fifth invalid answer, which a dim row says;
+#' attr "other" = free text, unless a console command (ui_console_command())
 #' Title line feeds are intentional (also for ask questions); labels and details stay escaped.
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
@@ -488,7 +494,7 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
     grepl("^[0-9][0-9,[:space:]]*$", trimws(x)) && !anyNA(ui_parse_choice(x, labels, multiple))
   }
   for (attempt in seq_len(5L)) {
-    ans = read(paste0(sym$person, " "), accept = numbers)
+    ans = read(ui_answer_prompt(), accept = numbers)
     if (is.na(ans)) return(NA_integer_)
     if (!nzchar(trimws(ans)) && length(default)) return(as.integer(default))
     idx = ui_parse_choice(ans, labels, multiple)
@@ -508,9 +514,10 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
 }
 
 #' Console input() (D-243): `? <prompt>`, a dim `Enter = <default>` under its text and the
-#' person's chevron; NA = cancelled; a secret is asked through RStudio's masked dialog there, else
-#' requires a no-echo terminal (ui_console_read()); a console command typed there
-#' waits for the next prompt (ui_console_command())
+#' answer's prompt (ui_answer_prompt()), a secret's showing nothing typed; NA = cancelled; a secret
+#' is asked through RStudio's masked dialog there, else requires a no-echo terminal
+#' (ui_console_read()); a console command typed there waits for the next prompt
+#' (ui_console_command())
 #' @noRd
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -535,17 +542,17 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
   }
   console_write(paste0(pad, c(ui_question(prompt, width), hint)))
   repeat {
-    ans = read(paste0(sym$person, " "), secret = isTRUE(secret))
+    ans = read(ui_answer_prompt(), secret = isTRUE(secret))
     if (is.na(ans) || isTRUE(secret) || !ui_console_command(ans)) break
     console_typed_ahead(ans)
   }
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
 
-#' Console permission(): the approval of NS-1 under the call it gates, read after the person's
-#' chevron (D-243), `?` for the detail view; every console prompt first ends partial answer lines
-#' and clears the live row (D-186), in a T console once typing pauses, and draws it again when it
-#' returns (D-243); a remembered answer adds a dim line naming the rule; an
+#' Console permission(): the approval of NS-1 under the call it gates, read at the answer's prompt
+#' (ui_answer_prompt(), D-243, D-301), `?` for the detail view; every console prompt first ends
+#' partial answer lines and clears the live row (D-186), in a T console once typing pauses, and
+#' draws it again when it returns (D-243); a remembered answer adds a dim line naming the rule; an
 #' invalid answer gets one dim row at column 4 in the console's terms (ui_reask()), `not an
 #' answer`, `kept in history` where an interactive session's history kept it, and the keys, and in
 #' an IDE console an answer of several words a row noting that a draft typed during the run joins
@@ -568,7 +575,7 @@ ui_console_permission = function(request, read = ui_console_read) {
   answers = function(x) tolower(trimws(x)) %in% keys || grepl(deny, tolower(trimws(x)))
   bad = 0L
   while (bad < 5L) {
-    a = trimws(read(paste0(sym$person, " "), accept = answers))
+    a = trimws(read(ui_answer_prompt(), accept = answers))
     if (is.na(a)) return(ui_answer("abort"))
     low = tolower(a)
     if (low %in% c("y", "yes")) return(ui_answer("allow"))

@@ -86,9 +86,10 @@ local_console_stdin = function(lines, .env = parent.frame()) {
                                   .env = .env)
 }
 
-# The end of a question in a pty (or pipe) child (D-243): its last row, then the person's chevron
-# as the prompt, `>>` where the child's output, in this process's locale, is not UTF-8
-pty_asked = function() paste0("\n", if (l10n_info()[["UTF-8"]]) "\u203a" else ">>", " ")
+# The end of a question in a pty (or pipe) child (D-243): its last row, then the answer's prompt
+# under the question, two columns in (D-301), `>>` where the child's output, in this process's
+# locale, is not UTF-8
+pty_asked = function() paste0("\n  ", if (l10n_info()[["UTF-8"]]) "\u203a" else ">>", " ")
 
 # The start of an approval's row for an invalid answer in a pty child (ui_reask()), which a queue
 # line's `not an answer` (a line typed before the question) never is

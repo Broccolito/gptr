@@ -1748,7 +1748,7 @@ test_that("inside an evaluation the console margin follows the person's console 
   out = utils::capture.output(eval_r("p = pad(); k = pick()", home, plots = "none", tee = FALSE))
   expect_identical(home$p, "  ")
   expect_identical(home$k, 1L)
-  expect_identical(prompts, ">> ")
+  expect_identical(prompts, "  >> ")
   expect_true("  ? Which format?" %in% out)
 })
 
