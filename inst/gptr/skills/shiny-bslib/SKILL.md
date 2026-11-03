@@ -8,7 +8,8 @@ license: Apache-2.0
 
 Write `<artifacts>/<id>/app.R` (id: lower-case letters, digits, `-`), then in r run
 `a = peter$app("<id>", data = c("obj"))` and print `a`. Each call snapshots the objects into a new
-version on the same URL. Fix what the checks, messages or screenshot show with edit (not a rewrite)
+version; its URL carries a fresh access token, so give the user the new handle's URL, never an
+earlier one. Fix what the checks, messages or screenshot show with edit (not a rewrite)
 and call `peter$app()` again until no check reads FAILED.
 After revising, assign the new handle in its own statement (`a = peter$app(...)`), then inspect
 `a$checks` and call `gptr_return(a)`. Capture `print(a)` output only after the assignment.
