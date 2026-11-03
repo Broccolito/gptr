@@ -426,6 +426,26 @@ test_that("a question clears the live row first; none is drawn before its answer
   expect_false(row$shown)
 })
 
+test_that("a launch clears a sub-agent group's row, which no foreground record owns (#99 review)", {
+  local_live_console("T")
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 60L)
+  row = console_live()
+  row$erase = TRUE
+  row$sinks = sink.number() + 1L
+  the$live_row = row
+  withr::defer(assign("live_row", NULL, envir = the))
+  show = function() written(function() row$draw(list(what = "sub-agents 0/2", secs = 1)))
+  # a direct team's row is a child's: a process the child launches writes past gptr
+  row$rec = list2env(list(child = list(label = "alpha")))
+  show()
+  expect_identical(written(function() console_before_message(kind = NULL)), "\r\033[K")
+  expect_false(row$shown)
+  # a notice is written through the row, which draws again after it
+  show()
+  written(function() console_before_message())
+  expect_true(row$shown)
+})
+
 test_that("Positron's and RStudio's rows say the key, then s, steers there (steering review)", {
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   # RStudio holds a typed line for the next prompt: typing there never steers (D-301)

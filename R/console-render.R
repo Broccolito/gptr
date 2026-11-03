@@ -667,7 +667,8 @@ console_render_on = function(rec) {
 #' NULL): it opens a block of `kind` (none when NULL). The writes themselves clear the live row and
 #' redraw it after them (gptr_message_write()); a question (`kind = "prompt"`) or a launched
 #' process (`kind = NULL`), which writes to the terminal past gptr, first clears it (a question also
-#' with no foreground record, as a nested call's, D-301), and the row's
+#' with no foreground record, as a nested call's, D-301; a launch also where a sub-agent's record
+#' owns the row, a direct team's or fan-out's, whose children are no foreground), and the row's
 #' task draws it again once the run waits (a T console's question draws it when it has its answer,
 #' console_asked()). A question in a T console first waits for typing to pause
 #' (console_ask_wait()); a question of a terminal call then reads in the saved modes from before its
@@ -689,8 +690,10 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
   ask = identical(kind, "prompt")
   if (length(recs) && ask) console_ask_wait()
   if (ask) tty_question(TRUE)
-  if (!is.null(the$live_row) && (ask || length(recs) && !identical(kind, "notice"))) {
-    the$live_row$clear()
+  row = the$live_row
+  if (!is.null(row) && (ask || (length(recs) || !is.null(row$rec$child)) &&
+                          !identical(kind, "notice"))) {
+    row$clear()
   }
   if (!is.null(kind)) for (rec in recs) console_gap(rec, kind)
   invisible(length(recs) > 0L)
