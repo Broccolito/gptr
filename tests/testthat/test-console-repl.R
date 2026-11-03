@@ -338,6 +338,22 @@ test_that("an explicit mode = on a continued session applies when its console op
   expect_identical(session_data(s)$mode, "plan")
 })
 
+test_that("a continued console opened with mode = \"yolo\" says so after its banner", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env(), mode = "edits")
+  local_console_stdin("/exit")
+  out = utils::capture.output(s |> peter(mode = "yolo", .stdin = TRUE))
+  expect_identical(session_data(s)$mode, "yolo")
+  banner = grep("gptr [0-9]", out)
+  said = grep("Mode yolo: actions run", out, fixed = TRUE)
+  expect_length(said, 1L)
+  expect_lt(banner[[1L]], said)
+})
+
 test_that("a console opened in yolo shows the yolo notice with its banner (IC-78)", {
   local_gptr_options(quiet = FALSE)
   rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)

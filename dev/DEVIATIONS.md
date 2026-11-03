@@ -9577,12 +9577,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (`s |> peter(mode = "plan")`) switches the session when its console opens (`repl_state()` calls
   `session_set_mode(source = "user")`, as `/mode` does), so the banner, the prompt, `/status` and
   `/mcp serve` use it before the first prompt. Leaving the console without a prompt keeps the new
-  mode, as `/mode` would. An inherited mode leaves the session's own.
+  mode, as `/mode` would. An inherited mode leaves the session's own. The switch leaves the yolo
+  notice to the front end (`session_set_mode(notice = FALSE)`): the console says it after its
+  banner, as for a new yolo console, and the jsonl front end on stderr when it opens.
 - Contract-visible: 04 section 15.5 IC-57 (the mode is passed directly).
 - Tests: test-mcp-waits.R "MCP serving hands the chat's workspace and mode to R, never a looser
   session mode" (replaces the test that mocked `ns_fun()` and set the mode as an option; it also
   covers reuse of a running server and a console with no session yet); test-console-repl.R "an
-  explicit mode = on a continued session applies when its console opens".
+  explicit mode = on a continued session applies when its console opens", "a continued console
+  opened with mode = "yolo" says so after its banner"; test-console-jsonl.R "a jsonl frontend
+  continued with mode = "yolo" gives the yolo notice on stderr".
 
 ## D-336 - FIX-1.0.1 lane F: MCP client snippets are redacted in every print path (2026-11-02)
 - Rule (live, high): IRkernel showed `h$config` and each snippet as text/html, text/markdown and
