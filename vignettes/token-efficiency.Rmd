@@ -58,7 +58,7 @@ view$sections
 #> 4    modes   T0     84
 #> 5  context   T0    152
 view$total_tokens
-#> [1] 1898
+#> [1] 1920
 ```
 
 `gptr_prompt()` inspects the system sections and tool definitions with estimated token counts;
@@ -119,7 +119,7 @@ ledger = gptr_usage(session, detail = TRUE)
 aggregate(tokens ~ component, data = ledger, FUN = sum)
 #>       component tokens
 #> 1      attached    132
-#> 2   environment    112
+#> 2   environment    156
 #> 3        images      0
 #> 4         other    344
 #> 5       project      0
