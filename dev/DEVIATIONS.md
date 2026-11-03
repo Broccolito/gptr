@@ -9608,3 +9608,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-doc-replay.R "an R Markdown transcript loads gptr and keeps direct R lines as chunks
   that knit"; test-doc-io.R "transcript lines are appended raw to an .R transcript, as a chunk to
   Rmd and qmd". Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-343 - v1.0.1 lane G A calling chunk that uses the agent's objects early is told so (2026-11-02)
+- Rule (re-render; live finding local): in R Markdown, Quarto and notebooks a block's code stays
+  in its own chunk or cell after the calling one, and replay stays as IC-46 has it: it rebuilds
+  the session and never runs the recorded code, which runs as document code. So the lines after
+  `peter()` in the calling chunk see the agent's objects on the first render (the live run made
+  them) but not on a re-render. gptr says so once per block, when the block is recorded (in the
+  first report) and when it replays (just before the error), naming the objects: those of the
+  `created=` key and the names the block's top-level code assigns that the rest of the chunk or
+  cell uses. Not taken: running the recorded code at the call and skipping its chunk (knitr only:
+  a notebook cannot skip a later cell, so the code would run twice there; it would also move the
+  block's plots and output and override a chunk the person turned off).
+- Contract-visible: 04 section 15.3 IC-46 (Used early); `?gptr_doc`; vignette
+  ("script-as-history").
+- Tests: test-doc-knitr.R "a calling chunk that uses the block's objects after the call is told
+  so, once". Evidence: progress/fixes-1.0.1/lane-G.md.

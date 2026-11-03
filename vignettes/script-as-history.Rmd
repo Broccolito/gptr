@@ -250,7 +250,11 @@ apply them with `gptr_doc(path, sync = TRUE)`.
 ## R Markdown, Quarto and Jupyter
 
 In `.Rmd` and `.qmd`, a recorded block becomes a chunk labeled `gptr-<id>` after its calling
-chunk. A binding belongs to the R process that made it. `rmarkdown::render()` knits in the
+chunk. On the first render the agent's objects exist right after the call, but when the
+document is rendered again the block replays and its code runs in that later chunk, so end the
+calling chunk with the `peter()` call and use what the agent made from the next chunk on. gptr
+says so when a calling chunk uses such an object after the call; notebook cells work the same
+way. A binding belongs to the R process that made it. `rmarkdown::render()` knits in the
 calling R session, so a binding made there covers the report:
 
 

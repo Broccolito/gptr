@@ -58,6 +58,46 @@ test_that("knitr records an agent chunk on the first knit and replays it on the 
   expect_identical(tools::md5sum(rmd), md5)
 })
 
+test_that("a calling chunk that uses the block's objects after the call is told so, once", {
+  skip_if_not_installed("knitr")
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto", quiet = FALSE)
+  rmd = file.path(getwd(), "local.Rmd")
+  writeLines(c("```{r ask}", "s = peter(\"make top3\")", "top3", "s", "```", "",
+               "```{r later}", "top3 + 1", "```"), rmd)
+  e = doc_stand_in(code = "top3 = 3\nother = 1")
+  out = file.path(getwd(), "local.md")
+  # the first knit works (the run assigns into the knit's environment) but says, in the report,
+  # what the next one will do
+  knitr::knit(rmd, output = out, envir = e, quiet = TRUE)
+  md = paste(readLines(out), collapse = " ")
+  expect_match(md, "makes top3, which its calling chunk uses after the call.*later chunk")
+  expect_false(grepl("not found", md, fixed = TRUE))
+  id = doc_find_blocks(readLines(rmd))$id
+  # the next knit replays: the block's chunk runs after `ask`, so `top3` is not there yet
+  for (k in grep("doc_used_early", ls(the$once), value = TRUE)) the$once[[k]] = NULL
+  knitr::knit(rmd, output = out, envir = doc_stand_in(), quiet = TRUE)
+  md = paste(readLines(out), collapse = " ")
+  expect_match(md, paste0("Block ", id, " of local.Rmd makes top3.*object 'top3' not found"))
+  # a chunk that ends with the call (or only prints the session) is not mentioned
+  writeLines(c("```{r ask}", "s = peter(\"count\")", "s", "```"), rmd)
+  knitr::knit(rmd, output = out, envir = doc_stand_in(code = "top3 = 3"), quiet = TRUE)
+  expect_false(any(grepl("calling chunk", readLines(out), fixed = TRUE)))
+  # in a notebook, the lines after the call in its cell
+  withr::local_options(jupyter.in_kernel = TRUE)
+  nb = file.path(getwd(), "nb.ipynb")
+  writeLines(c("{", " \"cells\": [", "  {", "   \"cell_type\": \"code\",",
+               "   \"execution_count\": null,", "   \"metadata\": {},", "   \"outputs\": [],",
+               "   \"source\": [\"x = peter(\\\"make fit\\\")\\n\", \"summary(fit)\"]", "  }",
+               " ],", " \"metadata\": {},", " \"nbformat\": 4,", " \"nbformat_minor\": 4", "}"),
+             nb)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  site = doc_locate(call_new("make fit", "make fit", sys_call = quote(peter("make fit")),
+                             nframe = 0L))
+  expect_message(doc_used_early(site, "abc123", "fit = lm(mpg ~ wt, mtcars)", character()),
+                 "Block abc123 of nb.ipynb makes fit, which its calling cell uses")
+})
+
 test_that("a stale agent chunk is regenerated during the knit without running the old code", {
   skip_if_not_installed("knitr")
   local_project()

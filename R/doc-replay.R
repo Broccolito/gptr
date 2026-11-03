@@ -301,6 +301,39 @@ doc_replay_no_value = function(site, block, code, s) {
               .once = paste0("doc_no_value:", path_key(site$path), ":", block$id))
 }
 
+#' Say once per block that, in R Markdown, Quarto or a notebook, the lines after its call in the
+#' calling chunk or cell use what the block makes: an object of its `created=` key or a name its
+#' top-level code assigns. The block's code is in its own chunk or cell after that one, so when the
+#' document runs again (its block replays) those lines run before it (D-343)
+#' @noRd
+doc_used_early = function(site, id, body, created) {
+  if (!isTRUE(site$format %in% c("rmd", "qmd", "ipynb")) || isTRUE(site$console) ||
+        !rlang::is_string(id)) {
+    return(invisible(NULL))
+  }
+  used = tryCatch({
+    text = doc_read(site$path)$lines
+    hit = doc_format_get(site$format)$locate(text, site)$hit
+    rest = if (identical(site$format, "ipynb")) {
+      utils::tail(nb_cell_lines(nb_parse(text)[["cells"]][[site$stmt[1L]]]), -hit$stmt2)
+    } else {
+      ch = doc_rmd_chunks(text)[hit$chunk, ]
+      doc_rmd_unprefix(doc_lines_between(text, hit$stmt2, ch$end), ch$prefix)
+    }
+    made = c(created, unlist(lapply(doc_parse_text(body, keep_source = FALSE),
+                                    function(e) doc_assign_parts(e)$name)))
+    intersect(made, all.names(doc_parse_text(rest, keep_source = FALSE)))
+  }, error = function(e) character())
+  if (!length(used)) return(invisible(NULL))
+  where = if (identical(site$format, "ipynb")) "cell" else "chunk"
+  gptr_inform(paste0("Block ", id, " of ", doc_rel(site$path), " makes ",
+                     paste(used, collapse = ", "), ", which its calling ", where, " uses after ",
+                     "the call. The block's code is in the ", where, " after that one, so when ",
+                     "the document runs again those lines run before it: use what it makes from ",
+                     "a later ", where, "."), "notice",
+              .once = paste0("doc_used_early:", path_key(site$path), ":", id))
+}
+
 #' Block `block_id` as the site's document holds it (doc_block_get()), with `sent`, what its
 #' prompt was sent with (doc_block_sent()); NULL when unreadable
 #' @noRd
@@ -385,6 +418,7 @@ doc_replay_call = function(call, site, mode = "replay") {
   if (!is.null(h$fork)) session_replay_bind(b$id, s)
   doc_replay_no_answer(site, s)
   doc_replay_no_value(site, b, doc$code, s)
+  doc_used_early(site, b$id, doc$code, doc_created(h$created))
   doc_source_log(site$path, b$id, "replayed")
   assign("doc", NULL, envir = call)
   s
@@ -1199,7 +1233,8 @@ doc_on_agent_end = function(event, ctx) {
     lines[length(lines) + 1L] = paste0("## Run: ", status)
     attr(lines, "answer") = NA_character_
   }
-  doc_upsert(site, lines, block_id = site$block_id)
+  res = doc_upsert(site, lines, block_id = site$block_id)
+  doc_used_early(site, res$block_id, lines, doc_created(attr(lines, "header")$created))
   NULL
 }
 
@@ -1540,11 +1575,14 @@ doc_console_held = function(s) {
 #' killed. Such blocks wait in the `.gptr/` of the document's project, else in
 #' `tools::R_user_dir("gptr", "cache")`, so any R process of the same user can apply them.
 #'
-#' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
-#' or functions do not. Only blank lines may separate a call's statement from its blocks: after a
+#' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops or
+#' functions do not. In R Markdown, Quarto and notebooks a call's blocks are a chunk or cell after
+#' its calling one, so when the document runs again, code after the call in that chunk or cell runs
+#' before them: use what the agent made from a later chunk or cell (gptr says so once when a calling
+#' chunk or cell does). Only blank lines may separate a call's statement from its blocks: after a
 #' comment or code line between them the blocks belong to no call, so the call is asked again and
-#' gets a new block while the old block's code still runs. A block records the R code the agent
-#' ran: of a call that stopped part-way,
+#' gets a new block while the old block's code still runs. A block records the R code the agent ran:
+#' of a call that stopped part-way,
 #' the expressions that ran, and code that changed your objects even where the model passed
 #' `record = false`, which leaves out only inspection. Binding supplies recording consent even
 #' when automatic recording is off, but `.opts = list(record = FALSE)` suppresses recording for
