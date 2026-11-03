@@ -2030,7 +2030,7 @@ the mode (only tightened) and, without `model =`, the running session's model, n
 session's own spec of the model's provider or router (one passed as `model =`); an egress question it raises names the
 sub-agent and that model [D-210].
 The same inheritance order applies to a direct `subagent_start()`: an explicit spec or agent model,
-then its parent's model, then the settings default. Before backend or pool selection, P19 uses P06's
+then its parent's model (every session has one). Before backend or pool selection, P19 uses P06's
 `model_canonical()` with the parent session id. Canonical provider-qualified references, aliases
 (including provider aliases and CLI family references) and thinking suffixes therefore select the
 same target as an ordinary `peter()` call, preserving the session-scoped provider or router spec.

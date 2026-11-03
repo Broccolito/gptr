@@ -3130,8 +3130,8 @@ mcp_close(conn)
 | `subagent_start(spec, parent_run)` | `subagent-backends.R` | starts a child through the backend: `spec` = `list(agent = <spec:agent>, prompt, context (list of call items), model, mode, depth, export, objects, preset, rng_state, registry)`; returns a handle `list(session = <session>, fds = function() int, poll = function() NULL, cancel = function() NULL)`; enforces the limits of §6.13 of `03` (`max_tasks` only at depth >= 1, IC-39; pools capped at 2 under check, IC-60); budget charged to the root (IC-66) | P19 |
 | `worker_main(spec_path, result_path)` | `subagent-worker.R` | runs inside a fixed `Rscript --vanilla` child (started with `supervise_default()`, UTF8 pipes and the complete `child_env("worker")` vector): reads the spec (`readRDS`), re-registers `spec$registry` (IC-69), runs `peter()` with the `jsonl` frontend on stdout and answers on stdin (§11.11), exits on stdin EOF, EPIPE or a dead parent pid (checked every 5 s, IC-60), saves exports with `save_rds()`, its home written as a reference that the parent reads back as the proxy's overlay, so exports carry none of the worker's other objects (D-189) | P19 (Rscript/processx) |
 
-A child's model is its explicit spec or agent model, else its parent's model, then the settings
-default. Omitting `model` in a running session therefore preserves that model and its scoped
+A child's model is its explicit spec or agent model, else its parent's model (every session has
+one). Omitting `model` in a running session therefore preserves that model and its scoped
 provider/router spec, including when the global default differs. Selecting another conversational
 provider is supported in either direction between Claude Code and Codex; `claude-cli/sonnet` selects
 a Sonnet child of a Claude Code Opus parent. Provider-qualified references fix the route;
