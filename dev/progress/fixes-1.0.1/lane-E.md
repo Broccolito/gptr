@@ -30,6 +30,8 @@ findings: 3 medium reviews, 1 medium live finding, 31 low). Decisions: D-330 to 
 | #102 shiny-bslib skill promises the same URL | 705f59cc | test-artifact-app.R (skill test) |
 | #102 audit ledger carries #101's evidence | dd57645b | none (dev record) |
 | `?peter` says where api rows rank | ebbdf365 | none (text) |
+| Verifier: a bare name whose folder is a marketplace clone got the generic "No plugin" error | 72759abe | test-ext-plugins.R "a bare plugin name is not blocked ..." (the marketplace explanation is chosen last, after every other place; D-331) |
+| Verifier: fc2ef32c added "URL's" to `?gptr_adapter`, a new spelling hit | 04e675d3 | `spelling::spell_check_package()` no longer lists it |
 
 ## Deferred
 
@@ -51,7 +53,8 @@ findings: 3 medium reviews, 1 medium live finding, 31 low). Decisions: D-330 to 
   `"gptr"` index and api rows in `peter$search()` (#100); a marketplace root in `plugins`, a plugin
   with nothing usable failing activation, the `gptr_plugins()` footer (#101); the r tool
   description now naming gptr setup (D-334).
-- Other spelling hits of `spelling::spell_check_package()` belong to other lanes: `unvisited`
+- Other spelling hits of `spelling::spell_check_package()` predate this lane (blame: 7d85e1d0,
+  f4110b47, b3d0044b, 045154bf, 8556ec6d on `claude/v1.0.1`) and belong to other lanes: `unvisited`
   (#98, gptr_options.Rd, gptr_rewind.Rd, teams-and-background.Rmd, NEWS.md), `entrantly` and
   `handoff` (#104), `deduplicates` and `judgements` (#106), `schemas` (NEWS.md).
 
@@ -77,6 +80,6 @@ are the bounded checkpoint scan reporting "automatic scan incomplete" under a ma
 (they belong to the checkpoint lane or to a load-tolerant timeout); `isolated-check.R lint` on every changed R and
 test file (no lints); `isolated-check.R document` (only the expected Rd pages change);
 `dev/release/check-docs.R` and `check-files.R all` (0 problems); `dev/bench/tokens/run.R --check`
-after the baselines moved; `spelling::spell_check_package()` (only other lanes' words remain);
+after the baselines moved; `spelling::spell_check_package()` (only words that predate this lane remain);
 an installed copy (`R CMD INSTALL` into a temporary library) answered search, help and source help
 with 66 exports read from NAMESPACE.
