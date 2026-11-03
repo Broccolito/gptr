@@ -10328,8 +10328,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   agent-end scans run only after a turn that could write files: a file-capable served call (the
   files checkpointer's before()) or a step outside R, which the Codex adapter reports as an
   informational `tool_execution_start` event (contract 8.5; a native shell command, file edit,
-  web search or another server's MCP call). The tracker's `dirty` flag (was `synced`) records
-  either; a sync clears it, so the CLI's agent_start sync no longer counts as a reason to scan.
+  web search or another server's MCP call) in `auto` or `yolo`: below them Codex runs in its
+  read-only sandbox (8.5's mapping), so its own steps cannot write files and a turn of shell
+  reads in the default `manual` mode is not scanned. The tracker's `dirty` flag (was `synced`)
+  records either; a sync clears it, so the CLI's agent_start sync no longer counts as a reason to
+  scan.
   The claude child runs with `--tools ""`, so only served calls mark its turns. API routes are
   unchanged: their per-turn scan follows a file-capable call, as before. D-310, D-311 and D-313
   are unchanged (the CLI agent_start sync, its replacing observations, served-call pre-images).
@@ -10338,15 +10341,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   item: `/undo` asked "Undo anyway?", the rewind was partial and the next request carried a
   `<rewind>` block, against D-312, `?gptr_rewind` and NEWS 1.0.1 (live retest rt-ckpt, captures
   d1-d5; the azure control and an empty folder rewound fully).
-- Trade-off: a native edit is seen only through Codex's own item events; a CLI that edited files
-  without reporting a step would go unrecorded, as for any unscanned path. The aborted-run case
-  of 8f019d5c is kept, as the informational start precedes the edit.
+- Trade-off: a native edit is seen only through Codex's own item events, and below `auto` the
+  read-only sandbox is trusted to prevent one, as the permission gate already does (IC-78); a CLI
+  that edited files without reporting a step would go unrecorded, as for any unscanned path. A
+  read-only step in `auto` or `yolo` (a shell read, a web search) is still scanned after. The
+  aborted-run case of 8f019d5c is kept, as the informational start precedes the edit.
 - Contract-visible: 04 sections 7.16 and 8.5 (the Codex sandbox mapping); 03 section 6.16 Files.
 - Tests: ckpt-scan-integration "R-only and text-only turns rewind fully in capped and partially
   scanned projects" (now on API and CLI routes, and the next request has no `<rewind>`), "a CLI
   turn with a step outside R keeps the coverage item of a partial scan"; cli-codex "a Codex
-  turn's files are scanned only after a step outside R (D-353)" (the fake Codex CLI's text and
-  codex_shell cases); the IC-65 native-edit tests of ckpt-rewind announce their edit with
+  turn's files are scanned only after a step that can write files (D-353)" (the fake Codex CLI's
+  text and codex_shell cases in manual and auto); the IC-65 native-edit tests of ckpt-rewind announce their edit with
   `local_native_step()` (helper-fake.R). Evidence: progress/fixes-1.0.1/round2-Y.md.
 
 ## D-354 - Fixes 1.0.1 round 2 lane Y Checkpoint messages name what changes, in plain words (2026-11-03)

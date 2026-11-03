@@ -206,14 +206,15 @@ ckpt_on_tool_result = function(event, ctx) {
 
 #' agent_start, tool_execution_start and turn_end hooks on a CLI route (IC-65): bring the file
 #' tracker up to date before the child acts, note a step it runs outside R (an informational
-#' event, contract 8.5) and record what changed after each turn in which such a step or a served
-#' call could write files; R-only and text-only turns are not scanned (D-312)
+#' event, contract 8.5) in auto or yolo, where Codex's sandbox lets it write files (below them it
+#' is read-only), and record what changed after each turn in which such a step or a served call
+#' could write files; R-only and text-only turns are not scanned (D-312, D-353)
 #' @noRd
 ckpt_on_cli = function(st, event, ctx) {
   s = ctx$session
   step = identical(event$type, "tool_execution_start")
-  if (step && !isTRUE(event$informational) || !ckpt_cli_session(s) ||
-        !ckpt_enabled("files", ctx, list())) {
+  writes = isTRUE(event$informational) && ctx$mode() %in% c("auto", "yolo")
+  if (step && !writes || !ckpt_cli_session(s) || !ckpt_enabled("files", ctx, list())) {
     return(NULL)
   }
   ck = ckpt_ck_of(st, s)

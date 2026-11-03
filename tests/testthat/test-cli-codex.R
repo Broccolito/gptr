@@ -1064,18 +1064,19 @@ test_that("after a rewind the next turn starts a fresh Codex thread with the rem
   expect_equal(s$messages[[length(s$messages)]]$usage$cache_read, 24448)
 })
 
-test_that("a Codex turn's files are scanned only after a step outside R (D-353)", {
+test_that("a Codex turn's files are scanned only after a step that can write files (D-353)", {
   skip_on_cran()
   root = local_project()
   expect_true(dir.create(file.path(root, "bulk")))
   expect_true(all(file.create(file.path(root, "bulk", sprintf("f%04d.R", seq_len(2100L))))))
   local_gptr_options(checkpoint_scan_timeout = 20, quiet = TRUE)
-  # text: an answer alone; call1: a codex_shell step, then the answer
-  for (case in c("text", "call1")) local({
+  # text: an answer alone; call1: a codex_shell step, then the answer, which can write files
+  # only in auto and yolo: below them Codex's sandbox is read-only
+  for (case in c("text", "call1")) for (mode in c("manual", "auto")) local({
     f = local_fake_cli("codex", case)
-    s = peter("First", model = f$model, envir = new.env(), mode = "auto")
+    s = peter("First", model = f$model, envir = new.env(), mode = mode)
     expect_identical("file coverage" %in% gptr_rewind(s, 0, preview = TRUE)$item,
-                     case == "call1", info = case)
+                     case == "call1" && mode == "auto", info = paste(case, mode))
   })
 })
 
