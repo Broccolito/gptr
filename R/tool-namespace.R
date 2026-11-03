@@ -986,7 +986,9 @@ member_search = function(words, limit = 8L) {
   docs = rbind(docs, ns_catalog_docs(s))
   rows = data.frame(id = as.character(seq_len(nrow(docs))), text = docs$text,
                     stringsAsFactors = FALSE)
-  hits = bm25_search(bm25_index(rows), words, limit)
+  api = docs$kind %in% "api"
+  hits = bm25_search(bm25_index(rows[!api, ]), words, limit)
+  hits = rbind(hits, bm25_search(bm25_index(rows[api, ]), words, limit - nrow(hits)))
   m = as.integer(hits$id)
   ids = docs$id[m]
   kinds = docs$kind[m]

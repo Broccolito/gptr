@@ -9564,3 +9564,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   08 sections 3.3 and 3.5 (limit 8) and Part 4; `cran-comments.md`; dev/HANDOFF.md's Remaining.
 - Tests: none (no code change). Evidence: progress/fixes.md FIX-40, FIX-43, FIX-44, FIX-45 and
   FIX-48; progress/open-findings.md.
+
+## D-330 - Lane E `peter$search()` ranks api documents after the members, tools and skills (2026-11-02)
+- Rule (review #100; regression from 1.0.0): the roughly 106 `api` documents (`gptr::name`, one per
+  export and Rd alias) share generic words such as file, code and session, and in one BM25 pool they
+  pushed callable members, skills and deferred tools out of the default 8 rows ("read file" lost
+  write, edit, grep and find; "run code" lost sh, sql and script). `member_search()` now indexes the
+  `api` documents apart from every other kind: the other kinds rank as they did in 1.0.0, and `api`
+  rows fill only the slots they leave free. A query only the API answers (`login credentials`)
+  still returns api rows, and `peter$help("gptr")` lists the whole API whatever a search showed.
+- Contract-visible: 04 section 9.4 (`search`).
+- Tests: test-tool-namespace.R "peter$search() lists api documents only after the members, tools and
+  skills it found"; the 1.0.0 assertion that a skill ranks first for "shiny apps" is restored.
