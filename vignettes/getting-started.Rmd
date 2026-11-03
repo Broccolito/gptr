@@ -106,7 +106,7 @@ Reuse that fitted object in the next turn. No data file or repeated fit is neede
 ``` r
 session |> peter("Reuse fit to predict mpg and return the first six predictions.")
 #> The first six predictions are ready.
-#> idle . fake/fake-1 . 2 turns . 7.0k tokens . $0.0000 . s1cbbfb2b23
+#> idle . fake/fake-1 . 2 turns . 7.0k tokens . $0.0000 . sfb68b4d442
 session$value
 #>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
 #>          23.28261          21.91977          24.88595          20.10265
@@ -157,7 +157,7 @@ session = peter("Compute the mean mpg for each number of cylinders.",
   model = fake2, envir = work, mode = auto)
 session |> peter("Which group is the most economical?")
 #> Four-cylinder cars are the most economical, at about 26.7 miles per gallon.
-#> idle . fake/fake-1 . 2 turns . 5.2k tokens . $0.0000 . sf1c5d83dba
+#> idle . fake/fake-1 . 2 turns . 5.2k tokens . $0.0000 . sf0f8bf7ec0
 session$turns
 #> [1] 2
 session$text
@@ -172,7 +172,7 @@ workspace looks up objects in the parent environment and keeps ordinary assignme
 branch = gptr_fork(session)
 branch |> peter("Answer in one word.")
 #> Four.
-#> idle . fake/fake-1 . 3 turns . 1.8k tokens . $0.0000 . saf2c0e98ab
+#> idle . fake/fake-1 . 3 turns . 1.8k tokens . $0.0000 . sd0b979fdda
 c(original = session$turns, branch = branch$turns)
 #> original   branch
 #>        2        3
