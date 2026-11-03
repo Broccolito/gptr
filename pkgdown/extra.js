@@ -39,13 +39,13 @@ document.addEventListener("DOMContentLoaded", () => {
     makeScrollable(block);
   });
   // Inline code of up to 32 characters (12 in a table) fits a phone's line, so it never breaks;
-  // longer code in a table breaks only after _ / - or ::, never inside a name.
+  // longer code in a table breaks only after _ / | - or ::, never inside a name.
   document.querySelectorAll("#main :not(pre) > code").forEach((code) => {
     const table = code.closest("table");
     if (code.textContent.length <= (table ? 12 : 32)) {
       code.classList.add("gptr-nowrap");
     } else if (table && !code.children.length) {
-      const parts = code.textContent.split(/(?<=.(?:[_/-]|::))(?=.)/);
+      const parts = code.textContent.split(/(?<=.(?:[_/|-]|::))(?=.)/);
       code.replaceChildren(...parts.flatMap((part, i) =>
         i ? [document.createElement("wbr"), part] : part));
     }

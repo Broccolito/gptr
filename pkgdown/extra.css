@@ -195,6 +195,11 @@ pre code a:any-link:hover {
 }
 
 @media (max-width: 575.98px) {
+  /* Table text one step smaller, so a table's columns fit a phone without scrolling sideways. */
+  #main :is(td, th) {
+    font-size: 0.875rem;
+  }
+
   /* Source and output blocks keep the same inset and corners on a phone. */
   #main div > div > pre {
     margin-left: 0;
