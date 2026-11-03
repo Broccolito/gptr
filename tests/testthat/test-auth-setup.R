@@ -12,6 +12,9 @@ test_that("session login keeps values out of files, returned values and scripted
   expect_identical(secret_value(rec$key, rec$resource), key)
   expect_error(secret_value(rec$key, "https://other.example"),
                class = "gptr_error_untrusted")
+  # the entered value redacts, but only its bound handle resolves
+  expect_null(secret_lookup("login-input"))
+  expect_false(grepl(key, redact(paste("x", key), "context"), fixed = TRUE))
   expect_true(gptr_logout("openrouter"))
   expect_null(auth_store_get("openrouter"))
   expect_false(file.exists(auth_store_path()))

@@ -650,7 +650,7 @@ oauth_ask = function(what, optional = FALSE) {
     gptr_abort("Nothing was entered.", "invalid_argument", arg = "input",
                expected = "a non-empty value")
   }
-  secret_register(v, "login-input", source = "hidden input")
+  secret_register(v, "login-input", source = "hidden input", active = FALSE)    # redaction only
   trimws(v)
 }
 
