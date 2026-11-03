@@ -1096,7 +1096,7 @@ gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, c
 #' for example `list("Bearer ", opts$credential)`), `body` (UTF-8 text or raw bytes), `stream`
 #' (`"sse"`, `"ndjson"`, `"json"` or `"raw"`; the transport supplies the default) and optional
 #' `sign`, `function(method, url, body, value)`, called once per attempt with the raw body, where
-#' `value(handle)` reads a handle bound to the URL's origin; it returns a named list of extra
+#' `value(handle)` reads a handle bound to the origin of the URL; it returns a named list of extra
 #' headers, for request signing. Never paste a handle into a string.
 #'
 #' For `process_jsonl`, `build()` returns `start`, a process specification with `command` (or

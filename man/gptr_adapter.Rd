@@ -49,7 +49,7 @@ handle such as \code{opts$credential}, or an unnamed list of strings and handles
 for example \code{list("Bearer ", opts$credential)}), \code{body} (UTF-8 text or raw bytes), \code{stream}
 (\code{"sse"}, \code{"ndjson"}, \code{"json"} or \code{"raw"}; the transport supplies the default) and optional
 \code{sign}, \verb{function(method, url, body, value)}, called once per attempt with the raw body, where
-\code{value(handle)} reads a handle bound to the URL's origin; it returns a named list of extra
+\code{value(handle)} reads a handle bound to the origin of the URL; it returns a named list of extra
 headers, for request signing. Never paste a handle into a string.
 
 For \code{process_jsonl}, \code{build()} returns \code{start}, a process specification with \code{command} (or
