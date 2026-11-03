@@ -1247,7 +1247,7 @@ egress_check = function(provider_id, provider = provider_get(provider_id),
   where = if (is.null(st$origin)) "" else paste0(" at ", st$origin)
   if (asked) {
     gptr_abort(c(paste0("Not sent: sending session context to ", pid, where, " was declined."),
-                 "Send the prompt again and answer y to allow it, or choose another model."),
+                 "Answer y when asked again to allow it, or choose another model."),
                "egress", provider = pid, how_to_ack = how, declined = TRUE)
   }
   gptr_abort(c(paste0("gptr has not been told that it may send session context to ", pid, where,

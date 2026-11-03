@@ -995,16 +995,17 @@ test_that("following the egress hint keeps the acknowledgements already given", 
   expect_identical(settings_read("user")$egress, list(anthropic = "ack", corp = "ack"))
 })
 
-test_that("an interactive no says the prompt was not sent and how to go on (D-307)", {
+test_that("an interactive no says nothing was sent and how to go on (D-307)", {
   skip_on_cran()
   local_gw()
   local_gptr_options(interactive = TRUE)
   local_mocked_bindings(gptr_confirm = function(question, default = FALSE) FALSE)
+  # the same words whatever asked: a prompt, or a model listing, which sends no prompt
   cnd = expect_error(egress_check("corp"), class = "gptr_error_egress")
   expect_true(cnd$declined)
   expect_identical(conditionMessage(cnd), paste0(
     "Not sent: sending session context to corp was declined.\n",
-    "Send the prompt again and answer y to allow it, or choose another model."))
+    "Answer y when asked again to allow it, or choose another model."))
   expect_length(parse(text = cnd$how_to_ack), 1L)
   # the console prints the person's own no as a dim notice, not as an error
   withr::local_options(cli.num_colors = 1L)

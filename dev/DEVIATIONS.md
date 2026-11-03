@@ -9748,14 +9748,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   context to azure at ...` and a `gptr_config(egress = utils::modifyList(...))` command, text
   written for a session nobody can ask): after the person declines the egress question,
   egress_check() signals `gptr_error_egress` with `declined = TRUE` and `Not sent: sending session
-  context to <provider> at <origin> was declined.` / `Send the prompt again and answer y to allow
-  it, or choose another model.`; `provider` and `how_to_ack` stay. The secret-prompt decline
-  (`Not sent: the prompt contains a secret-looking value.`) carries `declined = TRUE` too. The
-  console prints a declined error as a dim notice (repl_error()); elsewhere it is an R error, as a
-  call that sent nothing.
+  context to <provider> at <origin> was declined.` / `Answer y when asked again to allow it, or
+  choose another model.`, words that fit whatever asked, a prompt or a model listing, which sends
+  no prompt (follow-up review: it said `Send the prompt again`, which claude/v1.0.1's listing
+  question, `context = "listing"`, would contradict); `provider` and `how_to_ack` stay. The
+  secret-prompt decline (`Not sent: the prompt contains a secret-looking value.`) carries
+  `declined = TRUE` too. The console prints a declined error as a dim notice (repl_error());
+  elsewhere it is an R error, as a call that sent nothing.
 - Contract-visible: 04 section 3's `egress` condition row (`declined`).
-- Tests: test-gptr-config.R "an interactive no says the prompt was not sent and how to go on
-  (D-307)"; test-gptr-gateway.R `gptr.prompt_secrets = "ask" asks first; a no sends nothing`.
+- Tests: test-gptr-config.R "an interactive no says nothing was sent and how to go on (D-307)";
+  test-gptr-gateway.R `gptr.prompt_secrets = "ask" asks first; a no sends nothing`.
 
 ## D-308 - P30 follow-up: token totals count the requests of unknown tokens (2026-11-02)
 - Rule (lane H, seen live: one aborted request made a 16-turn session's footer read `unknown
