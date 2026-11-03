@@ -185,12 +185,15 @@ ckpt_is_link = function(path) {
   path_is_link(fs_path(path))
 }
 
-#' The session's file tracker, made on first use at project_root(): `prune`, what its walks prune;
-#' `stat`, the last walk, taken at `walk_time`; `walk_secs`, how long the last scan took;
-#' `hash` and `mode`, the content hash and mode bits of each captured relative path; `explicit`
-#' and `explicit_mode`, predicted absolute paths the walk does not cover, or every predicted path
-#' in per-turn mode ("" absent, "?" not capturable); `per_turn`, one scan per turn
-#' (`scanned_turn`) once walks are slow
+#' The session's file tracker, made on first use at project_root(): `prune`, what its scans prune;
+#' `stat`, the inventory of the last scans (relative path, size, mtime, link); `hash` and `mode`,
+#' the content hash and mode bits of each captured relative path; `absent`, relative paths proven
+#' absent; `complete`, the last scan reached every entry within the tracker's bound;
+#' `last_coverage`, the last recording scan's interval was complete at both ends; `walk_secs`, how
+#' long the last scan took; `explicit` and `explicit_mode`, the state ("" absent, "?" left to the
+#' recording scan or not capturable) and mode bits of every predicted absolute path; `per_turn`,
+#' one scan per turn (`scanned_turn`) once scans are slow or partial; `synced`, a sync since the
+#' last per-turn scan
 #' @noRd
 ckpt_files_tr = function(ck) {
   if (is.null(ck$files)) {
@@ -290,7 +293,6 @@ ckpt_files_observe = function(tr, s) {
   tr$complete = isTRUE(s$complete) && fits
   tr$last_coverage = s$coverage %||% tr$complete
   tr$walk_secs = s$seconds
-  tr$walk_time = s$time
   if (!isTRUE(s$complete)) tr$per_turn = TRUE
   if (!isTRUE(s$complete)) {
     ckpt_notice(paste0("File undo covers part of ", tr$root, ": the automatic scan stopped early (",
@@ -302,13 +304,12 @@ ckpt_files_observe = function(tr, s) {
 
 #' Compare completed observations; missing observations are never evidence of deletion.
 #' A newly discovered file is only known to be created when the previous inventory was complete.
-#' @return `list(walk, time, created, modified, deleted, ...)`.
+#' @return The scan (ckpt_scan_run()) with `coverage`, `created`, `modified` and `deleted`.
 #' @noRd
 ckpt_files_scan = function(tr) {
   s = ckpt_scan_run(tr$root, tr$prune, old = tr$stat)
   # an interval is covered when the scans at both ends reached every entry
   s$coverage = isTRUE(tr$complete) && isTRUE(s$complete)
-  s$time = as.numeric(Sys.time())
   old = tr$stat
   w = s$walk
   both = intersect(w$path, old$path)
@@ -377,7 +378,6 @@ ckpt_files_step = function(tr) {
 ckpt_files_sync = function(tr) {
   s = ckpt_scan_run(tr$root, tr$prune, old = tr$stat %||% ckpt_empty_walk(),
                     baseline = is.null(tr$stat))
-  s$time = as.numeric(Sys.time())
   tr$stat = ckpt_empty_walk()
   tr$hash = character()
   tr$mode = integer()
@@ -470,9 +470,9 @@ ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
        coverage = isTRUE(tr$complete))
 }
 
-#' Rows for the explicit paths of a call that changed: relative when the walk covers them (per-turn
-#' mode), as a scan records them, so that a file is one rewind item; else absolute. A path that
-#' was not capturable before the call is not recorded
+#' Rows for the explicit paths of a call that changed: relative when the walk covers them, as a
+#' scan records them, so that a file is one rewind item; else absolute. A path left to the
+#' recording scan or not capturable before the call ("?") is not recorded
 #' @noRd
 ckpt_files_explicit = function(tr, paths) {
   rows = list()
@@ -507,7 +507,8 @@ ckpt_files_explicit = function(tr, paths) {
 #' Files checkpointer, after the call: a scan (when one takes longer than
 #' gptr.checkpoint_scan_budget seconds, the session switches to one scan per turn) and the
 #' explicit paths
-#' @return `list(id, turn, root, files = list(<row>))`, or NULL when nothing changed.
+#' @return `list(id, turn, root, files = list(<row>), coverage = "complete"|"partial")`, or NULL
+#'   when no row changed and coverage is complete.
 #' @noRd
 ckpt_files_after = function(ck, call, token) {
   tr = ckpt_files_tr(ck)
@@ -534,7 +535,8 @@ ckpt_files_after = function(ck, call, token) {
 #' One scan recorded as its own fragment: at the end of a turn in per-turn mode whose calls could
 #' write files (they synced the tracker), and (`force`) after each turn of a CLI route whose child
 #' edits files itself (IC-65)
-#' @return A fragment, or NULL when nothing changed.
+#' @return A fragment (its `files` may be empty when `coverage` is "partial"), or NULL when
+#'   nothing changed and coverage is complete.
 #' @noRd
 ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
   tr = ckpt_files_tr(ck)

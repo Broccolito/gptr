@@ -1070,7 +1070,6 @@ test_that("checkpoint racy scans reject a tracked regular file replaced by a FIF
   tr = ckpt_files_tr(ck)
   ckpt_files_sync(tr)
   observed = tr$stat
-  tr$walk_time = observed$mtime[1L]
   pipe = file.path(proj, "empty.txt")
   expect_true(file.remove(pipe))
   fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
