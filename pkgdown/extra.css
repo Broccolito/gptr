@@ -119,9 +119,50 @@ html:not([data-bs-theme="dark"]) {
   color: var(--bs-secondary-color);
 }
 
+/* Code in the logo's colours: strings blue; keywords, constants and numbers red; the rest ink. */
+:root pre code span:is(.al, .an, .at, .bu, .cf, .ch, .cn, .co, .cv, .do, .dt, .dv, .er, .ex, .fl,
+  .fu, .im, .in, .kw, .op, .ot, .pp, .sc, .ss, .st, .va, .vs, .wa) {
+  color: inherit;
+  font-style: normal;
+}
+
+:root pre code span:is(.ch, .sc, .ss, .st, .vs) {
+  color: #40628f;
+}
+
+:root pre code span:is(.al, .cf, .cn, .dt, .dv, .er, .fl, .kw, .ot, .pp) {
+  color: #b85450;
+}
+
+:root pre code span:is(.an, .co, .cv, .do, .in, .wa) {
+  color: var(--bs-secondary-color);
+}
+
+[data-bs-theme="dark"] pre code span:is(.ch, .sc, .ss, .st, .vs) {
+  color: #7d9dcb;
+}
+
+[data-bs-theme="dark"] pre code span:is(.al, .cf, .cn, .dt, .dv, .er, .fl, .kw, .ot, .pp) {
+  color: #d98a85;
+}
+
+/* Function links in code underline on hover only. */
+pre code a:any-link {
+  text-decoration: none;
+}
+
+pre code a:any-link:hover {
+  text-decoration: underline;
+}
+
 /* Break lines between words only, never inside an identifier or a short word. */
 #main {
   hyphens: manual;
+}
+
+/* Short inline code stays on one line (extra.js marks it). */
+#main code.gptr-nowrap {
+  white-space: nowrap;
 }
 
 /* The site header supplies branding even when JavaScript is disabled. */

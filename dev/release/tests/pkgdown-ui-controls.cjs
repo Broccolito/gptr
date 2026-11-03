@@ -35,7 +35,9 @@ function run(tables, pre = [], blockedStorage = false) {
     documentElement: { dataset: {}, setAttribute() {} },
     getElementById() { return null; },
     addEventListener(event, callback) { callbacks[event] = callback; },
-    querySelectorAll(selector) { return selector === "#main table" ? tables : pre; },
+    querySelectorAll(selector) {
+      return { "#main table": tables, "#main pre": pre }[selector] || [];
+    },
     createElement() { const region = node(240, 100); created.push(region); return region; }
   };
   const localStorage = {

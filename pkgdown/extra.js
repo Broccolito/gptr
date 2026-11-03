@@ -38,6 +38,10 @@ document.addEventListener("DOMContentLoaded", () => {
     block.setAttribute("aria-label", `Code block ${index + 1}`);
     makeScrollable(block);
   });
+  // Inline code of up to 32 characters fits a phone's line, so it never breaks.
+  document.querySelectorAll("#main :not(pre) > code").forEach((code) => {
+    if (code.textContent.length <= 32) code.classList.add("gptr-nowrap");
+  });
   // The home page shows a figure above each lead point; README.md itself stays plain text.
   const points = {
     "Work with live R objects.": ["live", "Two piped peter() calls in one R session: the " +
