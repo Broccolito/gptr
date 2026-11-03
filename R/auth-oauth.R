@@ -654,14 +654,23 @@ oauth_ask = function(what, optional = FALSE) {
   trimws(v)
 }
 
+#' The one place a login stores credential `key` under `scope`
+#' @noRd
+oauth_login_storage = function(key, scope) {
+  switch(scope, session = "this R process only (no credential file)",
+         keyring = "the native OS credential store, through keyring",
+         user = if (is.list(auth_store_read()[[key]]$keyring)) {
+           "its existing keyring item (auth.json keeps the reference)"
+         } else {
+           "auth.json on this computer"
+         })
+}
+
 #' Destination and persistence are reviewed in the host prompt, never supplied as an answer
 #' @noRd
-oauth_login_prompt = function(what, destination, scope, entry = TRUE) {
+oauth_login_prompt = function(what, destination, key, scope, entry = TRUE) {
   paste0(what, "\nDestination: ", redact(destination, "context"), "\nStorage: ",
-          switch(scope, session = "this R process only; no credential file.",
-                  keyring = "remember in the native OS credential store through keyring.",
-                  user = paste0("remember on this computer in auth.json or its existing ",
-                                 "keyring reference.")),
+          oauth_login_storage(key, scope), ".",
           if (entry) paste0("\nEntering the credential authorizes this destination and storage. ",
                             "Leave blank or type /skip to skip; type /cancel, dismiss or ",
                             "interrupt to cancel.") else
@@ -676,22 +685,27 @@ oauth_login_incomplete = function(value) {
 
 #' A browser flow has no key prompt in which to review destination and persistence
 #' @noRd
-oauth_login_review = function(destination, scope) {
-  answer = oauth_ui()$select(oauth_login_prompt("Sign in", destination, scope, entry = FALSE),
+oauth_login_review = function(destination, key, scope) {
+  answer = oauth_ui()$select(oauth_login_prompt("Sign in", destination, key, scope,
+                                                entry = FALSE),
                              c("Continue to sign in", "Skip", "Cancel"))
   if (identical(answer, 1L)) return(TRUE)
   oauth_login_incomplete(if (identical(answer, 2L)) "" else NA_character_)
 }
 
-#' Reuse the credential store's keyring reference format, without returning secret values
+#' Reuse the credential store's keyring reference format, without returning secret values; a
+#' remembered login keeps an existing keyring item for the record's own secret field
 #' @noRd
 oauth_login_store = function(key, rec, scope) {
-  if (identical(scope, "keyring")) {
+  ref = if (identical(scope, "keyring")) {
     auth_need_os_keyring()
-    rec$keyring = list(service = "gptr", username = key,
-                       field = if (identical(rec$type, "oauth")) "refresh" else "key")
+    list(service = "gptr", username = key)
   } else if (identical(scope, "user")) {
-    rec$keyring = auth_store_read()[[key]]$keyring
+    auth_store_read()[[key]]$keyring
+  }
+  if (is.list(ref)) {
+    rec$keyring = list(service = ref$service, username = ref$username,
+                       field = if (identical(rec$type, "oauth")) "refresh" else "key")
   }
   auth_store_set(key, rec, scope = if (identical(scope, "session")) "session" else "user")
 }
@@ -773,12 +787,13 @@ gptr_login = function(provider, method = c("auto", "oauth", "key"),
                expected = "\"key\" or \"auto\" for this provider")
   }
   rec = if (!is.null(flow) && !identical(method, "key")) {
-    review = oauth_login_review(url_for_log(destination), scope)
+    review = oauth_login_review(url_for_log(destination), provider, scope)
     if (!isTRUE(review)) return(invisible(review))
     oauth_flow(provider, client = list(key = provider))
   } else {
     value = oauth_ask(oauth_login_prompt(paste("API key for", provider),
-                                          url_for_log(destination), scope), optional = TRUE)
+                                          url_for_log(destination), provider, scope),
+                      optional = TRUE)
     if (is.na(value) || !nzchar(value)) return(oauth_login_incomplete(value))
     list(type = "api_key", key = value)
   }
@@ -801,11 +816,12 @@ oauth_login_mcp = function(name, method, scope = "user", slot = NULL) {
   key = paste0("mcp:", target$name %||% name)
   if (!is.null(slot)) {
     if (identical(method, "oauth")) arg_abort(method, "method", "key for a stdio slot")
+    key = paste0(key, ":env:", slot)
     value = oauth_ask(oauth_login_prompt(paste("Credential for MCP server", name,
                                                "environment slot", slot),
-                                          target$description, scope), optional = TRUE)
+                                          target$description, key, scope), optional = TRUE)
     if (is.na(value) || !nzchar(value)) return(oauth_login_incomplete(value))
-    oauth_login_store(paste0(key, ":env:", slot),
+    oauth_login_store(key,
                     list(type = "env", key = value, slot = slot, binding = target$binding,
                          resource = target$resource), scope)
     if (is.function(target$on_login)) target$on_login()
@@ -818,13 +834,13 @@ oauth_login_mcp = function(name, method, scope = "user", slot = NULL) {
                  "invalid_argument", arg = "method", expected = "\"key\" for this server")
     }
     token = oauth_ask(oauth_login_prompt(paste("Bearer token for MCP server", name),
-                                          url_for_log(target$url), scope), optional = TRUE)
+                                          url_for_log(target$url), key, scope), optional = TRUE)
     if (is.na(token) || !nzchar(token)) return(oauth_login_incomplete(token))
     rec = list(type = "api_key", key = token, resource = target$url, binding = target$binding)
     oauth_login_store(key, rec, scope)
     return(invisible(TRUE))
   }
-  review = oauth_login_review(url_for_log(target$url), scope)
+  review = oauth_login_review(url_for_log(target$url), key, scope)
   if (!isTRUE(review)) return(invisible(review))
   rec = oauth_flow(disc, scopes = target$oauth$scope,
                    client = list(client_id = target$oauth$clientId,

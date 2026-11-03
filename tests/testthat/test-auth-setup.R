@@ -96,6 +96,33 @@ test_that("OS keyring login writes only its existing reference format, using fak
   expect_identical(secret_value(auth_store_get("openrouter")$key, rec$resource), key)
 })
 
+test_that("a remembered login names the one store it uses and keeps an existing keyring item", {
+  skip_if_not_installed("keyring")
+  local_user_dirs()
+  key = paste0("user-canary-", strrep("u", 24))
+  captured = new.env(parent = emptyenv())
+  local_mocked_bindings(key_set_with_value = function(service, username, password, ...) {
+    captured[[username]] = password
+    invisible(NULL)
+  }, key_get = function(service, username, ...) captured[[username]], .package = "keyring")
+  ui = local_scripted_ui(list(key, key))
+  expect_true(gptr_login("openrouter", method = "key"))
+  expect_match(ui$log$prompt[[1L]], "Storage: auth.json on this computer.", fixed = TRUE)
+  expect_identical(auth_store_read()$openrouter$key, key)
+  ref = list(service = "gptr", username = "mcp:demo", field = "refresh")
+  auth_store_update(function(all) {
+    all[["mcp:demo"]] = list(type = "oauth", keyring = ref)
+    all
+  })
+  local_login_target(c(demo = "https://mcp.example/mcp"))
+  expect_true(gptr_login("mcp:demo", method = "key"))
+  expect_match(ui$log$prompt[[2L]], "Storage: its existing keyring item", fixed = TRUE)
+  rec = auth_store_read()[["mcp:demo"]]
+  expect_null(rec[["key"]])
+  expect_identical(rec$keyring, list(service = "gptr", username = "mcp:demo", field = "key"))
+  expect_identical(captured[["mcp:demo"]], key)
+})
+
 test_that("explicit OS keyring storage refuses an environment fallback before input", {
   skip_if_not_installed("keyring")
   local_user_dirs()
