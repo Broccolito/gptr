@@ -5,8 +5,8 @@ gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version insta
 
 ## New features
 
-* `gptr_models(provider = , refresh = TRUE)` lists the models a provider or the `claude` and
-  `codex` command-line tools advertise, after consent and under the replay guard. Listings run
+* `gptr_models(provider = "codex", refresh = TRUE)` lists the models a provider or the `claude`
+  and `codex` command-line tools advertise, after consent and under the replay guard. Listings run
   only when you ask, say when they were checked, and keep the earlier entries when a refresh
   fails. The console footer separates the model you selected from the model the provider reports.
 * Sub-agents resolve model aliases before a backend is chosen and inherit their parent's model
