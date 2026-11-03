@@ -83,7 +83,9 @@ gptr_mcp_add(
 ```
 
 `scope = "user"` stores the entry in `mcp.json` under `tools::R_user_dir("gptr", "config")`.
-`scope = "project"` uses `.gptr/mcp.json`. Secrets in `env` and `headers` must use `${VAR}`
+`scope = "project"` uses `.gptr/mcp.json`, which needs a `.gptr/` workspace from `gptr_init()`
+and takes effect only once you trust the project (`gptr_trust()`); `gptr_mcp_add()` does neither.
+Secrets in `env` and `headers` must use `${VAR}`
 placeholders; gptr expands them from the environment at connection time. Do not put key values
 in a checked-in file or a recorded command. See [Configuration](configuration.html) for
 environment loading and credential storage.
