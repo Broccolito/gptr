@@ -4440,9 +4440,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   the served call's fragment or in the turn scan; an aborted run has no `turn_end`, so on a CLI
   route `agent_end` scans too, after builtin:cli has stopped the child (builtin:checkpoints loads
   after builtin:cli; review: a cancelled Codex turn's own edits were absorbed by the next sync,
-  files `0/0`). An untracked file is captured only while it is as the last walk saw it, so a child's
-  edit never becomes a pre-image (its row says no pre-image, and `/undo` does not claim to restore
-  it).
+  files `0/0`). A scanned target is captured only while it is as the last scan saw it (its hash,
+  or without one its size and mtime), so a child's edit of it does not become a pre-image (the
+  turn scan records it with the turn-start content); a target no scan observed gets its state
+  just before the served call (D-313).
 - Contract-visible: 04 IC-79 (served calls are checkpointed; contract edges `checkpoint_before`,
   `checkpoint_after`).
 - Tests: mcp-server, cli-claude, cli-codex, ckpt-files, ckpt-rewind (an aborted turn), arch-layers.
@@ -9564,3 +9565,130 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   08 sections 3.3 and 3.5 (limit 8) and Part 4; `cran-comments.md`; dev/HANDOFF.md's Remaining.
 - Tests: none (no code change). Evidence: progress/fixes.md FIX-40, FIX-43, FIX-44, FIX-45 and
   FIX-48; progress/open-findings.md.
+
+## D-310 - P16 Automatic file scans run in the R session (2026-11-02)
+- Rule (amends #98's record, progress/first-response-bounded-scans.md, "an owned R worker"): the
+  bounded scan (`ckpt_scan_run()`) runs in the R session, not in a supervised `Rscript` worker. It
+  keeps #98's limits and semantics: at most 2,000 inspected entries (`ckpt_entry_max`, also the
+  tracker's retention bound) and 256 captures within the byte limits; known paths first (a
+  readable parent proves one absent), then breadth first, source-like names first, with the
+  prune rules; at most `gptr.checkpoint_scan_timeout` seconds (2), checked between entries and
+  before each capture. An interrupt the person continues from (the pause menu's continue) ends the
+  scan too (reason "interrupted"); one that aborts keeps unwinding (no exiting handler, G3) and
+  leaves the tracker as it was. A scan keeps the records it completed.
+  `gptr.checkpoint_scan_budget` compares the scan's own time.
+- Why: every mutating call paid two R process launches (0.6-0.9 s each, more under load); the
+  deadline included start-up, so a busy machine reported "coverage incomplete (time limit)" and
+  lost file undo even in an empty project; killed workers left their R temp directories; the
+  worker loaded the installed gptr, not the loaded namespace; and its per-entry record files kept
+  the 2,000-entry limit out of reach. In the session a 2,000-entry scan takes about 0.5 s (path
+  classes are computed per directory in one call) and a small project's a few milliseconds.
+- Trade-off: a filesystem call that blocks (a hung network mount, a slow listing of one huge
+  directory) cannot be cut short in the session, as in 1.0.0; the timeout bounds the work between
+  such calls.
+- Removed: `ckpt_scan_main()`, the worker's spec and record files, `ckpt_scan_cleanup()`,
+  `ckpt_scan_reap()` and the pending-child guard, the `ckpt_scan` entry of `proc_rscript()`, and
+  test-ckpt-scan-lifecycle.R (its byte-cap and startup-path cases moved to test-ckpt-scan.R).
+- Contract-visible: 04 sections 3.1 (options row) and 7.16; 03 sections 3.2 (`ckpt-scan.R` row)
+  and 6.16 Files; `?gptr_options`; `?gptr_rewind` (its option list gains the timeout); vignette
+  teams-and-background (.Rmd.orig now holds the paragraph too).
+- Tests: test-ckpt-scan.R "the time budget stops a scan between entries and keeps what it
+  completed", "a zero budget scans nothing and invalid budgets are refused", "an interrupt the
+  person continues from stops the scan and keeps its records", "scans never capture protected
+  paths, startup files, links or FIFOs"; test-ckpt-files.R "a scan slower than
+  gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
+  progress/fixes-1.0.1/lane-A.md.
+
+## D-311 - P16 A sync's observations replace the tracker's (2026-11-02)
+- Rule (review of #98): a sync, the scan that brings the tracker up to date without recording (at
+  the first mutating call of a turn or call, and at a CLI child's start), replaces the tracker's
+  observations (rows, content hashes, mode bits, proven absences) with its own. A path it did not
+  reach has no pre-image and no proven absence from before it, so a later recording scan neither
+  restores an edit nor recreates a deletion made outside gptr between turns, and does not undo a
+  file the person recreated as "created". Recording scans keep the unvisited observations of the
+  turn's sync, as before. The first sync is the baseline (`gptr.checkpoint_track_file_max`).
+- Why: a bounded sync can stop before a known path; its old hash then served as the pre-image of
+  the next recording scan that reached the path, and rewinding that turn reverted the person's
+  own edit or deletion. 1.0.0's syncs were complete, so this was new in #98.
+- Trade-off: after a partial sync, a change a turn makes to a path the sync missed has no
+  automatic backup that turn (unpredicted writes only; predicted targets are backed up before the
+  call).
+- Contract-visible: 04 section 7.16; 03 section 6.16 Files.
+- Tests: test-ckpt-partial.R "a partial sync gives no pre-image to an edit or deletion made outside
+  gptr", "a file recreated outside gptr after a proven absence is not undone as created".
+  Evidence: progress/fixes-1.0.1/lane-A.md.
+
+## D-312 - P16 File coverage is partial only where a scan stopped early (2026-11-02)
+- Rule (review of #98): a files fragment's coverage is `"partial"` only when a scan of its interval
+  stopped early (time, entry limit, interrupt, an unreadable directory or an unavailable path). A
+  complete scan that hit a capture limit, a size limit or an unreadable file keeps coverage
+  complete; those files' later changes are rows without a pre-image, as in 1.0.0, and a
+  same-size, same-time edit of a file without a backup goes unseen, as in 1.0.0 (the
+  39b553a4 rule that made such scans partial is withdrawn).
+- Rule: the files checkpointer skips R code whose classified effects are only reads and object
+  writes (`ckpt_file_free()`: `gptr_risk()` categories within `read` and `object_write`; an
+  unlisted function, a session change, a file write or code without a risk is file-capable); the
+  objects checkpointer still records it. A per-turn scan at `agent_end` follows only a turn that
+  synced the tracker, which a file-capable call does; CLI routes scan every turn (IC-65).
+- Why: any project over 256 capturable files was capture-capped, and any over 2,000 entries
+  partial, so every rewind there warned `gptr_warning_rewind_partial`, put a `<rewind>` block in
+  the next request and made `/undo` ask "Undo anyway?", also for turns that only assigned objects
+  or only answered in text. `?gptr_rewind` promises that a full restore tells the model nothing.
+- Contract-visible: 04 section 7.16; 03 section 6.16 Files; `?gptr_rewind`.
+- Tests: test-ckpt-scan-integration.R "R-only and text-only turns rewind fully in capped and
+  partially scanned projects", "a complete scan with capped captures leaves undo coverage
+  complete", "a real unreadable file is listed without a backup until it can be read";
+  test-ckpt-partial.R "a complete scan that cannot back up a file keeps coverage and lists its
+  edits"; test-ckpt-rewind.R "R code that can write no file skips only the files checkpointer".
+  Evidence: progress/fixes-1.0.1/lane-A.md.
+
+## D-313 - P16 Peter's own writes to unobserved or unbacked targets are undone on every route (2026-11-02)
+- Rule (review of #98): a predicted target that no scan observed (outside the walk, or beyond a
+  partial inventory: not in the tracker's rows or proven absences) gets its state just before the
+  call as its explicit pre-image on every route, as API routes did. A target a scan observed gets
+  one on every route while it still holds what that scan saw (`ckpt_as_scanned()`): its content
+  hash, or, for a file the scan inventoried without a backup (past the capture limit or the
+  baseline size), its size and modification time, or its proven absence; else the turn's
+  recording scan, which holds the turn-start observation, records it. This withdraws #98's
+  content-hash-only rule for CLI routes (`sync = FALSE`; its record,
+  progress/first-response-bounded-scans.md, "Matching size and modification time alone do not
+  prove ...") and restores 1.0.0's (D-201). So `/undo` reverts Peter's own approved edit of an
+  unscanned or unbacked file and removes a file Peter created, and the report and the `<rewind>`
+  block name both.
+- Why: #98 marked such targets "?" on CLI routes and dropped their rows, so `/undo` on claude-cli
+  and codex left Peter's own edit and new file in place, named neither, and reported only "file
+  coverage"; the same prompt on an API route restored both. In a project of 257 to 2,000 entries
+  a complete scan backs up 256 files, so most served edits there had no pre-image.
+- Trade-off: a native CLI edit of an unscanned file earlier in the same turn is not undone (no
+  scan saw the original), as for any unscanned file; the row restores the content from just
+  before Peter's call. A native edit of a file without a backup that keeps its size and
+  modification time becomes the pre-image, as an unpredicted write's does on API routes (D-312,
+  as in 1.0.0); one that changes either is recorded by a recording scan without a pre-image.
+- Contract-visible: 04 sections 7.16, IC-65 and IC-79 (section 15, which also stops claiming a
+  full walk); 03 section 6.16 Files; D-201 edited in place.
+- Tests: test-ckpt-partial.R "a CLI-served write to a target no scan observed is undone to its
+  prior state", "a CLI-served write that creates an unobserved target is removed by undo", "a
+  CLI-served write outside the project is undone to its state before the call", "a CLI-served
+  write to a scanned file without a backup is undone while it is as seen"; test-ckpt-files.R "CLI
+  calls back up an unhashed target only while its size and mtime match the scan";
+  test-ckpt-scan-integration.R "real partial checkpoints preserve targeted writes and report
+  native coverage honestly", "a CLI-served write to a real scanned file past the capture limit is
+  undone". Evidence: progress/fixes-1.0.1/lane-A.md.
+
+## D-314 - P16 Checkpoint notices are console lines for the person (2026-11-02)
+- Rule (review and live tests of #98): the coverage notice reads "File undo covers part of <root>:
+  the automatic scan stopped early (<reason>), so changes to files it did not reach cannot be
+  undone. Files Peter's tools name are backed up before they change." It and the per-turn scan
+  notice (`ckpt_notice()`) are written once per project root and process through
+  `gptr_message_write()`, without a message condition, so no tool result records them (D-188's
+  out-of-scope path: a sub-agent's hook running inside the parent's `r` evaluation), and not at
+  all while knitting or in a Jupyter kernel; `gptr.quiet` silences them. The per-turn scan notice
+  is not shown after a scan that stopped early, which already told the person.
+- Why: the notice addressed the model ("Use ls/find/read ..."), blamed "native CLI edits" on
+  every route, reached the parent model's tool result from a CLI child's `agent_start` hook, and
+  filled rendered Quarto, R Markdown and notebook output.
+- Contract-visible: 04 sections 1.5 and 7.16.
+- Tests: test-ckpt-files.R "the coverage notice is a console line for the person, once per root",
+  "the coverage notice stays out of tool results, documents and notebooks", "a scan slower than
+  gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
+  progress/fixes-1.0.1/lane-A.md.

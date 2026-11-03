@@ -623,14 +623,14 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.checkpoint_disk_bytes` (bytes, `2e9`), `gptr.checkpoint_days` (days, `30`) and
 #'   `gptr.checkpoint_turns` (integer, `100`): retention of the checkpoint store.
 #' - `gptr.checkpoint_track_file_max` (bytes, `1e6`) and `gptr.checkpoint_track_total` (bytes,
-#'   `1e8`): the per-file and total size of tracked project files.
+#'   `1e8`): the largest file the first scan stores, and what one scan stores in all.
 #' - `gptr.checkpoint_capture_max` (bytes, `5e7`): a larger changed file gets no stored copy.
-#' - `gptr.checkpoint_scan_budget` (seconds, `0.25`): above this walk time the project is
+#' - `gptr.checkpoint_scan_budget` (seconds, `0.25`): above this scan time the project is
 #'   scanned once per turn.
-#' - `gptr.checkpoint_scan_timeout` (seconds, `2`): maximum wait for an automatic file scan,
-#'   including worker startup. Scans inspect at most 2,000 entries and back up at most 256
-#'   files within the byte limits above. Incomplete scans are reported; unvisited files have
-#'   no automatic undo coverage. Predicted write targets are backed up separately.
+#' - `gptr.checkpoint_scan_timeout` (seconds, `2`): the longest an automatic file scan runs.
+#'   Scans inspect at most 2,000 entries and back up at most 256 files within the byte limits
+#'   above. Incomplete scans are reported; unvisited files have no automatic undo coverage.
+#'   Predicted write targets are backed up separately.
 #' - `gptr.checkpoint_rng` (logical, `TRUE`): report changes of the random-number state in the
 #'   rewind report (gptr never changes your random seed).
 #' - `gptr.checkpoint_close_devices` (logical, `FALSE`): close graphics devices opened by an

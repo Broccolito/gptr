@@ -82,9 +82,9 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   blanks secret-looking variables such as provider keys and sets replay mode. With `NOT_CRAN`
   unset that directory is under `tempdir()`, tests that start a local server (a mock provider, an
   MCP server or a Shiny app) or optional sub-agent workers are skipped, and the suite needs no
-  network. Small automatic checkpoint tests start supervised R children on local synthetic files;
-  the large filesystem stress tests run only in the full offline CI suite.
-  To keep the check short, `tests/testthat.R` runs on CRAN a fixed list of 39 test files (the
+  network. Small automatic checkpoint tests scan local synthetic files in the R session; the
+  large filesystem stress tests run only in the full offline CI suite.
+  To keep the check short, `tests/testthat.R` runs on CRAN a fixed list of 38 test files (the
   permission, redaction and secret tests and files that reach all but 12 of the R files) without
   their slowest blocks; GitHub Actions runs the whole suite. Consent regressions are included in
   the CRAN test list. Live provider tests run only when `GPTR_LIVE_TESTS` is `"true"`.

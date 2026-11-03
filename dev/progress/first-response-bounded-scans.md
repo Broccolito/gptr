@@ -55,6 +55,10 @@ CSVs are named `/tmp/gptr-bounded-{rstudio,vscode,jupyter,terminal,model-switch}
 
 ## Mechanism and safety contract
 
+Amended by D-310 (1.0.1 review): the scan runs in the R session, not an owned R worker; the
+limits, order and partial-inventory rules below stand, and the 2 s budget no longer includes
+start-up. A filesystem call that blocks cannot be cut short in the session.
+
 Use one bounded policy for automatic startup, tool, turn and agent-end file scans: an owned
 R worker, a 2 s worker wait deadline including startup; bounded result collection follows.
 Limits are 2,000 inspected entries and 256 automatic captures, plus existing byte limits.

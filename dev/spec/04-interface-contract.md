@@ -165,7 +165,8 @@ session-scoped listeners first (rank 0), then registry hooks by rank. Every even
 
 Nothing below layer L5 prints (`03` §2.2 rule 2). Functions documented here as "prints" do so only through the console
 layer or `print()` methods of their own classes. Progress and notices go through `gptr_inform()` and are silenced
-by `options(gptr.quiet = TRUE)`. Untrusted text reaches the console only through `msg_verbatim()` or a
+by `options(gptr.quiet = TRUE)`; the file checkpointer's notices write the same console line without the message
+condition (§7.16, D-314). Untrusted text reaches the console only through `msg_verbatim()` or a
 `cli::cli_text("{x}")` interpolation (rule C1).
 
 ---
@@ -390,7 +391,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `gptr.undo_turns` | `int(1)` | `20L` | P16 | G7 §3.7 |
 | `gptr.checkpoint` | `chr(1)` | `"on"` | P16 | `"on"`, `"files"`, `"off"` |
 | `gptr.checkpoint_disk_bytes`, `gptr.checkpoint_days`, `gptr.checkpoint_turns`, `gptr.checkpoint_track_file_max`, `gptr.checkpoint_track_total`, `gptr.checkpoint_capture_max`, `gptr.checkpoint_scan_budget`, `gptr.checkpoint_rng`, `gptr.checkpoint_close_devices` | as G7 §3.7 | `2e9`, `30`, `100`, `1e6`, `1e8`, `5e7`, `0.25`, `TRUE`, `FALSE` | P16 | G7 §3.7 |
-| `gptr.checkpoint_scan_timeout` | `num(1)` | `2` | P16 | worker wait deadline in seconds for an automatic file scan, including startup; bounded result collection follows; partial coverage and fixed entry/file limits are described in §7.16 |
+| `gptr.checkpoint_scan_timeout` | `num(1)` | `2` | P16 | longest run in seconds of an automatic file scan, checked between entries and before each capture; partial coverage and fixed entry/file limits are described in §7.16 |
 | `gptr.redact_min_chars` | `int(1)` | `8L` | P03 | shortest value-redacted secret |
 | `gptr.redact_patterns` | `lgl(1)` | `TRUE` | P03 | pattern layer (values are always redacted) |
 | `gptr.stream_hold_max` | `int(1)` | `4096L` | P03 | streaming hold-back cap (characters) |
@@ -3041,23 +3042,41 @@ doc_upsert(site, doc_block_lines(s, 1L, site, 1L))
 
 The `checkpointer` contract used by the dispatcher (P06) is §10.2.
 
-Automatic file scans use a supervised R worker with a worker wait deadline of
-`gptr.checkpoint_scan_timeout` (default 2 s), including startup; bounded result collection
-follows. Limits are 2,000 inspected entries and 256 captured files, plus the existing per-file
+Automatic file scans run in the R session for at most `gptr.checkpoint_scan_timeout` (default
+2 s), checked between entries and before each capture; an interrupt the person continues from
+also ends one, and a scan keeps the records it completed; a filesystem call that blocks cannot be
+cut short (D-310). Limits are 2,000 inspected entries and 256 captured files, plus the existing per-file
 and total byte limits. Apply this policy to initial baselines, tool scans and CLI/turn/agent
 boundary scans. There is no unlimited catch-up
 scan. Completed observations distinguish known contents, verified absence and unknown paths;
-unvisited old observations remain available. A partial inventory is never evidence that an
-unseen file was created or deleted. Discovered changes without valid pre-images are not
+a recording scan keeps the unvisited observations of the turn's sync, while a sync (which records
+nothing) replaces the tracker's observations, so only what it observed gives a pre-image or
+proves an absence (D-311). A partial inventory is never evidence that an unseen file was created
+or deleted. Discovered changes without valid pre-images are not
 restorable, and coverage notices explain that other changes may not be listed or undoable.
+The coverage notice (and the per-turn scan notice) is for the person, once per project root and
+process: a console line through `gptr_message_write()`, never a message condition, so it enters
+no tool result (IC-77, D-188); none is shown while knitting or in a Jupyter kernel, where it
+would fill the rendered output (D-314).
+A fragment's coverage is `"partial"` only when a scan of its interval stopped early (time,
+entries, an interrupt, an unreadable directory or path); a capture limit leaves it complete and
+its uncaptured changes are rows without a pre-image. The files checkpointer skips R code whose
+classified effects are only reads and object writes, and a per-turn scan follows only a turn
+that synced the tracker (a file-capable call), so R-only and text-only turns carry no coverage
+item (D-312).
 
 Predicted targets of gptr-controlled writes are backed up immediately before the call,
 independently of automatic coverage, with the existing protected/control/link/type and byte
-checks. CLI-served calls using `sync = FALSE` require a matching prior content hash for an
-existing file, or verified prior absence for a creation. Size and modification time alone
-cannot prove original contents; a late copy cannot become an original for an earlier native CLI edit.
-Preserve guarded restores and R-object checkpointing. Arbitrary native CLI/shell writes outside
-coverage have no complete-undo guarantee. File discovery stays scoped and on demand through
+checks. On every route, CLI-served calls using `sync = FALSE` included, a target a scan observed
+gets a pre-image only while it still holds what that scan saw: its content hash, or for a file
+the scan inventoried without a backup its size and modification time, or its proven absence for
+a creation; else the turn's recording scan, which holds the turn-start observation, records the
+change, so a late copy does not become an original for an earlier native CLI edit that changed
+the file's size or time. A target no scan observed gets its state just before the call as its
+pre-image, so undo reverts Peter's own write or removes the file it created; an earlier native
+CLI edit of it in the same turn is not undone (D-313).
+Preserve guarded restores and R-object checkpointing. Unpredicted writes by R code, a shell or a CLI
+outside coverage have no complete-undo guarantee. File discovery stays scoped and on demand through
 `ls`, `find` and `read`; provider startup requires no full-folder inventory.
 
 Example calls:
@@ -5309,7 +5328,8 @@ document are exact.
   `workspace-write`, never `danger-full-access`, so Codex's own shell writes only in the workspace and the
   temporary directories, where it changes and deletes files without gptr's gate (IC-78). Before a
   `workspace-write` exec gptr hashes the `control` files (IC-54) and refuses to load changed ones until the user
-  confirms; the files checkpointer walks after each exec so `/undo` covers Codex's edits. On native Windows the
+  confirms; the files checkpointer runs its bounded scan after each exec (7.16), so `/undo` covers the Codex
+  edits that scan observes. On native Windows the
   sandbox is probed and the route falls back to `read-only` with a warning when it is not ready [08 line 2796].
   The one-time notice says Codex runs its own shell inside its sandbox; that shell runs in every mode outside
   gptr's gate, rules and secret guard, and in plan, manual and edits its read-only sandbox still lets it read any
@@ -5787,8 +5807,10 @@ totals line names the model and the context left.
   in the run's tool frame (`tool_execute_frame()`) when the call is reported (D-192). A reported call, `r` included,
   runs between the checkpointers' `before` and `after` (`checkpoint_before()`, `checkpoint_after()`), as a call of
   the loop does, so `/undo` restores what it changed (#24); on a CLI route the files checkpointer then records the
-  edits the child made since the turn's start rather than absorbing them, and captures an untracked file only while
-  it is as the last walk saw it (else its row has no pre-image). A served `r` call made while a run is live draws
+  edits the child made since the turn's start rather than absorbing them: a scanned target gets a pre-image only
+  while it is as the last scan saw it (its hash, or without one its size and time, or its proven absence), else
+  the turn's recording scan records it, and a target no scan observed gets its state just before the call (7.16,
+  D-313). A served `r` call made while a run is live draws
   its plots as the loop's `r` tool does (`plots = "auto"`: on the person's device when one is open or a human is
   present), so a CLI route's plots reach the screen (#42); without a run they stay offscreen (`"capture"`). A
   long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a refreeze
