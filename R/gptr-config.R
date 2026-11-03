@@ -1990,8 +1990,8 @@ NULL
 #' tools only the explicit refresh lists models, by starting the tool without a prompt. The
 #' models.dev catalog is refreshed only by `gptr_models(refresh = TRUE)`, reachability checks run
 #' only with `gptr_providers(check = TRUE)`, and MCP servers, sub-agents and command-line tools
-#' are otherwise contacted only when a session uses them. The `claude` and `codex` command-line routes send
-#' the conversation through those vendors' tools under their own terms.
+#' are otherwise contacted only when a session uses them. The `claude` and `codex` command-line
+#' routes send the conversation through those vendors' tools under their own terms.
 #'
 #' @seealso [gptr_security], [gptr_options], [gptr_providers()], [gptr_config()].
 #' @name gptr_egress

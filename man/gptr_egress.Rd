@@ -80,8 +80,8 @@ that provider's credential, never a prompt or session context; for the \code{cla
 tools only the explicit refresh lists models, by starting the tool without a prompt. The
 models.dev catalog is refreshed only by \code{gptr_models(refresh = TRUE)}, reachability checks run
 only with \code{gptr_providers(check = TRUE)}, and MCP servers, sub-agents and command-line tools
-are otherwise contacted only when a session uses them. The \code{claude} and \code{codex} command-line routes send
-the conversation through those vendors' tools under their own terms.
+are otherwise contacted only when a session uses them. The \code{claude} and \code{codex} command-line
+routes send the conversation through those vendors' tools under their own terms.
 }
 
 \seealso{
