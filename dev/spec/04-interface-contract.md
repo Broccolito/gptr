@@ -4995,22 +4995,22 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
 2. `run_start()` snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`,
    `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode` and `gptr.unsafe_no_permissions`; the run's gate
    reads only the snapshot.
-3. `risk-functions.csv` gains category `control`, level 4, `ask_human`: `gptr_config`, `gptr_permissions`,
-   `gptr_trust` (`trust = TRUE` or `FALSE`), `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
+3. `risk-functions.csv` gains category `control`, level 4, `ask_human`: `gptr_config`, `gptr_permissions`, `gptr_trust`
+   (`trust = TRUE` or `FALSE`), `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
    `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune, clear),
-   `gptr_scrub` (`dry_run = FALSE`), and `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`, `gptr_rewind`
-   on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` and
+   `gptr_scrub` (`dry_run = FALSE`), and `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`, `gptr_rewind` on a
+   session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` and
    `withr::local_envvar()`/`withr::with_envvar()` of `GPTR_*`, `*_BASE_URL` or R startup names (`R_ENVIRON_USER`,
    `R_PROFILE_USER`, `R_ENVIRON`, `R_PROFILE`), of a variable a registered provider reads (its `auth` names and
    `compat$base_url_env`, such as `AWS_REGION`, the `bedrock-converse` key pair, and the names the `cli-claude` and
-   `cli-codex` child environments keep, such as `CODEX_HOME`) or of a variable that moves the user config directory
-   or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in
-   any letter case, or of a name the classifier cannot read (`do.call()` of a `list()` or `c()` written out and
-   `rlang::exec()` read as the call they make, review round 6), `readRenviron()`, `dotenv::load_dot_env()` (D-272),
-   `setHook()`, `assignInNamespace()`. These exports also check `run_current()`: called from model code during a
-   run they signal `gptr_error_permission` unless the dispatcher approved exactly that call through an
-   `ask_human` (a one-shot token on the run). `perm_check()` grants the token on any final allow (IC-78); outside
-   yolo only a person's approval or `gptr.unsafe_no_permissions` allows a control call.
+   `cli-codex` child environments keep, such as `CODEX_HOME`) or of a variable that moves the user config directory or
+   the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any letter case, or of a name
+   the classifier cannot read (`do.call()` of a `list()` or `c()` written out and `rlang::exec()` read as the call they
+   make, review round 6), `readRenviron()`, `dotenv::load_dot_env()` (D-272), `setHook()`, `assignInNamespace()`. These
+   exports also check `run_current()`: called from model code during a run they signal `gptr_error_permission` unless
+   the dispatcher approved exactly that call through an `ask_human` (a one-shot token on the run). `perm_check()` grants
+   the token on any final allow (IC-78); outside yolo only a person's approval or `gptr.unsafe_no_permissions` allows a
+   control call.
 4. Every gateway call made while `run_current()` is non-NULL (any route) inherits the running mode (only
    tightened) and filters; model code continuing an idle user session runs it in the stricter of the two modes.
 5. The parent re-classifies the raw input carried in every forwarded worker `permission_request`; the worker
