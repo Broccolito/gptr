@@ -414,6 +414,33 @@ test_that("emulation happens only with gptr_config(system1 = \"emulate:<model>\"
   expect_length(fake_requests(chat), 2L)
 })
 
+test_that("emulation through a local Ollama chat model discovers it as a chat call does (D-323)", {
+  s1_fresh()
+  srv = local_ollama_server()
+  settings_write("user", list(egress = list(ollama = "ack")))
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  # the fake api answers as the Ollama chat model, through the live fake named "ollama"
+  engine = gptr_fake_provider(list(list(json = list(answers = list(answer = 0.8))),
+                                   list(json = list(answers = list(answer = 0.3)))),
+                              name = "ollama")
+  off = gptr_register(gptr_adapter("openai-completions", "inprocess", stream = fake_stream))
+  withr::defer(off())
+  old = gptr_config(system1 = "emulate:ollama/qwen3:1.7b", .scope = "session")
+  withr::defer(gptr_config(system1 = old$system1, .scope = "session"))
+  shows = function() sum(endsWith(srv$calls, "/api/show"))
+  # a fresh process has no discovery evidence: the first decision prepares the model once
+  outage = "The server is down."
+  typo = "A typo in the footer."
+  d = peter("Is this urgent?", outage, model = "jev")
+  expect_true(d)
+  expect_identical(attr(d, "meta")$execution, "emulated")
+  expect_identical(shows(), 1L)
+  e = peter("Is this urgent?", typo, model = "jev")
+  expect_false(e)
+  expect_identical(shows(), 1L)
+})
+
 test_that("a missing Jev key never falls back to emulation", {
   s1_fresh()
   local_no_network()

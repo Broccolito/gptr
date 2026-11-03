@@ -9622,3 +9622,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   System 1 rows stay out of its chat usage (D-321)"; subagent-backends "a worker composes native
   typed decisions with provenance and their own charges". Evidence:
   progress/fixes-1.0.1/lane-C.md.
+
+## D-323 - Fixes 1.0.1 lane C Emulated System 1 on Ollama and worker start (2026-11-02)
+- Rule (emulation on Ollama): `s1_ready()` prepares an emulation's chat model on an Ollama route
+  as `run_target()` prepares a chat call's (egress check, then `model_prepare()`, which discovers
+  only without current evidence), on live calls; replay keeps the preflight alone. Was a
+  preflight only, so every new R process failed with "there is no current discovery evidence"
+  until `gptr_models(provider = "ollama", refresh = TRUE)`, while a chat call on the same model
+  worked.
+- Contract-visible: 04 section 6.1.1 (model preparation).
+- Tests: s1-emulate "emulation through a local Ollama chat model discovers it as a chat call does
+  (D-323)"; "emulation preflights the chat model before any state is serialised or sent" keeps
+  `s1_emulate()` itself discovery-free. Evidence: progress/fixes-1.0.1/lane-C.md.

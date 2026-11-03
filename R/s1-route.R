@@ -514,16 +514,23 @@ s1_safety = function() {
 #' Preflight a target before the call's values are read or a credential is looked up (07 section
 #' 2.1; IC-74): the checked model replaces the resolved one, and the safety record travels with it
 #'
-#' A native Ollama model named by reference is prepared on a live call; under replay it is
-#' `frozen`: no discovery, preflight or request (D-120).
+#' A native Ollama model named by reference, and an emulation's Ollama chat model, are prepared
+#' on a live call, as a chat call's model is (D-323); under replay a native one is `frozen`: no
+#' discovery, preflight or request (D-120).
 #' @noRd
 s1_ready = function(target, safety = s1_safety(), replay = NULL) {
   emulated = identical(target$engine, "emulated:structured")
   native = !emulated && s1_ollama_native(target$model)
-  if (native && identical(replay_mode(replay), "replay")) {
+  live = !identical(replay_mode(replay), "replay")
+  if (native && !live) {
     target$frozen = TRUE
   } else if (emulated) {
-    target$model = s1_emu_ready(target$model, safety)
+    m = target$model
+    if (live && catalog_ollama_route(m, target$provider)) {
+      egress_check(m[["provider"]], target$provider, safety)
+      m = s1_prepare(m[["ref"]], safety = safety)
+    }
+    target$model = s1_emu_ready(m, safety)
   } else if (native && isTRUE(target$by_ref)) {
     egress_check(target$model[["provider"]], target$provider, safety)
     target$model = s1_ollama_ready(s1_prepare(target$ref, safety = safety))
