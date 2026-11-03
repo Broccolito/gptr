@@ -376,16 +376,17 @@ console_receipt = function(s, text, as, shown = NULL) {
   if (length(rows)) console_person_write(s, console_band(rows))
 }
 
-#' The dim row that says a message `it` (console_newest()) went back into the draft (Up, D-301):
-#' `<queued glyph> steer taken back<sep><text>` (`follow-up`), cut to one row, a block of the
-#' person's lines (console_person_write()), in the console's colours
+#' The dim rows that say a message `it` (console_newest()) went back into the draft (Up, D-301):
+#' `<queued glyph> steer taken back<sep><text>` (`follow-up`), wrapped under its text as a receipt
+#' is (console_person_rows()), a block of the person's lines (console_person_write()), in the
+#' console's colours
 #' @noRd
 console_taken_back = function(s, it) {
   rlang::local_options(cli.num_colors = console_colors())
   sym = console_style()
   kind = if (identical(it$kind, "steer")) "steer" else "follow-up"
-  said = paste0(sym$queued, " ", kind, " taken back", sym$sep, live_text(it$text))
-  console_person_write(s, sym$dim(live_fit(said, cli::console_width() - 1L, sym$ellipsis)))
+  rows = console_person_rows(sym$queued, paste0(kind, " taken back", sym$sep, it$text))
+  console_person_write(s, sym$dim(rows))
 }
 
 #' Write the person's `rows` for session `s` as a block of their own (console_gap()), except right

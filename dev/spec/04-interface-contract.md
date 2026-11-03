@@ -6012,10 +6012,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     person's rows at column 0 on the band (`console_style()$band`, row, `\033[K\033[0m`, where the band is known),
     `steer> <text>` (the agent reads it at its next step boundary) or `next> <text>` (after this answer: a
     follow-up, and any text starting with `/` or `!`), the same words in ASCII, the word mirroring the prompt
-    `peter> `; the text escaped, whole, wrapped inside the console width with its later rows under the text (a
+    `peter> `; the text escaped, a tab a blank (P30's live test: a raw tab moved to the terminal's next stop; the
+    text sent keeps it), whole, wrapped inside the console width with its later rows under the text (a
     message of several lines keeps them; a word wider than a row, as unspaced CJK text is, breaks at the row's
     width). On a CLI route (model type `"cli"`) a steer's receipt ends with a dim ` (after the CLI's answer)`,
-    on a row of its own under the text where the last row is full. A receipt is a block of the person's lines,
+    on a row of its own under the text where the last row is full, once the run has its model, as it sends
+    its first request (a steer sent before goes with that request). A receipt is a block of the person's lines,
     written between whole rows, also while an answer streams (see Whole rows, IC-82). The pause menu's [s] and
     [f] read their text at `steer> ` and `next> ` themselves, so the line read is the receipt and only a note
     follows it, dim on a row of its own (`console_receipt(shown = )`): a CLI steer's, or `(runs after this
@@ -6024,7 +6026,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     and leaves its bare `steer>` row, as an empty prompt leaves `peter>`. A line a question read past (IC-75,
     `console_typed_ahead()`), echoed after the question's prompt, gets its full receipt, which says where it
     went (it was `↳ steer · not an answer`). Up's take-back (`console_taken_back()`) writes a dim
-    `↳ steer taken back · <text>` (`follow-up`; ASCII `->` and ` - `), cut to one row, as a block of the
+    `↳ steer taken back · <text>` (`follow-up`; ASCII `->` and ` - `), wrapped under its text as a receipt is
+    (`console_person_rows()`; P30's live test: cut to one row with an ellipsis, it stood under a receipt that
+    wrapped), as a block of the
     person's lines (a blank row around it where the answer's text came between), the text back in the draft.
     Inside an evaluation the receipt has the console's colours. It replaces the dim queue line
     `↳ steer · <text>` (P28 Task 13, held while an answer streamed, cut to one row) and the notices

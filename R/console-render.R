@@ -35,15 +35,16 @@ console_write = function(lines) {
   invisible(NULL)
 }
 
-#' The person's rows at column 0 (D-242): `glyph`, a space and the escaped `text`, wrapped inside
-#' the console width with the later rows under the text, a word wider than a row (unspaced CJK
-#' text) broken at its width; for a finite `n` (a held line), its lines joined by a blank, as the
-#' live row shows them, and cut to `n` rows of that width, the cut marked with an ellipsis
+#' The person's rows at column 0 (D-242): `glyph`, a space and the escaped `text`, a tab a blank,
+#' as on the live row, wrapped inside the console width with the later rows under the text, a word
+#' wider than a row (unspaced CJK text) broken at its width; for a finite `n` (a held line), its
+#' lines joined by a blank, as the live row shows them, and cut to `n` rows of that width, the cut
+#' marked with an ellipsis
 #' @noRd
 console_person_rows = function(glyph, text, n = Inf) {
   lead = paste0(glyph, " ")
   width = max(20L, cli::console_width() - 1L - nchar(lead))
-  lines = console_lines(text)
+  lines = gsub("\t", " ", console_lines(text), fixed = TRUE)
   if (is.finite(n)) lines = paste(lines, collapse = " ")
   rows = unlist(lapply(console_wrap(lines, width), function(row) {
     out = character()

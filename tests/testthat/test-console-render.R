@@ -2077,6 +2077,24 @@ test_that("a receipt is the person's rows: wrapped under the text, a CLI steer s
                    receipt_line("follow_up", "then plot"))
 })
 
+test_that("a receipt shows a tab as a blank; a take-back wraps as a receipt does (P30)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = TRUE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  # live steering test: a pasted tab reached the terminal raw, which moved to the next tab stop
+  expect_identical(utils::capture.output(console_receipt(s, "a tab:\there", "steer")),
+                   receipt_line("steer", "a tab: here"))
+  # the take-back was cut to one row with an ellipsis, under a receipt that wrapped
+  sym = console_style()
+  long = paste(rep("use base R", 6L), collapse = " ")
+  rows = utils::capture.output(console_taken_back(s, list(kind = "steer", text = long)))
+  expect_identical(substr(rows, 1L, 2L), c(paste0(sym$queued, " "), rep("  ", length(rows) - 1L)))
+  expect_identical(paste(substring(rows, 3L), collapse = " "),
+                   paste0("steer taken back", sym$sep, long))
+  expect_true(all(nchar(rows, type = "width") <= 39L))
+})
+
 test_that("a foreground run separates text, tool and status blocks once (D-186, D-245)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)

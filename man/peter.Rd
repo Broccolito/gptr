@@ -231,7 +231,8 @@ the answer instead of pausing it. A steer the answer did not take (it ended firs
 prompt; after an abort or an error nothing queued is sent: the queued text and the draft go to
 the console history, and Up recalls them. Under TERM=dumb or in ESS a line typed with Enter is
 queued as \code{type_ahead} says. On the CLI routes (\code{claude-cli}, \code{codex}) the agent reads a steer
-after the CLI's answer, which is often the whole run.
+after the CLI's answer, which is often the whole run: once the run has sent its request, the
+receipt says so, \verb{(after the CLI's answer)}; a steer sent before the first request goes with it.
 
 RStudio, R.app, Positron and Windows consoles hold what is typed until R reads again. In RStudio,
 R.app and Windows consoles a line typed while peter works is the next prompt, one prompt per

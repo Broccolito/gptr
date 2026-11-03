@@ -9610,6 +9610,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   answer with no tool call between, opens a block of its own: it continued the answer before it
   with no blank row, so the reply to the steer read as the same paragraph (the end of an answer
   lets the next one's text open a block, as #41 did for a message's text blocks).
+- Rule (amendment, P30's live steering test of PR #108): a receipt shows a tab as a blank, as the
+  live row does (a pasted tab reached the terminal raw and moved to its next tab stop); the text
+  sent keeps it. Up's take-back wraps under its text as a receipt does (`console_person_rows()`),
+  no longer cut to one row (at 80 columns it was cut with an ellipsis under a receipt that
+  wrapped). `?peter` says a CLI steer's note shows once the run has sent its request, and a steer
+  sent before the first request goes with it. Not changed: a D console's row before the run says
+  `ctrl-c stop`, then `ctrl-c pause` once the run starts (D-309), as no pause menu is offered
+  before the run there and a Ctrl-C then stops the call (captures `steer-fix3/e1-dumb-prerun-row`,
+  `e2-dumb-prerun-ctrlc`). Test: test-console-render.R "a receipt shows a tab as a blank; a
+  take-back wraps as a receipt does (P30)".
 - Precedent: Codex 0.157.1 keeps a queued message's preview in its bottom pane and turns it into a
   user cell at delivery (P28 evidence). gptr has one live row, gone while an in-process `r` call runs
   and lost when the terminal scrolls, so the receipt goes to the scrollback when sent.
