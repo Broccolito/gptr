@@ -9735,7 +9735,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   three, and none in the tmux runs with 0.1 s and more; narrowing the window means caching the
   prompt's modes across calls, which a `!system("stty ...")` could make stale.
 - Contract-visible: section 10.2 row 22 (`confirm`), the `gptr_confirm()` row, `gptr_init(path)`,
-  IC-76's drain passage; `?gptr_init`.
+  IC-76's drain passage, the `tty_query()` and `tty_unreply()` rows and section 15.10's background
+  probe (the cursor query); `?gptr_init`.
 - Tests: test-console-ui.R "gptr_confirm() asks as a console question: keys under it, the chevron
   (D-306)", "what was typed before a run starts is never a question's answer (D-306)";
   test-console-repl.R "keys the terminal echoed before the probe are erased before the banner
