@@ -9598,6 +9598,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (`console_person_write()`, which receipts use too); the text is in the draft again (review: it was
   written straight into the stream, so it sat glued between two rows of a streaming paragraph, and it
   named no text).
+- Rule (follow-up, the maintainer's spacing request): a receipt or a take-back written while text
+  streams stands as its own block, one blank row on each side, by the console's block gaps
+  (console_gap()); between two paragraphs the renderer's held blank row and the gap were both
+  written (two blank rows under the receipt), so the renderer now drops its held blank row where
+  its row's block gap was written (`before_output()` says so). The answer to a steer, the next
+  answer with no tool call between, opens a block of its own: it continued the answer before it
+  with no blank row, so the reply to the steer read as the same paragraph (the end of an answer
+  lets the next one's text open a block, as #41 did for a message's text blocks).
 - Precedent: Codex 0.157.1 keeps a queued message's preview in its bottom pane and turns it into a
   user cell at delivery (P28 evidence). gptr has one live row, gone while an in-process `r` call runs
   and lost when the terminal scrolls, so the receipt goes to the scrollback when sent.
@@ -9614,7 +9622,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   taken back as text streams is a block of its own, naming it (P30 review)", "a terminal: the draft
   shows on the live row as text streams; Enter steers (D-243)"; test-console-repl.R "a chat prompt
   that steers a running session is the console's own item (P30 review)"; the CJK case of "a receipt is
-  the person's rows".
+  the person's rows"; test-console-typing.R "a receipt between two paragraphs has one blank row on
+  each side (P30 follow-up)", "the answer to a steer is a block of its own, after the one before (P30
+  follow-up)".
 
 ## D-302 - P30 The live row counts what is queued (2026-11-02)
 - Rule (P30 T2): the live row's queue term is a count, its kind named where one message waits:
@@ -9687,8 +9697,102 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   itself (a long `gptr_confirm()` question) is not followed by a redrawn row, and readline's prompt
   never follows one; `console_before_message(kind = "prompt")` clears it also when no foreground
   record is found (a nested call's question). Launch boundaries without a foreground record still
-  leave it (no display bytes from a nested or background launch). The row is drawn again after the
-  answer, by `console_asked()` in a T console or the row's task once the run waits.
+  leave it (no display bytes from a nested or background launch), except where a sub-agent's
+  record owns the row (a direct team's or fan-out's, whose children are no foreground record):
+  there a launch clears it too (follow-up, #99 review: a child's process wrote after the row). The
+  row is drawn again after the answer, by `console_asked()` in a T console or the row's task once
+  the run waits.
 - Contract-visible: IC-82 (Every console write).
 - Tests: test-console-input.R "a question clears the live row first; none is drawn before its
-  answer (P30, D-305)".
+  answer (P30, D-305)", "a launch clears a sub-agent group's row, which no foreground record owns
+  (#99 review)".
+
+## D-306 - P30 follow-up: gptr_confirm() asks the console's question; typed text is never mixed in (2026-11-02)
+- Rule (the 1.0.1 review's console findings, lane H; seen live with Azure: keys typed after a prompt
+  was sent became the egress question's pre-filled answer, `  > draft words`, and Enter declined it;
+  the question used `> ` and `[y/N]`, unlike every other question): the `ui.get` UI has an optional
+  `confirm(question, default = FALSE)` (contract section 10.2 row 22); gptr_confirm() asks it where
+  the UI has one, else `<question> [y/N] ` at readline as before. The console's
+  (ui_console_confirm()) is a console question: `? <question>`, its keys row `y yes · n no · enter
+  no` (Enter's word the default's), read at `  › ` by ui_console_read(), a console command typed
+  there waiting for the next prompt; it is the egress, trust, `.Rbuildignore`, transcript and
+  secret-prompt questions' look in every console the console UI serves, plain R and Jupyter too.
+- Rule (typed before the run): a question before the run is on record (the egress question comes
+  from gateway_guards(), before agent_start, with no policy target) drains fd 0 in tty_drain_mode()
+  too, as the question itself reads in the saved modes where a partial line waits: a T console's
+  keys become the composer's draft (line ends and Tab as blanks, cursor keys and Ctrl-C dropped, as
+  no run takes a message yet), shown by the `draft kept` row and on the live row after the answer;
+  a D console's lines go to the history (console_keep()). Never the answer.
+- Rule (typed during peter()'s start): keys typed after Enter on `peter(...)` were echoed by the
+  terminal until the background probe turned the echo off, and the banner was drawn after them
+  (`Make these ... done  gptr 1.0.1 · claude-`). The probe also asks for the cursor's position
+  (`ESC [ 6 n`; tty_unreply() drops its report); tty_echo_erase() leaves and clears the rows the
+  echoed text took from column 1, where its last row's width fits the reported column, else the
+  cursor's row alone. The text stays the prompt's draft, as before.
+- Not changed (deferred): a line typed within some 60 ms of sending a prompt is still echoed raw
+  once by the terminal, between readline's return (which restores the echo) and the call's no-echo
+  modes (two `stty` runs). Since D-301 it is two rows (the raw echo and its receipt), no longer
+  three, and none in the tmux runs with 0.1 s and more; narrowing the window means caching the
+  prompt's modes across calls, which a `!system("stty ...")` could make stale.
+- Contract-visible: section 10.2 row 22 (`confirm`), the `gptr_confirm()` row, `gptr_init(path)`,
+  IC-76's drain passage; `?gptr_init`.
+- Tests: test-console-ui.R "gptr_confirm() asks as a console question: keys under it, the chevron
+  (D-306)", "what was typed before a run starts is never a question's answer (D-306)";
+  test-console-repl.R "keys the terminal echoed before the probe are erased before the banner
+  (follow-up)"; tmux captures `before-egress-y`, `after-egress-y`, `dumb-egress`, `before-startup`,
+  `after-startup`, `after-startup-wrap`.
+
+## D-307 - P30 follow-up: the person's no to a send is a notice, not an error (2026-11-02)
+- Rule (lane H, seen live: `> n` gave `Error: gptr has not been told that it may send session
+  context to azure at ...` and a `gptr_config(egress = utils::modifyList(...))` command, text
+  written for a session nobody can ask): after the person declines the egress question,
+  egress_check() signals `gptr_error_egress` with `declined = TRUE` and `Not sent: sending session
+  context to <provider> at <origin> was declined.` / `Send the prompt again and answer y to allow
+  it, or choose another model.`; `provider` and `how_to_ack` stay. The secret-prompt decline
+  (`Not sent: the prompt contains a secret-looking value.`) carries `declined = TRUE` too. The
+  console prints a declined error as a dim notice (repl_error()); elsewhere it is an R error, as a
+  call that sent nothing.
+- Contract-visible: 04 section 3's `egress` condition row (`declined`).
+- Tests: test-gptr-config.R "an interactive no says the prompt was not sent and how to go on
+  (D-307)"; test-gptr-gateway.R `gptr.prompt_secrets = "ask" asks first; a no sends nothing`.
+
+## D-308 - P30 follow-up: token totals count the requests of unknown tokens (2026-11-02)
+- Rule (lane H, seen live: one aborted request made a 16-turn session's footer read `unknown
+  tokens`): token totals follow D-206's rule for cost. format_tokens() takes one total per request:
+  the known sum, `+ 1 request of unknown tokens` for those that reported none, `unknown tokens` only
+  when none did; the session footer (`print(session)`) and format_usage() (gptr_usage()'s footer,
+  `/cost`) use it (`13.9k tokens in + 1 request of unknown tokens`). Supersedes D-021 item 2's
+  display only: the usage data and their totals keep NA (IC-74).
+- Contract-visible: `?gptr_usage`.
+- Tests: test-session-budget.R "token totals count the requests of unknown tokens beside the known
+  sum (D-308)" and the gptr_usage() footer expectation; test-session-object.R "unknown usage prints
+  as unknown, never as zero (IC-74)".
+
+## D-309 - P30 follow-up: what the live row and a call's header say (2026-11-02)
+- Rule (live row words): every agent's text delta sets the row's word to `responding` (the main
+  agent's row said `thinking 25s` through its whole streamed answer); a scheduled group counts the
+  members not started as `pending`, only when there are some, its roster's label too (`pending
+  gamma`, the labels aligned), so `queued` on the row is the person's messages alone (IC-82, D-302;
+  #99 review: `1 queued 3s · 1 queued`). NEWS keeps its `queued counts` wording (not edited here).
+- Rule (live row clock and start): a direct group's row counts from the group's start
+  (`group$t0`, subagent_schedule()), as the row passes between its children (it went back from 1.2 s
+  to 0.9 s); a foreground run's row shows from agent_start at verbosity 2+, before its model is
+  prepared (a CLI's model listing, checkpoints), its clock from the console prompt's Enter
+  (`rs$started`, console_send()) (#98 review: nothing on screen for 10 s with codex, then
+  `thinking 0s`). Not changed (deferred): the CLI model listing provider_ready() runs on a first
+  prompt stays where it is (the catalog area, PR #106); the row now shows while it runs.
+- Rule (a call's header): the call row shows a path inside the project relative to it, as the
+  approval's own row and the result row do, and a path, command or other argument too wide is cut
+  in its middle (console_cut_middle()), its start and its file name kept, in the call row and the
+  approval's own row (the approval of an edit stood under `edit  /private/tmp/.../scratch…`); code
+  is split on CRLF, CR and LF there and in the approval's rows (`<U+000D>` ended every row of code
+  a model sent with CRLF).
+- Contract-visible: 04 section 15.10's live row `<state>` and group counts; 03's sub-agent passage;
+  the teams-and-background vignette.
+- Tests: test-console-render.R "the live row says responding while any agent's text streams (P30
+  follow-up)", "a call's path is project-relative, cut in its middle to keep its file name", "a
+  call's code split on CRLF and CR shows no <U+000D> (P30 follow-up)"; test-console-ui.R "an
+  approval's own path row keeps its file name, cut in its middle (P30 follow-up)", "an approval
+  splits its code on CRLF and CR, no <U+000D> (P30 follow-up)"; test-console-input.R "the live row
+  counts its group and shows active phases without hiding pending work", "the live row shows from
+  the run's start, its clock from the prompt's Enter (#98)".

@@ -116,6 +116,42 @@ the fix, one commit each.
   pause keys per console in `?peter` and the vignette; re-wrapped prose; D-301, D-303, D-304.
   Commit `docs(console): record the steering review fixes`.
 
+## Follow-up round (2026-11-02)
+
+The maintainer's spacing request and the console findings of the 1.0.1 review (lane H), each
+checked against the code first; a failing test first, then the fix, one commit each.
+
+- **F1 Receipt spacing** (`R/console-render.R`): a receipt or take-back written as text streams
+  is a block of its own, one blank row on each side (the renderer drops its held blank row where
+  the block gap was written); the answer to a steer opens its own block. Commits
+  `fix(console): one blank row between a receipt and the paragraph after it`,
+  `fix(console): open a block for the answer after a steer` (D-301).
+- **F2 gptr_confirm() as a console question** (`R/console-ui.R`, `R/utils-options.R`,
+  `R/console-repl.R`): the UI's optional `confirm()`; keys typed before the run are the draft, never
+  the answer. Commit `fix(console): ask gptr_confirm()'s questions as console questions` (D-306).
+- **F3 A declined send** (`R/gptr-config.R`, `R/console-repl.R`): `Not sent: ...`, `declined`, a dim
+  notice. Commit `fix(console): say a declined egress prompt was not sent, as a notice` (D-307).
+- **F4 A call's header** (`R/console-render.R`, `R/console-ui.R`): project-relative paths cut in the
+  middle; CRLF code. Commits `fix(console): keep the file name of a tool call's path in its header`,
+  `fix(console): split a tool call's code on CRLF and CR` (D-309).
+- **F5 Live row words and clock** (`R/console-render.R`, `R/console-input.R`,
+  `R/subagent-team.R`): `responding`, `pending`, the group's clock, the row from agent_start with
+  its clock from Enter, a group's row cleared before a launch. Commits
+  `fix(console): say responding on the live row while the answer streams`,
+  `fix(console): name a group's members not started yet pending`,
+  `fix(console): keep a direct group's clock when its row changes owner`,
+  `fix(console): show the live row from the run's start, timed from Enter`,
+  `fix(console): clear a sub-agent group's live row before a process writes` (D-305, D-309).
+- **F6 Token totals** (`R/utils-tokens.R`, `R/session-object.R`). Commit
+  `fix(console): count requests of unknown tokens beside the known total` (D-308).
+- **F7 Typed during the start** (`R/console-repl.R`): the echo erased before the banner. Commit
+  `fix(console): erase text typed during peter()'s start before the banner` (D-306).
+- **F8 Documents**: `@` mentions in the vignette and the cheat sheet (IC-81 unchanged); the internal
+  docs and the contract's `<state>`; the group's dead fallbacks dropped. Commits
+  `docs(console): say @ mentions attach the workspace's objects`,
+  `docs(console): describe the sub-agent phases and live row as they are`,
+  `refactor(console): drop the sub-agent group's dead fallbacks`.
+
 ## Plan acceptance
 
 `isolated-check.R test '^console'` and `'^(doc-|agent-run|agent-loop)'` with no failure; lint
