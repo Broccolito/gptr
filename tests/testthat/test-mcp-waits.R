@@ -27,7 +27,7 @@ test_that("child waits serve an independent MCP client without another input or 
     list(name = "r", arguments = list(code = "value + 1"))))
   withr::local_seed(17)
   seed = get(".Random.seed", globalenv())
-  # proc_run() and the merged bridge have separate redirected-output wait paths.
+  # proc_run() alone and through the merged bridge (stderr in the stdout file)
   for (merge in c(FALSE, TRUE)) {
     result = if (!merge) {
       do.call(proc_run, c(client, list(timeout = 5)))

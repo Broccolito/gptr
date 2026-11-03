@@ -188,6 +188,16 @@ test_that("a child's exit ends a wait outside a pump within a short slice", {
   expect_lt(waited(function() bridge_sh("true", merge = TRUE)), 0.15)
 })
 
+test_that("proc_run(merge = TRUE) sends stderr into the stdout file", {
+  skip_on_cran()
+  res = proc_run(rscript_path(), c("--vanilla", "-e", "cat('out\\n'); message('err')"),
+                 merge = TRUE)
+  expect_identical(res$status, 0L)
+  expect_identical(res$stderr, "")
+  expect_match(res$stdout, "out", fixed = TRUE)
+  expect_match(res$stdout, "err", fixed = TRUE)
+})
+
 test_that("proc_run() output past 64 MiB keeps its head and tail and a status line", {
   skip_on_cran()
   code = "x = strrep(paste0(strrep('a', 99), '\\n'), 1e5); cat('first\\n'); for (i in 1:20) cat(x)"

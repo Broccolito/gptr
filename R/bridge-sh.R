@@ -185,40 +185,6 @@ bridge_write_lines = function(lines, path) {
   invisible(path)
 }
 
-#' Run a child to completion through P04; merge = TRUE sends stderr into the stdout file
-#' @noRd
-bridge_run = function(target, input, wd, timeout, env, merge) {
-  if (!merge) {
-    return(proc_run(target$command, target$args, input = input, timeout = timeout, env = env,
-                    wd = wd))
-  }
-  out_f = tempfile("gptr-bridge-")
-  in_f = if (is.null(input)) NULL else proc_input_file(input)
-  on.exit(unlink(c(out_f, in_f)), add = TRUE)
-  t0 = reactor_now()
-  p = proc_spawn(target$command, target$args, env = env, wd = wd, stdin = in_f, stdout = out_f,
-                 stderr = "2>&1")
-  on.exit(kill_all(p, grace = 0), add = TRUE, after = FALSE)
-  timed_out = FALSE
-  repeat {
-    reactor_pump(until = function() !p$is_alive(), slice_ms = 20L, timeout = 0.2)
-    if (isTRUE(file.size(out_f) > proc_output_cap)) {
-      kill_all(p, grace = 0)
-      break
-    }
-    if (!p$is_alive()) break
-    if (reactor_now() - t0 > timeout) {
-      timed_out = TRUE
-      kill_all(p, grace = 0)
-      break
-    }
-  }
-  status = tryCatch(p$get_exit_status(), error = function(e) NULL)
-  list(status = if (is.null(status)) NA_integer_ else as.integer(status),
-       stdout = proc_read_text(out_f), stderr = "", timed_out = timed_out,
-       elapsed = reactor_now() - t0)
-}
-
 #' The digest of a result without the `#> ` prefix (G5: "sh git status: exit 0, 6 lines")
 #' @noRd
 bridge_cmd_digest = function(x, bridge, label) {
@@ -303,7 +269,8 @@ bridge_exec = function(cmd, input = NULL, wd = NULL, timeout = NULL, env = NULL,
   # IC-60 helper environment: named values are set, unnamed ones pass variables through
   named = nzchar(names(env) %||% character(length(env)))
   child = child_env("helper", pass = unname(env[!named]), set = c(env[named], target$env))
-  res = bridge_run(target, bridge_input(input), wd, timeout, child, merge)
+  res = proc_run(target$command, target$args, input = bridge_input(input), timeout = timeout,
+                 env = child, wd = wd, merge = merge)
   timed_out = isTRUE(res$timed_out)
   status = if (timed_out) NA_integer_ else as.integer(res$status)
   out = gsub("\r\n", "\n", res$stdout, fixed = TRUE)
