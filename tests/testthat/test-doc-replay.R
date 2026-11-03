@@ -2515,7 +2515,11 @@ test_that("gptr_source() validates its arguments and runs plain scripts", {
   expect_error(gptr_source(f, replay = "sometimes"), class = "gptr_error_invalid_argument")
   rmd = file.path(getwd(), "r.Rmd")
   writeLines("x", rmd)
-  expect_error(gptr_source(rmd), class = "gptr_error_invalid_argument")
+  # an existing document of another format is told how to run it; a missing .R file is missing
+  expect_error(gptr_source(rmd), "^Not an \\.R file \\(render \\.Rmd and \\.qmd documents\\)",
+               class = "gptr_error_invalid_argument")
+  expect_error(gptr_source(file.path(getwd(), "missing.R")), "^No such file: ",
+               class = "gptr_error_invalid_argument")
   echoed = utils::capture.output(gptr_source(f, envir = e, echo = TRUE))
   expect_identical(echoed, c("> x = 1", "> y = x + 1"))
 })

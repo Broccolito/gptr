@@ -1725,8 +1725,7 @@ doc_bind_format = function(full, format) {
 #'              "x = 1 + 1", "# <<< gptr:7f3a21"), f)
 #' gptr_blocks(f)
 gptr_blocks = function(file) {
-  path = doc_file_arg(file, c("r", "rmd", "qmd", "ipynb"),
-                      "an existing .R, .Rmd, .qmd or .ipynb file")
+  path = doc_file_arg(file, c("r", "rmd", "qmd", "ipynb"), "an .R, .Rmd, .qmd or .ipynb file")
   fmt = doc_format_of(path)
   doc_recover(path)
   text = doc_read(path)$lines
@@ -1735,14 +1734,16 @@ gptr_blocks = function(file) {
 }
 
 #' The normalised path of `file` when it is an existing document of one of `formats`; anything
-#' else is `invalid_argument` (gptr_blocks(), gptr_source())
+#' else is `invalid_argument` (gptr_blocks(), gptr_source(), gptr_export()): "Not <expected>" for
+#' another format, "No such file" for a missing file or a directory of a fitting name
 #' @noRd
 doc_file_arg = function(file, formats, expected) {
   check_string(file, "file")
   path = path_norm(file)
-  if (!isTRUE(doc_format_of(path) %in% formats) || !path_info(path)$isdir %in% FALSE) {
-    gptr_abort(paste0("Not ", expected, ": ", path), "invalid_argument", arg = "file",
-               expected = expected)
+  fits = isTRUE(doc_format_of(path) %in% formats)
+  if (!fits || !path_info(path)$isdir %in% FALSE) {
+    gptr_abort(paste0(if (fits) "No such file" else paste("Not", expected), ": ", path),
+               "invalid_argument", arg = "file", expected = expected)
   }
   path
 }
@@ -2097,7 +2098,7 @@ doc_catalog_prune = function() {
 gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(),
                        echo = FALSE, model = NULL) {
   scoped = !missing(replay)
-  path = doc_file_arg(file, "r", "an existing .R file (knit .Rmd and .qmd documents)")
+  path = doc_file_arg(file, "r", "an .R file (render .Rmd and .qmd documents)")
   replay = check_choice(replay, c("auto", "replay", "live", "record"), "replay")
   check_env(envir, "envir")
   check_flag(echo, "echo")

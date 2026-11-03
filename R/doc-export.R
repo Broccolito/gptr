@@ -372,7 +372,7 @@ doc_export_lines = function(lines, format, path, target) {
 gptr_export = function(file, to, format = c("r", "peter")) {
   doc_control_guard("gptr_export")
   format = check_choice(format, c("r", "peter"), "format")
-  path = doc_file_arg(file, "r", "an existing .R document")
+  path = doc_file_arg(file, "r", "an .R document")
   check_string(to, "to")
   if (!identical(doc_format_of(to), "r") || any(doc_sidecar_exists(to))) {
     doc_export_refuse("destination must be a new R file")
