@@ -60,6 +60,8 @@ test_that("minimal tool declarations teach discovery without loading the API doc
   prompt = gptr_prompt(preset = "minimal")
   expect_match(prompt$tools_json, "peter$search", fixed = TRUE)
   expect_match(prompt$tools_json, "peter$help", fixed = TRUE)
+  expect_match(prompt$tools_json, "set up MCP servers, skills or settings in gptr itself",
+               fixed = TRUE)
   expect_false(grepl("gptr_mcp_add", paste(prompt$system, collapse = "\n"), fixed = TRUE))
 })
 

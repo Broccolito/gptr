@@ -2449,10 +2449,10 @@ texts below, serialised as the Anthropic tool array [final/prompt/measure.R, mea
 
 | Preset | Direct tools | Tool array | T0 system | Used for |
 |---|---|---|---|---|
-| `minimal` | `r`, `read`, `edit`, `write` | 614 | 648 | sub-agents, cheap models |
-| `standard` (default) | minimal + `ask` when a human is present, or in a non-interactive `manual` run | 614-791 (the `r` schema variant, §7.2) | 1,291 core + conditional sections (1,734 with all and the `ask` line) | interactive and programmatic use |
+| `minimal` | `r`, `read`, `edit`, `write` | 669 | 648 | sub-agents, cheap models |
+| `standard` (default) | minimal + `ask` when a human is present, or in a non-interactive `manual` run | 669-846 (the `r` schema variant, §7.2) | 1,291 core + conditional sections (1,734 with all and the `ask` line) | interactive and programmatic use |
 | `readonly` | `read`, `r` (scratch environment), `ask` when a human is present | about 560 | as standard without the edit and write rules (-115), plan mode block | plan mode |
-| `extended` | standard + direct `grep`, `find`, `ls`; full `<r_performance>` | 1,254 | 2,060 | models that underuse code; models with a 4,096-token cache minimum |
+| `extended` | standard + direct `grep`, `find`, `ls`; full `<r_performance>` | 1,309 | 2,060 | models that underuse code; models with a 4,096-token cache minimum |
 
 (Measured after the review [IC-68]; presets are registered `preset` records, so a plugin can add one [IC-69].)
 
@@ -2473,17 +2473,17 @@ literally asked for; the user and the document get the full diff from `details` 
 
 ```json
 [{"name":"read","description":"Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.","input_schema":{"type":"object","required":["path"],"properties":{"path":{"type":"string","description":"Path to the file to read (relative or absolute)"},"offset":{"type":"number","description":"Line number to start reading from (1-indexed)"},"limit":{"type":"number","description":"Maximum number of lines to read"}}}},
- {"name":"r","description":"Run R code in the user's live R session. Objects persist between calls and belong to the user. Returns printed output, messages, warnings, errors with a traceback, and plots as images. Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and last 60% and names a peter$out(id) handle for the rest.","input_schema":{"type":"object","required":["code"],"properties":{"code":{"type":"string","description":"R code to evaluate. May contain several expressions."},"record":{"type":"boolean","description":"Record this code in the user's document (default true). Use false for throwaway inspection."},"note":{"type":"string","description":"One-line decision or rationale, recorded as a '## Decision:' comment."},"timeout":{"type":"number","description":"Seconds; best effort. Default: none when the user is present, else 3600."}}}},
+ {"name":"r","description":"Run R code in the user's live R session. Objects persist between calls and belong to the user. Returns printed output, messages, warnings, errors with a traceback, and plots as images. Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and last 60% and names a peter$out(id) handle for the rest. To set up MCP servers, skills or settings in gptr itself, or find its APIs, use peter$search(\"words\") and peter$help(\"gptr\") inside r; peter$help(\"gptr::name\") gives docs, source = TRUE its definition.","input_schema":{"type":"object","required":["code"],"properties":{"code":{"type":"string","description":"R code to evaluate. May contain several expressions."},"record":{"type":"boolean","description":"Record this code in the user's document (default true). Use false for throwaway inspection."},"note":{"type":"string","description":"One-line decision or rationale, recorded as a '## Decision:' comment."},"timeout":{"type":"number","description":"Seconds; best effort. Default: none when the user is present, else 3600."}}}},
  {"name":"edit","description":"Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.","input_schema":{"type":"object","required":["path","edits"],"properties":{"path":{"type":"string","description":"Path to the file to edit (relative or absolute)"},"edits":{"type":"array","items":{"type":"object","required":["oldText","newText"],"properties":{"oldText":{"type":"string","description":"Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call."},"newText":{"type":"string","description":"Replacement text for this targeted edit."}}},"description":"One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead."}}}},
  {"name":"write","description":"Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.","input_schema":{"type":"object","required":["path","content"],"properties":{"path":{"type":"string","description":"Path to the file to write (relative or absolute)"},"content":{"type":"string","description":"Content to write to the file"}}}},
  {"name":"ask","description":"Ask the user one to four questions and wait for the answers, when a decision changes the result and cannot be inferred. The user may always type their own answer. Not for permission to run code: the harness asks for that itself.","input_schema":{"type":"object","required":["questions"],"properties":{"questions":{"type":"array","maxItems":4,"items":{"type":"object","required":["id","question"],"properties":{"id":{"type":"string"},"question":{"type":"string"},"type":{"enum":["single","multi","text"]},"options":{"type":"array","maxItems":9,"items":{"type":"string"}},"default":{"type":"string"}}}}}}}]
 ```
 
-Measured: four tools 674 tokens with the full `r` schema shown above; `ask` adds 145 (P-C's trimmed schema, vs
-about 336 for 18 §3.6's); the `r` tool alone 197. The `r` schema is frozen in one of four variants [IC-68]:
+Measured: four tools 729 tokens with the full `r` schema shown above; `ask` adds 145 (P-C's trimmed schema, vs
+about 336 for 18 §3.6's); the `r` tool alone 252. The `r` schema is frozen in one of four variants [IC-68]:
 `record` and `note` only when a document is bound at freeze, `timeout` (then described "Seconds; best effort.
-Default 3600.") only when no human can answer: 188 (document, no human), 169 (document, human), 137 (no document,
-no human: sub-agents), 118 (no document, human) tokens, so the minimal array is 614. The `r` result cap is about 4,000 estimated tokens [G2 (g)]; `read` caps at 2,000 lines, 50 KB
+Default 3600.") only when no human can answer: 243 (document, no human), 224 (document, human), 192 (no document,
+no human: sub-agents), 173 (no document, human) tokens, so the minimal array is 669. The `r` result cap is about 4,000 estimated tokens [G2 (g)]; `read` caps at 2,000 lines, 50 KB
 and 12,000 tokens, with line numbers off (cat -n costs +19-26%) [G2 (g)]; direct MCP results cap at 4,000.
 
 ### 7.3 The system prompt (verbatim)
@@ -3285,12 +3285,12 @@ listed in 12.4.
 
 | Preset | Tool array | T0 | T1 (fixture: `<r_env>` + 2 built-in skills) | Static total | Reference points |
 |---|---|---|---|---|---|
-| `minimal` (sub-agents) | 614 | 648 | 0 | **1,262** (about 1,700 Claude) | Pi's 4-tool default 919-1,175 [G2 (b)] |
-| `standard` core (no documents, artifacts, System 1; no human) | 614 | 1,291 | 542 | **2,447** (about 3,300) | |
-| `standard`, non-interactive, all sections, a bound document | 665 | 1,717 | 542 | **2,924** (about 3,950) | G4's 7-tool default 3,598 |
-| `standard`, interactive (+ `ask`), all sections, a bound document | 791 | 1,734 | 542 | **3,067** (about 4,140) | Claude Code CLI 3-18K [07] |
-| `standard`, interactive (+ `ask`), no document | 740 | 1,551 | 542 | 2,833 (about 3,820) | |
-| `extended` | 1,254 | 2,060 | 542 | 3,856 (about 5,210) | Codex 19-38K per turn [08] |
+| `minimal` (sub-agents) | 669 | 648 | 0 | **1,317** (about 1,780 Claude) | Pi's 4-tool default 919-1,175 [G2 (b)] |
+| `standard` core (no documents, artifacts, System 1; no human) | 669 | 1,291 | 542 | **2,502** (about 3,380) | |
+| `standard`, non-interactive, all sections, a bound document | 720 | 1,717 | 542 | **2,979** (about 4,020) | G4's 7-tool default 3,598 |
+| `standard`, interactive (+ `ask`), all sections, a bound document | 846 | 1,734 | 542 | **3,122** (about 4,220) | Claude Code CLI 3-18K [07] |
+| `standard`, interactive (+ `ask`), no document | 795 | 1,551 | 542 | 2,888 (about 3,900) | |
+| `extended` | 1,309 | 2,060 | 542 | 3,911 (about 5,280) | Codex 19-38K per turn [08] |
 
 Measured after the review with rtiktoken o200k [IC-68]; the parenthesised values project Claude tokens with the
 1.35 prior of §12.5 (range 1.3-1.6) [IC-73]. Budgets are in o200k-estimated units scaled by the session's
@@ -3331,7 +3331,7 @@ static prefix is read from cache at 0.025-0.1x the input price.
 
 | Mechanism | Saving | Evidence |
 |---|---|---|
-| Four direct tools; search and everything else as `peter$` members | 674 vs 1,199 tokens of tool schema per uncached request; about 36 vs 328 per member [G1 §2.5; an upper bound, G1 fact-check] | G4 §2.8, measured §7.2 |
+| Four direct tools; search and everything else as `peter$` members | 729 vs 1,199 tokens of tool schema per uncached request; about 36 vs 328 per member [G1 §2.5; an upper bound, G1 fact-check] | G4 §2.8, measured §7.2 |
 | MCP tools as R signatures | 50 GitHub tools: 2,285 vs 11,361 tokens; 125 tools: 2,285 vs 28,534 | G2 (b) |
 | Composition in one `r` call | 2.2x fewer requests and 3.6x less cumulative input on golden transcripts; SQL in 3 steps 6,476 -> 175 tokens; 8 polyglot tasks 45,140 (bash tool) -> 7,592 (same commands via `peter$sh`) -> 1,967 (R-composed), i.e. 22.9x | G2 (d), G5 token table |
 | R as polyglot glue with default budgets | results stay R objects; cross-language data never passes through the context; frugal bash can match on pure text filtering, R wins on defaults, objects and round trips | G5 fact-check 11 |
@@ -3348,7 +3348,7 @@ static prefix is read from cache at 0.025-0.1x the input price.
 | `r` schema variants | 9-79 tokens per request (`record`/`note` only with a bound document, `timeout` only without a human) | [IC-68] |
 | Rules from the active tools' guidelines | -115 tokens in the `readonly` (plan) preset; disabling a built-in removes its `<r_session>` line | [IC-68] |
 | Deduplicated turn blocks | an unchanged plugin block is not re-sent every prompt | [IC-38] |
-| `minimal` preset for sub-agents | 1,262 vs about 3,067 static tokens per child request | §12.1 |
+| `minimal` preset for sub-agents | 1,317 vs about 3,122 static tokens per child request | §12.1 |
 | System 1 for judgements | about 383 vs 2,174 input tokens per decision; about 100x cheaper in dollars | G2 (d), 04 |
 | System 1 over a session | 55-70 characters of state instead of the transcript | G3 (12) |
 | Replay and caches | 0 tokens for replayed blocks, cached System 1 elements, knitr-cached chunks, `print`, `$value`, audit entries | G3 (14), 14 |

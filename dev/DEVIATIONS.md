@@ -9576,3 +9576,24 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: 04 section 9.4 (`search`).
 - Tests: test-tool-namespace.R "peter$search() lists api documents only after the members, tools and
   skills it found"; the 1.0.0 assertion that a skill ranks first for "shiny apps" is restored.
+
+## D-334 - Lane E The r tool description points gptr's own setup at discovery; token baselines re-measured (2026-11-02)
+- Rule (live finding on the Codex route): asked to "set up an MCP server for this project", a model
+  edited `.codex/config.toml`, because nothing it saw said that MCP servers, skills and settings for
+  the project are gptr's (`gptr_mcp_add()`, `gptr_init()`, `.gptr/mcp.json`); `peter$search("mcp")`
+  was run only after the user corrected it. The sentence the `r` description carries since #100,
+  "For harness APIs, ...", now reads "To set up MCP servers, skills or settings in gptr itself, or
+  find its APIs, use `peter$search("words")` and `peter$help("gptr")` inside r; ...". It is one rule
+  for every preset and route, costs 13 o200k tokens more (55 in all, 42 of them since #100), and
+  names no function, so the minimal preset still teaches discovery without loading the API.
+- Rule (review #100, baselines): the measured totals move to 1,317 / 2,502 / 2,979 / 3,122 (minimal,
+  standard core, all, interactive) and the golden transcripts' prefixes by 13 (the others by up to
+  21 more, the drift of earlier merges); the `estimate` block, which had drifted to 3.5% above, is
+  re-measured at 1,713 / 2,675 / 3,177 / 3,385, so the 2% and 5% gates bind again. Architecture 7.1,
+  7.2 and 12.1 and contract 9.2 and the IC-68 fixture row state the new figures (each was 42 below
+  the measurement). A later change to a prompt text re-measures with
+  `Rscript --vanilla dev/bench/tokens/run.R --update` and records the figures here or in a D-n.
+- Contract-visible: 03 sections 7.1, 7.2 and 12.1; 04 sections 9.2 and the IC-68 fixture row.
+- Tests: test-tool-discovery.R "minimal tool declarations teach discovery without loading the API
+  documentation"; test-bench-context.R "the measured o200k baselines are pinned" and the 5% estimate
+  test; `dev/bench/tokens/run.R --check`.
