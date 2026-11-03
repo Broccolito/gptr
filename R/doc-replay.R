@@ -813,16 +813,17 @@ doc_s1_summary = function(x) {
 
 #' doc.s1_block: the one-line block of a top-level System 1 call (contract 11.5), redacted with
 #' the persist profile (free-text choice levels reach it; IC-74); nothing in replay mode, for
-#' nested calls, for calls in no document or with `.opts$record = FALSE`
+#' nested calls, for calls in no document or with `.opts$record = FALSE`. Invisibly TRUE when the
+#' block was shown, as a notebook's pending block is in the cell output (doc_pending_add())
 #' @noRd
 doc_s1_block_service = function(call, summary) {
   if (isFALSE(call$args$opts$record) || !is.null(run_current()) ||
       identical(replay_mode(call$args$replay), "replay")) {
-    return(invisible(NULL))
+    return(invisible(FALSE))
   }
   site = tryCatch(doc_locate(call), error = function(e) NULL)
   if (is.null(site) || !isTRUE(site$top_level) || is.null(site$stmt) || isTRUE(site$console)) {
-    return(invisible(NULL))
+    return(invisible(FALSE))
   }
   txt = if (inherits(summary, "gptr_s1")) doc_s1_summary(summary) else as.character(summary)[1L]
   meta = attr(summary, "meta") %||% list()
@@ -834,12 +835,14 @@ doc_s1_block_service = function(call, summary) {
     site$regenerate = TRUE
   }
   line = redact(paste0("#> ", doc_one_line(txt)), "persist")
-  tryCatch(doc_upsert(site, structure(line, header = header)),
-           error = function(e) {
-             registry_diagnostic("builtin:documents", "doc.s1_block", class(e)[1L],
-                                 conditionMessage(e))
-           })
-  invisible(NULL)
+  res = tryCatch(doc_upsert(site, structure(line, header = header)),
+                 error = function(e) {
+                   registry_diagnostic("builtin:documents", "doc.s1_block", class(e)[1L],
+                                       conditionMessage(e))
+                   NULL
+                 })
+  invisible(identical(res$backend, "pending") &&
+              isTRUE(res$action %in% c("insert", "replace", "stale-regenerate")))
 }
 
 #' doc.replay: the replayed team or fan-out session of a fresh (or undone) block, else NULL with

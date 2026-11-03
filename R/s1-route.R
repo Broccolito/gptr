@@ -733,14 +733,15 @@ s1_failures = function(conditions, n) {
 }
 
 #' Write the one-line block of a statement through P15's doc.s1_block service, when registered and
-#' no run executes model code (the agent's calls are recorded by their r block)
+#' no run executes model code (the agent's calls are recorded by their r block); TRUE when the
+#' service showed the block (a notebook's pending block in the cell output), so the summary is not
+#' said again
 #' @noRd
 s1_doc_block = function(call, summary) {
   if (is.null(call) || !is.null(run_current()) || !ext_service_has("doc.s1_block")) {
-    return(invisible(NULL))
+    return(FALSE)
   }
-  ext_service_get("doc.s1_block")(call, summary)
-  invisible(NULL)
+  isTRUE(ext_service_get("doc.s1_block")(call, summary))
 }
 
 #' The session owning a typed decision: its explicit session, else the run evaluating R
@@ -825,8 +826,8 @@ s1_record = function(out, prompt, q, meta, session, call) {
                                  question_type = q$type, n = length(out), summary = summary,
                                  cached = n_cached),
               session = session)
-  if (verbosity() >= 1L) gptr_inform(ui_escape(summary), "progress")
-  s1_doc_block(call, structure(summary, meta = list(model = meta$model, date = meta$date)))
+  shown = s1_doc_block(call, structure(summary, meta = list(model = meta$model, date = meta$date)))
+  if (verbosity() >= 1L && !shown) gptr_inform(ui_escape(summary), "progress")
   invisible(summary)
 }
 
