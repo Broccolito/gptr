@@ -734,6 +734,27 @@ test_that("/undo asks first when the preview finds items it cannot restore", {
   expect_identical(ui$remaining(), 0L)
 })
 
+test_that("/undo's question lists what it restores after what it cannot (D-354)", {
+  skip_on_cran()
+  proj = local_project()
+  local_fake_provider(list(fake_tool("r", code = "x = 2; writeLines('b', 'b.txt')"), "done"))
+  e = new.env()
+  s = peter("change x", model = "fake/fake-1", mode = "auto", envir = e)
+  e$x = 99
+  seen = new.env()
+  ui = list(select = function(title, choices, default = NULL, details = NULL) {
+    seen$details = details
+    1L
+  })
+  ctx = list(session = s, has_ui = function() TRUE, ui = function() ui)
+  out = ckpt_cmd_undo("", ctx)
+  expect_identical(seen$details,
+                   c("object x: conflict: changed after the checkpoint (kept current)",
+                     "file b.txt: would be removed"))
+  expect_true("file b.txt: removed" %in% out)
+  expect_false(file.exists(file.path(proj, "b.txt")))
+})
+
 test_that("/undo lists each item once, by its outcome after the whole undo (#37)", {
   skip_on_cran()
   local_project()

@@ -829,17 +829,18 @@ ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all", verb = "Rewou
   c(paste0(verb, " (", lr$restore, end), lr$report, if (length(text)) c("Undone prompt:", text))
 }
 
-#' /undo: rewind the last turn; asks first when the preview finds items it cannot restore
+#' /undo: rewind the last turn; when the preview finds items it cannot restore, asks first,
+#' listing them and then what it would restore
 #' @noRd
 ckpt_cmd_undo = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no session to undo.")
   plan = tryCatch(gptr_rewind(s, preview = TRUE), gptr_error = conditionMessage)
   if (is.character(plan)) return(plan)
-  bad = plan[plan$restore %in% FALSE, , drop = FALSE]
-  if (nrow(bad) && ctx$has_ui()) {
+  bad = plan$restore %in% FALSE
+  if (any(bad) && ctx$has_ui()) {
     ans = ctx$ui()$select("Some items cannot be restored. Undo anyway?", c("Undo", "Cancel"),
-                          default = 2L, details = paste0(bad$item, ": ", bad$reason))
+                          default = 2L, details = paste0(plan$item, ": ", plan$reason)[order(!bad)])
     if (!isTRUE(ans == 1L)) return("Undo cancelled.")
   }
   ckpt_cmd_run(s)

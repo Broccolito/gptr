@@ -16,3 +16,11 @@ each confirmed by a verifier. Decisions D-353..D-355.
   case) on the old code. Green: `ckpt` PASS 1087; `cli-codex|cli-claude|mcp-server|cli-common`
   PASS 1875. The IC-65 native-edit tests fail without `local_native_step()` (FAIL 4), so they
   exercise the new hook.
+
+## Y-2 - /undo's question lists what it restores (D-354)
+- Defect: the "Undo anyway?" question listed only the items it could not restore, so a CLI turn
+  with an approved edit and a new file in a large project showed the coverage row alone; a file
+  to delete previewed as "would be restored".
+- Fix: the question lists every plan item, unrestorable first; a removal previews as "would be
+  removed".
+- Red: ckpt-rewind FAIL 1. Green: `ckpt|console-command` PASS 1266.

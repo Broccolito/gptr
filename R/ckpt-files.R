@@ -681,7 +681,7 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
     if (dry) {
       out = ckpt_item(out, item, if (g$ask) NA else TRUE,
                       if (g$ask) paste0("needs confirmation (", g$reason, ")") else
-                        paste("would be", verb))
+                        paste("would be", if (remove) "removed" else verb))
       next
     }
     if (g$ask && !ckpt_confirm_outside(full, session)) {

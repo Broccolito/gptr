@@ -10348,3 +10348,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   turn's files are scanned only after a step outside R (D-353)" (the fake Codex CLI's text and
   codex_shell cases); the IC-65 native-edit tests of ckpt-rewind announce their edit with
   `local_native_step()` (helper-fake.R). Evidence: progress/fixes-1.0.1/round2-Y.md.
+
+## D-354 - Fixes 1.0.1 round 2 lane Y Checkpoint messages name what changes, in plain words (2026-11-03)
+- Rule (`/undo`): when the preview finds items it cannot restore, the "Undo anyway?" question
+  lists every item of the plan, those it cannot restore first, then what it would restore or
+  remove. A file the undo deletes previews as "would be removed" (was "would be restored", as
+  objects already read). Was only the items it could not restore, so after Peter's approved edit
+  and new file on claude-cli in a large project the question showed the "file coverage" row alone.
+- Contract-visible: the `reason` of a `gptr_rewind(preview = TRUE)` file row (04 section 6.5);
+  the question itself is console wording.
+- Tests: ckpt-rewind "/undo's question lists what it restores after what it cannot (D-354)".
+  Evidence: progress/fixes-1.0.1/round2-Y.md.
