@@ -60,9 +60,10 @@ truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) 
   long = which(nchar(lines, allowNA = TRUE) > 400L)
   if (length(long)) {
     lines = as.list(lines)
+    # by code points: substring() rescans a non-ASCII string from its start for every piece
     lines[long] = lapply(lines[long], function(x) {
-      at = seq(1L, nchar(x), 400L)
-      substring(x, at, at + 399L)
+      cp = utf8ToInt(x)
+      vapply(split(cp, (seq_along(cp) - 1L) %/% 400L), intToUtf8, "", USE.NAMES = FALSE)
     })
     lines = unlist(lines)
     costs = est_tokens_each(paste0(lines, "\n"), class)

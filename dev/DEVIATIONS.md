@@ -9574,18 +9574,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   and spill file kept only the cut line, and the parent reported the answer as incomplete. The
   same cut reached `peter$py()` and job output values, knitted engine output and attached files.
   The token budget of each view is now the only bound: text within it (about 4000 tokens for `r`)
-  reaches the model as printed. When `truncate_output()` must cut, lines over 400
-  characters continue as 400-character pieces first, so a long line cannot leave the 40% head or
-  the 60% tail empty; the notice counts those lines, and the out store and spill file hold the same
-  lines, every character included, so `peter$out(id, lines =)` matches the notice. The helper views
+  reaches the model as printed. When `truncate_output()` must cut, lines over 400 characters
+  continue as 400-character pieces first (split by code points, in time linear in the line,
+  non-ASCII included), so a long line cannot leave the 40% head or the 60% tail empty; the notice
+  counts those lines, and the out store and spill file hold the same lines, every character
+  included, so `peter$out(id, lines =)` matches the notice. The helper views
   (`peter$sh()`, `peter$py()` prints, `peter$out()` values) keep whole lines and name a line they
   leave out in their notice. No option. The token benchmark replays recorded results and is
   unchanged.
 - Contract-visible: 04 `clean_terminal()` and `truncate_output()` rows; architecture `utils-text.R`
   row.
 - Tests: test-utils-text.R "a cut keeps lines over 400 characters as 400-character pieces",
-  "clean_terminal() drops ANSI and OSC sequences, collapses progress, keeps long lines";
-  test-eval-format.R "a long line within the budget reaches the model whole". Evidence:
+  "a cut splits a long non-ASCII line in linear time", "clean_terminal() drops ANSI and OSC
+  sequences, collapses progress, keeps long lines"; test-eval-format.R "a long line within the budget reaches the model whole". Evidence:
   progress/fixes-1.0.1/lane-I.md.
 
 ## D-346 - Fixes 1.0.1 lane I local()'s code binds plain names in its own environment (2026-11-02)
