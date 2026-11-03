@@ -453,6 +453,9 @@ repl_file_block = function(path, shown, max_lines = 40L, room = Inf) {
   x[bad] = iconv(x[bad], "CP1252", "UTF-8")
   more = length(x) > max_lines
   x = redact(clean_terminal(utils::head(x, max_lines)), profile = "context")
+  v = view_lines(x, room, "code")
+  more = more || !identical(v, x)
+  x = v
   tag = function(cut) paste0(file, if (cut) " truncated=\"true\"", ">")
   n = lines_fit(x, room, "code", function(m) c(tag(more || m > 0L), "</file>"))
   if (!n && length(x)) {

@@ -65,6 +65,7 @@ bridge_notice = function(omitted, id = NULL, stream = "stdout") {
 #' Per-line costs with their newline bound est_tokens() of the joined view (G5 budget_view).
 #' @noRd
 bridge_view_lines = function(lines, budget, head = 0.4, id = NULL, stream = "stdout") {
+  lines = view_lines(lines, budget)
   n = length(lines)
   costs = est_tokens_each(paste0(lines, "\n"), "r_output")
   if (!n || sum(costs) <= budget) return(lines)

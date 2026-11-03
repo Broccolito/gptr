@@ -9578,10 +9578,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   continue as 400-character pieces first (split by code points, in time linear in the line,
   non-ASCII included), so a long line cannot leave the 40% head or the 60% tail empty; the notice
   counts those lines, and the out store and spill file hold the same lines, every character
-  included, so `peter$out(id, lines =)` matches the notice. The helper views
-  (`peter$sh()`, `peter$py()` prints, `peter$out()` values) keep whole lines and name a line they
-  leave out in their notice. No option. The token benchmark replays recorded results and is
-  unchanged.
+  included, so `peter$out(id, lines =)` matches the notice. The helper views cut as D-348 says.
+  No option. The token benchmark replays recorded results and is unchanged.
 - Contract-visible: 04 `clean_terminal()` and `truncate_output()` rows; architecture `utils-text.R`
   row.
 - Tests: test-utils-text.R "a cut keeps lines over 400 characters as 400-character pieces",
@@ -9624,3 +9622,22 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   IC-54)" (read forms level 0, write and computed forms 4); test-perm-gate.R "control actions need
   a person in every mode, plan included (IC-53, IC-54)" (the read form runs in `auto`). Evidence:
   progress/fixes-1.0.1/lane-I.md.
+
+## D-348 - Fixes 1.0.1 lane I A helper view that must cut shows the head of a long line (2026-11-02)
+- Rule (amends D-345, 04 section 9.4 and architecture `utils-text.R`): the views that show text they
+  did not store (`peter$sh()`, `peter$py()`, `peter$sql()` and job prints, `peter$out()` and
+  `peter$help()` values, an `@file` block) keep every line whole when the text fits their budget;
+  when it does not, `view_lines()` first shows each line over 400 characters as its first 400 and
+  ` ...[+N chars]` (the 1.0.0 marker), then the view cuts by lines as before. After D-345 such a
+  view left out a line larger than its budget, so `peter$sh()` of one 50,000-character line and
+  `tail-line` printed only the notice and `tail-line`, `print(peter$out(id))` of it said
+  `index the value`, and a one-line minified file was `not attached`. These views do not split a
+  line into pieces as `truncate_output()` does: their notices count the lines of the value or store
+  the model indexes, which they did not make, so a piece count would point `x[a:b]` and
+  `peter$out(id, lines =)` at the wrong lines. The value and the store keep the whole line. An
+  `@file` block cut this way is marked `truncated="true"`.
+- Contract-visible: 04 section 9.4 (prints); architecture `utils-text.R` row.
+- Tests: test-bridge-sh.R "a view that must cut shows a line over 400 characters as its head
+  (D-348)"; test-tool-namespace.R "print.gptr_text() prints head and tail within the budget with a
+  notice"; test-console-repl.R "a one-line @file over the budget attaches the head of its line
+  (D-348)". Evidence: progress/fixes-1.0.1/lane-I.md.

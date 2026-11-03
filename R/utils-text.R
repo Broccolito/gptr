@@ -100,6 +100,18 @@ truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) 
   )
 }
 
+#' Lines of text a view did not store, within `budget` tokens: unchanged when they fit, else each
+#' line over 400 characters as its first 400 and ` ...[+N chars]`, so the line count stays that of
+#' the text (D-348)
+#' @noRd
+view_lines = function(lines, budget, class = "r_output") {
+  if (sum(est_tokens_each(paste0(lines, "\n"), class)) <= budget) return(lines)
+  width = nchar(lines, allowNA = TRUE)
+  long = !is.na(width) & width > 400L
+  lines[long] = paste0(substr(lines[long], 1L, 400L), " ...[+", width[long] - 400L, " chars]")
+  lines
+}
+
 #' The truncation notice (about 26 tokens; G5 fact-check 13)
 #' @noRd
 truncation_notice = function(omitted, id) {

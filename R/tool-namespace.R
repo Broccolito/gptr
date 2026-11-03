@@ -79,6 +79,7 @@ budget_head = function(lines, budget, class = "r_output") {
 #' Head (40% of the budget) and tail (60%) of lines and the number left out
 #' @noRd
 budget_head_tail = function(lines, budget, class = "r_output") {
+  lines = view_lines(lines, budget, class)
   n = length(lines)
   if (!n || est_tokens(lines, class) <= budget) {
     return(list(head = lines, tail = character(), omitted = 0L))

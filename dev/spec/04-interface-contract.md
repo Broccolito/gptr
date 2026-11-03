@@ -3604,7 +3604,8 @@ Registered as tool specs with a `fun` by the plans named (`read`, `write`, `edit
 an `execute`, so presets can declare them as direct tools; IC-37). Every member validates its arguments with the
 §1.1 checkers; called from model code while a run executes, it passes `dispatch_nested()` (P06) with the risk shown;
 called by the user it runs directly. Prints are budgeted by `gptr.helper_output_tokens` (1,500), and at most 0.6x
-the remaining `r` budget when called inside `r`.
+the remaining `r` budget when called inside `r`; a print that must cut shows a line over 400 characters as its first
+400 and ` ...[+N chars]`, keeping the value's line count (D-348).
 
 | Member | Owner | Signature | Returns | Risk (level) |
 |---|---|---|---|---|
