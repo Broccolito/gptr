@@ -125,7 +125,7 @@ by the main agent keep their reports out of its terminal output for the main age
 ## System 1 decision leaves
 
 A main agent or one of its children can call a decision model from R and use the typed result
-in a later step. For hundreds or thousands of judgements, pass the inputs as one batch:
+in a later step. For hundreds or thousands of judgments, pass the inputs as one batch:
 
 ```{r, eval = FALSE}
 keep = peter("Is this abstract about a randomised trial?", abstracts, model = "jev")
