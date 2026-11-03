@@ -1182,6 +1182,25 @@ test_that("configured marketplace paths explain their omission before plugin act
   expect_identical(nrow(gptr_registry(diagnostics = TRUE)), nrow(diag))
 })
 
+test_that("a configured marketplace path is recorded once, with its path, at every start", {
+  skip_on_cran()
+  root = local_gw()
+  write_file(file.path(root, "downloads", "mkt", ".claude-plugin", "marketplace.json"),
+             '{"name": "catalog", "plugins": []}')
+  write_file(file.path(root, "tools2", "helper.R"), "function(gptr) NULL")
+  gptr_config(plugins = c("./downloads/mkt", "./tools2/helper.R"), .scope = "session")
+  gptr_reload()
+  before = nrow(gptr_registry(diagnostics = TRUE))
+  for (i in 1:3) plugins_sync()
+  pl = gptr_plugins()
+  plugins_sync()
+  diag = gptr_registry(diagnostics = TRUE)
+  expect_identical(nrow(diag), before + 1L)
+  expect_match(tail(diag$message, 1L), "downloads/mkt: This path is a plugin marketplace",
+               fixed = TRUE)
+  expect_match(attr(pl, "footer"), "^# 1 configured plugin skipped")
+})
+
 test_that("an installed toy plugin package is discovered, lazy and activated on use", {
   local_toy_install()
   pl = gptr_plugins(installed = TRUE)

@@ -9596,6 +9596,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   directory", "an installed Claude plugin whose install root is a marketplace resolves by its
   name", and the marketplace-root test, which now also covers `.mcp.json` and `skills/`.
 
+## D-332 - Lane E A configured plugin entry that fails is recorded once, with its path (2026-11-02)
+- Rule (review #101; live finding): `gptr_plugins()` and the session-start sync (`plugins_sync()`,
+  run by the skills, prompts and agents `session_start` hooks, so three times at every top-level
+  start) wrote the same failure in two forms: the listing once, with the entry named, the sync
+  three times and nameless, so a marketplace root in the `plugins` setting added three or four rows
+  per start and the log (1,000 rows) lost older diagnostics within about 300 starts. Both call one
+  function, `plugin_entry_failed()`, which records `<entry>: <message>` unless that row is already
+  in `gptr_registry(diagnostics = TRUE)`. No console warning is added: an unresolved configured entry
+  stays a diagnostic, as contract 10.8 has it, and `gptr_plugins()` shows the footer (a `/plugins`
+  command was never specified, `03` section 6.17).
+- Rule (review #101): `gptr_plugins()` no longer counts a configured extension entry (an `.R` file or
+  a named extension) as a skipped plugin, since activation enables it through `extension_resolve()`
+  before `plugin_resolve()`.
+- Contract-visible: 04 section 11.12 (unchanged).
+- Tests: test-ext-plugins.R "a configured marketplace path is recorded once, with its path, at every
+  start".
+
 ## D-334 - Lane E The r tool description points gptr's own setup at discovery; token baselines re-measured (2026-11-02)
 - Rule (live finding on the Codex route): asked to "set up an MCP server for this project", a model
   edited `.codex/config.toml`, because nothing it saw said that MCP servers, skills and settings for

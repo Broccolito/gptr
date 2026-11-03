@@ -1342,12 +1342,9 @@ gptr_plugins = function(installed = FALSE) {
   }
   skipped = character()
   set = lapply(plugins_setting(), function(n) {
-    tryCatch(plugin_resolve(n), error = function(e) {
+    tryCatch(if (is.null(extension_resolve(n))) plugin_resolve(n), error = function(e) {
       skipped <<- unique(c(skipped, n))
-      problem = redact_hook(paste0(n, ": ", conditionMessage(e)), "persist")
-      if (!problem %in% gptr_registry(diagnostics = TRUE)$message) {
-        registry_diagnostic("user", "plugin", class(e)[1L], problem)
-      }
+      plugin_entry_failed(n, e)
       NULL
     })
   })
@@ -1368,6 +1365,15 @@ gptr_plugins = function(installed = FALSE) {
 }
 
 # ---- process-level sync ----------------------------------------------------------------------
+
+#' Record why a configured entry of the `plugins` setting failed, once, with the entry named
+#' @noRd
+plugin_entry_failed = function(entry, e) {
+  problem = redact_hook(paste0(entry, ": ", conditionMessage(e)), "persist")
+  if (!problem %in% gptr_registry(diagnostics = TRUE)$message) {
+    registry_diagnostic("user", "plugin", class(e)[1L], problem)
+  }
+}
 
 #' Extension files (`*.R`) of a directory, in radix order
 #' @noRd
@@ -1394,9 +1400,7 @@ plugins_sync = function() {
   st$sync_gen = gen
   st$sync_root = root
   for (n in plugins_setting()) {
-    tryCatch(plugin_enable(n, 5L), error = function(e) {
-      registry_diagnostic("user", "plugin", class(e)[1L], conditionMessage(e))
-    })
+    tryCatch(plugin_enable(n, 5L), error = function(e) plugin_entry_failed(n, e))
   }
   enable_dir = function(dir, scope, rank) {
     for (f in ext_files(dir)) {
