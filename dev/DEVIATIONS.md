@@ -9580,3 +9580,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: `?gptr_models`; `vignette("language-models")`.
 - Tests: test-cli-discovery.R ("the Claude catalog waits through the reactor and CLI catalogs run
   only on refresh").
+
+## D-326 - 1.0.1 lane D Claude CLI discovery registers full ids, never selection aliases (2026-11-02)
+- Rule: `pcli_claude_models()` gives each initialize selection the first `claude-` id among its
+  `value` and `resolvedModel`, and skips a selection that has none. An id taken from
+  `resolvedModel` carries no display name, because the alias's name (`Default (recommended)`)
+  would replace the catalog's name for that model. Formerly every `value` was registered, so
+  `claude-cli/sonnet` and `claude-cli/default` became catalog ids passed as `--model sonnet`.
+  That broke the full-id rule (03 section 8.4, 04 sections 8.5 and 11.10), and the backend of a
+  recorded ref changed whenever Claude moved the alias. The shipped full-id rows were also listed
+  `unlisted` next to an `advertised` alias row. #106's sentence "Claude selection aliases come
+  from `value`" (04 section 7.20) is replaced. The IC-19 declared-alias precedence of
+  `model_resolve()` stays.
+- Tests: test-cli-discovery.R ("Claude discovery uses only initialize and keeps full ids, never
+  selection aliases").

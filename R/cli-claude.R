@@ -52,7 +52,9 @@ pcli_claude_catalog = function(args) {
   }
 }
 
-#' The selectable identifiers and effort levels reported by Claude's initialize response
+#' The selectable models and effort levels reported by Claude's initialize response, as full
+#' ids (03 8.4): a selection's `value` when it is a `claude-` id, else its `resolvedModel`, which
+#' takes no alias display name; a selection alias (`sonnet`, `default`) is never a catalog id
 #' @noRd
 pcli_claude_models = function() {
   args = c("-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
@@ -63,9 +65,12 @@ pcli_claude_models = function() {
   out = list()
   for (m in obj$models) {
     if (!is.list(m)) next
-    id = pcli_chr(m$value)
-    if (is.null(id) || !nzchar(id)) next
-    out[[length(out) + 1L]] = compact(list(id = id, name = pcli_chr(m$displayName),
+    value = pcli_chr(m$value)
+    ids = c(value, pcli_chr(m$resolvedModel))
+    id = ids[which(startsWith(ids, "claude-"))[1L]]
+    if (!length(id) || is.na(id)) next
+    out[[length(out) + 1L]] = compact(list(id = id,
+      name = if (identical(id, value)) pcli_chr(m$displayName),
       reasoning = if (isTRUE(m$supportsEffort) || isTRUE(m$supportsAdaptiveThinking)) TRUE,
       thinking_levels = pcli_model_strings(m$supportedEffortLevels)))
   }

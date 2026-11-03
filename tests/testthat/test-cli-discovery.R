@@ -27,18 +27,22 @@ test_that("Codex discovery reads its CLI catalog without starting a turn", {
   expect_identical(calls, list(c("debug", "models", "--help"), c("debug", "models")))
 })
 
-test_that("Claude discovery uses only initialize and preserves reported selection aliases", {
+test_that("Claude discovery uses only initialize and keeps full ids, never selection aliases", {
   local_mocked_bindings(pcli_claude_catalog = function(args) {
     expect_true(all(c("--tools", "--strict-mcp-config", "--setting-sources",
                       "--disable-slash-commands", "--no-session-persistence") %in% args))
     expect_false("--model" %in% args)
     list(models = list(list(value = "sonnet", displayName = "Sonnet",
       resolvedModel = "claude-new-sonnet", supportsEffort = TRUE,
-      supportedEffortLevels = list("low", "high"))))
+      supportedEffortLevels = list("low", "high")),
+      list(value = "claude-haiku-4-5", displayName = "Haiku 4.5"),
+      list(value = "opusplan", displayName = "Opus Plan"),
+      list(value = "default", resolvedModel = "default")))
   })
   models = pcli_discover_models("claude-cli")
-  expect_identical(models[[1L]]$id, "sonnet")
-  expect_identical(models[[1L]]$name, "Sonnet")
+  expect_identical(vapply(models, function(m) m$id, ""), c("claude-new-sonnet", "claude-haiku-4-5"))
+  expect_null(models[[1L]]$name)
+  expect_identical(models[[2L]]$name, "Haiku 4.5")
   expect_identical(models[[1L]]$thinking_levels, c("low", "high"))
   expect_null(models[[1L]]$context)
   expect_null(models[[1L]]$input)

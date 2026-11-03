@@ -3152,8 +3152,10 @@ subagent_backend(gptr_agent(model = "codex"), model_resolve("codex"))     # "cli
 | `pcli_discover_models(provider)` | `cli-common.R`, `cli-claude.R`, `cli-codex.R` | sparse model records from Claude SDK initialization or the help-gated `codex debug models` JSON catalog; no user prompt or inference, no direct credential-file reads, 30 s timeout; unsupported discovery returns `NULL`, a successful empty catalog returns `list()`, failures omit raw CLI/account output; the Claude wait runs the reactor; called only on explicit refresh (D-325) | P05 provider discovery |
 
 CLI catalogs describe selectable choices and may be cached or bundled; they do not verify
-account entitlement. Missing capabilities and limits remain unknown. Claude selection aliases
-come from `value`; `resolvedModel` is catalog resolution, not observed inference identity.
+account entitlement. Missing capabilities and limits remain unknown. Claude discovery keeps
+full ids only (03 §8.4, D-326): a selection's `value` when it is a `claude-` id, else its
+`resolvedModel` (catalog resolution, not observed inference identity) without the alias's display
+name; selection aliases such as `sonnet` or `default` are not catalog ids.
 `response_model` holds only a nonempty scalar model name from that request's native response
 metadata or CLI output (Claude init/message metadata or a Codex reroute notice). The selected
 `model` remains separate; a CLI reported difference produces a notice. Codex exec normally
