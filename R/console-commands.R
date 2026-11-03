@@ -181,10 +181,12 @@ cmd_help = function(args, ctx) {
   } else {
     "stop the answer"
   }, "; twice at the prompt leaves")
+  fate = console_typed_fate()
   typed = if (keys) {
     "In other consoles a line typed while peter works is the next prompt."
-  } else if (console_menu_available() && front_end() == "positron") {
-    "Text typed while peter works waits as R code; ctrl-c, then s, to steer."
+  } else if (!is.null(fate)) {
+    paste0(toupper(substr(fate, 1L, 1L)), substring(fate, 2L), "; ",
+           tolower(console_interrupt_key()), ", then s, to steer.")
   } else if (console_class() == "D") {
     "A line typed while peter works is queued as type_ahead says: a steer, unless follow_up."
   } else {

@@ -441,8 +441,9 @@ console_newest = function(s, rd, take = FALSE) {
 #' place of the status words), `draft` (the composer's text; NULL where no composer reads keys),
 #' `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt key),
 #' `pause` (TRUE where the key pauses, else it stops), `steer` (TRUE where only the pause menu
-#' steers: Positron's console holds what is typed as R code) and `typed` (TRUE where a line typed
-#' during the run is the next prompt: RStudio's console), `frozen` (TRUE while R code runs in this
+#' steers: Positron's and RStudio's consoles hold what is typed, console_typed_fate()) and `typed`
+#' (TRUE where a line typed during the run is the next prompt: RStudio's console, D-301), `frozen`
+#' (TRUE while R code runs in this
 #' process: no clock, and the keys wait, `<sep>keys show when r returns` with an empty draft, else
 #' `keys wait` among the status words before the queue; not while a question waits, which reads
 #' keys), `band` (TRUE on the input band, its words in the band's grey) and `status_w` (the widest
@@ -451,7 +452,8 @@ console_newest = function(s, rd, take = FALSE) {
 #' `question waiting`, 0 for a row of completions, which shows until the next key). In the style
 #' table's glyphs: without a composer the status ends with the key and its verb, as the composer's
 #' keys read, `<sep>esc stop`, with `steer` `<sep>ctrl-c, then s, to steer`, and with `typed`
-#' `<sep>typed lines run next`; with an empty draft `<up> edit` where Up takes a message back, or
+#' `<sep>typed lines run after this answer`; with an empty draft `<up> edit` where Up takes a
+#' message back, or
 #' the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`;
 #' else `<person> <draft>`, after the hint `runs after this answer` where the draft starts with / or
 #' ! (a follow-up, whatever the key) and the hint fits beside the status at its widest, and a
@@ -486,7 +488,7 @@ console_live_row = function(state, width) {
   terms = if (is.null(draft)) {
     verb = if (isTRUE(state$steer)) ", then s, to steer" else
       if (isTRUE(state$pause)) " pause" else " stop"
-    c(paste0(key, verb), if (isTRUE(state$typed)) "typed lines run next")
+    c(paste0(key, verb), if (isTRUE(state$typed)) "typed lines run after this answer")
   } else if (!nzchar(draft) && frozen) {
     "keys show when r returns"
   } else if (!nzchar(draft) && is.null(state$newest)) {
@@ -676,7 +678,7 @@ console_live_state = function(rec) {
        queued = if (direct) character() else console_queued(s),
        question = isTRUE(rec$question), frozen = isTRUE(frozen),
        key = console_interrupt_key(), pause = console_menu_available(),
-       steer = !direct && console_menu_available() && front_end() == "positron",
+       steer = !direct && !is.null(console_typed_fate()),
        typed = front_end() == "rstudio",
        draft = if (!is.null(rd)) rd$compose$draft %||% "", candidates = rd$compose$candidates,
        newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))

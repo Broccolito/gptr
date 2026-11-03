@@ -385,15 +385,15 @@ test_that("the banner names the console's key and promises nothing it lacks (rev
                                          "  ctrl-c twice leaves"))
 })
 
-test_that("in Positron the banner says typed text waits as R code (steering review)", {
+test_that("in Positron and RStudio the banner says how to steer (steering review, D-301)", {
   skip_on_cran()
   local_gptr_options(interactive = TRUE)
   expect_identical(utils::tail(banner_rows("positron", complete = FALSE), 3L), c(
     "/help lists commands - ctrl-c twice leaves",
     "text typed while peter works waits as R code - ctrl-c, then s, to steer", ""))
-  for (fe in c("terminal", "rstudio")) {
-    expect_false(any(grepl("waits as R code", banner_rows(fe))), info = fe)
-  }
+  expect_identical(utils::tail(banner_rows("rstudio"), 2L), c(
+    "lines typed while peter works run after its answer - esc, then s, to steer", ""))
+  expect_false(any(grepl("then s, to steer", banner_rows("terminal"))))
   # no menu, no line: nobody can answer it
   local_gptr_options(interactive = FALSE)
   expect_false(any(grepl("waits as R code", banner_rows("positron"))))

@@ -318,7 +318,7 @@ live_rows = function(states, width) {
 
 live_states = list(
   rstudio = list(what = "thinking", secs = 6, queued = "steer", key = "Esc", pause = TRUE,
-                 typed = TRUE),
+                 steer = TRUE, typed = TRUE),
   positron = list(what = "thinking", secs = 6, queued = "steer", key = "Ctrl-C", pause = TRUE,
                   steer = TRUE),
   menu = list(what = "r", secs = 65, key = "Ctrl-C", pause = TRUE),
@@ -337,7 +337,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   # the queue is counted, its kind named where one waits; the receipts show the text (D-301)
   expect_identical(live_rows(live_states, 80L), list(
-    rstudio = "▌ thinking 6s · 1 steer queued · esc pause · typed lines run next",
+    rstudio = "▌ thinking 6s · 1 steer queued · esc, then s, to steer",
     positron = "▌ thinking 6s · 1 steer queued · ctrl-c, then s, to steer",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer · tab follow-up · ctrl-c pause",
@@ -393,8 +393,14 @@ test_that("the live row says what the run does, its queue and the person's draft
   ))
 })
 
-test_that("Positron's row says Ctrl-C, then s, steers there (steering review)", {
+test_that("Positron's and RStudio's rows say the key, then s, steers there (steering review)", {
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
+  # RStudio holds a typed line for the next prompt: typing there never steers (D-301)
+  rstudio = list(what = "thinking", secs = 6, steer = TRUE, typed = TRUE, pause = TRUE,
+                 key = "Esc")
+  expect_identical(console_live_row(rstudio, 80L),
+                   "▌ thinking 6s · esc, then s, to steer · typed lines run after this answer")
+  expect_identical(console_live_row(rstudio, 60L), "▌ thinking 6s · esc, then s, to steer")
   state = list(what = "thinking", secs = 6, steer = TRUE, pause = TRUE, key = "Ctrl-C")
   expect_identical(console_live_row(state, 80L), "▌ thinking 6s · ctrl-c, then s, to steer")
   # the term goes whole, as every term does

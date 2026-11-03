@@ -178,10 +178,11 @@ test_that("an IDE console's row says what its key does and where typed lines go"
   testthat::local_mocked_bindings(front_end = function() "rstudio")
   w = wait_record()
   local_live_console("L")
-  # RStudio honours \033[K, so no padding stays in its transcript (visual review); Esc pauses
-  # there, and a line typed during the run is the next prompt (steering review)
-  expect_identical(utils::capture.output(invisible(wait_request(w))),
-                   "\r# thinking 0s - esc pause - typed lines run next\033[K")
+  # RStudio honours \033[K, so no padding stays in its transcript (visual review); Esc, then the
+  # pause menu's s, steers there, and a line typed during the run is the next prompt (steering
+  # review, D-301)
+  expect_identical(utils::capture.output(invisible(wait_request(w))), paste0(
+    "\r# thinking 0s - esc, then s, to steer - typed lines run after this answer\033[K"))
   # Rgui is abort-only: no pause is promised
   testthat::local_mocked_bindings(front_end = function() "rgui")
   utils::capture.output(console_live_stop())

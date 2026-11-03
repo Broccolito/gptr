@@ -984,10 +984,10 @@ console_wait = function(rs, ss, pump) {
 #' <model> - <mode> - .gptr/ found`, `objects: ` and up to six names of the evaluation environment,
 #' then the keys in bold, `/help lists commands - tab completes after @ ! / - ctrl-c twice leaves`:
 #' the tab only where the REPL completes (after ! and / in RStudio's console, which puts other words
-#' in backticks), the console's own interrupt key, which does not pause at the prompt. In Positron,
-#' whose console holds what is typed while peter works as R code, a line says so and that the key,
-#' then s, steers, in the live row's words (`ctrl-c, then s, to steer`). A blank line ends it, after
-#' the yolo notice
+#' in backticks), the console's own interrupt key, which does not pause at the prompt. Where the
+#' console holds what is typed while peter works (console_typed_fate()), a line says what becomes
+#' of it and that the key, then s, steers, in the live row's words (`ctrl-c, then s, to steer`). A
+#' blank line ends it, after the yolo notice
 #' @noRd
 repl_banner = function(rs) {
   sym = console_style()
@@ -1001,6 +1001,7 @@ repl_banner = function(rs) {
   # rows of whole terms (console_terms()), at the content width
   width = max(20L, cli::console_width() - 2L * nchar(console_pad()))
   terms = function(x) console_terms(x, width, sym$dim(sep))
+  fate = console_typed_fate()
   console_notice(paste(c(
     sym$dim(console_terms(c(paste("gptr", utils::packageVersion("gptr")),
                             console_escape(c(repl_model(rs), repl_mode(rs)), FALSE), ws), width)),
@@ -1011,12 +1012,23 @@ repl_banner = function(rs) {
     terms(c(key("/help", " lists commands"),
             if (isTRUE(rs$reader$complete)) key("tab", paste0(" completes after ", after)),
             key(esc, " twice leaves"))),
-    if (console_menu_available() && front_end() == "positron") {
-      terms(c(sym$dim("text typed while peter works waits as R code"),
-              paste0(key(esc, ", then "), key("s", ", to steer"))))
+    if (!is.null(fate)) {
+      terms(c(sym$dim(fate), paste0(key(esc, ", then "), key("s", ", to steer"))))
     }), collapse = "\n"))
   mode_notice(repl_mode(rs))
   console_write("")
+}
+
+#' What becomes of text typed while peter works where the console holds it and only the pause menu
+#' steers (D-301), in the banner's and /help's words: Positron's console keeps it as R code;
+#' RStudio's and R.app's run each line as the next prompt. NULL elsewhere: a terminal's composer
+#' reads the keys, and where the pause menu is not offered nobody can answer it
+#' @noRd
+console_typed_fate = function() {
+  fe = front_end()
+  if (!console_menu_available() || !fe %in% c("positron", "rstudio", "rgui")) return(NULL)
+  if (fe == "positron") "text typed while peter works waits as R code" else
+    "lines typed while peter works run after its answer"
 }
 
 #' A notice when background sessions wait for approval; P21 asks at their gptr_wait() (IC-57), the
