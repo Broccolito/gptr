@@ -150,8 +150,9 @@ mcp_serve_envir = function(target, run, mode) {
 }
 
 #' Gate a served call when no pump runs (an idle console): the policies alone decide; whatever
-#' needs approval is denied with how to allow it and, with `notice`, a console notice, never
-#' prompted from a callback (IC-57)
+#' needs approval is denied with what a person can do about it and, with `notice`, a console
+#' notice, never prompted from a callback (IC-57). An allow rule never pre-approves a call a
+#' policy leaves to a person (`ask_human`, level 4 included), so it is not offered for one (D-352).
 #' @noRd
 mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   if (isTRUE(gptr_opt("unsafe_no_permissions"))) {
@@ -159,20 +160,28 @@ mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   }
   pols = registry_all("policy", session = sid)
   ask = if (!"mode" %in% names(pols)) list(reason = "no permission mode policy is active")
+  person = FALSE
   for (p in pols) {
     d = ext_policy_decide(p, call, ctx)
     if (identical(d$decision, "deny")) return(d)
     if (!is.null(d) && !identical(d$decision, "allow")) ask = ask %||% d
+    person = person || identical(d$decision, "ask_human")
   }
   if (is.null(ask)) return(list(decision = "allow", reason = ""))
+  rule = "gptr_permissions(allow = ...)"
   if (notice) {
-    gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your approval; it ",
-                       "was refused. Allow it with gptr_permissions(allow = ...) or run it ",
-                       "yourself."), "notice")
+    message_row(gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your ",
+                                   "approval; it was refused. ",
+                                   if (person) "Run it yourself if you want it." else
+                                     paste0("Allow it with ", rule, " or run it yourself.")),
+                            "notice"),
+                row = reactor_depth() == 0L)
   }
   list(decision = "deny",
        reason = paste0(if (nzchar(ask$reason)) ask$reason else "this needs approval",
-                       "; nobody can approve it while gptr serves requests in the background"))
+                       "; nobody can approve it while gptr serves requests in the background"),
+       how = paste0("Ask the user to run it at the R prompt",
+                    if (!person) paste0(" or to allow it with ", rule), "."))
 }
 
 #' The gate of a served call (IC-57): perm_check() with the session's run only while a pump runs
@@ -221,6 +230,7 @@ mcp_serve_call = function(target, name, args, id, schema) {
 #' as the agent loop runs it (tool_run(): its record's source, the result check), a reported one
 #' (`st`, which marks the start of its execution) in the run's tool frame (tool_execute_frame()).
 #' A reported call runs between the checkpointers' before and after, as dispatch_steps() runs one.
+#' Its child waits cannot reenter later callbacks or sibling tools, even when entered at idle.
 #' @noRd
 mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   s = target$session
@@ -262,7 +272,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     spec$risk(input, ctx)
   }
   call = list(id = paste0("mcp_", id), name = name, input = input, tool = spec, nested = FALSE,
-              risk = risk)
+              risk = risk, envir = env)
   if (!is.null(run)) call = tool_call_hook(run, call, risk)
   if (!is.null(call$blocked)) {
     if (!is.null(st)) st$refused = call$refused
@@ -271,8 +281,6 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
     if (!is.null(st)) st$refused = perm_refused(d) %||% "not allowed"
-    d$how = paste0("To allow it, run it yourself at the R prompt or add a rule with ",
-                   "gptr_permissions(allow = ...).")
     return(gptr_tool_result(paste(perm_denial_text(d), "Nothing in this call ran."),
                             is_error = TRUE))
   }
@@ -282,6 +290,11 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     tokens = checkpoint_before(run, call, ctx)
     st$t0 = reactor_now()
   }
+  reactor = reactor_get()
+  reactor$tool_depth = reactor$tool_depth + 1L
+  on.exit({
+    reactor$tool_depth = reactor$tool_depth - 1L
+  }, add = TRUE)
   res = if (identical(name, "r")) {
     call$approved_level = as.integer((d$risk %||% call$risk)$level %||% 2L)
     mcp_serve_r(call, env, run, s, ctx)
@@ -309,7 +322,7 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
   gptr_r_call = r_call_new(ctx)
   if (!mcp_pumped(run)) {
     sid = if (!is.null(session)) session_data(session)$id
-    gptr_r_call$gate = function(name, input) mcp_nested_gate(name, input, ctx, sid, call$risk)
+    gptr_r_call$gate = function(name, input) mcp_nested_gate(name, input, ctx, sid, call)
   }
   if (!is.null(run)) {
     outer = run$tool_call
@@ -351,15 +364,17 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
 #' run in its `wd`, as the member's own risk reads it, or a script's path), as the static gate
 #' reads one, with the registered secrets its `env` hands the child for the rules, and then, when
 #' that hand-over meets the secret guard, the member itself (its own risk), which no rule for `r`
-#' code covers; any other with its tool's risk of its input. A secret the served call's analysis
-#' (`outer`) guards was that call's question, as in dispatch_nested(). Signals the denial.
+#' code covers; any other with its tool's risk of its input. The literal is gated in the served
+#' call's environment (`outer$envir`), as the plan policy reads it. A secret the served call's
+#' analysis (`outer$risk`) guards was that call's question, as in dispatch_nested(). Signals the
+#' denial.
 #' @noRd
 mcp_nested_gate = function(name, input, ctx, sid = NULL, outer = NULL) {
   spec = registry_get("tool", name, session = sid)
   call = list(name = name, input = input, tool = spec, nested = TRUE,
               risk = if (is.function(spec$risk)) spec$risk(input, ctx))
-  if (isTRUE(call$risk$secret_guard) && isTRUE(outer$secret_guard) &&
-      all(call$risk$secrets %in% outer$secrets)) {
+  if (isTRUE(call$risk$secret_guard) && isTRUE(outer$risk$secret_guard) &&
+      all(call$risk$secrets %in% outer$risk$secrets)) {
     call$risk$secret_guard = FALSE
   }
   calls = list(call)
@@ -367,7 +382,7 @@ mcp_nested_gate = function(name, input, ctx, sid = NULL, outer = NULL) {
     code = nested_literal(name, input)
     risk = ext_service_get("risk.classify")(code, envir = NULL, root = project_root(), kind = "r")
     risk$secrets = unique(c(risk$secrets, call$risk$secrets))
-    calls = c(list(list(name = "r", input = list(code = code), risk = risk)),
+    calls = c(list(list(name = "r", input = list(code = code), risk = risk, envir = outer$envir)),
               if (isTRUE(call$risk$secret_guard)) calls)
   }
   for (x in calls) {
@@ -602,28 +617,26 @@ mcp_http_route = function(st, req) {
 
 #' Client snippets for Codex, Claude Code, Claude Desktop and Cursor, each with a tool timeout of
 #' 3,600 s (HTTP MCP clients time a request out after 60 s by default). They carry the token, so
-#' they print redacted. The Codex snippet is a list: `args` (the `-c` overrides, which read the
-#' token from GPTR_MCP_TOKEN) and `env` (the environment to start Codex with); the others are JSON
-#' text (contract 6.3)
+#' they, the codex `env` and the list of them (a `gptr_mcp_config`) print and format redacted. The
+#' Codex snippet is a list: `args` (the `-c` overrides, which read the token from GPTR_MCP_TOKEN)
+#' and `env` (the environment to start Codex with); the others are JSON text (contract 6.3)
 #' @noRd
 mcp_client_snippets = function(url, token) {
   bearer = paste("Bearer", token)
-  obj = function(x) {
-    structure(json_encode(list(mcpServers = list(gptr = x)), pretty = TRUE),
-              class = c("gptr_mcp_snippet", "character"))
-  }
-  list(
-    codex = structure(list(args = c("-c", paste0("mcp_servers.gptr.url=", url), "-c",
-                                    "mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN",
-                                    "-c", "mcp_servers.gptr.tool_timeout_sec=3600"),
-                           env = c(GPTR_MCP_TOKEN = token)),
-                      class = c("gptr_mcp_snippet", "list")),
+  snippet = function(x) structure(x, class = c("gptr_mcp_snippet", class(x)))
+  obj = function(x) snippet(json_encode(list(mcpServers = list(gptr = x)), pretty = TRUE))
+  structure(list(
+    codex = snippet(list(args = c("-c", paste0("mcp_servers.gptr.url=", url), "-c",
+                                  "mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN",
+                                  "-c", "mcp_servers.gptr.tool_timeout_sec=3600"),
+                         env = snippet(c(GPTR_MCP_TOKEN = token)))),
     claude_code = obj(list(type = "http", url = url, headers = list(Authorization = bearer),
                            timeout = 3600000L)),
     claude_desktop = obj(list(command = "npx", args = I(c("-y", "mcp-remote", url, "--header",
                                                           paste0("Authorization: ", bearer))),
                               timeout = 3600000L)),
-    cursor = obj(list(url = url, headers = list(Authorization = bearer), timeout = 3600000L)))
+    cursor = obj(list(url = url, headers = list(Authorization = bearer), timeout = 3600000L))),
+    class = c("gptr_mcp_config", "list"))
 }
 
 #' A `gptr_mcp_handle` (contract 5.11): url, port, token_env, config and stop(), plus `token`,
@@ -647,14 +660,25 @@ mcp_handle_new = function(st, tok, stop) {
 #' agents such as Codex, Claude Code, Claude Desktop or Cursor. It listens only on 127.0.0.1,
 #' requires a 192-bit bearer token, rejects foreign browser origins, and runs every call through
 #' your permission settings; R code evaluates in `envir`, where its objects persist. The calls
-#' belong to a dedicated gptr session whose permission mode is the one in effect when the server
-#' starts (stop and start the server to change it); like any new session, it becomes
-#' [gptr_last()]. Requests are answered while R waits at the console or inside a gptr call; one
-#' that needs your approval is refused with a note on how to allow it, because gptr never asks
-#' from a background callback. The token appears only in the snippets of `$config` (printed
-#' redacted; `as.character()` gives the text to paste; `$config$codex` holds the `codex` options
-#' in `$args` and the environment to start Codex with in `$env`). One server runs per R process.
-#' Needs 'httpuv', 'later' and 'openssl'; gptr's own codex route does not use this server.
+#' belong to a dedicated gptr session whose permission mode is the configured default when the
+#' server starts, independently of a chat's explicit mode; like any new session, it becomes
+#' [gptr_last()]. A running server keeps its original workspace and mode until stopped.
+#' Requests are answered at R's top-level idle prompt or during an outermost gptr wait. Serving
+#' pauses while Peter's own prompt waits (in every console), while other R code runs and during a
+#' nested tool wait. Where R has no idle prompt (Rscript, knitr, Quarto, or a Jupyter kernel
+#' between cells), a request waits for the next gptr wait, such as `peter$sh()` or
+#' [gptr_wait()], and a client may time out (a server started there says so); serve from an
+#' interactive R console instead.
+#' In Peter, `/mcp serve` starts or reuses the server and returns to R's prompt; a new server
+#' uses that chat's workspace and mode. Resume the chat with `gptr_last() |> peter()`. Calls that
+#' need approval are refused with a note on what a person can do, because gptr never asks from a
+#' background callback. In plan mode, `r` calls that only read run in a scratch environment above
+#' the workspace (what they create is not kept) and every call that changes something is
+#' refused. The token appears only in the snippets of `$config`, which show it
+#' redacted, in notebooks and documents too (`as.character()` gives the text to paste;
+#' `$config$codex` holds the `codex` options in `$args` and the environment to start Codex with
+#' in `$env`). One server runs per R process. Needs 'httpuv', 'later' and 'openssl'; gptr's own
+#' codex route does not use this server.
 #'
 #' If shutdown cannot be confirmed, access is revoked and the server is retained for retry.
 #' Call `gptr_mcp_serve(stop = TRUE)` again; new requests are refused until shutdown completes.
@@ -680,11 +704,20 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   check_env(envir, "envir")
   port = check_number(port, "port", min = 1, max = 65535, int = TRUE, null = TRUE)
   check_flag(stop, "stop")
-  ext_control_guard("gptr_mcp_serve")
   if (stop) {
+    ext_control_guard("gptr_mcp_serve")
     mcp_serve_stop()
     return(invisible(NULL))
   }
+  mcp_serve_open(envir, setting_get("mode", default = "manual"), unique(tools), port)
+}
+
+#' Start the server with a dedicated session in `mode` (the configured default, or the chat's
+#' for /mcp serve, so a session-scope setting never loosens it), or return the running handle,
+#' which keeps its workspace and mode
+#' @noRd
+mcp_serve_open = function(envir, mode, tools = mcp_default_tools(), port = NULL) {
+  ext_control_guard("gptr_mcp_serve")
   if (isTRUE(the$mcp_server$stopping)) {
     gptr_abort("The MCP server is stopping; retry its stop before serving new requests.",
                "not_available", member = "mcp_serve")
@@ -692,13 +725,17 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   if (!is.null(the$mcp_server$handle)) return(the$mcp_server$handle)
   st = mcp_serve_start(port)
   st$envir = envir
-  # the dedicated session (contract 6.3, IC-58; P01's arch_contract_edges() admits this edge):
-  # the mode setting now, and a placeholder model, since it never sends a request
-  s = session_new(setting_get("model", default = "mcp/serve"),
-                  setting_get("mode", default = "manual"), home = envir, kind = "chat")
-  tok = mcp_serve_token(s, unique(tools))
+  # the dedicated session (contract 6.3, IC-58; P01's arch_contract_edges() admits this edge),
+  # with a placeholder model, since it never sends a request
+  s = session_new(setting_get("model", default = "mcp/serve"), mode, home = envir, kind = "chat")
+  tok = mcp_serve_token(s, tools)
   st$user = list(key = tok$key, session = s)
   st$handle = mcp_handle_new(st, tok, mcp_serve_stop)
+  if (!gptr_is_interactive()) {
+    gptr_inform(paste("R has no idle prompt in a script, document or Jupyter kernel: the MCP",
+                      "server answers only during gptr waits such as peter$sh() or gptr_wait(),",
+                      "not between them or between Jupyter cells."), "notice")
+  }
   st$handle
 }
 
@@ -724,6 +761,24 @@ print.gptr_mcp_handle = function(x, ...) {
   invisible(x)
 }
 
+#' A client snippet's text with its token redacted
+#'
+#' @param x A `gptr_mcp_snippet`.
+#' @param ... Ignored.
+#' @return A character vector.
+#' @export
+#' @noRd
+format.gptr_mcp_snippet = function(x, ...) {
+  text = if (is.list(x)) {
+    c(paste(x$args, collapse = " "), format(x$env))
+  } else if (is.null(names(x))) {
+    as.character(x)
+  } else {
+    paste0(names(x), "=", unname(x))
+  }
+  redact(text, "persist")
+}
+
 #' Print a client snippet with its token redacted
 #'
 #' @param x A `gptr_mcp_snippet`.
@@ -732,18 +787,55 @@ print.gptr_mcp_handle = function(x, ...) {
 #' @export
 #' @noRd
 print.gptr_mcp_snippet = function(x, ...) {
-  if (is.list(x)) {
-    text = c(paste(x$args, collapse = " "), paste0(names(x$env), "=", unname(x$env)))
-    note = "(the token is hidden; $args are the codex options, $env the child's environment)"
+  note = if (is.list(x)) {
+    "(the token is hidden; $args are the codex options, $env the child's environment)"
   } else {
-    text = as.character(x)
-    note = "(the token is hidden; as.character() gives the text to paste)"
+    "(the token is hidden; as.character() gives the text to paste)"
   }
-  msg_verbatim(c(redact(text, "persist"), note))
+  msg_verbatim(c(format(x), note))
   invisible(x)
 }
+
+#' The client snippets' text with their token redacted
+#'
+#' @param x A `gptr_mcp_config`.
+#' @param ... Passed to `format()`.
+#' @return A named character vector.
+#' @export
+#' @noRd
+format.gptr_mcp_config = function(x, ...) format(lapply(x, format), ...)
+
+#' Print the client snippets with their token redacted
+#'
+#' @param x A `gptr_mcp_config`.
+#' @param ... Passed to `print()`.
+#' @return `x`, invisibly.
+#' @export
+#' @noRd
+print.gptr_mcp_config = function(x, ...) {
+  print(unclass(x), ...)
+  invisible(x)
+}
+
+#' Show a client snippet's structure with its token redacted
+#'
+#' @param object A `gptr_mcp_snippet`.
+#' @param ... Passed to `str()`.
+#' @return `NULL`, invisibly.
+#' @exportS3Method utils::str
+#' @noRd
+str.gptr_mcp_snippet = function(object, ...) utils::str(redact(unclass(object), "persist"), ...)
 
 on_load({
   the$mcp_tokens = new.env(parent = emptyenv())
 })
+
+#' No rich repr: Jupyter (IRkernel) then shows a snippet, and a list holding one (`$config`), only
+#' as the redacted text/plain of print()
+#' @noRd
+mcp_snippet_repr = function(obj, ...) NULL
+
+on_load(s3_register("repr::repr_html", "gptr_mcp_snippet", method = mcp_snippet_repr))
+on_load(s3_register("repr::repr_markdown", "gptr_mcp_snippet", method = mcp_snippet_repr))
+on_load(s3_register("repr::repr_latex", "gptr_mcp_snippet", method = mcp_snippet_repr))
 on_load(on_unload(mcp_serve_stop))

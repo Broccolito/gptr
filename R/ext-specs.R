@@ -502,6 +502,7 @@ kind_check_prompt_section = function(spec) {
 #' UI backends: absent methods get fail-closed defaults (a missing dialog is never an approval)
 #' @noRd
 kind_check_ui = function(spec) {
+  if (is.null(spec[["has_secret_input"]])) spec$has_secret_input = function() FALSE
   if (is.null(spec[["input"]])) {
     spec$input = function(prompt, default = "", secret = FALSE) NA_character_
   }
@@ -732,7 +733,7 @@ kinds_install = function(k) {
   ), kind_check_agent)
   def("ui", list(
     has_ui = req_fn(), select = req_fn(), input = fn(), questions = fn(), notify = fn(),
-    permission = fn("request")
+    permission = fn("request"), has_secret_input = fn()
   ), kind_check_ui)
   def("frontend", list(run = req_fn("session")), experimental = TRUE)
   def("setting", list(
@@ -970,6 +971,8 @@ spec_missing = function(kind, name, field) {
 #' @param description Model-facing description; direct tools stay under 400 estimated tokens.
 #' @param parameters A JSON Schema list with `type = "object"`, a `function(ctx)` evaluated once
 #'   when a session freezes its prompt, or `NULL` to derive the schema from `fun`'s formals.
+#'   Derived properties are strings, `...` is omitted and arguments without defaults are
+#'   required. Supply an explicit schema for other types.
 #' @param execute `function(input, ctx)` returning a [gptr_tool_result()], text, a list or `NULL`.
 #' @param fun The R-callable form of the tool.
 #' @param exposure One of `"direct"`, `"r"`, `"deferred"`, `"hidden"`.
@@ -1030,7 +1033,10 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #'   `api = "bedrock-converse"`, `region`: the AWS region requests are signed for).
 #' @param type `"chat"`, `"classifier"` (System 1) or `"cli"`.
 #' @param headers Named list of non-secret header strings.
-#' @param discover `function()` listing models on request, or `NULL`.
+#' @param discover `function()` returning a data frame with `id`, a list of sparse model
+#'   records (at least `id`), or `NULL` when unsupported. Runs only on
+#'   `gptr_models(provider = , refresh = TRUE)`, after consent. An empty listing is a successful
+#'   result; an error keeps prior catalog entries. Report only actual capabilities and limits.
 #' @param status `function()` reporting cached provider status, or `NULL`.
 #' @param aliases Alternative names of the provider.
 #' @param local Endpoint locality hint permitting unknown model ids. Resolved model locality is
@@ -1083,6 +1089,29 @@ gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, c
 #'   separate signature from the ordinary chat stream `parse(model, opts)`.
 #' @param capabilities Named list of adapter capabilities.
 #' @return A spec of class `c("gptr_adapter", "gptr_spec")`.
+#' @section Callback results:
+#' HTTP `build()` returns a named list with an absolute HTTP(S) `url`, optional `method`
+#' (POST with a body, otherwise GET), named `headers` (each a string, an origin-bound secret
+#' handle such as `opts$credential`, or an unnamed list of strings and handles joined in order,
+#' for example `list("Bearer ", opts$credential)`), `body` (UTF-8 text or raw bytes), `stream`
+#' (`"sse"`, `"ndjson"`, `"json"` or `"raw"`; the transport supplies the default) and optional
+#' `sign`, `function(method, url, body, value)`, called once per attempt with the raw body, where
+#' `value(handle)` reads a handle bound to the origin of the URL; it returns a named list of extra
+#' headers, for request signing. Never paste a handle into a string.
+#'
+#' For `process_jsonl`, `build()` returns `start`, a process specification with `command` (or
+#' `NULL` to reuse the session child), optional `send`, an unnamed list of objects to write as
+#' JSON lines (default empty), and optional `close_stdin`.
+#'
+#' `parse()` returns a list of functions: `push(unit)` consumes a decoded unit, `finish()`
+#' ends input and returns the final assistant message, `fail(cnd)` handles a transport failure,
+#' and `message()` returns the partial assistant message. The normalizer emits events through
+#' `opts$emit` and ends with one `done` or `error` event carrying the final or partial message.
+#'
+#' `stream()` returns a zero-argument generator. Each step returns
+#' `list(events = list(...), wait = 0)`; `wait` is seconds before the next step. Emit a terminal
+#' `done` or `error` event before returning `NULL`. Steps must return promptly (within 50 ms)
+#' so other work on the shared reactor can progress.
 #' @examples
 #' gptr_adapter("echo", transport = "inprocess",
 #'              stream = function(model, context, opts) {
@@ -1091,7 +1120,13 @@ gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, c
 #'                function() {
 #'                  if (state$done) return(NULL)
 #'                  state$done = TRUE
-#'                  list(events = list())
+#'                  message = list(role = "assistant", content = list(), api = model$api,
+#'                                 provider = model$provider, model = model$id,
+#'                                 stop_reason = "stop")
+#'                  list(events = list(
+#'                    list(type = "start", api = model$api, provider = model$provider,
+#'                         model = model$id),
+#'                    list(type = "done", reason = "stop", message = message)))
 #'                }
 #'              })
 #' @export
@@ -1302,18 +1337,31 @@ gptr_context_block = function(name, provide, placement = c("turn", "first", "bot
 
 #' Define a sub-agent backend
 #'
-#' A backend runs child sessions: `start(spec, ctx)` returns a handle the reactor can poll,
-#' `cancel(handle)` stops it and every process it started. Backends never block the reactor for
-#' more than 50 ms.
+#' A backend runs child sessions on the shared reactor. Its `start(spec, ctx)` returns a handle
+#' with a `gptr_session` in `session` and a zero-argument `cancel` function that stops the child
+#' and its processes. Asynchronous work supplies `run`, the child's live run on that reactor;
+#' without `run` the team scheduler treats the child as settled. Backend callbacks must not
+#' block the reactor for more than 50 ms.
 #'
 #' @param name Backend name, usable as `backend = <name>`.
-#' @param start `function(spec, ctx)`.
-#' @param poll `function(handle)` or `NULL`.
-#' @param cancel `function(handle)`.
-#' @param capabilities Named list: `parallel`, `live_objects`, `ask`.
+#' @param start `function(spec, ctx)`, receiving the prepared child specification and parent
+#'   context, and returning the handle described above. [gptr_check()] calls it with a minimal
+#'   probe (`name`, `prompt`, `model` and `tools`) and a scratch context, so it should tolerate a
+#'   specification without the other prepared fields.
+#' @param poll `function(handle)` or `NULL`, retained in the spec. The built-in team scheduler
+#'   observes `handle$run` on the reactor and does not call this callback.
+#' @param cancel `function(handle)` that stops the child and every process it started.
+#'   [gptr_check()] calls it on its probe handle and requires that no child process remains. The
+#'   team scheduler cancels through the handle's zero-argument `cancel` function instead, so a
+#'   backend normally sets `cancel = function(handle) handle$cancel()`.
+#' @param capabilities Named list: for a custom backend, `parallel = "cpu"` selects the worker
+#'   concurrency pool (other values select inline); `live_objects` (logical) and `ask`
+#'   (`"queue"`, `"forward"` or `"none"`) describe the backend rather than enforcing scheduler
+#'   behavior.
 #' @return A spec of class `c("gptr_backend", "gptr_spec")`.
 #' @examples
-#' gptr_backend("echo", start = function(spec, ctx) NULL, cancel = function(handle) NULL)
+#' # This constructs a spec; a working start() must return the handle described above.
+#' gptr_backend("echo", start = function(spec, ctx) NULL, cancel = function(handle) handle$cancel())
 #' @export
 gptr_backend = function(name, start, poll = NULL, cancel, capabilities = list()) {
   if (missing(start)) spec_missing("backend", name, "start")
@@ -1362,7 +1410,8 @@ spec_result_images = function(images) {
 #' member (kept in memory only, never persisted).
 #'
 #' @param text Character vector, joined with newlines into one text block, or `NULL`.
-#' @param images List of image blocks, PNG file paths or raw PNG vectors, or `NULL`.
+#' @param images Image blocks, PNG/JPEG/GIF/WebP file paths or raw PNG vectors, supplied as a
+#'   list; also accepts a character vector of paths, one raw PNG vector or `NULL`.
 #' @param details Named list of details, or `NULL`.
 #' @param is_error `TRUE` when the result reports a failure.
 #' @param value Any R value returned to R callers.

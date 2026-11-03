@@ -25,7 +25,8 @@ gptr_option_defaults = list(
   undo_max_bytes = 1e9, undo_spill_max = 2e9, undo_turns = 20L, checkpoint = "on",
   checkpoint_disk_bytes = 2e9, checkpoint_days = 30, checkpoint_turns = 100,
   checkpoint_track_file_max = 1e6, checkpoint_track_total = 1e8,
-  checkpoint_capture_max = 5e7, checkpoint_scan_budget = 0.25, checkpoint_rng = TRUE,
+  checkpoint_capture_max = 5e7, checkpoint_scan_budget = 0.25,
+  checkpoint_scan_timeout = 2, checkpoint_rng = TRUE,
   checkpoint_close_devices = FALSE, redact_min_chars = 8L, redact_patterns = TRUE,
   stream_hold_max = 4096L, env_export = TRUE, prompt_secrets = "redact",
   deprecations = "warn", history = TRUE, s1_max_active = 8L, s1_rounds = 3L,
@@ -295,7 +296,10 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
   }
   if (!is.null(hide)) {
     on.exit(tty_modes(hide), add = TRUE, after = FALSE)
-    tty_modes("-echo")
+    if (is.null(tty_modes("-echo"))) {
+      gptr_abort("The terminal could not disable echo; no credential was read.", "not_available",
+                 member = "hidden credential input", provided_by = "terminal")
+    }
   }
   start = proc.time()[["elapsed"]]
   x = as_utf8(read(prompt))
@@ -383,8 +387,26 @@ gptr_has_human = function() {
 gptr_can_prompt = function() {
   opt = getOption("gptr.interactive")
   if (!is.null(opt)) return(isTRUE(opt))
-  asks = gptr_is_interactive() || isTRUE(getOption("jupyter.in_kernel"))
+  asks = gptr_is_interactive() || (isTRUE(getOption("jupyter.in_kernel")) && jupyter_stdin())
   asks && !is_knitting() && !is_testthat() && !check_running()
+}
+
+#' Does the Jupyter client answer this kernel's readline()? IRkernel installs its executor's
+#' readline() in base, and the executor holds the current request: a client that serves no input
+#' (nbconvert, papermill, Quarto's jupyter engine) sends `allow_stdin = false`, and the readline
+#' would then wait forever. Only that explicit false says no, once with a notice (IC-43)
+#' @noRd
+jupyter_stdin = function(read = readline) {
+  allow = tryCatch(get0("current_request", environment(read), inherits = FALSE)$content$allow_stdin,
+                   error = function(e) NULL)
+  if (!isFALSE(allow)) return(TRUE)
+  gptr_inform(paste0("gptr asks no questions in this kernel: its Jupyter client takes no input ",
+                     "(nbconvert, papermill and Quarto run notebooks so). Each question takes ",
+                     "its unattended answer: a document is recorded into only with consent ",
+                     "given beforehand (gptr_doc()), an untrusted project's resources are not ",
+                     "loaded and actions that need approval are refused."), "notice",
+              .once = "jupyter_no_stdin")
+  FALSE
 }
 
 #' Yes/no question; `default` when nobody can answer. Never askYesNo().
@@ -619,10 +641,14 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.checkpoint_disk_bytes` (bytes, `2e9`), `gptr.checkpoint_days` (days, `30`) and
 #'   `gptr.checkpoint_turns` (integer, `100`): retention of the checkpoint store.
 #' - `gptr.checkpoint_track_file_max` (bytes, `1e6`) and `gptr.checkpoint_track_total` (bytes,
-#'   `1e8`): the per-file and total size of tracked project files.
+#'   `1e8`): the largest file the first scan stores, and what one scan stores in all.
 #' - `gptr.checkpoint_capture_max` (bytes, `5e7`): a larger changed file gets no stored copy.
-#' - `gptr.checkpoint_scan_budget` (seconds, `0.25`): above this walk time the project is
+#' - `gptr.checkpoint_scan_budget` (seconds, `0.25`): above this scan time the project is
 #'   scanned once per turn.
+#' - `gptr.checkpoint_scan_timeout` (seconds, `2`): the longest an automatic file scan runs.
+#'   Scans inspect at most 2,000 entries and back up at most 256 files within the byte limits
+#'   above. Incomplete scans are reported; unvisited files have no automatic undo coverage.
+#'   Predicted write targets are backed up separately.
 #' - `gptr.checkpoint_rng` (logical, `TRUE`): report changes of the random-number state in the
 #'   rewind report (gptr never changes your random seed).
 #' - `gptr.checkpoint_close_devices` (logical, `FALSE`): close graphics devices opened by an

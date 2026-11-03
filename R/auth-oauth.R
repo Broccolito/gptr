@@ -9,9 +9,10 @@
 # httr2 is never used (conventions section 8); every transfer runs on P04's reactor, whose
 # handles set followlocation = 0L (IC-64). Layer L0: the MCP layer reaches gptr_login("mcp:")
 # through the callback it registers with oauth_hooks_set() at load (architecture 2.2).
-# Credentials: refresh tokens and API keys live in P03's credential store (auth.json, 0600);
-# access tokens live only in the vault (secret "auth:<key>:access", bound to the resource's
-# origin) with their expiry in the store record (contract 11.8).
+# Credentials: user scope uses P03's auth.json (0600) or its existing keyring references;
+# explicit keyring scope uses the native OS backend. Session scope keeps metadata and vault
+# handles in this R process. Access tokens live only in the vault (secret "auth:<key>:access",
+# bound to the resource's origin), with their expiry in credential metadata (contract 11.8).
 
 # ---- URLs, headers, forms (pure) -----------------------------------------------------------
 
@@ -143,9 +144,8 @@ oauth_parse_redirect = function(input, redirect_uri, state, issuer, iss_supporte
     q = query_parse(input)
   }
   if (!is.null(q[["error"]])) {
-    gptr_abort(paste0("The sign-in was declined: ", q[["error_description"]] %||% q[["error"]],
-                      "."),
-               "provider", provider = issuer, status = NA_integer_, error_type = q[["error"]])
+    gptr_abort("The sign-in was declined by the authorization server.",
+               "provider", provider = issuer, status = NA_integer_, error_type = "oauth_denied")
   }
   if (!identical(q[["state"]], state)) untrusted("the state parameter does not match")
   if (!is.null(q[["iss"]])) {
@@ -385,9 +385,9 @@ oauth_remember = function(key, access, origin) {
 #' in-memory access token, else an OAuth refresh under a lock (`force` = refresh now, after a 401).
 #' A record that names its `resource` is handed only to that resource's origin: a server whose
 #' URL changed (another config reusing the name) gets no credential and asks for a sign-in.
+#' A caller that already read the record passes it as `rec`.
 #' @noRd
-oauth_access = function(key, origin, force = FALSE) {
-  rec = auth_store_get(key)
+oauth_access = function(key, origin, force = FALSE, rec = auth_store_get(key)) {
   if (is.null(rec)) return(NULL)
   if (is.character(rec$resource) && !is.null(origin) &&
         !identical(url_origin(rec$resource), url_origin(origin))) {
@@ -409,9 +409,8 @@ oauth_access = function(key, origin, force = FALSE) {
 #' field RFC 6749 section 6 requires (P04 bodies cannot carry handles; plan ambiguity 2).
 #' @noRd
 oauth_refresh = function(key, origin) {
-  lock = file.path(gptr_user_dir("config", create = TRUE),
-                   paste0("oauth-", substr(hash_sha256(key), 1L, 16L)))
-  lock_with(lock, function() {
+  scope = auth_store_scope(key)
+  refresh_record = function() {
     rec = auth_store_get(key)
     if (!inherits(rec$refresh, "gptr_secret") || !is.character(rec$token_endpoint)) return(NULL)
     refresh = secret_value(rec$refresh, url_origin(rec$token_endpoint))
@@ -424,9 +423,13 @@ oauth_refresh = function(key, origin) {
     rec$refresh = tok$refresh_token %||% refresh
     rec$expires = oauth_expiry(tok)
     header = oauth_remember(key, tok$access_token, origin)
-    auth_store_set(key, rec)
+    auth_store_set(key, rec, scope = scope)
     header
-  })
+  }
+  if (identical(scope, "session")) return(refresh_record())
+  lock = file.path(gptr_user_dir("config", create = TRUE),
+                   paste0("oauth-", substr(hash_sha256(key), 1L, 16L)))
+  lock_with(lock, refresh_record)
 }
 
 #' Deactivate the in-memory access tokens of `key` (gptr_logout(), contract 6.2): secret_lookup()
@@ -444,15 +447,18 @@ oauth_forget_access = function(key) {
 # ---- the authorization-code flow ---------------------------------------------------------------
 
 #' Load-time callbacks of the layers above (architecture 2.2: L0 talks upward only through
-#' callbacks), like P10's namespace providers: `target(name)` resolves gptr_login("mcp:<name>")
-#' to list(url, oauth). No credentials and no run state live here.
+#' callbacks), like P10's namespace providers: `target(name, slot = NULL, resolve_only = FALSE)`
+#' resolves MCP login metadata: name, binding and HTTP url/oauth or stdio resource/description,
+#' with lifecycle callbacks. `provider_target(id)` resolves the configured provider endpoint.
+#' Credential entry stays in the host UI; no credential values or run state live here.
 #' @noRd
 oauth_hooks = new.env(parent = emptyenv())
 
 #' Register the callbacks (mcp-namespace.R does at load)
 #' @noRd
-oauth_hooks_set = function(target = NULL) {
+oauth_hooks_set = function(target = NULL, provider_target = NULL) {
   if (!is.null(target)) assign("target", target, envir = oauth_hooks)
+  if (!is.null(provider_target)) assign("provider_target", provider_target, envir = oauth_hooks)
   invisible(NULL)
 }
 
@@ -502,18 +508,20 @@ oauth_page = function(status, text) {
 #' Where the browser comes back: a loopback listener on 127.0.0.1 (a port from
 #' port_candidates(), started with the seed preserved; IC-61) that keeps the whole query string,
 #' `iss` included (IC-71), or, without httpuv and later, a paste prompt. Returns
-#' list(redirect_uri, wait(timeout), close()).
+#' list(redirect_uri, wait(timeout), close()). Nested pumps and served tools use the paste
+#' fallback: their waits cannot run later callbacks without violating IC-57.
 #' @noRd
 oauth_redirect_setup = function(port = NULL, path = "/callback", state = NULL) {
   st = new.env(parent = emptyenv())
   st$query = NULL
-  if (!oauth_loopback_ok()) {
+  if (reactor_nested() || !oauth_loopback_ok()) {
+    oauth_need_hidden()                                   # before the browser opens
     p = if (is.null(port)) port_candidates(1L)[1L] else as.integer(port)
     uri = paste0("http://127.0.0.1:", p, path)
     return(list(redirect_uri = uri, close = function() invisible(NULL),
                 wait = function(timeout = 300) {
-                  oauth_ui()$input(paste0("After signing in, paste the full address of the ",
-                                          "page your browser opened"))
+                  oauth_ask(paste0("After signing in, paste the full address of the ",
+                                    "page your browser opened"))
                 }))
   }
   app = list(call = function(req) {
@@ -616,16 +624,107 @@ oauth_key_exchange = function(id, flow, client) {
   list(type = "api_key", key = oauth_post(flow$token, body, "key", id)$key)
 }
 
+#' The UI, when it can read without echo; else a classed refusal before anything is read
+#' @noRd
+oauth_need_hidden = function() {
+  ui = oauth_ui()
+  hidden = is.function(ui$has_secret_input) &&
+    isTRUE(tryCatch(ui$has_secret_input(), error = function(e) FALSE))
+  if (!hidden) {
+    gptr_abort(paste0("This UI cannot provide hidden credential input; nothing was read. Load ",
+                      "the key from a private file with gptr_env(path), or log in once in ",
+                      "RStudio or terminal R on Unix with scope = \"user\" or \"keyring\"."),
+               "not_available", member = "hidden credential input", provided_by = "UI backend")
+  }
+  ui
+}
+
 #' Masked entry of a key, token or client id through the UI (P11: rstudioapi::askForPassword()
 #' or a no-echo read)
 #' @noRd
-oauth_ask = function(what) {
-  v = oauth_ui()$input(what, secret = TRUE)
+oauth_ask = function(what, optional = FALSE) {
+  ui = oauth_need_hidden()
+  v = tryCatch(ui$input(what, secret = TRUE), error = function(e) {
+    gptr_abort("Hidden credential input failed; no credential was stored.", "not_available",
+               member = "hidden credential input", provided_by = "UI backend")
+  },
+                interrupt = function(e) NA_character_)
+  # the questions' commands, in any case and between blanks, are never stored as a credential
+  if (rlang::is_string(v) && !is.na(v)) {
+    v = switch(tolower(trimws(v)), `/skip` = "", `/cancel` = NA, v)
+  }
+  if (optional && (!rlang::is_string(v) || !nzchar(trimws(v)))) {
+    return(if (rlang::is_string(v) && !is.na(v)) "" else NA_character_)
+  }
   if (!rlang::is_string(v) || !nzchar(trimws(v))) {
     gptr_abort("Nothing was entered.", "invalid_argument", arg = "input",
                expected = "a non-empty value")
   }
+  secret_register(v, "login-input", source = "hidden input", active = FALSE)    # redaction only
   trimws(v)
+}
+
+#' The one place a login stores credential `key` under `scope`
+#' @noRd
+oauth_login_storage = function(key, scope) {
+  switch(scope, session = "this R process only (no credential file)",
+         keyring = "the native OS credential store, through keyring",
+         user = if (is.list(auth_store_read()[[key]]$keyring)) {
+           "its existing keyring item (auth.json keeps the reference)"
+         } else {
+           "auth.json on this computer"
+         })
+}
+
+#' Destination and persistence are reviewed in the host prompt, never supplied as an answer
+#' @noRd
+oauth_login_prompt = function(what, destination, key, scope, entry = TRUE) {
+  paste0(what, "\nDestination: ", redact(destination, "context"), "\nStorage: ",
+          oauth_login_storage(key, scope), ".",
+          if (entry) paste0("\nEntering the credential authorizes this destination and storage. ",
+                            "Leave blank or type /skip to skip; type /cancel, dismiss or ",
+                            "interrupt to cancel.") else
+            "\nContinuing authorizes this destination and storage.")
+}
+
+#' A safe, distinguishable result for an unfinished login, said to the person and the model
+#' @noRd
+oauth_login_incomplete = function(value, key) {
+  status = if (is.na(value)) "cancelled" else "skipped"
+  gptr_inform(paste0(if (is.na(value)) "Cancelled" else "Skipped",
+                     ": no credential was stored for ", key, "."), "login", key = key,
+              status = status)
+  invisible(structure(FALSE, status = status))
+}
+
+#' A browser flow has no key prompt in which to review destination and persistence
+#' @noRd
+oauth_login_review = function(destination, key, scope) {
+  answer = oauth_ui()$select(oauth_login_prompt("Sign in", destination, key, scope,
+                                                entry = FALSE),
+                             c("Continue to sign in", "Skip", "Cancel"))
+  if (identical(answer, 1L)) return(TRUE)
+  oauth_login_incomplete(if (identical(answer, 2L)) "" else NA_character_, key)
+}
+
+#' Reuse the credential store's keyring reference format, without returning secret values; a
+#' remembered login keeps an existing keyring item for the record's own secret field
+#' @noRd
+oauth_login_store = function(key, rec, scope) {
+  where = oauth_login_storage(key, scope)
+  ref = if (identical(scope, "keyring")) {
+    list(service = "gptr", username = key)                 # gptr_login() checked the backend
+  } else if (identical(scope, "user")) {
+    auth_store_read()[[key]]$keyring
+  }
+  if (is.list(ref)) {
+    rec$keyring = list(service = ref$service, username = ref$username,
+                       field = if (identical(rec$type, "oauth")) "refresh" else "key")
+  }
+  auth_store_set(key, rec, scope = if (identical(scope, "session")) "session" else "user")
+  gptr_inform(paste0("Stored the credential for ", key, " in ", where, "."), "login", key = key,
+              status = "stored")
+  invisible(TRUE)
 }
 
 # ---- gptr_login() and gptr_logout() ------------------------------------------------------------
@@ -636,16 +735,40 @@ oauth_ask = function(what) {
 #' (`"mcp:<server>"`). With `method = "auto"`, providers and MCP servers that support OAuth
 #' get the authorization-code flow with PKCE (S256): a page on 127.0.0.1 receives the redirect
 #' when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
-#' on. Everything else gets masked key entry. Credentials go to the credential store
-#' (`auth.json`, readable only by you: mode 0600 on Unix, and on Windows the access control list
-#' of your user profile, so keep `tools::R_user_dir("gptr", "config")` inside it; or a keyring
-#' reference); access tokens stay in memory.
-#' A tool call never opens a browser: when an MCP server needs a sign-in, the call fails with
-#' an error naming this function.
+#' on. A login inside a tool also uses hidden paste entry because loopback callbacks cannot run
+#' recursively. Key entry requires a UI with hidden input; it never falls back to visible typing.
+#' Hidden entry works in RStudio and Positron (through 'rstudioapi') and in terminal R on Unix;
+#' where the UI has none (Windows Rgui or Rterm, R.app, Jupyter, Emacs ESS), load keys with
+#' [gptr_env()] instead, or log in once elsewhere with a remembering `scope`.
+#' The host prompt shows the destination and storage before entry. For key entry, leave it blank
+#' (in a terminal, Ctrl-D counts as blank) or type `/skip` to skip; type `/cancel`, dismiss or
+#' interrupt (Ctrl-C) it to cancel. The initial OAuth review offers Skip and Cancel.
+#' Secret answers are not returned to the model.
+#' `scope = "session"` keeps credentials in this R process until logout or exit; it does not
+#' export an environment variable or create a credential file. For assisted setup, use this scope.
+#' The default `scope = "user"` remembers credentials in `auth.json` (mode 0600 on Unix; on
+#' Windows, protected by your user profile's access control list), or its existing keyring
+#' reference. `scope = "keyring"` explicitly uses the native OS credential backend through the
+#' optional 'keyring' package, and writes only a reference to `auth.json`. File and environment
+#' keyring backends are refused for this scope. Hidden input is not encryption.
+#' Provider credentials are bound to the configured endpoint; MCP credentials are bound to the
+#' reviewed server. Changed destinations require login again. An MCP tool that needs sign-in
+#' fails with an error naming this function; it never opens a browser by itself.
 #'
 #' @param provider A provider id such as `"openrouter"`, or `"mcp:<server>"` for an MCP server.
 #' @param method `"auto"` (default), `"oauth"` (the browser flow only) or `"key"` (key entry).
-#' @return `gptr_login()` returns `TRUE` invisibly; `gptr_logout()` removes the stored
+#' @param scope `"user"` (default) to remember, `"session"` for this R process only, or
+#'   `"keyring"` to remember through a native OS credential backend.
+#' @param slot For a stdio MCP server, the name of a declared secret environment entry such as
+#'   `"SERVICE_API_TOKEN"`. The credential is passed only to that server's child environment,
+#'   bound to its configuration as written and its resolved executable (an edit of either or an
+#'   update of the executable asks for login again; changing R's working directory or an
+#'   environment variable does not).
+#'   Leave `NULL` for providers and HTTP MCP servers.
+#' @return `gptr_login()` returns `TRUE` invisibly on success, or `FALSE` invisibly with a
+#'   `status` attribute of `"skipped"` or `"cancelled"`, and says which in a message that names
+#'   the store used; no credential value is returned or shown.
+#'   `gptr_logout()` removes the stored
 #'   credential and forgets the access token held in memory, and returns `TRUE` invisibly when
 #'   it removed something, else `FALSE`.
 #' @examples
@@ -654,22 +777,32 @@ oauth_ask = function(what) {
 #'   gptr_logout("openrouter")
 #' }
 #' @export
-gptr_login = function(provider, method = c("auto", "oauth", "key")) {
+gptr_login = function(provider, method = c("auto", "oauth", "key"),
+                      scope = c("user", "session", "keyring"), slot = NULL) {
   provider = check_string(provider, "provider")
   method = check_choice(method, c("auto", "oauth", "key"), "method")
+  scope = check_choice(scope, c("user", "session", "keyring"), "scope")
+  check_string(slot, "slot", null = TRUE)
   ext_control_guard("gptr_login")
-  if (!gptr_can_prompt()) {
+  if (!gptr_can_prompt() || !isTRUE(oauth_ui()$has_ui())) {
     gptr_abort("gptr_login() needs a person to sign in; run it in an interactive R session.",
                "noninteractive", what = "gptr_login()", questions = NULL)
   }
+  if (identical(scope, "keyring")) auth_need_os_keyring()
   if (startsWith(provider, "mcp:")) {
-    oauth_login_mcp(substring(provider, 5L), method)
-    return(invisible(TRUE))
+    return(invisible(oauth_login_mcp(substring(provider, 5L), method, scope, slot)))
   }
   flow = oauth_builtin_flows()[[provider]]
   if (is.null(flow) && is.null(registry_get("provider", provider))) {
     gptr_abort(paste0("Unknown provider: ", provider, "."), "invalid_argument", arg = "provider",
                expected = "a provider id from gptr_providers(), or \"mcp:<server>\"")
+  }
+  if (!is.null(slot)) arg_abort(slot, "slot", "NULL for a model provider")
+  target_fun = get0("provider_target", envir = oauth_hooks, inherits = FALSE)
+  destination = if (is.function(target_fun)) target_fun(provider)
+  if (!rlang::is_string(destination) || is.na(url_origin(destination))) {
+    gptr_abort("Configure a valid provider endpoint before signing in.", "invalid_argument",
+               arg = "provider", expected = "a provider with a configured endpoint")
   }
   if (identical(method, "oauth") && is.null(flow)) {
     gptr_abort(paste0("Provider ", provider, " has no sign-in flow in gptr; use method = \"key\"."),
@@ -677,41 +810,65 @@ gptr_login = function(provider, method = c("auto", "oauth", "key")) {
                expected = "\"key\" or \"auto\" for this provider")
   }
   rec = if (!is.null(flow) && !identical(method, "key")) {
+    review = oauth_login_review(url_for_log(destination), provider, scope)
+    if (!isTRUE(review)) return(invisible(review))
     oauth_flow(provider, client = list(key = provider))
   } else {
-    list(type = "api_key", key = oauth_ask(paste("API key for", provider)))
+    value = oauth_ask(oauth_login_prompt(paste("API key for", provider),
+                                          url_for_log(destination), provider, scope),
+                      optional = TRUE)
+    if (is.na(value) || !nzchar(value)) return(oauth_login_incomplete(value, provider))
+    list(type = "api_key", key = value)
   }
-  auth_store_set(provider, rec)
-  invisible(TRUE)
+  rec$resource = url_for_log(destination)
+  rec$endpoint_hash = hash_sha256(destination)
+  oauth_login_store(provider, rec, scope)
 }
 
 #' The MCP branch of gptr_login(): RFC 9728 discovery and OAuth, or a bearer token entered by
 #' hand when the server offers no OAuth
 #' @noRd
-oauth_login_mcp = function(name, method) {
+oauth_login_mcp = function(name, method, scope = "user", slot = NULL) {
   target_fun = get0("target", envir = oauth_hooks, inherits = FALSE)
   if (!is.function(target_fun)) {
     gptr_abort("MCP support is not loaded (builtin:mcp is filtered out).", "not_available",
                member = "gptr_login(\"mcp:...\")", provided_by = "P18")
   }
-  key = paste0("mcp:", name)
-  target = target_fun(name)
+  target = if (is.null(slot)) target_fun(name) else target_fun(name, slot = slot)
+  key = paste0("mcp:", target$name %||% name)
+  if (!is.null(slot)) {
+    if (identical(method, "oauth")) arg_abort(method, "method", "key for a stdio slot")
+    key = paste0(key, ":env:", slot)
+    value = oauth_ask(oauth_login_prompt(paste("Credential for MCP server", name,
+                                               "environment slot", slot),
+                                          target$description, key, scope), optional = TRUE)
+    if (is.na(value) || !nzchar(value)) return(oauth_login_incomplete(value, key))
+    oauth_login_store(key,
+                    list(type = "env", key = value, slot = slot, binding = target$binding,
+                         resource = target$resource), scope)
+    if (is.function(target$on_login)) target$on_login()
+    return(invisible(TRUE))
+  }
   disc = if (!identical(method, "key")) oauth_discover(target$url)
   if (is.null(disc)) {
     if (identical(method, "oauth")) {
       gptr_abort(paste0("MCP server ", name, " does not offer OAuth; use method = \"key\"."),
                  "invalid_argument", arg = "method", expected = "\"key\" for this server")
     }
-    token = oauth_ask(paste("Bearer token for MCP server", name))
-    auth_store_set(key, list(type = "api_key", key = token, resource = target$url))
-    return(invisible(TRUE))
+    token = oauth_ask(oauth_login_prompt(paste("Bearer token for MCP server", name),
+                                          url_for_log(target$url), key, scope), optional = TRUE)
+    if (is.na(token) || !nzchar(token)) return(oauth_login_incomplete(token, key))
+    rec = list(type = "api_key", key = token, resource = target$url, binding = target$binding)
+    return(oauth_login_store(key, rec, scope))
   }
+  review = oauth_login_review(url_for_log(target$url), key, scope)
+  if (!isTRUE(review)) return(invisible(review))
   rec = oauth_flow(disc, scopes = target$oauth$scope,
                    client = list(client_id = target$oauth$clientId,
                                  callback_port = target$oauth$callbackPort,
                                  resource = target$url, key = key))
-  auth_store_set(key, rec)
-  invisible(TRUE)
+  rec$binding = target$binding
+  oauth_login_store(key, rec, scope)
 }
 
 #' @rdname gptr_login
@@ -719,7 +876,20 @@ oauth_login_mcp = function(name, method) {
 gptr_logout = function(provider) {
   provider = check_string(provider, "provider")
   ext_control_guard("gptr_logout")
+  if (startsWith(provider, "mcp:")) {
+    target_fun = get0("target", envir = oauth_hooks, inherits = FALSE)
+    target = tryCatch(target_fun(substring(provider, 5L), resolve_only = TRUE),
+                       error = function(e) NULL)
+    provider = paste0("mcp:", target$name %||% substring(provider, 5L))
+  }
   stored = isTRUE(auth_store_remove(provider))
+  if (startsWith(provider, "mcp:")) {
+    slots = auth_store_keys()
+    for (key in slots[startsWith(slots, paste0(provider, ":env:"))]) {
+      stored = isTRUE(auth_store_remove(key)) || stored
+    }
+  }
   memory = oauth_forget_access(provider)
+  if (startsWith(provider, "mcp:") && is.function(target$on_logout)) target$on_logout()
   invisible(stored || memory)
 }

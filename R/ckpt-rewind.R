@@ -40,13 +40,23 @@ ckpt_pure_read = function(call) {
     !length(unlist(ckpt_predict(code)))
 }
 
+#' Can a call write no file: R code whose classified effects are only reads and object writes
+#' (`x = 1`, `lm()`; an unlisted function, a session change or a file write is not)? (D-312)
+#' @noRd
+ckpt_file_free = function(call) {
+  rlang::is_string(call$input$code) && !is.null(call$risk) &&
+    all(call$risk$categories %in% c("read", "object_write"))
+}
+
 #' Does checkpointer `name` record this call? Not with the setting `checkpoint = "off"`, only
-#' files with `"files"`, nothing in plan mode (G7 4.5), nothing for a pure read
+#' files with `"files"`, nothing in plan mode (G7 4.5), nothing for a pure read, and no files for
+#' a call that can write none
 #' @noRd
 ckpt_enabled = function(name, ctx, call) {
   mode = setting_get("checkpoint", default = "on")
   !identical(mode, "off") && (name == "files" || !identical(mode, "files")) &&
-    !identical(ctx$mode(), "plan") && !ckpt_pure_read(call)
+    !identical(ctx$mode(), "plan") && !ckpt_pure_read(call) &&
+    !(name == "files" && ckpt_file_free(call))
 }
 
 #' Does the session run on a subscription-CLI route whose child edits files itself (a provider
@@ -194,24 +204,35 @@ ckpt_on_tool_result = function(event, ctx) {
   }
 }
 
-#' agent_start and turn_end hooks on a CLI route (IC-65): bring the file tracker up to date
-#' before the child acts, record what it changed after each turn
+#' agent_start, tool_execution_start and turn_end hooks on a CLI route (IC-65): bring the file
+#' tracker up to date before the child acts, note a step it runs outside R (an informational
+#' event, contract 8.5) in auto or yolo, where Codex's sandbox lets it write files (below them it
+#' is read-only), and record what changed after each turn in which such a step or a served call
+#' could write files; R-only and text-only turns are not scanned (D-312, D-353)
 #' @noRd
 ckpt_on_cli = function(st, event, ctx) {
   s = ctx$session
-  if (!ckpt_cli_session(s) || !ckpt_enabled("files", ctx, list())) return(NULL)
+  step = identical(event$type, "tool_execution_start")
+  writes = isTRUE(event$informational) && ctx$mode() %in% c("auto", "yolo")
+  if (step && !writes || !ckpt_cli_session(s) || !ckpt_enabled("files", ctx, list())) {
+    return(NULL)
+  }
   ck = ckpt_ck_of(st, s)
-  if (identical(event$type, "agent_start")) {
-    ckpt_files_sync(ckpt_files_tr(ck))
+  tr = ckpt_files_tr(ck)
+  if (step) {
+    tr$dirty = TRUE
+  } else if (identical(event$type, "agent_start")) {
+    ckpt_files_sync(tr)
   } else {
-    frag = ckpt_files_turn_scan(ck, ckpt_turn(s), force = TRUE)
+    frag = ckpt_files_turn_scan(ck, ckpt_turn(s), force = isTRUE(tr$dirty))
     if (!is.null(frag)) ckpt_append_scan(s, frag)
   }
   NULL
 }
 
-#' agent_end hook: the memory budget, the per-turn scan (once walks are slow, and always on a CLI
-#' route: an aborted run has no `turn_end`) and one blob collection per session
+#' agent_end hook: the memory budget, the per-turn scan (once walks are slow, and on a CLI route
+#' after a turn that could write files: an aborted run has no `turn_end`) and one blob collection
+#' per session
 #' @noRd
 ckpt_on_agent_end = function(st, ctx) {
   s = ctx$session
@@ -220,7 +241,8 @@ ckpt_on_agent_end = function(st, ctx) {
   turn = ckpt_turn(s)
   ckpt_objects_budget(ck, turn, session_home(s))
   if (ckpt_enabled("files", ctx, list())) {
-    frag = ckpt_files_turn_scan(ck, turn, force = ckpt_cli_session(s))
+    frag = ckpt_files_turn_scan(ck, turn,
+                                force = ckpt_cli_session(s) && isTRUE(ckpt_files_tr(ck)$dirty))
     if (!is.null(frag)) ckpt_append_scan(s, frag)
   }
   if (is.null(ck$gc_done)) {
@@ -273,7 +295,7 @@ builtin_checkpoints = function(gptr) {
   st$sessions = st$sessions %||% new.env(parent = emptyenv())
   for (nm in c("objects", "files", "state")) gptr$register(ckpt_spec(st, nm))
   gptr$on("tool_result", ckpt_on_tool_result)
-  for (ev in c("agent_start", "turn_end")) {
+  for (ev in c("agent_start", "tool_execution_start", "turn_end")) {
     gptr$on(ev, function(event, ctx) ckpt_on_cli(st, event, ctx))
   }
   gptr$on("agent_end", function(event, ctx) ckpt_on_agent_end(st, ctx))
@@ -579,10 +601,15 @@ ckpt_ext_state = function(s = NULL) {
 #' `renv.lock`, keys under `.ssh/`; see [gptr_security]) are never copied to the checkpoint store,
 #' so a turn's edit or deletion of one is not undone. Directories are not tracked: an empty
 #' directory a turn created stays. Files outside the project and `tempdir()` are restored only
-#' after you confirm each path. After a full restore the model is told nothing (the next
-#' request's prefix is byte-identical to the earlier request at the target); after a partial one
-#' the next prompt carries a short `<rewind>` block listing what was not restored. Model code may
-#' rewind another session only when you approve that call.
+#' after you confirm each path. Automatic file scans are bounded by time, entry and capture
+#' limits (see [gptr_options]); a scan that stops early is reported as incomplete coverage of the
+#' calls and turns that could write files (R code that only reads and assigns objects cannot).
+#' The files gptr's tools name (write and edit targets, literal paths in R code) are backed up
+#' before the call; other changes to unvisited files (computed paths in R code, shell commands, a
+#' CLI's own edits) have no automatic backup. After a full restore the model is told nothing (the
+#' next request's prefix is byte-identical to the earlier request at the target); after a partial
+#' one the next prompt carries a short `<rewind>` block listing what was not restored. Model code
+#' may rewind another session only when you approve that call.
 #'
 #' @param s A `gptr_session`.
 #' @param turn Integer. Negative counts back from the last turn (`-1` undoes the last turn); `0`
@@ -613,10 +640,12 @@ ckpt_ext_state = function(s = NULL) {
 #' - `gptr.checkpoint_days` (`30`): unreferenced blobs older than this many days are deleted.
 #' - `gptr.checkpoint_turns` (`100`): file checkpoints older than this many turns are not
 #'   restored.
-#' - `gptr.checkpoint_track_file_max` (`1e6`), `gptr.checkpoint_track_total` (`1e8`): bytes per
-#'   file and in all of the baseline taken at the first mutating call.
+#' - `gptr.checkpoint_track_file_max` (`1e6`): bytes; the largest file the first scan stores.
+#' - `gptr.checkpoint_track_total` (`1e8`): bytes one automatic scan stores in all.
 #' - `gptr.checkpoint_capture_max` (`5e7`): bytes; a larger changed file gets no stored copy.
-#' - `gptr.checkpoint_scan_budget` (`0.25`): seconds; slower walks switch to one scan per turn.
+#' - `gptr.checkpoint_scan_budget` (`0.25`): seconds; slower scans switch to one scan per turn.
+#' - `gptr.checkpoint_scan_timeout` (`2`): seconds; the longest an automatic scan runs. An
+#'   incomplete scan also switches to one scan per turn.
 #' - `gptr.checkpoint_rng` (`TRUE`): report changes of the random-number state.
 #' - `gptr.checkpoint_close_devices` (`FALSE`): close graphics devices an undone turn opened.
 #' @export
@@ -801,17 +830,19 @@ ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all", verb = "Rewou
   c(paste0(verb, " (", lr$restore, end), lr$report, if (length(text)) c("Undone prompt:", text))
 }
 
-#' /undo: rewind the last turn; asks first when the preview finds items it cannot restore
+#' /undo: rewind the last turn; when the preview finds items it cannot restore, asks first,
+#' listing at most 10 items: those, then those it leaves as is, then what it would restore
 #' @noRd
 ckpt_cmd_undo = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no session to undo.")
   plan = tryCatch(gptr_rewind(s, preview = TRUE), gptr_error = conditionMessage)
   if (is.character(plan)) return(plan)
-  bad = plan[plan$restore %in% FALSE, , drop = FALSE]
-  if (nrow(bad) && ctx$has_ui()) {
+  if (any(plan$restore %in% FALSE) && ctx$has_ui()) {
+    rows = paste0(plan$item, ": ", plan$reason)[order(match(plan$restore, c(FALSE, NA, TRUE)))]
+    if (length(rows) > 10L) rows = c(rows[1:10], paste0("(+ ", length(rows) - 10L, " more)"))
     ans = ctx$ui()$select("Some items cannot be restored. Undo anyway?", c("Undo", "Cancel"),
-                          default = 2L, details = paste0(bad$item, ": ", bad$reason))
+                          default = 2L, details = rows)
     if (!isTRUE(ans == 1L)) return("Undo cancelled.")
   }
   ckpt_cmd_run(s)

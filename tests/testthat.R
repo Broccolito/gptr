@@ -42,7 +42,8 @@ if (identical(Sys.getenv("NOT_CRAN"), "true") &&
   })
 } else if (!identical(Sys.getenv("NOT_CRAN"), "true")) {
   cran = c(
-    "aaa-state", "agent-run", "auth-redact", "auth-secrets", "bridge-sh", "ckpt-rewind",
+    "aaa-state", "agent-run", "auth-redact", "auth-secrets", "bridge-sh", "ckpt-partial",
+    "ckpt-rewind", "ckpt-scan", "ckpt-scan-integration",
     "cli-claude", "cli-codex", "console-render", "console-repl", "env-describe", "eval-core",
     "ext-builtins", "ext-check", "gptr-capture", "http-reactor", "json-schema", "mcp-client",
     "perm-classify", "perm-gate", "perm-plan", "perm-rules", "proc-spawn", "prompt-compact",

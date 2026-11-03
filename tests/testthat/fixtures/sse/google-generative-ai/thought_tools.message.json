@@ -2,6 +2,7 @@
   "stop_reason": "tool_use",
   "raw_stop_reason": "STOP",
   "response_id": "k9_XaJ3vGsmWz7IP",
+  "response_model": "gemini-3.8-flash",
   "content": [
     {
       "type": "thinking",

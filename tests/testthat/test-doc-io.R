@@ -1309,22 +1309,36 @@ test_that("an editor's empty line after the final newline is clean unless the fi
   expect_identical(readBin(f, "raw", n = 100L), charToRaw("peter(\"count rows\")\nz = 2"))
 })
 
-test_that("transcript lines are appended only to an .R transcript", {
+test_that("transcript lines are appended raw to an .R transcript, as a chunk to Rmd and qmd", {
   proj = local_project()
   local_gptr_options(record = "auto")
   nb = file.path(proj, "notes.ipynb")
   writeLines(c("{", " \"cells\": [],", " \"nbformat\": 4", "}"), nb)
-  rmd = file.path(proj, "notes.Rmd")
-  writeLines(c("# Notes", "", "Some text."), rmd)
-  for (p in c(nb, rmd)) {
-    bytes = readBin(p, "raw", n = file.info(p)$size)
-    expect_false(doc_transcript_append(p, c("# /model opus", "x = 1")))
-    expect_identical(readBin(p, "raw", n = file.info(p)$size), bytes)
-  }
-  for (p in file.path(proj, c("notes.qmd", "notes.txt", "notes"))) {
+  bytes = readBin(nb, "raw", n = file.info(nb)$size)
+  expect_false(doc_transcript_append(nb, c("# /model opus", "x = 1")))
+  expect_identical(readBin(nb, "raw", n = file.info(nb)$size), bytes)
+  for (p in file.path(proj, c("notes.txt", "notes"))) {
     expect_false(doc_transcript_append(p, "# /model opus"))
     expect_false(file.exists(p))
   }
+  # an R Markdown or Quarto document reads raw lines as prose: they go in an R chunk (D-342)
+  rmd = file.path(proj, "notes.Rmd")
+  writeLines(c("# Notes", "", "Some text."), rmd)
+  expect_true(doc_transcript_append(rmd, c("", "# /model opus", "x = \"", "```\"")))
+  expect_identical(readLines(rmd), c("# Notes", "", "Some text.", "", "````{r}", "# /model opus",
+                                     "x = \"", "```\"", "````"))
+  qmd = file.path(proj, "notes.qmd")
+  expect_true(doc_transcript_append(qmd, "# /model opus"))
+  expect_identical(readLines(qmd), c(doc_transcript_preamble(qmd), "", "```{r}", "# /model opus",
+                                     "```"))
+  # after an unterminated chunk, a new chunk would be read as its body: nothing is written
+  local_gptr_options(quiet = FALSE)
+  open = file.path(proj, "open.Rmd")
+  writeLines(c("# Notes", "", "```{r}", "x = 1"), open)
+  expect_message(expect_false(doc_transcript_append(open, "# /model opus")),
+                 "did not record into open.Rmd: its last chunk is not terminated",
+                 class = "gptr_message_notice")
+  expect_identical(readLines(open), c("# Notes", "", "```{r}", "x = 1"))
   t = file.path(proj, ".gptr", "transcripts", "session.R")
   expect_true(doc_transcript_append(t, "# /model opus"))
   expect_identical(readLines(t), c(doc_transcript_preamble(t), "# /model opus"))

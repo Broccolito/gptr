@@ -1403,7 +1403,7 @@ test_that("the status line names the model and the context left; unknown terms g
   expect_identical(status_line("aborted", NULL, usage, NA_real_), "aborted - 2 requests")
   # a CLI keeps its own transcript: no context term
   expect_identical(status_line("idle", NULL, fake_usage(route = "plan-cli", cost = 0.01)),
-                   "done - fake-1 - 1 request - 1.1k tokens - $0.0100")
+                   "done - selected fake-1 - 1 request - 1.1k tokens - $0.0100")
 })
 
 test_that("the status line names the model a CLI's default runs, as /status does (Task 33)", {
@@ -1414,10 +1414,88 @@ test_that("the status line names the model a CLI's default runs, as /status does
   usage = fake_usage("default", route = "plan-cli", cost = 0.01)
   usage$provider = "fakeclaude"
   expect_identical(status_line("idle", NULL, usage),
-                   "done - cli-claude-id - 1 request - 1.1k tokens - $0.0100")
+                   "done - selected cli-claude-id - 1 request - 1.1k tokens - $0.0100")
   usage$model = "claude-sonnet-5-5"
   expect_identical(status_line("idle", NULL, usage),
-                   "done - claude-sonnet-5-5 - 1 request - 1.1k tokens - $0.0100")
+                   "done - selected claude-sonnet-5-5 - 1 request - 1.1k tokens - $0.0100")
+})
+
+test_that("the CLI status line distinguishes selection from reported identity", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  usage = fake_usage("selected-model", route = "plan-cli")
+  expect_match(status_line("idle", usage = usage, response_model = "reported-model"),
+               "selected selected-model; reported reported-model", fixed = TRUE)
+  expect_match(status_line("idle", usage = usage, response_model = "selected-model"),
+               "reported selected-model", fixed = TRUE)
+  text = status_line("idle", usage = usage, response_model = paste0("bad\n\033", strrep("x", 500)))
+  expect_false(grepl("\n|\033", text))
+  expect_lt(nchar(text), 350)
+  expect_match(status_line("idle", usage = usage, response_model = c("a", "b")),
+               "selected selected-model", fixed = TRUE)
+})
+
+test_that("native status lines show distinct reported models and keep matching names compact", {
+  testthat::local_reproducible_output(width = 120, crayon = FALSE, unicode = FALSE)
+  usage = fake_usage("model-alias")
+  expect_match(status_line("idle", usage = usage, response_model = "dated-model-id"),
+               "selected model-alias; reported dated-model-id", fixed = TRUE)
+  expect_identical(status_line("idle", usage = usage, response_model = "model-alias"),
+                   status_line("idle", usage = usage))
+})
+
+test_that("the CLI footer uses only metadata for its last usage request", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 160, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  usage = fake_usage("default", route = "plan-cli")
+  adapter = session_live(s)$adapter
+  adapter$pcli_request_id = usage$request_id[[1L]]
+  adapter$pcli_model_arg = "chosen"
+  session_append(s, entry_message(msg_assistant("answer", api = "cli-codex", provider = "fake",
+    model = "default", response_model = "observed", request_id = usage$request_id[[1L]])))
+  session_append(s, entry_message(msg_assistant("another answer", api = "cli-codex",
+    provider = "fake",
+    model = "chosen", response_model = "unrelated", request_id = "other-request")))
+  out = utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    invisible(console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = usage,
+                                              turns = 1L), ctx))
+  })
+  expect_match(paste(out, collapse = " "), "selected chosen; reported observed", fixed = TRUE)
+  expect_false(any(grepl("unrelated", out, fixed = TRUE)))
+})
+
+test_that("native footers use only the last request's report and ignore CLI argument state", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 160, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  usage = fake_usage("model-alias")
+  adapter = session_live(s)$adapter
+  adapter$pcli_request_id = usage$request_id[[1L]]
+  adapter$pcli_model_arg = "cli-only"
+  session_append(s, entry_message(msg_assistant("answer", api = "fake", provider = "fake",
+    model = "model-alias", response_model = "dated-model-id",
+    request_id = usage$request_id[[1L]])))
+  session_append(s, entry_message(msg_assistant("unrelated answer", api = "fake", provider = "fake",
+    model = "model-alias", response_model = "stale-report", request_id = "other-request")))
+  footer = function(usage) {
+    utils::capture.output({
+      console_on_agent_start(hook_event("agent_start", s), ctx)
+      invisible(console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = usage,
+                                                turns = 1L), ctx))
+    })
+  }
+  out = footer(usage)
+  expect_match(paste(out, collapse = " "), "selected model-alias; reported dated-model-id",
+               fixed = TRUE)
+  expect_false(any(grepl("cli-only|stale-report", out)))
+  usage$request_id = "new-request"
+  out = footer(usage)
+  expect_false(any(grepl("reported|dated-model-id|stale-report|cli-only", out)))
 })
 
 test_that("a reason's line breaks fold into one space; other controls stay escaped (sessions-7)", {
@@ -1705,6 +1783,142 @@ test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no q
                    "  # sub-agent a x")
 })
 
+test_that("fanout shows active and queued names and child tool progress without child output", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(mode = "auto", verbose = 2L, quiet = FALSE, interactive = TRUE)
+  withr::local_options(cli.dynamic = FALSE, cli.num_colors = 1L, cli.unicode = FALSE,
+                       cli.width = 80L)
+  fake = local_fake_provider(list(fake_tool("r", code = "cat('PRIVATE CHILD OUTPUT')"),
+                                  "PRIVATE CHILD ANSWER"))
+  out = utils::capture.output({
+    result = peter("each", list(alpha = 1, beta = 2, gamma = 3), model = fake, parallel = 2)
+  })
+  text = paste(out, collapse = "\n")
+  expect_match(text, "sub-agents 0/3 done - 2 active - 1 queued", fixed = TRUE)
+  expect_match(text, "active  alpha (fake/fake-1), beta (fake/fake-1)", fixed = TRUE)
+  expect_match(text, "queued  gamma (fake/fake-1)", fixed = TRUE)
+  expect_match(text, "sub-agent alpha r", fixed = TRUE)
+  expect_match(text, "sub-agents 2/3 done - 1 active - 0 queued", fixed = TRUE)
+  expect_false(grepl("PRIVATE CHILD", text, fixed = TRUE))
+  expect_identical(result$status, "idle")
+  expect_length(console_kids(), 0L)
+  expect_null(the$live_row)
+})
+
+test_that("a top-level fanout keeps one live row until its last child settles", {
+  skip_on_cran()
+  local_console_test()
+  local_live_console()
+  local_gptr_options(mode = "auto", verbose = 2L, quiet = FALSE, interactive = TRUE)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 1L, cli.unicode = FALSE)
+  seen = list()
+  fake = local_fake_provider(function(request) {
+    seen[[length(seen) + 1L]] <<- console_live_state(the$live_row$rec)$what
+    "ok"
+  })
+  out = written(function() {
+    result = peter("each", list(alpha = 1, beta = 2, gamma = 3), model = fake, parallel = 2)
+  })
+  expect_true(all(vapply(seen, function(x) startsWith(x, "sub-agents"), NA)))
+  expect_match(paste(unlist(seen), collapse = "\n"), "1 queued", fixed = TRUE)
+  expect_match(out, "sub-agents", fixed = TRUE)
+  expect_null(the$live_row)
+  expect_length(console_kids(), 0L)
+})
+
+test_that("a mixed team names models before queued members start", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(mode = "auto", verbose = 2L, quiet = FALSE)
+  withr::local_options(cli.dynamic = FALSE, cli.num_colors = 1L, cli.unicode = FALSE,
+                       cli.width = 100L)
+  first = local_fake_provider(list("first report"), name = "first")
+  local_fake_provider(list("second report"), name = "second")
+  out = utils::capture.output({
+    result = peter("review", model = first, agents = list(
+      alpha = agent(model = "first/first-1", backend = "inline"),
+      beta = agent(model = "second/second-1", backend = "inline")
+    ), .opts = list(max_active = 1L))
+  })
+  queued = grep("queued  beta (second/second-1)", out, fixed = TRUE)
+  started = grep("sub-agent beta (second/second-1) started", out, fixed = TRUE)
+  expect_match(paste(out, collapse = "\n"), "active  alpha (first/first-1)", fixed = TRUE)
+  expect_true(length(queued) == 1L, info = paste(out, collapse = "\n"))
+  expect_length(started, 1L)
+  expect_lt(queued, started)
+  expect_identical(result$status, "idle")
+})
+
+test_that("active rosters follow concrete targets and keep the worker's real model", {
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  withr::local_options(cli.dynamic = FALSE, cli.num_colors = 1L, cli.unicode = FALSE)
+  s = render_session()
+  d = session_data(s)
+  d$depth = 1L
+  run = list2env(list(id = "u_model", settled = FALSE))
+  group = list2env(list(n = 1L, labels = "alpha", models = "router:pick", runs = list(run)))
+  run$group = group
+  rec = console_track(run$id, s)
+  rec$child = list(label = "alpha", model = "router:pick", run = run)
+  withr::defer(console_drop(run$id))
+  request = function(model) {
+    utils::capture.output(console_on_before_request(
+      hook_event("before_request", s, run = run$id, model = model), session_live(s)$ctx))
+  }
+  expect_match(paste(request("first/model"), collapse = "\n"),
+               "active  alpha (first/model)", fixed = TRUE)
+  expect_match(paste(request("second/model"), collapse = "\n"),
+               "active  alpha (second/model)", fixed = TRUE)
+  expect_output(console_group_notice(rec), NA)
+  live = session_live(s)
+  live$adapter$worker_spec = list(model = "worker-target/model")
+  expect_match(paste(request("worker/worker"), collapse = "\n"),
+               "active  alpha (worker-target/model)", fixed = TRUE)
+  expect_identical(rec$child$model, "worker-target/model")
+})
+
+test_that("rosters show the full default model selected for each built-in CLI", {
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  withr::local_options(cli.dynamic = FALSE, cli.num_colors = 1L, cli.unicode = FALSE,
+                       cli.width = 120L)
+  off_claude = gptr_register(pcli_fake_provider("claude"))
+  withr::defer(off_claude())
+  off_codex = gptr_register(pcli_fake_provider("codex"))
+  withr::defer(off_codex())
+  local_mocked_bindings(pcli_default_model = function(api) paste0(api, "-id"))
+  run = list2env(list(settled = FALSE))
+  group = list2env(list(n = 2L, labels = c("alpha", "beta"),
+                        models = c("fakeclaude/default", "fakecodex/default"),
+                        runs = list(run, NULL)))
+  rec = list(child = list(run = list(group = group)))
+  text = paste(utils::capture.output(console_group_notice(rec)), collapse = "\n")
+  expect_match(text, "active  alpha (fakeclaude/default (cli-claude-id))", fixed = TRUE)
+  expect_match(text, "queued  beta (fakecodex/default (cli-codex-id))", fixed = TRUE)
+})
+
+test_that("group rosters escape names, bound large queues and obey quiet and verbosity", {
+  local_gptr_options(verbose = 2L, quiet = FALSE)
+  withr::local_options(cli.dynamic = FALSE, cli.num_colors = 1L, cli.unicode = FALSE,
+                       cli.width = 40L)
+  run = new.env()
+  group = list2env(list(n = 12L, labels = c("{active}\033[2J", paste0("queued", 1:11)),
+                        runs = c(list(run), rep(list(NULL), 11L))))
+  rec = list(child = list(run = list(group = group)))
+  out = utils::capture.output(console_group_notice(rec))
+  text = paste(out, collapse = "\n")
+  expect_match(text, "{active}<U+001B>[2J", fixed = TRUE)
+  expect_match(text, "+3 more", fixed = TRUE)
+  expect_false(grepl("\033", text, fixed = TRUE))
+  expect_true(all(nchar(out, type = "width") <= 40L))
+  expect_output(console_group_notice(rec), NA)
+  group$shown = NULL
+  local_gptr_options(quiet = TRUE)
+  expect_output(console_group_notice(rec), NA)
+  local_gptr_options(quiet = FALSE, verbose = 0L)
+  expect_output(console_group_notice(rec), NA)
+})
+
 test_that("a failed sub-agent line counts it and gives its reason's first line, cut (#36)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
@@ -1888,7 +2102,7 @@ test_that("tool calls of a run show escaped previews and results (acceptance 7)"
   out = utils::capture.output(peter("go", model = fake, envir = e, mode = auto))
   expect_true("  | r  z = 1 # <U+001B>[31mred" %in% out)
   # the elapsed time follows when the call took a second or more (a first call on a slow runner)
-  expect_match(out, "^    \\+ z( \\([0-9.]+ s\\))?$", all = FALSE)
+  expect_match(out, "^    \\+ z( - [1-9][0-9]*[.][0-9] s)?$", all = FALSE)
   expect_false(any(grepl("\033", out, fixed = TRUE)))
   expect_identical(e$z, 1)
 })

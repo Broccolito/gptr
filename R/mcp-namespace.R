@@ -434,18 +434,52 @@ mcp_on_session_start = function(event, ctx) {
   NULL
 }
 
-#' The login target of gptr_login("mcp:<name>"): the expanded URL and oauth fields of an HTTP
-#' server (registered with oauth_hooks_set(); auth-oauth.R is L0)
+#' Credential targets and cached stdio logout cleanup, registered with L0's oauth_hooks_set()
 #' @noRd
-mcp_login_target = function(name) {
+mcp_login_target = function(name, slot = NULL, resolve_only = FALSE) {
+  if (resolve_only) {
+    # login's rule first; a cached connection only once the configuration is gone
+    conns = mcp_state()$conns
+    resolved = tryCatch(mcp_server_resolve(name), error = function(e) {
+      cached = ls(envir = conns)
+      hit = cached[cached == name | mcp_r_name(cached) == name]
+      if (length(hit) == 1L) hit else name
+    })
+    return(list(name = resolved, on_logout = function() {
+      conn = get0(resolved, envir = conns, inherits = FALSE)
+      if (!is.null(conn) && identical(conn$transport, "stdio")) mcp_close(conn)
+    }))
+  }
   s = mcp_server_get(name)
+  invalidate = if (identical(mcp_transport(s), "stdio")) function() {
+    conn = get0(s$name %||% name, envir = mcp_state()$conns, inherits = FALSE)
+    if (!is.null(conn)) mcp_close(conn)
+  }
+  if (!is.null(slot)) {
+    if (!identical(mcp_transport(s), "stdio") ||
+          !grepl("^[A-Za-z_][A-Za-z0-9_]*$", slot) || !mcp_secret_name(slot) ||
+          !(slot %in% names(s$env))) {
+      gptr_abort(paste0("A credential slot must name a secret environment entry declared by ",
+                        "a stdio MCP server."), "invalid_argument", arg = "slot",
+                 expected = "a declared secret environment slot of a stdio MCP server")
+    }
+    ex = mcp_expand_spec(s)
+    binding = mcp_stdio_binding(s, ex)
+    return(list(name = s$name, binding = binding$id, resource = binding$origin,
+                on_login = invalidate,
+                description = paste(c(paste0("MCP server ", name), binding$command,
+                                       paste(ex$args, collapse = " "),
+                                       paste0("Working directory: ", ex$cwd %||%
+                                                "R's working directory when the server starts")),
+                                     collapse = "\n")))
+  }
   if (!identical(mcp_transport(s), "http")) {
     gptr_abort(paste0("MCP server ", name, " runs as a local process; it takes credentials from ",
-                      "its env entries."), "invalid_argument", arg = "provider",
-               expected = "an HTTP MCP server")
+                      "its env entries. Use slot = \"ENV_VAR\" for a declared secret slot."),
+               "invalid_argument", arg = "provider", expected = "an HTTP server or stdio slot")
   }
   ex = mcp_expand_spec(s)
-  list(url = ex$url, oauth = mcp_expand(s$oauth))
+  list(name = s$name, url = ex$url, oauth = mcp_expand(s$oauth), binding = mcp_http_binding(s, ex))
 }
 
 #' builtin:mcp (contract 10.3): the `mcp` prompt section, the session_start hook and the

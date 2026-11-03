@@ -47,7 +47,10 @@ cost is unknown.}
 
 \item{headers}{Named list of non-secret header strings.}
 
-\item{discover}{\verb{function()} listing models on request, or \code{NULL}.}
+\item{discover}{\verb{function()} returning a data frame with \code{id}, a list of sparse model
+records (at least \code{id}), or \code{NULL} when unsupported. Runs only on
+\code{gptr_models(provider = , refresh = TRUE)}, after consent. An empty listing is a successful
+result; an error keeps prior catalog entries. Report only actual capabilities and limits.}
 
 \item{status}{\verb{function()} reporting cached provider status, or \code{NULL}.}
 

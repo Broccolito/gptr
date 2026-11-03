@@ -22,6 +22,9 @@ A function of no arguments that removes the hook, invisibly.
 Registers a session-scoped hook (rank 0) for one cataloged event (such as \code{message_end},
 \code{tool_call}, \code{turn_end}) or a plugin channel containing \code{:}. The handler is
 \verb{function(event, ctx)} and returns what the event allows. Forks never copy listeners.
+From model code during a run, \code{gptr_on()} needs an allowing permission decision (a person's,
+in every mode but \code{yolo}; see \link{gptr_security}); otherwise it signals
+\code{gptr_error_permission}.
 }
 \examples{
 session = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE)

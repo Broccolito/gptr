@@ -13,10 +13,14 @@ first.}
 
 \item{provider}{\code{NULL} or a provider id (for example \code{"anthropic"}).}
 
-\item{refresh}{\code{TRUE} downloads the current models.dev catalog with ETag revalidation into
-the user cache. For a local provider (\code{provider = "ollama"}, \code{"lmstudio"}, ...) it asks
-that server for its installed models instead (a 1 second limit per request; for Ollama the
-native \verb{/api/version}, \verb{/api/tags} and \verb{/api/show} endpoints). Ollama discovery requires a
+\item{refresh}{\code{TRUE} with \code{provider = NULL} downloads the models.dev catalog with ETag
+revalidation into the user cache. With a provider it asks that provider's model-list API
+(or registered \code{discover()} callback), using its configured credentials after the normal
+egress and replay checks. API discovery is bounded to four pages, four seconds total and
+one second per request. A failed listing keeps prior models and reports the failed refresh
+in the footer. A provider with neither (Bedrock Converse, an offline provider) is not
+contacted. For Ollama it uses native \verb{/api/version}, \verb{/api/tags} and \verb{/api/show} endpoints
+with a one second limit per request. Ollama discovery requires a
 loopback address under the default local-only policy; only an explicit human setting at
 user or session scope can relax it (see \code{\link[=gptr_config]{gptr_config()}}).
 The only network use of this function; it never starts or installs a server and never
@@ -26,16 +30,28 @@ downloads a model.}
 A \code{gptr_models} data frame with columns \code{ref}, \code{provider}, \code{name}, \code{context},
 \code{max_output}, \code{input_price}, \code{output_price} (USD per million tokens, selected for today's
 date from the available catalog; \code{0} for verified local inference, \code{NA} when unknown),
-\code{reasoning}, \code{aliases} and \code{status}. Catalog prices can be stale and are not an account quote.
+\code{reasoning} (\code{NA} when unknown), \code{aliases}, \code{status}, \code{availability} (\code{unknown},
+\code{advertised}, \code{unlisted}, or
+the latter two with \code{ (stale)}; a \code{claude-cli} or \code{codex} \code{default} row takes that of the
+full id it runs) and \code{checked_at} (UTC time of the last successful provider listing, \code{NA}
+when none). Unlisted models remain in the catalog. Catalog prices can be
+stale and are not an account quote.
 }
 \description{
 Searches the merged model catalog: the shipped snapshot (models.dev plus gptr's reviewed
 prices and capabilities), a refreshed copy in \code{tools::R_user_dir("gptr", "cache")}, models
-declared by registered providers, user configuration and discovered local servers. Offline
+declared by registered providers, user configuration and provider inventories. Offline
 by default: only \code{refresh = TRUE} touches the network.
 }
 \details{
-A catalog entry describes a route, not current account access. Copy its \code{ref} into the
+A catalog entry describes a route, not current account access. \code{availability} records what
+the last provider listing advertised, with its \code{checked_at} time; it does not verify inference
+or billing access. Failed or expired listings are marked stale and keep the previous models.
+Providers other than Ollama with a native model-list API are inventoried before use after
+consent, at most once per five minutes in this R process; \code{refresh = TRUE} bypasses that
+cache. A \code{discover()} callback, such as the \code{claude} and \code{codex} command-line catalogs, runs
+only with \code{refresh = TRUE}.
+Copy a \code{ref} into the
 \code{model} argument of \code{\link[=peter]{peter()}} to choose that route. Ollama routes require current installed
 model evidence before inference; discovery does not pull models. See
 \code{vignette("language-models", package = "gptr")} for setup and \code{\link[=gptr_providers]{gptr_providers()}} for

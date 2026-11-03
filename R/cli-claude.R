@@ -11,6 +11,76 @@
 
 # ---- build (Task 5) ----------------------------------------------------------------------------
 
+#' The variables that keep a claude child without auto memory, CLAUDE.md files or prompt history
+#' (the catalog child and coaching children)
+#' @noRd
+pcli_claude_quiet = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1",
+                      CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")
+
+#' Initialize an empty Claude SDK session and retain only its model catalog; no user message
+#' is sent. Keep stdin open until the response, then retire the supervised child. The wait
+#' runs the reactor, as proc_run() does, so other sessions and timers stay live.
+#' @noRd
+pcli_claude_catalog = function(args) {
+  path = pcli_find("claude")
+  p = proc_spawn(path[[1L]], c(as.character(path[-1L]), args), stdin = "|",
+                 env = child_env("cli-claude", set = pcli_claude_quiet),
+                 wd = path_norm(tempdir()))
+  on.exit({
+    tryCatch(kill_all(p, grace = 0), error = function(e) NULL)
+    proc_release(p)
+  }, add = TRUE)
+  id = "gptr_models"
+  request = list(type = "control_request", request_id = id,
+                 request = list(subtype = "initialize", hooks = NULL, skills = list()))
+  p$write_input(paste0(json_encode(request), "\n"))
+  deadline = Sys.time() + 30
+  bytes = 0
+  repeat {
+    p$poll_io(0L)
+    lines = p$read_output_lines()
+    p$read_error_lines()
+    bytes = bytes + sum(nchar(lines, type = "bytes"))
+    if (bytes > 1024^2) pcli_catalog_error("claude")
+    for (line in lines) {
+      obj = tryCatch(json_decode(line), error = function(e) NULL)
+      if (!is.list(obj)) next
+      response = obj$response
+      if (!is.list(response) || !identical(obj$type, "control_response") ||
+          !identical(response$request_id, id)) next
+      if (!identical(response$subtype, "success") || !is.list(response$response) ||
+          !is.list(response$response$models)) pcli_catalog_error("claude")
+      return(list(models = response$response$models))
+    }
+    if (!p$is_alive() || Sys.time() >= deadline) pcli_catalog_error("claude")
+    reactor_pump(until = function() !p$is_alive(), slice_ms = 50L, timeout = 0.05)
+  }
+}
+
+#' The selectable models and effort levels reported by Claude's initialize response, as full
+#' ids (03 8.4): a selection's `value` when it is a `claude-` id, else its `resolvedModel`, which
+#' takes no alias display name; a selection alias (`sonnet`, `default`) is never a catalog id
+#' @noRd
+pcli_claude_models = function() {
+  args = c("-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+            "--system-prompt", "", "--tools", "", "--strict-mcp-config", "--mcp-config",
+            '{"mcpServers":{}}', "--setting-sources", "", "--disable-slash-commands",
+            "--no-session-persistence")
+  obj = pcli_claude_catalog(args)
+  out = list()
+  for (m in obj$models) {
+    if (!is.list(m)) next
+    value = pcli_chr(m$value)
+    id = Find(function(x) startsWith(x, "claude-"), c(value, pcli_chr(m$resolvedModel)))
+    if (is.null(id)) next
+    out[[length(out) + 1L]] = compact(list(id = id,
+      name = if (identical(id, value)) pcli_chr(m$displayName),
+      reasoning = if (isTRUE(m$supportsEffort) || isTRUE(m$supportsAdaptiveThinking)) TRUE,
+      thinking_levels = pcli_model_strings(m$supportedEffortLevels)))
+  }
+  out
+}
+
 #' The claude argv of architecture 8.3 in its exact order, then the budget flags (IC-65,
 #' IC-66), the documented --bare opt-out when the probe found one, and --resume (never --bare)
 #'
@@ -147,6 +217,7 @@ pcli_claude_build = function(model, context, opts) {
   state$pcli_request_id = context[["request_id"]]
   pcli_track(opts[["session"]], state)
   model_id = pcli_model_id(model)
+  state$pcli_model_arg = model_id
   par = pcli_params(context)
   parts = pcli_split(context[["messages"]] %||% list())
   role = the$coach_role
@@ -170,11 +241,7 @@ pcli_claude_build = function(model, context, opts) {
     args = pcli_claude_args(model_id, files$mcp, files$system, budget = flags,
                            optout = probe$bare_optout, resume = resume, role = role)
     # set after the profile drops CLAUDE_CODE_*, so they reach the CLI
-    env = character()
-    if (!is.null(role)) {
-      env = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1",
-              CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")
-    }
+    env = if (is.null(role)) character() else pcli_claude_quiet
     start = list(command = path[[1L]], args = c(as.character(path[-1L]), args),
                  env_profile = "cli-claude", env = env, wd = path_norm(getwd()))
     state$cli_api = "cli-claude"
@@ -326,6 +393,9 @@ pcli_claude_forward = function(ev, s) {
 #' @noRd
 pcli_claude_stream = function(event, s) {
   if (!is.list(event)) return(invisible(NULL))
+  if (identical(event[["type"]], "message_start")) {
+    pcli_response_model(s, event[["message"]][["model"]])
+  }
   if (identical(event[["type"]], "message_start") || is.null(s$inner)) {
     s$map = integer()
     inner_opts = list(emit = function(ev) pcli_claude_forward(ev, s),
@@ -434,7 +504,7 @@ pcli_claude_system = function(obj, s) {
   sid = pcli_sid(obj[["session_id"]])
   if (!is.null(sid)) s$state$claude_session = sid
   model = pcli_chr(obj[["model"]])
-  if (!is.null(model)) s$response_model = model
+  pcli_response_model(s, model)
   src = obj[["apiKeySource"]]
   if (is.null(src) || identical(src, "none")) return(invisible(NULL))
   why = paste0("The claude CLI reported apiKeySource ", src, ": this turn would be billed to ",

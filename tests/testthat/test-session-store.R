@@ -140,6 +140,36 @@ test_that("operator, model_change, compaction and custom entries have their JSON
   expect_identical(x[[4L]]$data$to, "auto")
 })
 
+test_that("operator context and its canonical timestamp survive file replay", {
+  local_store()
+  s = test_session()
+  msg = msg_operator("reminder", "", timestamp = 1)
+  msg$content = list(block_context("gptr_runtime", "selected route",
+                                  attrs = list(provider = "fake"), anchor = TRUE),
+                     block_text("plain"))
+  session_append(s, entry_message(msg))
+  entry = session_data(s)$entries[[1L]]
+  expect_true(all(vapply(entry$message$content, block_ok, NA, msg_block_types[["operator"]])))
+  expect_identical(entry$message$timestamp, iso_ms(entry$timestamp))
+  expect_identical(msg$timestamp, 1)
+  restored = store_read(s$file)$entries[[1L]]$message
+  wire = function(m) json_encode(msg_to_json(m))
+  expect_identical(wire(restored), wire(entry$message))
+  expect_identical(restored$content[[1L]], msg$content[[1L]])
+  expect_identical(restored$content[[2L]], block_text("plain"))
+})
+
+test_that("legacy plain operator entries retain their JSON shape", {
+  old = json_decode(paste0('{"type":"custom_message","id":"1234abcd","parentId":null,',
+    '"timestamp":"1970-01-01T00:00:00.004Z","customType":"gptr.operator",',
+    '"content":[{"type":"text","text":"old"}],"display":false,',
+    '"details":{"kind":"steer_relay","originText":"old"}}'))
+  entry = entry_from_json(old)
+  expect_identical(entry$message,
+                   msg_operator("steer_relay", "old", origin_text = "old", timestamp = 4))
+  expect_identical(entry_to_json(entry), old)
+})
+
 test_that("opening a file whose last byte is not LF appends LF and a gptr.recovered entry", {
   s = written_session()
   d = session_data(s)
@@ -273,7 +303,8 @@ test_that(oracle_title(store_recs, "S33"), {
   expect_true(any(vapply(first$content, function(b) {
     identical(b$type, "context") && identical(b$kind, "checkpoint")
   }, NA)))
-  expect_identical(req_roles(req), c("user", "user", "assistant", "tool_result"))
+  expect_identical(req_roles(req), c("user", "user", "operator", "assistant", "tool_result"))
+  expect_identical(req$messages[[3L]]$content[[1L]]$kind, "gptr_runtime")
 })
 
 test_that(oracle_title(store_recs, "S35"), {
@@ -455,7 +486,8 @@ test_that("a fork that copies no gptr.frozen entry freezes its own, the first of
   expect_true(length(session_data(f0)$frozen) > 0L)
   entries = lapply(readLines(f0$file, encoding = "UTF-8")[-1L], json_decode)
   types = vapply(entries, function(e) e$customType %||% e$type, "")
-  expect_identical(types, c("gptr.frozen", "message", "message"))
+  expect_identical(types, c("gptr.frozen", "message", "gptr.operator", "message"))
+  expect_identical(entries[[3L]]$content[[1L]]$gptr$context, "gptr_runtime")
   expect_false(identical(entries[[1L]]$id, d$entries[[1L]]$id))
 })
 
@@ -476,7 +508,8 @@ test_that("a fork of a source still in its first turn freezes its own prompt", {
   expect_identical(f$text, "branch answer")
   entries = lapply(readLines(f$file, encoding = "UTF-8")[-1L], json_decode)
   types = vapply(entries, function(e) e$customType %||% e$type, "")
-  expect_identical(types, c("gptr.frozen", "message", "message"))
+  expect_identical(types, c("gptr.frozen", "message", "gptr.operator", "message"))
+  expect_identical(entries[[3L]]$content[[1L]]$gptr$context, "gptr_runtime")
 })
 
 test_that("forkOf.entry is the last entry the fork copied when a label trails the cut", {
@@ -528,7 +561,10 @@ test_that(oracle_title(store_recs, "S13"), {
 test_that(oracle_title(store_recs, "S14"), {
   s = stored_run()
   x = store_read(s$file)
-  last = x$entries[[length(x$entries)]]$message
+  messages = Filter(function(e) {
+    identical(e$type, "message") && identical(e$message$role, "assistant")
+  }, x$entries)
+  last = messages[[length(messages)]]$message
   expect_identical(msg_text(last), "All done \u2713")
   expect_identical(Encoding(msg_text(last)), "UTF-8")
 })
@@ -710,6 +746,8 @@ test_that("SIGKILL mid-stream: resume parses, keeps the last complete message, n
   file = wait_ready(p)
   skip_if(is.null(file), "the child did not start streaming")
   p$kill()
+  p$wait(5000L)
+  expect_false(p$is_alive())
   r = gptr_resume(file, envir = new.env())
   ids = vapply(session_data(r)$entries, function(e) e$id, "")
   expect_false(any(duplicated(ids)))
@@ -736,6 +774,8 @@ test_that("SIGKILL mid-append, resume, three appends: all present and the tree c
   skip_if(is.null(file), "the child did not start appending")
   Sys.sleep(0.2)
   p$kill()
+  p$wait(5000L)
+  expect_false(p$is_alive())
   r = gptr_resume(file, envir = new.env())
   for (i in 1:3) session_append(r, entry_custom("test.after", list(i = i)))
   lines = readLines(file, encoding = "UTF-8", warn = FALSE)

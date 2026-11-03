@@ -212,7 +212,6 @@ test_that("unreported usage stays unknown and provenance says emulated (IC-74)",
   expect_identical(res$answers[[1]]$answer$prob, 0.6)
   expect_identical(res$usage$input, NA_real_)
   expect_identical(res$usage$output, NA_real_)
-  expect_identical(res$usages[[1]], list(input = NA_real_, output = NA_real_))
   expect_identical(res$model_version, "emunone-1")
   expect_match(res$request_ids, "^q[0-9a-f]{12}$")
   expect_identical(res$provenance[c("provider", "api", "execution")],
@@ -222,7 +221,6 @@ test_that("unreported usage stays unknown and provenance says emulated (IC-74)",
                                 usage = list(input = 12, output = 3))), name = "emucount")
   res2 = s1_emulate(model_resolve("emucount/emucount-1"), list(list(x = "a"), list(x = "b")), q)
   expect_identical(res2$usage[c("input", "output")], list(input = 24, output = 6))
-  expect_identical(res2$usages[[2]], list(input = 12, output = 3))
 })
 
 test_that("a stop other than a complete answer is a response error, never retried (IC-74)", {
@@ -412,6 +410,33 @@ test_that("emulation happens only with gptr_config(system1 = \"emulate:<model>\"
   j = peter("Is the review positive?", hated, model = jev)
   expect_identical(attr(j, "meta")$engine, "emulated:structured")
   expect_length(fake_requests(chat), 2L)
+})
+
+test_that("emulation through a local Ollama chat model discovers it as a chat call does (D-323)", {
+  s1_fresh()
+  srv = local_ollama_server()
+  settings_write("user", list(egress = list(ollama = "ack")))
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  # the fake api answers as the Ollama chat model, through the live fake named "ollama"
+  engine = gptr_fake_provider(list(list(json = list(answers = list(answer = 0.8))),
+                                   list(json = list(answers = list(answer = 0.3)))),
+                              name = "ollama")
+  off = gptr_register(gptr_adapter("openai-completions", "inprocess", stream = fake_stream))
+  withr::defer(off())
+  old = gptr_config(system1 = "emulate:ollama/qwen3:1.7b", .scope = "session")
+  withr::defer(gptr_config(system1 = old$system1, .scope = "session"))
+  shows = function() sum(endsWith(srv$calls, "/api/show"))
+  # a fresh process has no discovery evidence: the first decision prepares the model once
+  outage = "The server is down."
+  typo = "A typo in the footer."
+  d = peter("Is this urgent?", outage, model = "jev")
+  expect_true(d)
+  expect_identical(attr(d, "meta")$execution, "emulated")
+  expect_identical(shows(), 1L)
+  e = peter("Is this urgent?", typo, model = "jev")
+  expect_false(e)
+  expect_identical(shows(), 1L)
 })
 
 test_that("a missing Jev key never falls back to emulation", {

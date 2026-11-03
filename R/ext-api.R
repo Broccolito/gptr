@@ -433,7 +433,13 @@ ctx_new = function(session, run = NULL) {
   ctx$aborted = function() isTRUE(ctx_call(ctx, "aborted"))
   ctx$update = function(text) ctx_call(ctx, "update", text)
   ctx$decide = function(question, x, ...) {
-    ctx_service(ctx, "s1.decide", "ctx$decide()", "P13")(question, x, ...)
+    f = ctx_service(ctx, "s1.decide", "ctx$decide()", "P13")
+    # only a service that declares `.session` (the builtin) owns the call through it
+    if (".session" %in% names(formals(f))) {
+      f(question, x, ..., .session = ctx$session %||% sid())
+    } else {
+      f(question, x, ...)
+    }
   }
   ctx$usage = function() ctx_call(ctx, "usage")
   ctx$state = function() ctx_call_plugin(ctx, "state")

@@ -72,7 +72,8 @@ test_that("Windows checkpoint walks list directory links without descending into
   writeLines("id\n1", file.path(target, "x.csv"))
   writeLines("unexpected alias child", file.path(alias, "unexpected.txt"))
   local_win_alias(alias, target)
-  value = ckpt_walk(root)
+  local_gptr_options(checkpoint_scan_timeout = 15)
+  value = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)$walk
   expect_true("data-link" %in% value$path)
   expect_true(value$link[value$path == "data-link"])
   expect_false("data-link/unexpected.txt" %in% value$path)

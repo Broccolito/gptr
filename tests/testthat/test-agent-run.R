@@ -630,7 +630,7 @@ test_that("the fallback request projects the transcript and carries the frozen t
   expect_named(ctx$system, c("t0", "t1"))
   expect_s3_class(ctx$tools_json, "json")
   expect_identical(vapply(ctx$tools, function(t) t$name, ""), "read")
-  expect_identical(vapply(ctx$messages, function(m) m$role, ""), "user")
+  expect_identical(vapply(ctx$messages, function(m) m$role, ""), c("user", "operator"))
   expect_match(ctx$request_id, "^q[0-9a-f]{12}$")
   expect_identical(ctx$params$returns, list(type = "object"))
   expect_gt(req$tokens_est, 0)
@@ -650,6 +650,52 @@ test_that("request_params handlers patch only the adapter's declared fields (IC-
                            list(max_tokens = 100L, service_tier = "auto"))
   expect_identical(out$service_tier, "priority")
   expect_identical(out$max_tokens, 100L)
+})
+
+test_that("runtime identity changes append once and preserve the actual request prefix", {
+  skip_on_cran()
+  local_fake_provider(list("x"))
+  s = test_session()
+  run = test_run(s)
+  freeze_fallback(s)
+  session_append(s, entry_message(msg_user("Who are you?")))
+  frozen = session_data(s)$frozen
+  target = run_target(run)
+  req = run_build(run, target)
+  note = tail(req$context$messages, 1L)[[1L]]
+  expect_identical(note$role, "operator")
+  expect_identical(note$content[[1L]]$kind, "gptr_runtime")
+  expect_match(note$content[[1L]]$text, target$ref, fixed = TRUE)
+  expect_match(note$content[[1L]]$text, "Prior completed response_model: not reported",
+               fixed = TRUE)
+  expect_match(note$content[[1L]]$text,
+               "Current response metadata may arrive after generation", fixed = TRUE)
+  expect_match(note$content[[1L]]$text, "console footers show it when supplied", fixed = TRUE)
+  expect_match(note$content[[1L]]$text, "gptr::gptr_models()", fixed = TRUE)
+  before = session_data(s)$entries
+  expect_identical(run_build(run, target)$context$messages, req$context$messages)
+  expect_identical(session_data(s)$entries, before)
+  withr::local_options(gptr.check_prefix = "error")
+  prefix_guard(s, target, req$view)
+  session_append(s, entry_message(msg_assistant("answer", api = target$api,
+    provider = target$provider, model = target$id, response_model = "reported-model")))
+  reported = run_build(run, target)
+  expect_match(tail(reported$context$messages, 1L)[[1L]]$content[[1L]]$text,
+               "reported-model", fixed = TRUE)
+  expect_no_error(prefix_guard(s, target, reported$view))
+  before = session_data(s)$entries
+  target$id = "changed"
+  target$ref = "fake/changed"
+  changed_req = run_build(run, target)
+  changed = tail(changed_req$context$messages, 1L)[[1L]]
+  expect_match(changed$content[[1L]]$text, "fake/changed", fixed = TRUE)
+  expect_length(session_data(s)$entries, length(before) + 1L)
+  expect_identical(changed_req$context$messages[seq_along(reported$context$messages)],
+                   reported$context$messages)
+  expect_no_error(prefix_guard(s, target, changed_req$view))
+  expect_identical(session_data(s)$frozen, frozen)
+  expect_equal(req$tokens_est, prompt_request_estimate(req$context, target$api,
+                session_data(s)$id)$total)
 })
 
 test_that("older images are elided above the model's image limit, once (IC-67)", {
@@ -929,8 +975,8 @@ test_that("the fallback request and the context projection count elided images a
   transcript = sum(vapply(texts, est_tokens, 1, class = "prose"))
   expect_equal(req$components[["transcript"]], transcript)
   static = est_tokens(session_data(s)$frozen$tools_json, "json")
-  expect_equal(req$tokens_est, static + transcript + est_image_tokens(768, 512))
-  # no reported total yet: the projection estimates the same elided messages
+  expect_equal(req$tokens_est, static + transcript + est_image_tokens(768, 512) +
+                 req$components[["other"]])
   expect_equal(context_tokens(s), req$tokens_est)
   n = length(session_data(s)$entries)
   expect_identical(run_build(run, target)$context$messages, sent)
@@ -1126,7 +1172,7 @@ test_that("queued items start an idle session's run (input = NULL)", {
   s = test_session()
   session_enqueue(s, "please start", as = "follow_up", source = "api_user")
   session_run(s, NULL)
-  expect_identical(roles(s), c("user", "assistant"))
+  expect_identical(roles(s), c("user", "operator", "assistant"))
   expect_identical(s$messages[[1L]]$source, "follow_up")
   expect_identical(s$turns, 1L)
 })
@@ -1147,7 +1193,8 @@ test_that("a steer older than every follow-up still opens a run without input (s
   users = Filter(function(m) identical(m$role, "user"), s$messages)
   expect_identical(vapply(users, msg_text, ""), c("old steer", "new follow-up"))
   expect_identical(vapply(users, function(m) m$source, ""), c("steer", "follow_up"))
-  expect_identical(vapply(fake_requests(fake)[[1L]]$messages, msg_text, ""), "old steer")
+  expect_identical(vapply(Filter(function(m) identical(m$role, "user"),
+                                 fake_requests(fake)[[1L]]$messages), msg_text, ""), "old steer")
 })
 
 test_that("run_start(s, NULL) continues from the leaf after an abort", {
@@ -1162,7 +1209,7 @@ test_that("run_start(s, NULL) continues from the leaf after an abort", {
   session_run(s, NULL)
   expect_identical(s$text, "resumed answer")
   expect_identical(s$turns, 1L)
-  expect_identical(req_roles(fake_requests(fake)[[2L]]), "user")
+  expect_identical(req_roles(fake_requests(fake)[[2L]]), c("user", "operator"))
 })
 
 test_that("run_current() and run_eval_env() inside a tool; the home is reset at settlement", {
@@ -1364,7 +1411,7 @@ test_that("tools plus returns = <schema> give a typed $value and keep the tool c
   run_text(s, "count", list(returns = list(type = "object", required = I("n"),
                                            properties = list(n = list(type = "integer")))))
   expect_identical(s$value$n, 32L)
-  expect_identical(roles(s), c("user", "assistant", "tool_result", "assistant"))
+  expect_identical(roles(s), c("user", "operator", "assistant", "tool_result", "assistant"))
 })
 
 test_that("a router session calls router.call before each request (IC-69)", {
@@ -1444,8 +1491,8 @@ test_that("a tool piping into its own running session enqueues a steer delivered
   s = test_session()
   run_text(s, "go")
   req = fake_requests(fake)[[2L]]
-  expect_identical(req_roles(req), c("user", "assistant", "tool_result", "operator"))
-  expect_identical(msg_text(req$messages[[4L]]),
+  expect_identical(req_roles(req), c("user", "operator", "assistant", "tool_result", "operator"))
+  expect_identical(msg_text(req$messages[[5L]]),
                    "The user sent this message while you were working: use TPM")
 })
 
@@ -1463,8 +1510,8 @@ test_that("every steer queued during a tool call reaches the next request, in or
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   expect_identical(req_roles(reqs[[2L]]),
-                   c("user", "assistant", "tool_result", "operator", "operator"))
-  expect_identical(vapply(reqs[[2L]]$messages[4:5], msg_text, ""),
+                   c("user", "operator", "assistant", "tool_result", "operator", "operator"))
+  expect_identical(vapply(reqs[[2L]]$messages[5:6], msg_text, ""),
                    paste("The user sent this message while you were working:",
                          c("use TPM", "and log2")))
 })
@@ -1508,7 +1555,7 @@ test_that("a steer sent during a final answer adds one request to the same run (
   run_text(s, "go")
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
-  expect_identical(req_roles(reqs[[2L]]), c("user", "assistant", "operator"))
+  expect_identical(req_roles(reqs[[2L]]), c("user", "operator", "assistant", "operator"))
   expect_identical(s$text, "plotted")
   expect_identical(s$turns, 1L)
 })
@@ -1531,8 +1578,8 @@ test_that("a steer sent during the first of two calls waits for both results; no
   expect_true(isTRUE(ran$second))
   req = fake_requests(fake)[[2L]]
   expect_identical(req_roles(req),
-                   c("user", "assistant", "tool_result", "tool_result", "operator"))
-  expect_identical(vapply(req$messages[3:4], msg_text, ""), c("one", "two"))
+                   c("user", "operator", "assistant", "tool_result", "tool_result", "operator"))
+  expect_identical(vapply(req$messages[4:5], msg_text, ""), c("one", "two"))
 })
 
 test_that("a mode change during a run reaches the model as an operator message after the results", {
@@ -1547,8 +1594,8 @@ test_that("a mode change during a run reaches the model as an operator message a
   s = test_session(mode = "auto")
   run_text(s, "go")
   req = fake_requests(fake)[[2L]]
-  expect_identical(req_roles(req), c("user", "assistant", "tool_result", "operator"))
-  expect_match(msg_text(req$messages[[4L]]), "<mode name=\"plan\">", fixed = TRUE)
+  expect_identical(req_roles(req), c("user", "operator", "assistant", "tool_result", "operator"))
+  expect_match(msg_text(req$messages[[5L]]), "<mode name=\"plan\">", fixed = TRUE)
 })
 
 test_that("a run sent to the background ends the foreground wait (P21)", {
@@ -1610,7 +1657,7 @@ test_that(oracle_title(recovery_recs, "R20"), {
   local_fast_retry()
   fake = local_fake_provider(flaky())
   run_text(test_session(), "hello")
-  expect_identical(req_roles(fake_requests(fake)[[3L]]), "user")
+  expect_identical(req_roles(fake_requests(fake)[[3L]]), c("user", "operator"))
 })
 
 test_that(oracle_title(recovery_recs, "R21"), {
@@ -1745,14 +1792,14 @@ test_that("a reported usage keeps its unknown counts; only an unreported one is 
   expect_identical(u$input[[1L]], 120)
   expect_true(is.na(u$output[[1L]]))
   expect_false(u$estimated[[1L]])
-  msgs = s$messages
-  expect_identical(msgs[[2L]]$usage$input, 120)
-  expect_true(is.na(msgs[[2L]]$usage$output))
+  msgs = Filter(function(m) identical(m$role, "assistant"), s$messages)
+  expect_identical(msgs[[1L]]$usage$input, 120)
+  expect_true(is.na(msgs[[1L]]$usage$output))
   expect_identical(u$estimated[2:3], c(TRUE, FALSE))
   expect_true(u$input[[2L]] > 0)
   expect_identical(c(u$input[[3L]], u$output[[3L]]), c(0, 0))
-  expect_true(isTRUE(msgs[[4L]]$usage$estimated))
-  expect_false(isTRUE(msgs[[6L]]$usage$estimated))
+  expect_true(isTRUE(msgs[[2L]]$usage$estimated))
+  expect_false(isTRUE(msgs[[3L]]$usage$estimated))
   expect_identical(s$status, "error")
 })
 
@@ -1810,7 +1857,8 @@ test_that("an overflow condition carries the provider's prompt count, never gptr
   cnd = session_data(s)$condition
   expect_s3_class(cnd, "gptr_error_context_overflow")
   expect_identical(cnd$tokens, NA_real_)
-  expect_identical(s$messages[[2L]]$usage$input, 0)
+  assistant = Filter(function(m) identical(m$role, "assistant"), s$messages)[[1L]]
+  expect_identical(assistant$usage$input, 0)
 })
 
 test_that("a decision-only model or a refused request preflight ends the run before any request", {

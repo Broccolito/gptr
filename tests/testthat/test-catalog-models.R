@@ -255,6 +255,19 @@ test_that("references resolve: exact, alias, family, normalised, owner, thinking
   expect_equal(jev$api, "typesafe-system-one")
 })
 
+test_that("discovered CLI ids cannot redirect declared model aliases", {
+  local_catalog()
+  aliases = c("sonnet", "opus", "haiku")
+  before = vapply(aliases, function(alias) model_resolve(alias)$ref, "")
+  full_sonnet = model_resolve("sonnet")$id
+  catalog_discovered_set("claude-cli", lapply(c(aliases, "default"), function(id) {
+    list(provider = "claude-cli", id = id)
+  }))
+  expect_identical(vapply(aliases, function(alias) model_resolve(alias)$ref, ""), before)
+  expect_identical(model_resolve("claude-cli/sonnet")$ref, "claude-cli/sonnet")
+  expect_identical(pcli_model_id(model_resolve("claude-cli/default")), full_sonnet)
+})
+
 test_that("a model record has every contract field (04 section 4.9)", {
   local_catalog()
   r = model_resolve("sonnet")
@@ -304,6 +317,8 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
 
 test_that("an alias with no model in the catalog is unknown, not a fuzzy match", {
   local_catalog(catalog_snapshot(generated = "2026-10-22")$models)
+  catalog_discovered_set("claude-cli", list(list(provider = "claude-cli", id = "gemini")))
+  expect_identical(model_resolve("claude-cli/gemini")$ref, "claude-cli/gemini")
   for (ref in c("gemini", "gemini:high")) {
     expect_error(model_resolve(ref), "alias 'gemini' .*gptr_models\\(refresh = TRUE\\)",
                  class = "gptr_error_unknown_model")
@@ -329,23 +344,29 @@ test_that("an alias with no model in the catalog is unknown, not a fuzzy match",
   expect_identical(model_resolve("gemini")$ref, "google/gemini-3.1-pro-preview")
 })
 
-test_that("an unknown id on a route with no catalog models says a refresh fills it (D-250)", {
+test_that("an unknown id points to explicit provider discovery without doing I/O", {
   local_catalog(catalog_snapshot(generated = "2026-10-22")$models)
-  hint = "lists no groq models yet; gptr_models\\(refresh = TRUE\\) downloads them from models.dev"
+  hint = 'gptr_models\\(provider = "groq", refresh = TRUE\\)'
   for (ref in c("groq/llama-x", "groq/llama-x:high")) {
     err = expect_error(model_resolve(ref), hint, class = "gptr_error_unknown_model")
     expect_identical(err$suggestions, character())
   }
-  # a route with catalog rows keeps its suggestions and gets no refresh hint
+  # a route with catalog rows keeps its suggestions and also names the explicit refresh
   err = expect_error(model_resolve("anthropic/claude-nope"), class = "gptr_error_unknown_model")
   expect_gt(length(err$suggestions), 0L)
-  expect_no_match(conditionMessage(err), "refresh", fixed = TRUE)
-  # models.dev does not list a provider registered by the user
+  expect_match(conditionMessage(err), 'provider = "anthropic"', fixed = TRUE)
+  # custom compatible providers use their own endpoint too
   off = gptr_register(gptr_provider("versa", api = "openai-completions",
                                     base_url = "https://versa.example/v1"))
   withr::defer(off())
   err = expect_error(model_resolve("versa/x"), class = "gptr_error_unknown_model")
-  expect_no_match(conditionMessage(err), "refresh", fixed = TRUE)
+  expect_match(conditionMessage(err), 'provider = "versa"', fixed = TRUE)
+  # a provider without a listing API or discover() gets no hint that would do nothing
+  off2 = gptr_register(gptr_provider("brx", api = "bedrock-converse",
+                                     base_url = "https://brx.example"))
+  withr::defer(off2())
+  err = expect_error(model_resolve("brx/x"), class = "gptr_error_unknown_model")
+  expect_no_match(conditionMessage(err), "gptr_models(", fixed = TRUE)
 })
 
 test_that("a reference that names a provider gets suggestions from that provider only (#44)", {
@@ -648,6 +669,7 @@ test_that("catalog_http_request() runs on the real reactor against loopback fixt
 
 test_that("a loopback server's listed models join the catalog only on request", {
   local_catalog()
+  withr::local_options(gptr.replay = "auto")
   local_mocked_bindings(
     check_running = function() FALSE,
     catalog_http_request = function(url, headers = list(), timeout = 30, ...) {
@@ -672,7 +694,8 @@ test_that("gptr_models() searches the catalog and lists prices in force", {
   df = gptr_models("sonnet")
   expect_s3_class(df, "gptr_models")
   expect_named(df, c("ref", "provider", "name", "context", "max_output", "input_price",
-                     "output_price", "reasoning", "aliases", "status"))
+                     "output_price", "reasoning", "aliases", "status", "availability",
+                     "checked_at"))
   expect_equal(df$ref[[1]], "anthropic/claude-sonnet-5-5")
   expect_equal(df$input_price[[1]], 2)
   expect_equal(df$aliases[[1]], "sonnet")
@@ -806,6 +829,15 @@ test_that("resolution is offline: builtins and gptr_models('sonnet') start no tr
   expect_match(df$ref[[1]], "^anthropic/claude-sonnet-")
   expect_equal(df$ref[[1]], model_resolve("sonnet")$ref)
   expect_equal(count$transfers, 0L)
+})
+
+test_that("an untagged Ollama catalog name is advertised when its :latest tag is installed", {
+  local_catalog(list(list(provider = "ollama", id = "clef-flash", name = "Clef Flash"),
+                     list(provider = "ollama", id = "clef", name = "Clef")))
+  local_ollama_server()
+  found = gptr_models(provider = "ollama", refresh = TRUE)
+  expect_identical(found$availability[found$ref == "ollama/clef-flash"], "advertised")
+  expect_identical(found$availability[found$ref == "ollama/clef"], "unlisted")
 })
 
 test_that("native Ollama discovery reads version, tags and show only on explicit request", {
@@ -1043,7 +1075,7 @@ test_that("model_prepare() discovers only missing or stale evidence and fails be
   expect_true(m$tool_call)
   n = length(srv$calls)
   expect_identical(model_prepare("ollama/qwen3:1.7b")$ref, "ollama/qwen3:1.7b")
-  expect_identical(model_prepare("sonnet")$ref, "anthropic/claude-sonnet-5-5")
+  expect_error(model_prepare("sonnet"), class = "gptr_error_egress")
   expect_length(srv$calls, n)
   err = expect_error(model_prepare("ollama/llama3.2:3b"), class = "gptr_error_not_available")
   expect_match(conditionMessage(err), "ollama pull llama3.2:3b`), then call again", fixed = TRUE)
@@ -1105,6 +1137,7 @@ test_that("a System 2 call prepares its selected Ollama model as System 1 does",
   # A router's fallback default is also replay-guarded before preparation.
   local_service("router.call", function(s, reason) stop("router crashed"))
   local_mocked_bindings(model_default = function(role = "chat") "ollama/qwen3:1.7b")
+  withr::local_options(gptr.replay = "replay")
   run = run_new(session_new("router:r", "auto", home = new.env()), list(), NULL)
   expect_error(run_target(run), class = "gptr_error_not_recorded")
   local_settings(providers = list(ollama = list(base_url = "http://192.0.2.10:11434/v1")))

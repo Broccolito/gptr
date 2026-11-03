@@ -160,10 +160,14 @@ before a change, even when the change was not predicted.
 \item \code{gptr.checkpoint_disk_bytes} (bytes, \code{2e9}), \code{gptr.checkpoint_days} (days, \code{30}) and
 \code{gptr.checkpoint_turns} (integer, \code{100}): retention of the checkpoint store.
 \item \code{gptr.checkpoint_track_file_max} (bytes, \code{1e6}) and \code{gptr.checkpoint_track_total} (bytes,
-\code{1e8}): the per-file and total size of tracked project files.
+\code{1e8}): the largest file the first scan stores, and what one scan stores in all.
 \item \code{gptr.checkpoint_capture_max} (bytes, \code{5e7}): a larger changed file gets no stored copy.
-\item \code{gptr.checkpoint_scan_budget} (seconds, \code{0.25}): above this walk time the project is
+\item \code{gptr.checkpoint_scan_budget} (seconds, \code{0.25}): above this scan time the project is
 scanned once per turn.
+\item \code{gptr.checkpoint_scan_timeout} (seconds, \code{2}): the longest an automatic file scan runs.
+Scans inspect at most 2,000 entries and back up at most 256 files within the byte limits
+above. Incomplete scans are reported; unvisited files have no automatic undo coverage.
+Predicted write targets are backed up separately.
 \item \code{gptr.checkpoint_rng} (logical, \code{TRUE}): report changes of the random-number state in the
 rewind report (gptr never changes your random seed).
 \item \code{gptr.checkpoint_close_devices} (logical, \code{FALSE}): close graphics devices opened by an

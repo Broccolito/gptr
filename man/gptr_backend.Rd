@@ -9,22 +9,35 @@ gptr_backend(name, start, poll = NULL, cancel, capabilities = list())
 \arguments{
 \item{name}{Backend name, usable as \verb{backend = <name>}.}
 
-\item{start}{\verb{function(spec, ctx)}.}
+\item{start}{\verb{function(spec, ctx)}, receiving the prepared child specification and parent
+context, and returning the handle described above. \code{\link[=gptr_check]{gptr_check()}} calls it with a minimal
+probe (\code{name}, \code{prompt}, \code{model} and \code{tools}) and a scratch context, so it should tolerate a
+specification without the other prepared fields.}
 
-\item{poll}{\verb{function(handle)} or \code{NULL}.}
+\item{poll}{\verb{function(handle)} or \code{NULL}, retained in the spec. The built-in team scheduler
+observes \code{handle$run} on the reactor and does not call this callback.}
 
-\item{cancel}{\verb{function(handle)}.}
+\item{cancel}{\verb{function(handle)} that stops the child and every process it started.
+\code{\link[=gptr_check]{gptr_check()}} calls it on its probe handle and requires that no child process remains. The
+team scheduler cancels through the handle's zero-argument \code{cancel} function instead, so a
+backend normally sets \code{cancel = function(handle) handle$cancel()}.}
 
-\item{capabilities}{Named list: \code{parallel}, \code{live_objects}, \code{ask}.}
+\item{capabilities}{Named list: for a custom backend, \code{parallel = "cpu"} selects the worker
+concurrency pool (other values select inline); \code{live_objects} (logical) and \code{ask}
+(\code{"queue"}, \code{"forward"} or \code{"none"}) describe the backend rather than enforcing scheduler
+behavior.}
 }
 \value{
 A spec of class \code{c("gptr_backend", "gptr_spec")}.
 }
 \description{
-A backend runs child sessions: \code{start(spec, ctx)} returns a handle the reactor can poll,
-\code{cancel(handle)} stops it and every process it started. Backends never block the reactor for
-more than 50 ms.
+A backend runs child sessions on the shared reactor. Its \code{start(spec, ctx)} returns a handle
+with a \code{gptr_session} in \code{session} and a zero-argument \code{cancel} function that stops the child
+and its processes. Asynchronous work supplies \code{run}, the child's live run on that reactor;
+without \code{run} the team scheduler treats the child as settled. Backend callbacks must not
+block the reactor for more than 50 ms.
 }
 \examples{
-gptr_backend("echo", start = function(spec, ctx) NULL, cancel = function(handle) NULL)
+# This constructs a spec; a working start() must return the handle described above.
+gptr_backend("echo", start = function(spec, ctx) NULL, cancel = function(handle) handle$cancel())
 }

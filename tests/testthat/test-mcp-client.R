@@ -394,6 +394,37 @@ test_that("progress that arrives while a cancel is written does not re-enter the
   mcp_close(conn)
 })
 
+test_that("an interrupt during the initial stdio send cancels the request", {
+  fx = local_mcp_fixture("modern", "stdio")
+  conn = mcp_connect(fx$spec)
+  esc = structure(class = c("interrupt", "condition"), list(message = "", call = NULL))
+  seen = new.env(parent = emptyenv())
+  seen$sent = FALSE
+  seen$calls = 0L
+  send = mcp_stdio_send
+  local_mocked_bindings(mcp_stdio_send = function(conn, msg) {
+    send(conn, msg)
+    if (identical(msg$method, "tools/call")) {
+      seen$sent = TRUE
+      token = as.character(msg$params[["_meta"]]$progressToken)
+      get(token, envir = conn$progress, inherits = FALSE)(list(progress = 1L))
+    }
+  })
+  # A Windows stdin writer can deliver progress before its write acknowledgement. Force
+  # that callback after a real send, while mcp_await() has not been entered yet.
+  got = tryCatch(mcp_call(conn, "echo", list(text = "sent"), on_progress = function(p) {
+    seen$calls = seen$calls + 1L
+    stop(esc)
+  }), interrupt = function(e) "interrupted")
+  expect_true(seen$sent)
+  expect_identical(got, "interrupted")
+  expect_identical(seen$calls, 1L)
+  deadline = Sys.time() + 10
+  while (!"notifications/cancelled" %in% fx$log()$method && Sys.time() < deadline) Sys.sleep(0.05)
+  expect_identical(sum(fx$log()$method == "notifications/cancelled"), 1L)
+  mcp_close(conn)
+})
+
 test_that("input_required rounds (modern) and elicitation/create (legacy) reach the ask UI", {
   ui = local_scripted_ui(list(list(name = "octocat"), list(name = "octocat")))
   for (era in c("modern", "legacy")) {
@@ -620,6 +651,7 @@ test_that("an access token bound to an https origin on the default port is sent"
   secret_register(value, oauth_access_name("mcp:web"), source = "oauth",
                   origin = "https://mcp.example.com")
   conn = list2env(list(name = "web", auth_key = "mcp:web", headers = list(),
+                       url = "https://mcp.example.com/mcp",
                        origin = url_origin("https://mcp.example.com/mcp")))
   auth = mcp_http_auth(conn)
   expect_identical(auth[[1L]], "Bearer ")

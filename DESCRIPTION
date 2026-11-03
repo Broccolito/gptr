@@ -1,6 +1,6 @@
 Package: gptr
 Title: Language Model Agents in Live 'R' Sessions
-Version: 1.0.0
+Version: 1.0.1
 Authors@R: c(
     person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0002-7342-7000")),
@@ -17,7 +17,7 @@ Description: Runs language model agents in an existing 'R' session, where
     associated model probabilities. Supports the 'Anthropic'
     <https://platform.claude.com/docs/en/api/overview>, 'OpenAI'
     <https://developers.openai.com/api/reference/overview> and 'Google Gemini'
-    <https://ai.google.dev/gemini-api/docs> APIs, 'OpenAI'-compatible endpoints,
+    <https://aistudio.google.com/docs> APIs, 'OpenAI'-compatible endpoints,
     local 'Ollama' <https://ollama.com> models, and the 'Claude Code' and
     'Codex' command line tools. Decision models include 'Jev', hosted by
     'TypeSafe AI' <https://docs.typesafe.ai/introduction>, and the local 'Clef'.

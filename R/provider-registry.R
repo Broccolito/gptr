@@ -55,12 +55,11 @@ provider_table = function() {
          auth = NULL, local = TRUE, discover = provider_ollama_discoverer("ollama"),
          compat = list(supports_reasoning_effort = TRUE, supports_tool_choice = FALSE)),
     list(id = "lmstudio", api = "openai-completions", base_url = "http://localhost:1234/v1",
-         auth = NULL, local = TRUE, discover = provider_discoverer("lmstudio")),
+         auth = NULL, local = TRUE),
     list(id = "llamacpp", api = "openai-completions", base_url = "http://127.0.0.1:8080/v1",
-         auth = NULL, local = TRUE, discover = provider_discoverer("llamacpp")),
+         auth = NULL, local = TRUE),
     list(id = "vllm", api = "openai-completions", base_url = "http://localhost:8000/v1",
          auth = provider_optional_auth("vllm", "VLLM_API_KEY"), local = TRUE,
-         discover = provider_discoverer("vllm"),
          compat = list(supports_reasoning_effort = TRUE)),
     list(id = "azure", api = "openai-completions", base_url = NULL, auth = "AZURE_OPENAI_API_KEY",
          compat = list(auth_header = "api-key", deployment_model = TRUE,
@@ -95,22 +94,148 @@ provider_optional_auth = function(id, vars) {
   }, gptr_optional_auth = vars)
 }
 
-#' A `discover` function for a loopback server: GET <base>/models with a 1 s timeout
-#' Runs only on request (gptr_models(refresh = TRUE)), never at load or under R CMD check.
+#' Whether the provider uses a supported native model-list API (not an inference request); the
+#' gateways that serve the TypeSafe protocol (`openrouter-jev`, `vercel-jev`) have no TypeSafe
+#' listing, so that API counts for `typesafe` itself only
 #' @noRd
-provider_discoverer = function(id) {
-  force(id)
-  function() {
-    if (check_running()) return(NULL)
-    p = provider_get(id)
-    url = if (is.null(p)) NULL else provider_base_url(p)
-    if (is.null(url)) return(NULL)
-    res = tryCatch(catalog_http_request(paste0(url, "/models"), timeout = 1),
-                   gptr_error = function(e) NULL)
-    if (is.null(res) || !identical(res$status, 200L)) return(NULL)
+provider_models_supported = function(p) {
+  isTRUE(p[["api"]] %in% c("openai-responses", "openai-completions", "anthropic-messages",
+                             "google-generative-ai")) ||
+    identical(p[["api"]], "typesafe-system-one") &&
+      identical(p[["id"]] %||% p[["name"]], "typesafe")
+}
+
+#' Sparse advertised model records: map only fields the endpoint actually reports. Catalog
+#' facts for an existing id survive a sparse response; a new id receives no guessed limits,
+#' tools or price. A listing is not proof that the account can make an inference request.
+#' @noRd
+provider_models = function(p, credential = provider_credential(p)) {
+  if (check_running() || !provider_models_supported(p)) return(NULL)
+  base = provider_base_url(p)
+  if (is.null(base)) return(NULL)
+  api = p[["api"]]
+  fail = function(why, status = NA_integer_) {
+    gptr_abort(paste0("Model listing for ", p[["id"]] %||% p[["name"]], " ", why, "."),
+               c("network", "provider"), provider = p[["id"]] %||% p[["name"]],
+               status = status, retryable = FALSE, reason = why)
+  }
+  headers = list(accept = "application/json")
+  auth = "authorization"
+  if (identical(api, "anthropic-messages")) {
+    headers[["anthropic-version"]] = "2023-06-01"
+    auth = "x-api-key"
+  } else if (identical(api, "google-generative-ai")) {
+    auth = "x-goog-api-key"
+  } else if (identical(p[["compat"]][["auth_header"]], "api-key")) {
+    auth = "api-key"
+  }
+  if (!is.null(credential)) {
+    headers[[auth]] = if (identical(auth, "authorization")) {
+      list("Bearer ", credential)
+    } else {
+      credential
+    }
+  }
+  headers = adp_merge_headers(headers, p[["headers"]] %||% list(),
+                              auth = c("authorization", "x-api-key", "x-goog-api-key", "api-key"))
+  path = if (identical(api, "anthropic-messages")) {
+    "/v1/models?limit=1000"
+  } else {
+    if (identical(api, "google-generative-ai")) "/models?pageSize=1000" else "/models"
+  }
+  positive = function(x) {
+    if (is.numeric(x) && length(x) == 1L && !is.na(x) && is.finite(x) && x > 0) x else NULL
+  }
+  record = function(m) {
+    if (!is.list(m)) fail("returned an invalid model record")
+    id = m[["id"]] %||% m[["name"]]
+    if (!rlang::is_string(id) || !nzchar(id) || grepl("[[:cntrl:]]", id)) {
+      fail("returned an invalid model id")
+    }
+    if (identical(api, "google-generative-ai")) {
+      methods = unlist(m[["supportedGenerationMethods"]], use.names = FALSE)
+      if (length(methods) && !"generateContent" %in% methods) return(NULL)
+      id = sub("^models/", "", id)
+    }
+    name = m[["display_name"]] %||% m[["displayName"]] %||% m[["name"]] %||% id
+    if (!rlang::is_string(name) || grepl("[[:cntrl:]]", name)) name = id
+    out = list(id = id, name = name)
+    if (identical(api, "anthropic-messages")) {
+      out$context = positive(m[["max_input_tokens"]])
+      out$max_output = positive(m[["max_tokens"]])
+      caps = m[["capabilities"]]
+      if (is.logical(caps[["thinking"]][["supported"]])) {
+        out$reasoning = isTRUE(caps[["thinking"]][["supported"]])
+      }
+      if (isTRUE(caps[["image_input"]][["supported"]]) ||
+          isTRUE(caps[["pdf_input"]][["supported"]])) {
+        out$input = c("text", if (isTRUE(caps[["image_input"]][["supported"]])) "image",
+                      if (isTRUE(caps[["pdf_input"]][["supported"]])) "pdf")
+      }
+    } else if (identical(api, "google-generative-ai")) {
+      out$context = positive(m[["inputTokenLimit"]])
+      out$max_output = positive(m[["outputTokenLimit"]])
+      if (is.logical(m[["thinking"]]) && length(m[["thinking"]]) == 1L) {
+        out$reasoning = isTRUE(m[["thinking"]])
+      }
+    } else if (identical(api, "typesafe-system-one")) {
+      out$type = "classifier"
+      out$api = api
+      out$tool_call = FALSE
+      out$reasoning = FALSE
+    } else {
+      caps = m[["capabilities"]]
+      if (isFALSE(caps[["completion_chat"]])) return(NULL)
+      outputs = unlist(m[["architecture"]][["output_modalities"]], use.names = FALSE)
+      if (length(outputs) && !"text" %in% outputs) return(NULL)
+      out$context = positive(m[["context_length"]]) %||% positive(m[["max_context_length"]])
+      out$max_output = positive(m[["top_provider"]][["max_completion_tokens"]])
+      params = unlist(m[["supported_parameters"]], use.names = FALSE)
+      if (length(params)) {
+        out$tool_call = "tools" %in% params
+        if (any(c("reasoning", "reasoning_effort") %in% params)) out$reasoning = TRUE
+      }
+      if (is.logical(caps[["function_calling"]]) && length(caps[["function_calling"]]) == 1L) {
+        out$tool_call = isTRUE(caps[["function_calling"]])
+      }
+      input = intersect(c("text", "image", "pdf"),
+                          unlist(m[["architecture"]][["input_modalities"]], use.names = FALSE))
+      if (length(input)) out$input = input else if (isTRUE(caps[["vision"]])) {
+        out$input = c("text", "image")
+      }
+    }
+    Filter(Negate(is.null), out)
+  }
+  result = list()
+  cursor = NULL
+  seen = character()
+  deadline = reactor_now() + 4
+  for (page in seq_len(4L)) {
+    url = paste0(base, path, if (!is.null(cursor)) paste0(
+      if (identical(api, "anthropic-messages")) "&after_id=" else "&pageToken=",
+      utils::URLencode(cursor, reserved = TRUE)))
+    remaining = deadline - reactor_now()
+    if (remaining <= 0) fail("exceeded its discovery time limit")
+    res = catalog_http_request(url, headers = headers, timeout = min(1, remaining),
+                               attempts = 1L, max_bytes = 8 * 1024^2)
+    if (!identical(res$status, 200L)) fail(paste0("returned HTTP ", res$status), res$status)
     body = tryCatch(json_decode(raw_to_utf8(res$body)), error = function(e) NULL)
-    ids = vapply(body[["data"]] %||% list(), function(m) as.character(m[["id"]] %||% ""), "")
-    data.frame(id = ids[nzchar(ids)], stringsAsFactors = FALSE)
+    field = if (api %in% c("google-generative-ai", "typesafe-system-one")) "models" else "data"
+    if (!is.list(body) || !is.list(body[[field]])) fail("returned an invalid response")
+    result = c(result, Filter(Negate(is.null), lapply(body[[field]], record)))
+    if (length(result) > 4096L) fail("exceeded 4096 models")
+    cursor = if (identical(api, "anthropic-messages") && isTRUE(body[["has_more"]])) {
+      last = body[["last_id"]]
+      if (!rlang::is_string(last) || !nzchar(last)) fail("returned an incomplete model page")
+      last
+    } else if (identical(api, "google-generative-ai")) {
+      body[["nextPageToken"]]
+    }
+    if (is.null(cursor) || identical(cursor, "")) return(result)
+    if (!rlang::is_string(cursor) || cursor %in% seen || page == 4L) {
+      fail("returned an incomplete or repeated model page")
+    }
+    seen = c(seen, cursor)
   }
 }
 
@@ -276,9 +401,14 @@ credential_bind = function(h, origin) {
 
 #' A handle from a credential-store record (P03 returns handles for stored values)
 #' @noRd
-credential_from_store = function(rec, name, origin, register = TRUE) {
+credential_from_store = function(rec, name, origin, register, endpoint) {
   if (is.null(rec)) return(NULL)
   if (inherits(rec, "gptr_secret")) return(rec)
+  if (rlang::is_string(rec$resource) &&
+        !identical(provider_origin(rec$resource), provider_origin(origin))) return(NULL)
+  if (!is.null(rec$endpoint_hash) && !identical(rec$endpoint_hash, hash_sha256(endpoint))) {
+    return(NULL)
+  }
   for (k in c("handle", "key")) {
     v = rec[[k]]
     if (inherits(v, "gptr_secret")) return(v)
@@ -290,6 +420,12 @@ credential_from_store = function(rec, name, origin, register = TRUE) {
   }
   NULL
 }
+
+#' L0 login resolves the same configured endpoint that requests use
+#' @noRd
+provider_login_target = function(id) provider_base_url(registry_get("provider", id))
+
+on_load(oauth_hooks_set(provider_target = provider_login_target))
 
 #' What credential_register() would yield, without registering or binding (the listing's view)
 #' NULL when the vault holds `name` bound to another origin; else a `gptr_credential_peek`
@@ -370,7 +506,8 @@ provider_credential = function(provider, register = TRUE) {
     if (credential_usable(h, origin)) return(credential_bind(h, origin))
   }
   rec = tryCatch(auth_store_get(id), gptr_error = function(e) NULL)
-  h = credential_from_store(rec, vars[[1]], origin, register)
+  h = credential_from_store(rec, vars[[1]], origin, register,
+                            endpoint = provider_base_url(provider))
   if (inherits(h, "gptr_credential_peek")) return(h)
   if (credential_usable(h, origin)) return(credential_bind(h, origin))
   for (v in vars) {
@@ -1151,15 +1288,27 @@ stream_conversational = function(model, adapter) {
 }
 
 #' A disabled provider is refused, then the request preflight runs (IC-74); `prepare = TRUE`
-#' first discovers an Ollama route's model through model_prepare() (the gateway's check, D-251)
+#' inventories a registered provider after consent, or prepares native Ollama evidence.
 #' @noRd
-provider_ready = function(model, provider, safety = NULL, prepare = FALSE) {
+provider_ready = function(model, provider, safety = NULL, prepare = FALSE, replay = NULL) {
   if (isFALSE(provider[["enabled"]])) {
     pid = provider[["id"]] %||% provider[["name"]]
     gptr_abort(paste0("Provider ", pid, " is disabled in the settings (providers.", pid,
                       ".enabled)."), "not_available", member = pid, provided_by = "settings")
   }
-  if (prepare && catalog_ollama_route(model, provider)) return(model_prepare(model$ref, safety))
+  if (prepare && catalog_ollama_route(model, provider)) {
+    return(model_prepare(model$ref, safety, replay))
+  }
+  if (prepare && identical(provider, provider_get(model[["provider"]]))) {
+    catalog_inventory(provider, safety, replay = replay)
+    refreshed = model_resolve(model[["ref"]], strict = FALSE)
+    if (!is.null(refreshed)) {
+      if (!is.null(model$thinking)) {
+        refreshed$thinking = model_clamp_thinking(refreshed$thinking_levels, model$thinking)
+      }
+      model = refreshed
+    }
+  }
   provider_preflight(model, provider, safety)
 }
 

@@ -406,6 +406,63 @@ test_that("plugin_resolve finds Claude bundles by path and installed Claude plug
   expect_identical(r$path, path_norm(b))
 })
 
+test_that("a marketplace root points to a plugin directory instead of enabling an empty bundle", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, ".claude-plugin", "marketplace.json"),
+             '{"name": "catalog", "plugins": [{"name": "tools", "source": "./plugins/tools"}]}')
+  write_file(file.path(d, "plugins", "tools", ".claude-plugin", "plugin.json"),
+             '{"name": "tools"}')
+  expect_null(plugin_from_dir(d))
+  expect_error(plugin_resolve(d), "marketplace.*plugin directory")
+  # A repository can be both a marketplace and a plugin, with its own resources or manifest.
+  write_file(file.path(d, ".claude-plugin", "plugin.json"), '{"name": "catalog-tools"}')
+  expect_identical(plugin_resolve(d)$name, "catalog-tools")
+  unlink(file.path(d, ".claude-plugin", "plugin.json"))
+  expect_error(plugin_resolve(d), "marketplace")
+  write_file(file.path(d, ".mcp.json"), "{}")
+  expect_identical(plugin_resolve(d)$kind, "claude-plugin")
+  unlink(file.path(d, ".mcp.json"))
+  write_file(file.path(d, "skills", "s", "SKILL.md"), "---\nname: s\ndescription: S.\n---\nx")
+  expect_identical(plugin_resolve(d)$kind, "claude-plugin")
+})
+
+test_that("a bare plugin name is not blocked by a same-named folder in the working directory", {
+  skip_on_cran()
+  root = local_gw()
+  write_file(file.path(root, ".gptr", "plugins", "docs9", "skills", "a", "SKILL.md"),
+             "---\nname: a\ndescription: A.\n---\nx")
+  write_file(file.path(root, "docs9", "notes.md"), "notes")
+  expect_identical(plugin_resolve("docs9")$path,
+                   path_norm(file.path(root, ".gptr", "plugins", "docs9")))
+  expect_error(plugin_resolve("./docs9"), "not a plugin directory")
+  unlink(file.path(root, ".gptr", "plugins"), recursive = TRUE)
+  expect_error(plugin_resolve("docs9"), "No plugin with this name")
+  # A same-named marketplace clone is explained only when nothing else resolves the name.
+  write_file(file.path(root, "docs9", ".claude-plugin", "marketplace.json"), '{"name": "docs9"}')
+  expect_error(plugin_resolve("docs9"), "plugin marketplace")
+  write_file(file.path(root, ".gptr", "plugins", "docs9", "skills", "a", "SKILL.md"),
+             "---\nname: a\ndescription: A.\n---\nx")
+  expect_identical(plugin_resolve("docs9")$path,
+                   path_norm(file.path(root, ".gptr", "plugins", "docs9")))
+})
+
+test_that("an installed Claude plugin whose install root is a marketplace resolves by its name", {
+  skip_on_cran()
+  mk = withr::local_tempdir()
+  write_file(file.path(mk, ".claude-plugin", "marketplace.json"),
+             '{"name": "mkt9", "plugins": [{"name": "toolkit9", "source": "./", "strict": false}]}')
+  inst = file.path(user_home(), ".claude", "plugins", "installed_plugins.json")
+  entry = list(scope = "user", installPath = mk, lastUpdated = "2026-09-01T00:00:00.000Z")
+  write_file(inst, json_encode(list(version = 2L, plugins = list("toolkit9@mkt9" = list(entry)))))
+  withr::defer(unlink(inst))
+  expect_null(plugin_from_dir(mk))
+  r = plugin_resolve("toolkit9")
+  expect_identical(r$kind, "claude-plugin")
+  expect_identical(r$name, "toolkit9")
+  expect_true("toolkit9" %in% gptr_plugins()$name)
+  expect_error(plugin_resolve(mk), "marketplace")
+})
+
 test_that("plugin_resolve rejects unknown names and ambiguous normalised names", {
   skip_on_cran()
   expect_error(plugin_resolve("no-such-plugin-p17"), class = "gptr_error_invalid_argument")
@@ -681,6 +738,33 @@ test_that("missing rDepends disable a plugin", {
   sid = "s00000000d7"
   expect_warning(plugin_enable(d, 0L, session = sid), class = "gptr_warning_plugin")
   expect_null(registry_get("skill", "np-skill", session = sid))
+})
+
+test_that("a Claude bundle with no usable components is failed with an actionable diagnostic", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, ".claude-plugin", "plugin.json"), '{"name": "hooks-only"}')
+  write_file(file.path(d, "hooks", "hooks.json"), '{"hooks": {}}')
+  withr::defer(plugin_forget(d))
+  expect_warning(expect_false(plugin_enable(d, 3L)), "no supported resources")
+  row = gptr_plugins()[gptr_plugins()$name == "hooks-only", , drop = FALSE]
+  expect_false(row$enabled)
+  expect_identical(row$state, "failed")
+  diag = gptr_registry(diagnostics = TRUE)
+  expect_true(any(diag$source == "plugin:hooks-only" &
+                    grepl("no supported resources", diag$message, fixed = TRUE)))
+  expect_false(plugin_enable(d, 3L))
+})
+
+test_that("a plugin R factory can intentionally register no components", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "empty-factory"}')
+  write_file(file.path(d, "extensions", "empty.R"), "function(gptr) invisible(NULL)")
+  withr::defer(plugin_forget(d))
+  withr::defer(ext_unload("plugin:empty-factory"))
+  expect_true(plugin_enable(d, 3L))
+  row = gptr_plugins()[gptr_plugins()$name == "empty-factory", , drop = FALSE]
+  expect_true(row$enabled)
+  expect_identical(row$state, "active")
 })
 
 test_that("plugin_enable is idempotent and is the plugin.enable service", {
@@ -1071,6 +1155,59 @@ test_that("gptr_plugins lists settings plugins and candidates, and a plugin enab
                    list(kind = "claude-plugin", enabled = FALSE, state = "disabled"))
 })
 
+test_that("configured marketplace paths explain their omission before plugin activation", {
+  root = local_gw()
+  marketplace = '{"name": "catalog", "plugins": [{"name": "tools", "source": "./tools"}]}'
+  for (dir in c("downloads/posit-skills", ".gptr/plugins/passive-marketplace")) {
+    write_file(file.path(root, dir, ".claude-plugin", "marketplace.json"), marketplace)
+  }
+  write_file(file.path(root, "downloads", "feature-dev", ".claude-plugin", "plugin.json"),
+             '{"name": "feature-dev"}')
+  write_file(file.path(root, "downloads", "feature-dev", "extensions", "never.R"),
+             'function(gptr) stop("plugin code ran during listing")')
+  gptr_config(plugins = c("./downloads/posit-skills", "./downloads/feature-dev"),
+              .scope = "session")
+  gptr_reload()
+  before = nrow(gptr_registry(diagnostics = TRUE))
+  pl = gptr_plugins()
+  row = pl[pl$name == "feature-dev", , drop = FALSE]
+  expect_identical(row$state, "lazy")
+  expect_true(row$enabled)
+  expect_false(any(pl$name %in% c("posit-skills", "passive-marketplace")))
+  diag = gptr_registry(diagnostics = TRUE)
+  expect_identical(nrow(diag), before + 1L)
+  expect_identical(tail(diag$source, 1L), "user")
+  msg = paste(tail(diag$message, 1L), collapse = "")
+  expect_match(msg, "downloads/posit-skills", fixed = TRUE)
+  expect_match(msg, "Choose an individual plugin directory", fixed = TRUE)
+  out = paste(utils::capture.output(print(pl)), collapse = "\n")
+  expect_match(out, "gptr_registry(diagnostics = TRUE)", fixed = TRUE)
+  expect_identical(attr(gptr_plugins(), "footer"), attr(pl, "footer"))
+  expect_identical(nrow(gptr_registry(diagnostics = TRUE)), nrow(diag))
+  gptr_config(plugins = "./downloads/feature-dev", .scope = "session")
+  expect_null(attr(gptr_plugins(), "footer"))
+  expect_identical(nrow(gptr_registry(diagnostics = TRUE)), nrow(diag))
+})
+
+test_that("a configured marketplace path is recorded once, with its path, at every start", {
+  skip_on_cran()
+  root = local_gw()
+  write_file(file.path(root, "downloads", "mkt", ".claude-plugin", "marketplace.json"),
+             '{"name": "catalog", "plugins": []}')
+  write_file(file.path(root, "tools2", "helper.R"), "function(gptr) NULL")
+  gptr_config(plugins = c("./downloads/mkt", "./tools2/helper.R"), .scope = "session")
+  gptr_reload()
+  before = nrow(gptr_registry(diagnostics = TRUE))
+  for (i in 1:3) plugins_sync()
+  pl = gptr_plugins()
+  plugins_sync()
+  diag = gptr_registry(diagnostics = TRUE)
+  expect_identical(nrow(diag), before + 1L)
+  expect_match(tail(diag$message, 1L), "downloads/mkt: This path is a plugin marketplace",
+               fixed = TRUE)
+  expect_match(attr(pl, "footer"), "^# 1 configured plugin skipped")
+})
+
 test_that("an installed toy plugin package is discovered, lazy and activated on use", {
   local_toy_install()
   pl = gptr_plugins(installed = TRUE)
@@ -1218,6 +1355,7 @@ test_that("a session's plugin entries are forgotten at session_shutdown", {
   skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "ended-plug"}')
+  write_file(file.path(d, "prompts", "ended.md"), "A session-scoped prompt.")
   sid = "s00000000c9"
   plugin_enable(d, 0L, session = sid)
   expect_true("ended-plug" %in% gptr_plugins()$name)

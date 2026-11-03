@@ -538,8 +538,8 @@ catalog_key = function() {
 }
 
 #' The merged catalog (04 section 11.10), rebuilt only when a layer changed
-#' `the$catalog` also keeps the discovery layer and the private Ollama evidence (read only by
-#' provider_preflight()); neither is part of the returned catalog.
+#' `the$catalog` also keeps the discovery layer, inventory freshness and private Ollama evidence
+#' (read only by provider_preflight()); none is part of the returned catalog.
 #' @noRd
 catalog_get = function() {
   key = catalog_key()
@@ -549,7 +549,7 @@ catalog_get = function() {
   }
   value = catalog_build()
   the$catalog = list(key = key, value = value, discovered = st[["discovered"]],
-                     evidence = st[["evidence"]])
+                     evidence = st[["evidence"]], inventory = st[["inventory"]])
   value
 }
 
@@ -561,7 +561,8 @@ catalog_reset = function(discovered = FALSE) {
   the$catalog = if (discovered) {
     NULL
   } else {
-    list(discovered = st[["discovered"]], evidence = st[["evidence"]])
+    list(discovered = st[["discovered"]], evidence = st[["evidence"]],
+         inventory = st[["inventory"]])
   }
   invisible(NULL)
 }
@@ -595,9 +596,12 @@ model_alias_entry = function(target, ctg) {
 model_key_present = function(id, vars) {
   if (length(vars) && any(nzchar(Sys.getenv(vars, unset = "")))) return(TRUE)
   if (any(vapply(vars, function(v) !is.null(secret_lookup(v)), NA))) return(TRUE)
-  rec = tryCatch(auth_store_read()[[id]], error = function(e) NULL)
+  st = the$secrets
+  rec = if (is.environment(st)) st$auth[[id]] else NULL
+  rec = rec %||% tryCatch(auth_store_read()[[id]], error = function(e) NULL)
   if (!is.list(rec)) return(FALSE)
-  (rlang::is_string(rec[["key"]]) && nzchar(rec[["key"]])) ||
+  inherits(rec[["key"]], "gptr_secret") || inherits(rec[["refresh"]], "gptr_secret") ||
+    (rlang::is_string(rec[["key"]]) && nzchar(rec[["key"]])) ||
     (rlang::is_string(rec[["refresh"]]) && nzchar(rec[["refresh"]])) || is.list(rec[["keyring"]])
 }
 
@@ -691,9 +695,9 @@ model_alias_target = function(name, targets) {
   unname(targets[match(catalog_norm_id(name), catalog_norm_id(names(targets)))])
 }
 
-#' Resolve a reference without its thinking suffix (report 09 match_pattern()): an exact
-#' provider/id, then an id, an alias, a registered provider named alone (its first declared
-#' model, IC-19), then the fuzzy step
+#' Resolve a reference without its thinking suffix: explicit provider-qualified matching,
+#' a declared alias, an unqualified id, a registered provider named alone (its first declared
+#' model, IC-19), then the fuzzy step. An unavailable alias never matches an unrelated id.
 #' @noRd
 model_match = function(pat, ctg) {
   idx = ctg$index
@@ -724,17 +728,20 @@ model_match = function(pat, ctg) {
       return(list(entry = NULL, how = "unknown id for known provider", provider = pv, id = rest))
     }
   }
-  every = rep(TRUE, nrow(idx))
-  r = model_match_id(pat, ctg, every)
-  if (!is.null(r)) return(r)
   e = model_alias_entry(alias, ctg)
   if (!is.null(e)) return(list(entry = e, how = "alias"))
+  declared_alias = catalog_norm_id(pat) %in% catalog_norm_id(names(targets))
+  every = rep(TRUE, nrow(idx))
+  if (!declared_alias) {
+    r = model_match_id(pat, ctg, every)
+    if (!is.null(r)) return(r)
+  }
   pv = model_provider_id(pat, ctg)
   models = if (!is.na(pv)) provider_get(pv)$models
   e = if (length(models)) model_alias_entry(paste0(pv, "/", models[[1L]]$id), ctg)
   if (!is.null(e)) return(list(entry = e, how = "provider"))
   # an alias with no model is not guessed ("gemini" with no Gemini Pro is no Gemini Flash)
-  if (catalog_norm_id(pat) %in% catalog_norm_id(names(targets))) {
+  if (declared_alias) {
     return(list(entry = NULL, how = "alias without a model", alias = pat))
   }
   r = model_match_fuzzy(pat, ctg, every)
@@ -901,11 +908,12 @@ model_resolve = function(ref, strict = TRUE) {
     } else {
       paste0("Unknown model reference '", ref, "'.")
     }
-    # a models.dev route with no rows yet (the shipped snapshot is seed-only for most routes)
     pid = hit$provider %||% ""
-    if (pid %in% names(catalog_modelsdev_ids()) && !(pid %in% ctg$index$provider)) {
-      lead = paste0(lead, " The catalog lists no ", pid, " models yet; ",
-                    "gptr_models(refresh = TRUE) downloads them from models.dev.")
+    if (nzchar(pid) && catalog_listable(provider_get(pid))) {
+      lead = paste0(lead, " Run gptr_models(provider = \"", pid,
+                    "\", refresh = TRUE) to ask that provider for its models.")
+    } else if (pid %in% names(catalog_modelsdev_ids()) && !(pid %in% ctg$index$provider)) {
+      lead = paste0(lead, " gptr_models(refresh = TRUE) updates the offline catalog.")
     }
     gptr_abort(paste0(lead, if (length(sugg)) paste0(" Did you mean: ",
                                                      paste(sugg, collapse = ", "), "?") else ""),
@@ -1083,12 +1091,12 @@ catalog_http_request = function(url, method = "GET", headers = list(), body = NU
     gptr_abort(paste0("The answer from ", origin, " exceeded ",
                       format(max_bytes, scientific = FALSE), " bytes and was discarded."),
                c("network", "provider"), provider = "catalog", status = st$status,
-               curl_code = NA_integer_)
+               curl_code = NA_integer_, reason = "answer too large")
   }
   if (!isTRUE(done)) {
     gptr_abort(paste0("No answer from ", origin, " within ", timeout, " s."),
                c("network", "provider"), provider = "catalog", status = NA_integer_,
-               curl_code = NA_integer_)
+               curl_code = NA_integer_, reason = paste0("no answer within ", timeout, " s"))
   }
   if (!is.null(st$cnd)) {
     status = suppressWarnings(as.integer(st$cnd[["status"]] %||% NA_integer_))
@@ -1098,7 +1106,8 @@ catalog_http_request = function(url, method = "GET", headers = list(), body = NU
     code = suppressWarnings(as.integer(st$cnd[["curl_code"]] %||% NA_integer_))
     gptr_abort(paste0("Could not reach ", origin, ": ", conditionMessage(st$cnd)),
                c("network", "provider"), provider = "catalog", status = NA_integer_,
-               curl_code = if (length(code) == 1L) code else NA_integer_)
+               curl_code = if (length(code) == 1L) code else NA_integer_,
+               reason = "could not connect")
   }
   list(status = as.integer(st$status), headers = st$headers,
        body = if (length(st$chunks)) do.call(c, st$chunks) else raw())
@@ -1171,22 +1180,135 @@ catalog_discovered_set = function(pid, entries, evidence = list(), replace = TRU
   invisible(NULL)
 }
 
-#' Ask a local provider for its models and add them as the discovery layer (explicit request)
-#' Ollama gets native discovery; any other `discover()` adds descriptive entries only, granting
-#' no capability or locality and no evidence (IC-74). Returns the ids, invisibly.
+#' Add a provider's sparse advertised records to its discovery layer. NULL means unsupported;
+#' an empty list/data frame is a successful empty listing. Only native Ollama discovery can
+#' supply the private evidence accepted by preflight (IC-74). Returns ids, invisibly.
 #' @noRd
-catalog_discover = function(p, safety = NULL) {
+catalog_discover = function(p, safety = NULL, credential = NULL) {
   if (catalog_ollama_provider(p)) return(catalog_ollama_discover(p, safety))
   pid = p[["id"]] %||% p[["name"]]
-  df = tryCatch(p[["discover"]](), error = function(e) NULL)
-  if (!is.data.frame(df)) return(invisible(character()))
-  ids = if (is.null(df[["id"]])) character() else as.character(df[["id"]])
-  ids = unique(ids[!is.na(ids) & nzchar(ids) & !grepl("[[:cntrl:]]", ids)])
-  entries = lapply(ids, function(i) {
-    list(provider = pid, id = i, name = i, status = "active", locality = "unknown")
+  rows = if (is.function(p[["discover"]])) p[["discover"]]() else provider_models(p, credential)
+  if (is.null(rows)) return(invisible(NULL))
+  if (is.data.frame(rows)) {
+    rows = lapply(seq_len(nrow(rows)), function(i) as.list(rows[i, , drop = FALSE]))
+  }
+  if (!is.list(rows) || length(rows) > 4096L) {
+    gptr_abort("Model discovery must return at most 4096 sparse model records.",
+               "invalid_spec", kind = "provider", name = pid, field = "discover",
+               problem = "expected a data frame or list of model records")
+  }
+  fields = c("id", "type", "api", "context", "max_output", "reasoning", "thinking_levels",
+              "input", "tool_call", "structured_output")
+  known = catalog_get()$models
+  entries = lapply(rows, function(m) {
+    id = if (is.list(m)) m[["id"]]
+    if (!rlang::is_string(id) || !nzchar(id) || grepl("[[:cntrl:]]", id)) {
+      gptr_abort("Model discovery returned an invalid model id.", "invalid_spec",
+                 kind = "provider", name = pid, field = "discover", problem = "invalid id")
+    }
+    entry = spec_model_metadata(list(kind = "provider", name = pid),
+                                m[intersect(fields, names(m))])
+    name = m[["name"]] %||% id
+    if (!rlang::is_string(name) || grepl("[[:cntrl:]]", name)) name = id
+    if (identical(name, id)) {
+      name = known[[paste0(pid, "/", id)]][["name"]] %||% id
+    }
+    c(list(provider = pid, name = name, locality = "unknown"), entry)
   })
+  ids = vapply(entries, function(e) e[["id"]], "")
+  entries = entries[!duplicated(ids)]
   catalog_discovered_set(pid, entries)
-  invisible(ids)
+  invisible(unique(ids))
+}
+
+#' Inventory identity without credential lookup; header names are HTTP case-insensitive
+#' @noRd
+catalog_inventory_route = function(p) {
+  if (is.null(p)) return(NULL)
+  endpoint = provider_base_url(p)
+  headers = adp_merge_headers(list(), p[["headers"]] %||% list())
+  names(headers) = tolower(names(headers))
+  headers = headers[order(names(headers), method = "radix")]
+  list(endpoint = if (!is.null(endpoint)) hash_sha256(endpoint),
+       headers = hash_sha256(json_encode(headers)), api = p[["api"]],
+       lifecycle = catalog_lifecycle(p[["id"]] %||% p[["name"]]))
+}
+
+#' Can gptr ask this provider for its models: native Ollama, a `discover()` callback or a native
+#' model-list API, and not an offline provider
+#' @noRd
+catalog_listable = function(p) {
+  is.list(p) && !isTRUE(p[["offline"]]) &&
+    (catalog_ollama_provider(p) || is.function(p[["discover"]]) || provider_models_supported(p))
+}
+
+#' Inventory after consent, once per endpoint/headers/lifecycle/credential per five minutes. Failed
+#' attempts are cached too, and never remove the last successful discovery or offline catalog.
+#' Only credential fingerprints enter the cache; ordinary catalog reads do not look up keys.
+#' A `discover()` callback has no time bound (the claude and codex CLIs start a process), so it
+#' runs only on explicit refresh; before use only the bounded native listings run.
+#' @noRd
+catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
+  if (!catalog_listable(p) || check_running() || isFALSE(p[["enabled"]])) return(invisible(NULL))
+  native = catalog_ollama_provider(p)
+  callback = !native && is.function(p[["discover"]])
+  if (callback && !refresh) return(invisible(NULL))
+  pid = p[["id"]] %||% p[["name"]]
+  if (native) catalog_ollama_endpoint(p, safety)
+  egress_check(pid, p, safety = safety %||% egress_safety(), context = "listing")
+  replay_guard(p, what = "model listing", mode = replay_mode(replay))
+  credential = tryCatch(if (!native && !callback) provider_credential(p) else NULL,
+                        error = function(e) e)
+  route = catalog_inventory_route(p)
+  key = c(route, list(credential = if (inherits(credential, "error")) {
+    class(credential)[[1L]]
+  } else {
+    credential[c("name", "fp")]
+  }))
+  old = the$catalog[["inventory"]][[pid]]
+  now = reactor_now()
+  if (!refresh && identical(old[["key"]], key) && now - old[["attempted"]] < 300) {
+    return(invisible(old[["ids"]]))
+  }
+  record = old %||% list()
+  record$key = key
+  record$route = route
+  record$attempted = now
+  # The reactor may prepare another request while this listing is pending.
+  if (!native) {
+    st = the$catalog %||% list()
+    st$inventory[[pid]] = record
+    the$catalog = st
+  }
+  # Native Ollama failures remain actionable preflight errors; other listings are advisory.
+  found = if (native) catalog_discover(p, safety) else tryCatch({
+    if (inherits(credential, "error")) stop(credential)
+    catalog_discover(p, safety, credential)
+  }, error = function(e) e)
+  if (is.null(found) || inherits(found, "error")) {
+    # Only the short `reason` of gptr's own listing conditions is shown; other condition text
+    # may carry server or callback output.
+    status = if (inherits(found, "error")) found[["status"]]
+    reason = if (inherits(found, "gptr_error_network")) found[["reason"]]
+    record$error = if (inherits(found, "gptr_error_no_key")) {
+      "missing credentials"
+    } else if (is.numeric(status) && length(status) == 1L && !is.na(status)) {
+      paste("HTTP", status)
+    } else if (rlang::is_string(reason)) {
+      reason
+    } else {
+      "listing unavailable"
+    }
+  } else {
+    record$ids = found
+    record$checked_at = iso_time()
+    record$checked = now
+    record$error = NULL
+  }
+  st = the$catalog %||% list()
+  st$inventory[[pid]] = record
+  the$catalog = st
+  invisible(record$ids)
 }
 
 #' Is a host name a loopback address (as the transport's URL parser normalises it)?
@@ -1363,14 +1485,11 @@ catalog_unavailable_abort = function(ref, why, provided_by) {
              member = ref, provided_by = provided_by)
 }
 
-#' Native Ollama discovery: /api/version, /api/tags and /api/show (07-local-ollama.md section 2)
-#' Explicit only, never under R CMD check; under local-only a non-loopback endpoint is refused
-#' first. Bounded requests; an undescribed model is skipped. Returns the ids, invisibly.
+#' Validate the native Ollama endpoint before egress, preserving the local-only refusal order
 #' @noRd
-catalog_ollama_discover = function(p, safety = NULL, only = NULL) {
+catalog_ollama_endpoint = function(p, safety = NULL, only = NULL) {
   local_only = catalog_local_only(safety)
   pid = p[["id"]] %||% p[["name"]]
-  if (check_running()) return(invisible(character()))
   ep = catalog_endpoint(p)
   target = paste0(pid, "/", only %||% "*")
   if (is.null(ep)) {
@@ -1380,6 +1499,18 @@ catalog_ollama_discover = function(p, safety = NULL, only = NULL) {
   if (local_only && !ep$loopback) {
     catalog_local_only_abort(target, ep$origin, "its endpoint is not a loopback address")
   }
+  ep
+}
+
+#' Native Ollama discovery: /api/version, /api/tags and /api/show (07-local-ollama.md section 2)
+#' Explicit only, never under R CMD check; under local-only a non-loopback endpoint is refused
+#' first. Bounded requests; an undescribed model is skipped. Returns the ids, invisibly.
+#' @noRd
+catalog_ollama_discover = function(p, safety = NULL, only = NULL) {
+  if (check_running()) return(invisible(character()))
+  ep = catalog_ollama_endpoint(p, safety, only)
+  pid = p[["id"]] %||% p[["name"]]
+  target = paste0(pid, "/", only %||% "*")
   fetch = function(path, body = NULL) {
     hdr = c(list(accept = "application/json"),
             if (!is.null(body)) list(`content-type` = "application/json"))
@@ -1639,11 +1770,12 @@ provider_preflight = function(model, provider, safety = NULL) {
   model
 }
 
-#' Explicit selected-model preparation (07-local-ollama.md section 2.1; contract section 7.5)
-#' An Ollama route with missing or stale evidence discovers that model only, then preflights.
+#' Selected-model preparation (07-local-ollama.md section 2.1; contract section 7.5). An Ollama
+#' route with missing or stale evidence discovers that model only. Other providers inventory
+#' advertised routes once per cache interval after consent; failure preserves catalog facts.
 #' Offline replay must not call this (P08's replay guard runs first).
 #' @noRd
-model_prepare = function(ref, safety = NULL) {
+model_prepare = function(ref, safety = NULL, replay = NULL) {
   catalog_local_only(safety)
   rec = model_resolve(ref)
   p = provider_get(rec[["provider"]])
@@ -1654,6 +1786,9 @@ model_prepare = function(ref, safety = NULL) {
       catalog_ollama_discover(p, safety, only = rec[["id"]])
       rec = model_resolve(ref)
     }
+  } else {
+    catalog_inventory(p, safety, replay = replay)
+    rec = model_resolve(ref)
   }
   provider_preflight(rec, p, safety)
 }
@@ -1669,10 +1804,17 @@ catalog_grepl = function(pattern, x) {
 #'
 #' Searches the merged model catalog: the shipped snapshot (models.dev plus gptr's reviewed
 #' prices and capabilities), a refreshed copy in `tools::R_user_dir("gptr", "cache")`, models
-#' declared by registered providers, user configuration and discovered local servers. Offline
+#' declared by registered providers, user configuration and provider inventories. Offline
 #' by default: only `refresh = TRUE` touches the network.
 #'
-#' A catalog entry describes a route, not current account access. Copy its `ref` into the
+#' A catalog entry describes a route, not current account access. `availability` records what
+#' the last provider listing advertised, with its `checked_at` time; it does not verify inference
+#' or billing access. Failed or expired listings are marked stale and keep the previous models.
+#' Providers other than Ollama with a native model-list API are inventoried before use after
+#' consent, at most once per five minutes in this R process; `refresh = TRUE` bypasses that
+#' cache. A `discover()` callback, such as the `claude` and `codex` command-line catalogs, runs
+#' only with `refresh = TRUE`.
+#' Copy a `ref` into the
 #' `model` argument of [peter()] to choose that route. Ollama routes require current installed
 #' model evidence before inference; discovery does not pull models. See
 #' `vignette("language-models", package = "gptr")` for setup and [gptr_providers()] for
@@ -1682,10 +1824,14 @@ catalog_grepl = function(pattern, x) {
 #'   against the reference, the name and the aliases; the model an alias resolves to is listed
 #'   first.
 #' @param provider `NULL` or a provider id (for example `"anthropic"`).
-#' @param refresh `TRUE` downloads the current models.dev catalog with ETag revalidation into
-#'   the user cache. For a local provider (`provider = "ollama"`, `"lmstudio"`, ...) it asks
-#'   that server for its installed models instead (a 1 second limit per request; for Ollama the
-#'   native `/api/version`, `/api/tags` and `/api/show` endpoints). Ollama discovery requires a
+#' @param refresh `TRUE` with `provider = NULL` downloads the models.dev catalog with ETag
+#'   revalidation into the user cache. With a provider it asks that provider's model-list API
+#'   (or registered `discover()` callback), using its configured credentials after the normal
+#'   egress and replay checks. API discovery is bounded to four pages, four seconds total and
+#'   one second per request. A failed listing keeps prior models and reports the failed refresh
+#'   in the footer. A provider with neither (Bedrock Converse, an offline provider) is not
+#'   contacted. For Ollama it uses native `/api/version`, `/api/tags` and `/api/show` endpoints
+#'   with a one second limit per request. Ollama discovery requires a
 #'   loopback address under the default local-only policy; only an explicit human setting at
 #'   user or session scope can relax it (see [gptr_config()]).
 #'   The only network use of this function; it never starts or installs a server and never
@@ -1693,7 +1839,12 @@ catalog_grepl = function(pattern, x) {
 #' @return A `gptr_models` data frame with columns `ref`, `provider`, `name`, `context`,
 #'   `max_output`, `input_price`, `output_price` (USD per million tokens, selected for today's
 #'   date from the available catalog; `0` for verified local inference, `NA` when unknown),
-#'   `reasoning`, `aliases` and `status`. Catalog prices can be stale and are not an account quote.
+#'   `reasoning` (`NA` when unknown), `aliases`, `status`, `availability` (`unknown`,
+#'   `advertised`, `unlisted`, or
+#'   the latter two with ` (stale)`; a `claude-cli` or `codex` `default` row takes that of the
+#'   full id it runs) and `checked_at` (UTC time of the last successful provider listing, `NA`
+#'   when none). Unlisted models remain in the catalog. Catalog prices can be
+#'   stale and are not an account quote.
 #' @examples
 #' gptr_models("sonnet")
 #' gptr_models(provider = "anthropic")
@@ -1705,13 +1856,12 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   p = if (is.null(provider)) NULL else provider_get(provider)
   if (!is.null(p)) provider = p[["id"]] %||% p[["name"]] %||% provider
   if (refresh) {
-    local_server = catalog_ollama_provider(p) ||
-      (isTRUE(p[["local"]]) && is.function(p[["discover"]]))
-    if (local_server) catalog_discover(p) else catalog_refresh()
+    if (is.null(provider)) catalog_refresh() else catalog_inventory(p, refresh = TRUE)
   }
   ctg = catalog_get()
   idx = ctg$index
   keep = !idx$provider %in% provider_internal()
+  total = sum(keep)
   if (!is.null(provider)) keep = keep & idx$provider == provider
   first = character()
   if (!is.null(query)) {
@@ -1740,14 +1890,53 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
                   configured_context = e[["configured_context"]])
     tryCatch(catalog_num(catalog_entry_context(limits)), error = function(err) NA_real_)
   })
+  inventory = the$catalog[["inventory"]] %||% list()
+  state = lapply(unique(rows$provider), function(pid) {
+    entry = inventory[[pid]]
+    p = provider_get(pid)
+    entry$stale = !is.null(entry$error) || is.null(entry$checked) ||
+      reactor_now() - entry$checked >= 300 ||
+      !identical(entry$route, catalog_inventory_route(p))
+    # a built-in CLI's `default` row is listed as the full id the CLI gets (03 8.4)
+    if (isTRUE(p[["api"]] %in% c("cli-claude", "cli-codex"))) {
+      entry$default = pcli_default_model(p[["api"]])
+    }
+    entry
+  })
+  names(state) = unique(rows$provider)
+  availability = vapply(seq_len(nrow(rows)), function(i) {
+    pid = rows$provider[[i]]
+    entry = state[[pid]]
+    if (is.null(entry$checked_at)) return("unknown")
+    id = rows$id[[i]]
+    if (identical(id, "default")) id = entry$default %||% id
+    # an Ollama name without a tag means :latest, as preflight reads it
+    tag = if (identical(pid, "ollama")) function(x) vapply(x, catalog_ollama_tag, "") else identity
+    label = if (tag(id) %in% tag(entry$ids)) "advertised" else "unlisted"
+    paste0(label, if (entry$stale) " (stale)")
+  }, "")
+  checked_at = vapply(rows$provider, function(pid) state[[pid]]$checked_at %||% NA_character_, "",
+                      USE.NAMES = FALSE)
   df = data.frame(ref = rows$ref, provider = rows$provider, name = rows$name,
                   context = context, max_output = num(function(e) catalog_num(e[["max_output"]])),
                   input_price = rate("input"), output_price = rate("output"),
-                  reasoning = vapply(entries, function(e) isTRUE(e[["reasoning"]]), NA,
-                                     USE.NAMES = FALSE),
-                  aliases = rows$aliases, status = rows$status, stringsAsFactors = FALSE)
+                  reasoning = vapply(entries, function(e) {
+                    if (is.null(e[["reasoning"]])) NA else isTRUE(e[["reasoning"]])
+                  }, NA, USE.NAMES = FALSE),
+                  aliases = rows$aliases, status = rows$status, availability = availability,
+                  checked_at = checked_at, stringsAsFactors = FALSE)
   rownames(df) = NULL
+  failed = intersect(names(Filter(function(x) !is.null(x$error), inventory)),
+                    provider %||% rows$provider)
+  failure = if (length(failed)) {
+    errors = vapply(failed, function(pid) inventory[[pid]]$error, "")
+    paste0("; listing failed for ", paste0(failed, " (", errors, ")", collapse = ", "),
+           "; prior catalog kept")
+  } else {
+    ""
+  }
   new_listing(df, "gptr_models",
-              footer = paste0("catalog ", ctg$generated, " (", ctg$source, "), ",
-                              nrow(idx), " models; gptr_models(refresh = TRUE) updates it"))
+              footer = paste0("catalog ", ctg$generated, " (", ctg$source, "), ", total,
+                              " models; refresh = TRUE updates it; advertised does not verify ",
+                              "access", failure))
 }

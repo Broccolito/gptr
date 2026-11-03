@@ -519,6 +519,58 @@ test_that("a sub-agent's long label gives way to its number before the person's 
                    "▌ 4s   › s11 during the sub-agent")
 })
 
+test_that("the live row counts its group and shows active phases without hiding queued work", {
+  withr::local_options(cli.unicode = FALSE, cli.num_colors = 1L)
+  local_mocked_bindings(console_queued = function(s) 0L,
+                        console_repl_prompt = function() list(reader = NULL))
+  active = console_state()$active
+  runs = lapply(1:2, function(i) {
+    r = new.env()
+    r$id = paste0("u_group", i)
+    r$settled = FALSE
+    r
+  })
+  group = list2env(list(n = 3L, labels = c("alpha", "beta", "gamma"),
+                        runs = c(runs, list(NULL))))
+  recs = lapply(1:2, function(i) {
+    runs[[i]]$group = group
+    rec = new.env()
+    rec$what = c("r", "thinking")[[i]]
+    rec$child = list(label = group$labels[[i]], run = runs[[i]])
+    assign(runs[[i]]$id, rec, active)
+    rec
+  })
+  withr::defer(rm(list = vapply(runs, function(r) r$id, ""), envir = active))
+  parent = list(session = NULL, t0 = as.numeric(Sys.time()), what = "r")
+  state = console_live_state(parent)
+  expect_match(state$what, "sub-agents 0/3 done - 2 active - 1 queued", fixed = TRUE)
+  expect_match(state$what, "alpha r, beta thinking", fixed = TRUE)
+  expect_identical(state$short, "sub-agents 0/3 - 2 active - 1 queued")
+  for (width in c(20L, 40L, 80L, 120L)) {
+    row = console_live_row(c(state, draft = "use the median"), width)
+    expect_lte(cli::ansi_nchar(row, type = "width"), width - 1L)
+  }
+  runs[[1L]]$settled = TRUE
+  rm(list = runs[[1L]]$id, envir = active)
+  withr::defer(assign(runs[[1L]]$id, recs[[1L]], active))
+  expect_match(console_live_state(parent)$what,
+               "sub-agents 1/3 done - 1 active - 1 queued", fixed = TRUE)
+  withr::local_options(cli.dynamic = TRUE)
+  local_live_console()
+  recs[[2L]]$what = "working"
+  written(function() console_live_start(recs[[2L]]))
+  expect_identical(recs[[2L]]$what, "working")
+  # A direct group has no root chat to steer, even inside the console's R escape.
+  tty = the$tty
+  the$tty = list(keys = TRUE)
+  withr::defer(assign("tty", tty, envir = the))
+  local_mocked_bindings(console_repl_prompt = function() {
+    list(reader = list(compose = list(draft = "not for this child")))
+  }, front_end = function() "positron")
+  expect_null(console_live_state(recs[[2L]])$draft)
+  expect_false(console_live_state(recs[[2L]])$steer)
+})
+
 test_that("the draft keeps its column as the status changes; the status only widens (review)", {
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   rows = function(...) {

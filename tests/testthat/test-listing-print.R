@@ -119,3 +119,75 @@ test_that("C-locale listings fit printed Unicode escapes without changing source
   expect_true(any(grepl("FALSE", out, fixed = TRUE)))
   expect_identical(x, before)
 })
+
+test_that("a block listing at width 80 keeps its date whole and shortens free text first", {
+  local_reproducible_output(width = 80L)
+  rows = list(doc_block_row("0135a6", "cell 4", "Fit a linear model of mpg on wt", "fresh",
+                            list(model = "azure/gpt-5.6-luna-2026-07-09", date = "2026-11-02",
+                                 tokens = "8697/178", session = "saf9ae6d820")))
+  x = new_listing(doc_blocks_frame(rows), "gptr_blocks")
+  out = utils::capture.output(print(x))
+  expect_true(all(nchar(out, type = "width") <= 80L))
+  expect_true(any(grepl("2026-11-02", out, fixed = TRUE)))
+  expect_true(any(grepl("8697/178", out, fixed = TRUE)))
+})
+
+test_that("model listings keep provider, availability and checked_at whole and shown (D-355)", {
+  row = function(ref, name, availability, checked_at) {
+    data.frame(ref = ref, provider = sub("/.*$", "", ref), name = name, context = 200000,
+               max_output = 8192, input_price = NA_real_, output_price = NA_real_,
+               reasoning = NA, aliases = "", status = "active", availability = availability,
+               checked_at = checked_at)
+  }
+  stamp = "2026-11-03T08:42:19.048Z"
+  frames = list(
+    rbind(row("flaky/m-a", "m-a", "advertised (stale)", stamp),
+          row("flaky/m-b", "m-b", "advertised (stale)", stamp)),
+    rbind(row("codex/default", "ChatGPT plan default model (Codex CLI)", "advertised", stamp),
+          row("codex/gemma4:31b:cloud", "gemma4:31b:cloud", "unlisted (stale)", stamp)),
+    row("versa-bedrock/us.anthropic.claude-sonnet-4-8", "us.anthropic.claude-sonnet-4-8",
+        "unknown", NA_character_))
+  for (df in frames) for (width in c(80L, 120L)) {
+    x = new_listing(df, "models")
+    out = withr::with_options(list(cli.width = width), utils::capture.output(print(x)))
+    info = paste(df$provider[[1L]], "at", width)
+    expect_true(all(nchar(out, type = "width") <= width), info = info)
+    shown = paste(out, collapse = "\n")
+    for (v in c(df$ref, df$name, df$provider, df$availability, stats::na.omit(df$checked_at))) {
+      expect_true(grepl(v, shown, fixed = TRUE), info = paste(info, v))
+    }
+    other = grep("^# Other columns:", out, value = TRUE)
+    expect_false(any(grepl("provider|availability|checked_at", other)), info = info)
+  }
+})
+
+test_that("at 80 columns free text gives way before a long source and model refs (D-355)", {
+  providers = data.frame(id = c("anthropic", "azure", "google", "openrouter-jev", "typesafe"),
+                         type = c("chat", "chat", "chat", "classifier", "classifier"),
+                         api = c("anthropic-messages", "openai-completions",
+                                 "google-generative-ai", "typesafe-system-one",
+                                 "typesafe-system-one"),
+                         credential = c("ANTHROPIC_API_KEY #f1a2b3c4", NA, NA, NA, NA),
+                         source = c("builtin:providers", "builtin:providers", "builtin:providers",
+                                    "builtin:system1", "builtin:system1"),
+                         status = c("ready", "no base url", "no key", "no key", "no key"),
+                         default_model = c("anthropic/claude-sonnet-4-8", NA,
+                                           "google/gemini-3.8-flash", NA, "typesafe/jev-latest"),
+                         egress = "needed", version = NA_character_)
+  servers = data.frame(name = c("learn", "files"),
+                       source = c("user ~/.codex/config.toml", "project .mcp.json"),
+                       transport = c("http", "stdio"), era = "modern",
+                       status = c("configured", "connected"), tools = c(12L, NA_integer_),
+                       exposure = "deferred", tokens = c(180L, 0L), trusted = c(TRUE, FALSE))
+  shown = function(df) {
+    out = withr::with_options(list(cli.width = 80L),
+                              utils::capture.output(print(new_listing(df, "listing"))))
+    expect_true(all(nchar(out, type = "width") <= 80L))
+    paste(out, collapse = "\n")
+  }
+  out = shown(providers[rep(seq_len(5L), 2L), ])
+  for (v in c("google/gemini-3.8-flash", "typesafe/jev-latest", "ANTHROPIC_API_KEY #f1...")) {
+    expect_true(grepl(v, out, fixed = TRUE), info = v)
+  }
+  expect_true(grepl("user ~/.codex/config....", shown(servers), fixed = TRUE))
+})

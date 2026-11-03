@@ -217,7 +217,7 @@ responses_normaliser = function(model, opts) {
         rid = responses_str(r[["id"]])
         if (nzchar(rid)) st$response_id = rid
         rm = responses_str(r[["model"]])
-        if (nzchar(rm) && !identical(rm, model$id)) st$response_model = rm
+        if (nzchar(rm)) st$response_model = rm
       }
     } else if (type == "response.output_item.added") {
       item = e[["item"]]

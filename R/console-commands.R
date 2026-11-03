@@ -1,8 +1,9 @@
 # console-commands.R -- the slash commands of architecture 6.17 as `command` specs (P14, layer L5,
 # area console; contract 10.2 kind 10). The console only dispatches: /undo, /redo, /rewind and
 # /checkpoints are registered by P16 and prompt templates by P17 (IC-31). Exports of later plans
-# (gptr_doc(), gptr_rewind(), gptr_skills(), gptr_mcp()) are reached through ns_fun(); exports of
-# other layers are called as gptr::<name>() (plan ambiguity 1).
+# (gptr_doc(), gptr_rewind(), gptr_skills(), gptr_mcp()) and the server start of /mcp serve
+# (mcp_serve_open()) are reached through ns_fun(); exports of other layers are called as
+# gptr::<name>() (plan ambiguity 1).
 
 #' The command specs registered by builtin_console()
 #' @noRd
@@ -29,7 +30,7 @@ console_commands = function() {
     gptr_command("doc", cmd_doc, "Show or bind the history document: /doc [path]"),
     gptr_command("skills", cmd_skills, "List the skills"),
     gptr_command("skill", cmd_skill, "Use a skill for the next prompt: /skill:<name> [request]"),
-    gptr_command("mcp", cmd_mcp, "List the MCP servers"),
+    gptr_command("mcp", cmd_mcp, "List MCP servers, or return to R to serve: /mcp [serve]"),
     gptr_command("permissions", cmd_permissions,
                  paste("Show or change the rules of this R session:",
                        "/permissions [<verb> <rule>] (allow, ask, deny or remove)")),
@@ -270,7 +271,7 @@ cmd_model = function(args, ctx) {
     return(paste0("Model: ", cmd_model_label(s$model), " (from the next request)"))
   }
   if (is.null(rs)) return("There is no session to switch.")
-  if (is.null(registry_get("router", args))) model_canonical(args, strict = TRUE)
+  if (is.null(registry_get("router", args))) kernel_model_ref(args)
   rs$model = args
   paste0("Model: ", cmd_model_label(args), " (used from the first prompt)")
 }
@@ -513,6 +514,10 @@ cmd_doc = function(args, ctx) {
   f = ns_fun("gptr_doc")
   if (is.null(f)) return("Binding a document needs gptr_doc(), which is not available.")
   f(args)
+  if (grepl("[.]ipynb$", args, ignore.case = TRUE)) {
+    return(paste0("Bound ", args, "; console turns are not recorded into it, only the calls in ",
+                  "its cells when it runs in a Jupyter kernel."))
+  }
   paste0("Recording into ", args, ".")
 }
 
@@ -538,6 +543,24 @@ cmd_skill = function(args, ctx) {
 
 #' @noRd
 cmd_mcp = function(args, ctx) {
+  if (identical(args, "serve")) {
+    rs = console_repl_find()
+    if (is.null(rs) || isTRUE(rs$stdin)) {
+      return("/mcp serve returns to an interactive R prompt; it cannot serve after piped R exits.")
+    }
+    f = ns_fun("mcp_serve_open")
+    if (is.null(f)) return("MCP is not available.")
+    handle = f(repl_eval_env(rs), repl_mode(rs))
+    if (!is.null(rs$session)) last_set(rs$session)
+    rs$exit = TRUE
+    return(c(print_lines(handle),
+             "Leave R at its top-level prompt while MCP clients work.",
+             if (is.null(rs$session)) "Open Peter again with peter()." else
+               "Resume this chat with gptr_last() |> peter().",
+             "Client configuration: h = gptr_mcp_serve(); h$config.",
+             "A running server keeps its workspace and mode; stop it before changing them."))
+  }
+  if (nzchar(args)) return("Use /mcp to list servers, or /mcp serve to serve from R's prompt.")
   f = ns_fun("gptr_mcp")
   if (is.null(f)) return("MCP is not available.")
   print_lines(f())

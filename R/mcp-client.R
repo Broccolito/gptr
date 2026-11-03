@@ -666,6 +666,11 @@ mcp_request = function(conn, method, params = NULL, timeout = NULL, modern = NUL
   st = new.env(parent = emptyenv())
   st$deadline = reactor_now() + timeout
   st$hard = reactor_now() + 10 * timeout
+  # Sending stdio can pump progress before mcp_await() starts. Own cancellation before
+  # either phase; a resumed interrupt does not unwind this request (G3).
+  st$reason = "user interrupt"
+  st$settled = FALSE
+  on.exit(if (!st$settled) mcp_cancel(conn, id, st, st$reason), add = TRUE)
   # a named closure, then assign(): lintr's object_usage_linter checks a function literal passed
   # to assign() on its own, without this function's arguments
   on_tick = function(p) {
@@ -728,11 +733,6 @@ mcp_await = function(conn, key, st, id, method, timeout) {
     exists(key, envir = conn$pending, inherits = FALSE) || length(conn$requests) > 0L ||
       !isTRUE(conn$alive) || isTRUE(st$failed) || reactor_now() > min(st$deadline, st$hard)
   }
-  # any unwind cancels, after the pump has unwound; an interrupt the pause menu resumes does not
-  # unwind (G3)
-  reason = "user interrupt"
-  settled = FALSE
-  on.exit(if (!settled) mcp_cancel(conn, id, st, reason), add = TRUE)
   repeat {
     left = min(st$deadline, st$hard) - reactor_now()
     reactor_pump(until = done, slice_ms = 50L, timeout = max(0.05, left))
@@ -744,20 +744,20 @@ mcp_await = function(conn, key, st, id, method, timeout) {
     if (exists(key, envir = conn$pending, inherits = FALSE)) {
       r = get(key, envir = conn$pending, inherits = FALSE)
       rm(list = key, envir = conn$pending)
-      settled = TRUE
+      st$settled = TRUE
       return(r)
     }
     if (isTRUE(st$failed)) {
-      settled = TRUE
+      st$settled = TRUE
       return(st$failure)
     }
     if (!isTRUE(conn$alive)) {
-      settled = TRUE
+      st$settled = TRUE
       return(list(error = list(code = NA_integer_, message = "the server process exited"),
                   exited = TRUE))
     }
     if (reactor_now() > min(st$deadline, st$hard)) {
-      reason = "timeout"
+      st$reason = "timeout"
       gptr_abort(paste0("MCP server ", conn$name, " did not answer ", method, " within ",
                         format(timeout), " s."), "timeout", seconds = timeout,
                  what = paste("MCP", method))
@@ -1065,6 +1065,49 @@ mcp_stdio_command = function(command) {
   command
 }
 
+#' Bind stdio consent to the configuration as written and the executable that receives the value
+#' (its resolved path and contents). What placeholders expand to and getwd() are the user's
+#' environment, trusted like the allowlisted variables the server inherits
+#' @noRd
+mcp_stdio_binding = function(spec, ex) {
+  command = mcp_stdio_command(ex$command)
+  if (!grepl("[/\\\\]", command)) command = unname(Sys.which(command))
+  if (!rlang::is_string(command) || !nzchar(command) || !file.exists(command)) {
+    gptr_abort("The MCP executable could not be resolved for credential entry.", "spawn",
+               command = basename(ex$command))
+  }
+  command = normalizePath(command, winslash = "/", mustWork = TRUE)
+  identity = list(spec = mcp_cache_key(spec), command = command, binary = hash_file(command),
+                   source = spec$source, path = spec$path)
+  id = hash_sha256(canonical_json(identity))
+  list(id = id, command = command, origin = paste0("https://", id, ".stdio.invalid"))
+}
+
+#' Insert reviewed credential handles only into this server's owned child environment; an
+#' unreadable credential store leaves the session's credentials, like provider_credential()
+#' @noRd
+mcp_stdio_credentials = function(spec, ex) {
+  env = as.list(ex$env %||% character())
+  prefix = paste0("mcp:", spec$name, ":env:")
+  keys = tryCatch(auth_store_keys(),
+                  gptr_error = function(e) as.character(names(secrets_state()$auth)))
+  keys = keys[startsWith(keys, prefix)]
+  if (!length(keys)) return(env)
+  binding = mcp_stdio_binding(spec, ex)
+  for (key in keys) {
+    rec = auth_store_get(key)
+    if (!identical(rec$binding, binding$id) || !(rec$slot %in% names(env)) ||
+          !inherits(rec$key, "gptr_secret")) {
+      gptr_abort(paste0("MCP server ", spec$name, " or its executable changed since credential ",
+                        "entry. Run gptr_login() again to review the destination."),
+                 "untrusted", what = "MCP credential destination", path = binding$command,
+                 origin = NULL)
+    }
+    env[[rec$slot]] = rec$key
+  }
+  env
+}
+
 #' Start a stdio server through the process engine with the mcp child environment plus the
 #' spec's expanded env (IC-60; `.cmd`/`.bat` shims run through cmd.exe /d /c call in
 #' proc_spawn()); stdout and stderr lines are read by the reactor
@@ -1072,7 +1115,7 @@ mcp_stdio_command = function(command) {
 mcp_stdio_start = function(conn) {
   mcp_stdio_make_room()
   ex = mcp_expand_spec(conn$spec, conn$project)
-  env = child_env("mcp", set = ex$env %||% character())
+  env = child_env("mcp", set = mcp_stdio_credentials(conn$spec, ex))
   conn$log_path = mcp_log_path(conn$name)
   conn$rs = redact_stream("persist")
   conn$proc = proc_spawn(mcp_stdio_command(ex$command), ex$args, env = env, wd = ex$cwd,
@@ -1113,6 +1156,13 @@ mcp_stdio_send = function(conn, msg) {
 
 # ---- Streamable HTTP transport ---------------------------------------------------------------
 
+#' Include expanded authentication configuration without retaining values in the binding
+#' @noRd
+mcp_http_binding = function(spec, ex) {
+  hash_sha256(canonical_json(list(config = mcp_cache_key(spec), url = ex$url,
+                                  headers = as.list(ex$headers))))
+}
+
 #' HTTP setup: the expanded URL, its origin, the configured headers (values that came from a
 #' placeholder, sit under a secret-like name or look secret travel as handles bound to the
 #' server's origin) and the credential-store key "mcp:<name>"
@@ -1121,6 +1171,7 @@ mcp_http_setup = function(conn) {
   ex = mcp_expand_spec(conn$spec, conn$project)
   conn$url = ex$url
   conn$origin = url_origin(ex$url)
+  conn$auth_binding = mcp_http_binding(conn$spec, ex)
   raw = mcp_map_chr(conn$spec$headers)
   hdr = list()
   for (k in names(ex$headers)) {
@@ -1146,7 +1197,15 @@ mcp_http_setup = function(conn) {
 #' @noRd
 mcp_http_auth = function(conn, force = FALSE) {
   if ("authorization" %in% tolower(names(conn$headers))) return(NULL)
-  tryCatch(oauth_access(conn$auth_key, conn$origin, force = force),
+  tryCatch({
+    rec = auth_store_get(conn$auth_key)
+    if (!is.null(rec$binding)) {
+      if (!identical(rec$binding, conn$auth_binding)) return(NULL)
+    }
+    if (rlang::is_string(rec$resource) &&
+          !identical(url_for_log(rec$resource), url_for_log(conn$url))) return(NULL)
+    oauth_access(conn$auth_key, conn$origin, force = force, rec = rec)
+  },
            gptr_error = function(e) {
              registry_diagnostic("builtin:mcp", "mcp_auth", class(e)[1L], conditionMessage(e))
              NULL

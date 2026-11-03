@@ -41,6 +41,32 @@ An adapter turns gptr's request context into one provider's wire format and its 
 into gptr events. HTTP and process adapters give \code{build()} and \code{parse()}; \code{inprocess} adapters
 give \code{stream()}, a generator factory; classifier adapters give \code{classify}.
 }
+\section{Callback results}{
+
+HTTP \code{build()} returns a named list with an absolute HTTP(S) \code{url}, optional \code{method}
+(POST with a body, otherwise GET), named \code{headers} (each a string, an origin-bound secret
+handle such as \code{opts$credential}, or an unnamed list of strings and handles joined in order,
+for example \code{list("Bearer ", opts$credential)}), \code{body} (UTF-8 text or raw bytes), \code{stream}
+(\code{"sse"}, \code{"ndjson"}, \code{"json"} or \code{"raw"}; the transport supplies the default) and optional
+\code{sign}, \verb{function(method, url, body, value)}, called once per attempt with the raw body, where
+\code{value(handle)} reads a handle bound to the origin of the URL; it returns a named list of extra
+headers, for request signing. Never paste a handle into a string.
+
+For \code{process_jsonl}, \code{build()} returns \code{start}, a process specification with \code{command} (or
+\code{NULL} to reuse the session child), optional \code{send}, an unnamed list of objects to write as
+JSON lines (default empty), and optional \code{close_stdin}.
+
+\code{parse()} returns a list of functions: \code{push(unit)} consumes a decoded unit, \code{finish()}
+ends input and returns the final assistant message, \code{fail(cnd)} handles a transport failure,
+and \code{message()} returns the partial assistant message. The normalizer emits events through
+\code{opts$emit} and ends with one \code{done} or \code{error} event carrying the final or partial message.
+
+\code{stream()} returns a zero-argument generator. Each step returns
+\code{list(events = list(...), wait = 0)}; \code{wait} is seconds before the next step. Emit a terminal
+\code{done} or \code{error} event before returning \code{NULL}. Steps must return promptly (within 50 ms)
+so other work on the shared reactor can progress.
+}
+
 \examples{
 gptr_adapter("echo", transport = "inprocess",
              stream = function(model, context, opts) {
@@ -49,7 +75,13 @@ gptr_adapter("echo", transport = "inprocess",
                function() {
                  if (state$done) return(NULL)
                  state$done = TRUE
-                 list(events = list())
+                 message = list(role = "assistant", content = list(), api = model$api,
+                                provider = model$provider, model = model$id,
+                                stop_reason = "stop")
+                 list(events = list(
+                   list(type = "start", api = model$api, provider = model$provider,
+                        model = model$id),
+                   list(type = "done", reason = "stop", message = message)))
                }
              })
 }

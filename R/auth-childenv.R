@@ -155,7 +155,10 @@ child_env_put = function(out, values) {
 }
 
 #' The key a provider's worker needs, as a named character vector (empty when none is found);
-#' a `bedrock-converse` key pair travels with its key id and session token (IC-80)
+#' a `bedrock-converse` key pair travels with its key id and session token (IC-80). The order is
+#' provider_credential()'s: the vault, a session login (it lives only in this process, so it
+#' travels under the provider's first key variable; the worker reads a remembered one from
+#' auth.json itself), then the environment
 #' @noRd
 child_env_provider_key = function(provider) {
   spec = tryCatch(registry_get("provider", provider), error = function(e) NULL)
@@ -183,11 +186,18 @@ child_env_provider_key = function(provider) {
   pair = if (identical(spec[["api"]], "bedrock-converse")) {
     c("AWS_ACCESS_KEY_ID", "AWS_SESSION_TOKEN")
   }
-  for (nm in as.character(spec[["auth"]])) {
-    key = one(nm)
-    if (length(key)) return(c(key, unlist(lapply(pair, one))))
+  vars = as.character(spec[["auth"]])
+  key = character()
+  for (nm in vars) if (!length(key) && !is.null(secret_lookup(nm))) key = one(nm)
+  if (!length(key) && identical(auth_store_scope(provider), "session")) {
+    h = tryCatch(provider_credential(spec), gptr_error_no_key = function(e) NULL)
+    if (inherits(h, "gptr_secret")) {
+      key = stats::setNames(secret_value(h, provider_base_url(spec)), vars[[1L]])
+    }
   }
-  character()
+  for (nm in vars) if (!length(key)) key = one(nm)
+  if (!length(key)) return(character())
+  c(key, unlist(lapply(pair, one)))
 }
 
 #' The complete environment of a child process for one profile (processx form, no NA)
@@ -195,7 +205,8 @@ child_env_provider_key = function(provider) {
 child_env = function(profile, pass = character(), set = character(), provider = NULL) {
   check_string(profile, "profile")
   check_strings(pass, "pass")
-  check_string(provider, "provider", null = TRUE)
+  check_strings(provider, "provider", null = TRUE)
+  for (pid in provider) check_string(pid, "provider")
   child_env_names(pass, "pass")
   child_env_values(set)
   spec = child_env_profile(profile)
@@ -235,9 +246,18 @@ child_env = function(profile, pass = character(), set = character(), provider = 
   out = env[take]
   out = child_env_put(out, as.list(spec[["set"]] %||% character()))
   out = child_env_put(out, as.list(set))
-  if (!is.null(provider)) {
-    out = child_env_put(out, as.list(child_env_values(child_env_provider_key(provider))))
+  keys = structure(character(), names = character())
+  for (pid in unique(provider)) {
+    values = child_env_values(child_env_provider_key(pid))
+    at = match(toupper(names(values)), toupper(names(keys)))
+    shared = !is.na(at)
+    if (any(values[shared] != keys[at[shared]])) {
+      gptr_abort("Provider credentials conflict for the same environment name.", "invalid_argument",
+                 arg = "provider", expected = "unambiguous provider credentials")
+    }
+    keys = child_env_put(keys, as.list(values))
   }
+  out = child_env_put(out, as.list(keys))
   # IC-60 overrides the plan snippet: every profile neutralises both user startup files,
   # including explicit `set`. Only R_ENVIRON has the documented explicit-pass exception.
   out = out[!startsWith(out, "()") &

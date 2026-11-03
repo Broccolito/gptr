@@ -197,7 +197,7 @@ entry_to_json = function(e) {
 #' @noRd
 operator_to_json = function(m) {
   list(customType = "gptr.operator",
-       content = lapply(m$content, function(b) list(type = "text", text = b$text)),
+       content = lapply(m$content, block_to_json),
        display = FALSE,
        details = compact(list(kind = m$kind, toolAdd = m$tool_add, originText = m$origin_text)))
 }
@@ -345,9 +345,10 @@ entry_from_json = function(x) {
 #' An operator message from a `gptr.operator` custom_message entry
 #' @noRd
 operator_from_json = function(x) {
-  text = paste(vapply(x$content %||% list(), function(b) b$text %||% "", ""), collapse = "\n")
-  msg_operator(x$details$kind %||% "reminder", text, tool_add = x$details$toolAdd,
-               origin_text = x$details$originText, timestamp = iso_ms(x$timestamp))
+  msg = msg_operator(x$details$kind %||% "reminder", "", tool_add = x$details$toolAdd,
+                     origin_text = x$details$originText, timestamp = iso_ms(x$timestamp))
+  msg$content = lapply(x$content %||% list(), block_from_json)
+  msg
 }
 
 #' The `gptr` object of a compaction entry with its context blocks in R shape
@@ -555,8 +556,8 @@ rebuild_usage = function(entries, d) {
     if (identical(e$type, "custom") && identical(e$custom_type, "gptr.usage")) {
       row = usage_ancestor_restore(e$data, d)
     } else if (identical(e$type, "custom") &&
-               identical(e$custom_type, "gptr.compaction_usage")) {
-      check_list(e$data, "compaction usage data", named = TRUE)
+               isTRUE(e$custom_type %in% c("gptr.compaction_usage", "gptr.s1_usage"))) {
+      check_list(e$data, "usage data", named = TRUE)
       row = usage_row_restore(e$data[["row"]])
       usage_own_check(row, d)
     } else if (identical(e$type, "message") && identical(e$message$role, "assistant")) {
@@ -805,6 +806,9 @@ file_chunk_lines = function(path, from_end, n) {
 #' replay bound to that block. Resuming restores conversation state, not a complete analysis
 #' workspace, and does not rerun the R tool code. Make required objects available in `envir`; use
 #' document replay when the intention is to execute the recorded analysis again.
+#' From model code during a run, `gptr_resume()` needs an allowing permission decision (a person's,
+#' in every mode but `yolo`; see [gptr_security]); otherwise it signals
+#' `gptr_error_permission`.
 #' @param x `NULL` (the most recently updated stored session), a session id, a file path, or a
 #'   detached `gptr_session`.
 #' @param envir The home of a rebuilt session.

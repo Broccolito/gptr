@@ -53,6 +53,7 @@ secrets_state = function() {
   if (is.environment(st)) return(st)
   st = new.env(parent = emptyenv())
   st$reg = list()            # per id: name, source, fingerprint, active, redact, origin
+  st$auth = list()           # R-process credentials: metadata and vault handles only
   st$lits = character()      # literals (values and derived forms), longest first
   st$marks = character()     # the marker of each literal
   st$lit_re = character()    # PCRE alternations of the escaped literals (lit_groups())

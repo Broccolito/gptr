@@ -305,7 +305,7 @@ eval_guard = function(exprs, envir = NULL) {
     eval_guard_walk(exprs[[i]], acc)
   }
   funs = eval_guard_fun_defs(exprs)
-  vals = setdiff(acc$values, eval_assign_targets(exprs))
+  vals = setdiff(acc$values, eval_assign_targets(exprs, own = TRUE))
   if (!is.null(envir)) vals = vals[!vapply(vals, eval_guard_is_data, TRUE, envir = envir)]
   hits = c(setdiff(acc$called, funs), acc$ns, setdiff(acc$strings, funs), vals)
   fns = intersect(unique(hits), eval_guard_blocked)
@@ -375,13 +375,17 @@ eval_guard_set_funs = c(
   "setDF", "setcolorder", "setindex", "setindexv"
 )
 
-#' Collect the assignment targets of one expression into acc$out
+#' Collect the assignment targets of one expression into acc$out; `own`: inside local()'s code,
+#' whose plain names and for variables (collected into acc$own) bind in its own environment
 #' @noRd
-eval_guard_targets_walk = function(e, acc, in_fun = FALSE) {
+eval_guard_targets_walk = function(e, acc, in_fun = FALSE, own = FALSE) {
   if (!is.call(e)) return(invisible())
   fname = eval_guard_head_name(e[[1L]])
   target = NULL
-  if (fname %in% eval_guard_assign_ops && length(e) == 3L) {
+  if (own && !in_fun && (fname %in% c("=", paste0("<", "-")) && length(e) == 3L &&
+                           !is.call(e[[2L]]) || identical(fname, "for") && length(e) >= 2L)) {
+    acc$own = c(acc$own, eval_guard_target_root(e[[2L]]))
+  } else if (fname %in% eval_guard_assign_ops && length(e) == 3L) {
     if (!in_fun || identical(fname, "<<-")) target = eval_guard_target_root(e[[2L]])
   } else if (!in_fun && identical(fname, "assign") && length(e) >= 2L) {
     if (is.character(e[[2L]]) && length(e[[2L]]) == 1L && !is.na(e[[2L]])) target = e[[2L]]
@@ -394,25 +398,31 @@ eval_guard_targets_walk = function(e, acc, in_fun = FALSE) {
   }
   if (!is.null(target) && nzchar(target)) acc$out = c(acc$out, target)
   if (identical(fname, "function")) {
-    if (length(e) >= 3L) eval_guard_targets_walk(e[[3L]], acc, in_fun = TRUE)
+    if (length(e) >= 3L) eval_guard_targets_walk(e[[3L]], acc, in_fun = TRUE, own)
     return(invisible())
   }
+  # base local()'s code (not once the code has bound local); an unknown-effect call inside it,
+  # local(envir =) included, may bind in the caller's environment again
+  own = identical(fname, "local") && length(e) == 2L && !"local" %in% c(acc$out, acc$own) ||
+    own && !fname %in% risk_unknown_funs
   for (i in seq_along(e)) {
     el = e[[i]]
-    if (!missing(el) && is.call(el)) eval_guard_targets_walk(el, acc, in_fun)
+    if (!missing(el) && is.call(el)) eval_guard_targets_walk(el, acc, in_fun, own)
   }
   invisible()
 }
 
 #' Static assignment targets of parsed code (the `assigned` field of gptr_eval_result)
-#' Assignments (in function bodies only `<<-`), `assign("name")`, replacement roots, data.table
-#' `:=` and `set*()`, `for` variables; unique, in first occurrence order.
+#' Assignments (in function bodies only `<<-`; in local()'s code no plain name), `assign("name")`,
+#' replacement roots, data.table `:=` and `set*()`, `for` variables; unique, in first occurrence
+#' order. `own = TRUE` adds the names local()'s code binds in its own environment.
 #' @noRd
-eval_assign_targets = function(exprs) {
+eval_assign_targets = function(exprs, own = FALSE) {
   acc = new.env(parent = emptyenv())
   acc$out = character()
+  acc$own = character()
   for (i in seq_along(exprs)) eval_guard_targets_walk(exprs[[i]], acc)
-  unique(acc$out)
+  unique(c(acc$out, if (own) acc$own))
 }
 
 #' Rewrite one expression for gptr_shim()

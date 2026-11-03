@@ -259,7 +259,7 @@ artifact_handle = function(id) {
 }
 
 #' Kill artifact children whose owning R process is gone (report 17 section 2.2, E11), then
-#' remove their run files; run once per process, lazily (report 17 verification log item 42)
+#' remove their run files; called before listing artifacts and lazily before the first app
 #'
 #' A run/run.json is skipped when this process's table holds its child, or when its owner is
 #' another R process that may be alive (pid and creation time). Otherwise its child is killed

@@ -948,6 +948,40 @@ test_that("direct R lines and slash commands of the console enter the transcript
   expect_lt(match("library(gptr)", tr), grep(" = peter(\"count\")", tr, fixed = TRUE))
 })
 
+test_that("an R Markdown transcript loads gptr and keeps direct R lines as chunks that knit", {
+  skip_if_not_installed("knitr")
+  proj = local_project()
+  local_gptr_options(record = "auto", replay = "replay", model = "fake/fake-1", mode = "auto")
+  rmd = file.path(proj, "console.Rmd")
+  local_doc_binding(rmd, "rmd")
+  doc_on_console_direct(list(data = list(code = "half = mtcars$mpg / 2\nhalf[1]",
+                                         output = "[1] 10.5", status = "ok", created = "half")),
+                        list(session = NULL))
+  doc_on_console_command(list(data = list(text = "/model opus")), list(session = NULL))
+  s = doc_test_session(list(doc_test_turn("half_mean = mean(half)", prompt = "Store the mean")))
+  site = doc_console_site(session_id = session_data(s)$id, template = "Store the mean")
+  doc_on_agent_end(list(status = "idle", doc = site, turns = 1L), list(session = s))
+  text = readLines(rmd)
+  expect_identical(text[1:7], c("```{r}", "library(gptr)", "```", "", "```{r}",
+                                "# direct R (no model) created=half", "half = mtcars$mpg / 2"))
+  # knitr prints the output itself; slash commands are comment chunks
+  expect_false(any(startsWith(text, "#> ")))
+  expect_true("# /model opus" %in% text)
+  ch = doc_rmd_chunks(text)
+  expect_identical(nrow(ch), 5L)
+  expect_match(ch$label[5], "^gptr-[0-9a-f]{6}$")
+  # the document replays: its direct R chunk makes what the recorded block uses
+  e = new.env(parent = globalenv())
+  knitr::knit(rmd, output = file.path(proj, "console.md"), envir = e, quiet = TRUE)
+  expect_identical(e$half_mean, mean(mtcars$mpg / 2))
+  # a Quarto transcript starts the same way
+  qmd = file.path(proj, "console.qmd")
+  local_doc_binding(qmd, "qmd")
+  doc_on_console_direct(list(data = list(code = "z = 1", status = "ok")), list(session = NULL))
+  expect_identical(readLines(qmd), c("```{r}", "library(gptr)", "```", "", "```{r}",
+                                     "# direct R (no model)", "z = 1", "```"))
+})
+
 test_that("what the console records while its session runs in the background follows its block", {
   proj = local_project()
   local_gptr_options(record = "auto", model = "fake/fake-1", mode = "auto")
@@ -2481,7 +2515,11 @@ test_that("gptr_source() validates its arguments and runs plain scripts", {
   expect_error(gptr_source(f, replay = "sometimes"), class = "gptr_error_invalid_argument")
   rmd = file.path(getwd(), "r.Rmd")
   writeLines("x", rmd)
-  expect_error(gptr_source(rmd), class = "gptr_error_invalid_argument")
+  # an existing document of another format is told how to run it; a missing .R file is missing
+  expect_error(gptr_source(rmd), "^Not an \\.R file \\(render \\.Rmd and \\.qmd documents\\)",
+               class = "gptr_error_invalid_argument")
+  expect_error(gptr_source(file.path(getwd(), "missing.R")), "^No such file: ",
+               class = "gptr_error_invalid_argument")
   echoed = utils::capture.output(gptr_source(f, envir = e, echo = TRUE))
   expect_identical(echoed, c("> x = 1", "> y = x + 1"))
 })
@@ -2639,9 +2677,10 @@ test_that("recorded code is never sent as context, in a script or a console bloc
   expect_identical(sent("s_ab12cd", c("n = 1", forged)), list(replay = "text", live = list()))
 })
 
-# What the person's messages (user and operator roles) of request `n` say, one string each
+# What the person's messages and steering relays of request `n` say, one string each
 doc_said = function(fake, n = length(fake_requests(fake))) {
-  msgs = Filter(function(m) m$role %in% c("user", "operator"), fake_requests(fake)[[n]]$messages)
+  msgs = Filter(function(m) identical(m$role, "user") || identical(m$kind, "steer_relay"),
+                 fake_requests(fake)[[n]]$messages)
   vapply(msgs, msg_text, "")
 }
 
@@ -3526,7 +3565,9 @@ test_that("a replayed session keeps the recorded steers and every replayed turn 
   e = doc_e2e_source(f)
   expect_identical(session_data(e$s)$history_source, "store")
   expect_length(fake_requests(x$fake), 5L)
-  expect_length(live(e, 6L), 14L)
+  msgs = live(e, 6L)
+  expect_length(msgs, 15L)
+  expect_identical(msgs[[2L]]$content[[1L]]$kind, "gptr_runtime")
   d = session_data(e$s)
   on_path = vapply(entries_path(d), function(en) en$id, "")
   said = Filter(function(en) en$type %in% c("message", "custom_message"), d$entries)
@@ -3545,7 +3586,8 @@ test_that("a replayed session keeps the recorded steers and every replayed turn 
   expect_identical(session_data(e$s)$history_source, "reconstructed")
   expect_length(fake_requests(x$fake), 6L)
   msgs = live(e, 7L)
-  expect_length(msgs, 14L)
+  expect_length(msgs, 15L)
+  expect_identical(tail(msgs, 1L)[[1L]]$content[[1L]]$kind, "gptr_runtime")
   expect_identical(vapply(msgs[c(4, 7, 12)], function(m) m$origin_text, ""), unname(steers))
 })
 
@@ -3912,6 +3954,7 @@ test_that("without .gptr/, gptr_cache() counts and clears the System 1 answers i
   key = strrep("ab", 32L)
   s1_cache_put(key, list(key = key, answer = "yes"))
   expect_identical(gptr_cache("info", "s1")$entries[1L], 1L)
+  expect_identical(gptr_cache("info", "s1")$path[1L], "memory")
   expect_identical(gptr_cache("prune", "s1"), 0L)
   expect_identical(gptr_cache("clear", "s1"), 1L)
   expect_null(s1_cache_get(key))

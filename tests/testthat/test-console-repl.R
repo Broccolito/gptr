@@ -321,6 +321,39 @@ test_that("repl_state() takes the console call's identifiers, options and object
   expect_error(repl_state(NULL, "not an env"), class = "gptr_error_invalid_argument")
 })
 
+test_that("an explicit mode = on a continued session applies when its console opens", {
+  skip_on_cran()
+  local_console_test()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env(), mode = "edits")
+  local_console_stdin(c("/mode", "/exit"))
+  out = utils::capture.output(invisible(utils::capture.output({
+    s |> peter(mode = "plan", .stdin = TRUE)
+  }, type = "message")))
+  expect_identical(session_data(s)$mode, "plan")
+  expect_true(any(grepl("Mode: plan", out, fixed = TRUE)))
+  # an inherited mode leaves the session's own
+  local_console_stdin("/exit")
+  invisible(utils::capture.output(utils::capture.output(s |> peter(.stdin = TRUE)),
+                                  type = "message"))
+  expect_identical(session_data(s)$mode, "plan")
+})
+
+test_that("a continued console opened with mode = \"yolo\" says so after its banner", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env(), mode = "edits")
+  local_console_stdin("/exit")
+  out = utils::capture.output(s |> peter(mode = "yolo", .stdin = TRUE))
+  expect_identical(session_data(s)$mode, "yolo")
+  banner = grep("gptr [0-9]", out)
+  said = grep("Mode yolo: actions run", out, fixed = TRUE)
+  expect_length(said, 1L)
+  expect_lt(banner[[1L]], said)
+})
+
 test_that("a console opened in yolo shows the yolo notice with its banner (IC-78)", {
   local_gptr_options(quiet = FALSE)
   rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
@@ -599,6 +632,15 @@ test_that("the @files of a prompt share the user_files budget, and the line unde
   men = repl_mentions("see @wide.md", new.env())
   expect_match(men$said, "^@ wide.md [(]first [0-9]+ lines[)]$")
   expect_match(men$files, "<file path=\"wide.md\" truncated=\"true\">", fixed = TRUE)
+})
+
+test_that("a one-line @file over the budget attaches the head of its line (D-348)", {
+  skip_on_cran()
+  local_project(files = list("min.json" = strrep("a", 5e4)))
+  men = repl_mentions("see @min.json", new.env())
+  expect_identical(men$files, paste0("<file path=\"min.json\" truncated=\"true\">\n",
+                                     strrep("a", 400), " ...[+49600 chars]\n</file>"))
+  expect_identical(men$said, "@ min.json (first 1 line)")
 })
 
 test_that("!code runs in the REPL environment and leaves a note; !!code does not", {
@@ -1039,6 +1081,7 @@ test_that("piped .stdin: a nested prompt and its echo reach stdout from an untee
 })
 
 test_that("the stdin UI never echoes a secret answer", {
+  local_mocked_bindings(tty_secret = function() "SAVED", ui_rstudio = function() FALSE)
   rd = stdin_reader(c("FAKE-TOKEN-123", "plain"), echo = TRUE)
   ui = ui_console_spec(rd$read, "console_stdin")
   got = NULL
@@ -1047,6 +1090,22 @@ test_that("the stdin UI never echoes a secret answer", {
   })
   expect_identical(got, c("FAKE-TOKEN-123", "plain"))
   expect_identical(out, c("? Token", ">> ", "? Name", ">> plain"))
+})
+
+test_that("the stdin UI refuses secret input without hidden capability before reading", {
+  local_mocked_bindings(tty_secret = function() NULL, ui_rstudio = function() FALSE)
+  read = FALSE
+  ui = ui_console_spec(function(...) {
+    read <<- TRUE
+    "FAKE-TOKEN-123"
+  }, "console_stdin")
+  out = utils::capture.output({
+    expect_error(ui$input("Token", secret = TRUE), "hidden",
+                 class = "gptr_error_not_available")
+  })
+  expect_false(ui$has_secret_input())
+  expect_false(read)
+  expect_false(any(grepl("FAKE-TOKEN-123", out, fixed = TRUE)))
 })
 
 test_that("a scripted .stdin console session (acceptance 2)", {
@@ -1630,7 +1689,9 @@ test_that("a terminal: a run sent to the background shows again while the consol
     "Sys.setenv(COLORFGBG = '15;0')",
     "long = paste(c('BEGIN', sprintf('w%02dabc', 1:60), 'END'), collapse = ' ')",
     "fake = gptr_fake_provider(function(req) {",
-    "  m = req$messages[[length(req$messages)]]",
+    "  prompts = Filter(function(m) identical(m$role, 'user') ||",
+    "    identical(m$kind, 'steer_relay'), req$messages)",
+    "  m = prompts[[length(prompts)]]",
     "  if (identical(m$role, 'user')) return(list(text = long, chunk = 8L, gap = 0.1))",
     "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
     "})",

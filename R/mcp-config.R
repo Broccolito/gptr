@@ -784,20 +784,26 @@ mcp_check_kv = function(x, arg) {
 #' you trust the project). It never edits another harness's files. Give exactly one of
 #' `command` (a server started as a local process speaking stdio) and `url` (a Streamable HTTP
 #' server). Secret values in `env` and `headers` must be `${VAR}` placeholders: they are
-#' expanded from the environment when gptr connects and never stored. Nothing connects until a
-#' tool is used.
+#' expanded from the environment when gptr connects and never stored. Adding a server does not
+#' connect to it; listing its tools with [gptr_mcp()], refreshing it or calling a tool may connect,
+#' and a server with `"direct"` exposure (also through the setting `mcp.exposure`) is connected
+#' when a session starts unless its tool list is cached.
 #'
 #' @param name Server name: 1-64 letters, digits, `_` or `-`. Its tools are reached as
 #'   `peter$mcp$<name>$<tool>()` inside the `r` tool.
 #' @param command,args The program and its arguments for a stdio server.
 #' @param url The endpoint of a Streamable HTTP server.
 #' @param env,headers Named character vectors: environment variables of a stdio server, HTTP
-#'   headers of an HTTP server. Write secrets as `${VAR}` placeholders.
+#'   headers of an HTTP server. Write secrets as `${VAR}` placeholders. For a stdio server,
+#'   `gptr_login("mcp:<name>", slot = "VAR")` can fill a declared secret entry instead; the
+#'   credential is kept per its `scope` and passed only to that server's process.
 #' @param exposure How the model reaches the tools: `"r"` (R functions listed in the prompt),
 #'   `"direct"` (declared as tools), `"deferred"` (found through `peter$search()`) or
 #'   `"hidden"`.
 #' @param timeout Seconds per request; progress notifications from the server extend it.
-#' @param scope `"user"` (default) or `"project"`.
+#' @param scope `"user"` (default) or `"project"`. Project scope requires a `.gptr/`
+#'   workspace created with [gptr_init()]. Trust the project before using its servers
+#'   (see [gptr_trust()]); `gptr_mcp_add()` neither initializes a workspace nor grants trust.
 #' @return `gptr_mcp_add()` returns the server spec invisibly; `gptr_mcp_remove()` returns
 #'   `TRUE` invisibly when a server was removed, else `FALSE`.
 #' @examples
@@ -893,7 +899,8 @@ mcp_forget_conn = function(name) {
 #' cache when it is fresh and otherwise by connecting (which starts stdio servers). Servers of
 #' an untrusted project are listed but never started.
 #'
-#' @param server A server name, or `NULL` for all.
+#' @param server A server name selecting which tools to list or caches to refresh, or `NULL`
+#'   for all. The server listing (`tools = FALSE`) always includes all configured servers.
 #' @param tools `TRUE` to list tools instead of servers.
 #' @param refresh `TRUE` to reconnect and refresh the caches.
 #' @return A `gptr_mcp_servers` data frame (`name`, `source`, `transport`, `era`, `status`,

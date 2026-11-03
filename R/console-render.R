@@ -552,8 +552,72 @@ console_child_shown = function(run) {
   top = run
   while (!is.null(top$outer)) top = top$outer
   live = if (inherits(top$shell, "gptr_session")) session_live(top$shell)
-  isTRUE(run$depth >= 1L) && !is.null(live) && is.null(live$background) &&
-    !isTRUE(top$opts$background) && verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
+  waited = !is.null(live) && session_data(top$shell)$id %in% console_state()$waited
+  isTRUE(run$depth >= 1L) && !is.null(live) &&
+    (waited || is.null(live$background) && !isTRUE(top$opts$background)) &&
+    verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
+}
+
+#' A scheduled group's completed count, active phases and queued names
+#' @noRd
+console_group_state = function(group) {
+  if (!is.environment(group) || is.null(group$labels)) return(NULL)
+  queued = vapply(group$runs, is.null, NA)
+  done = vapply(group$runs, function(r) isTRUE(r$settled), NA)
+  active = which(!queued & !done)
+  labels = console_escape(group$labels, FALSE)
+  models = group$models %||% rep("", group$n)
+  phases = character(length(active))
+  for (j in seq_along(active)) {
+    i = active[[j]]
+    rec = console_record(list(run = group$runs[[i]]$id))
+    models[[i]] = rec$child$model %||% models[[i]]
+    phases[[j]] = console_escape(rec$what %||% "thinking", FALSE)
+  }
+  counts = c(paste(length(active), "active"), paste(sum(queued), "queued"))
+  short = paste(c(paste0("sub-agents ", sum(done), "/", group$n), counts),
+                collapse = console_style()$sep)
+  text = paste(c(paste0("sub-agents ", sum(done), "/", group$n, " done"), counts),
+               collapse = console_style()$sep)
+  list(active = stats::setNames(phases, labels[active]), queued = labels[queued],
+       models = list(active = models[active], queued = models[queued]),
+       text = text, short = short)
+}
+
+#' Print a bounded roster only when a scheduled group's members or model targets change
+#' @noRd
+console_group_notice = function(rec) {
+  if (is.null(rec$child) || verbosity() < 1L || isTRUE(getOption("gptr.quiet"))) return(NULL)
+  group = rec$child$run$group
+  state = console_group_state(group)
+  if (is.null(state) || !length(state$active)) return(NULL)
+  members = list(active = names(state$active), queued = state$queued)
+  shown = list(members = members, models = state$models)
+  if (identical(group$shown, shown)) return(NULL)
+  group$shown = shown
+  console_before_message(kind = if (is.null(run_current())) "notice" else "tool", tools = TRUE)
+  rlang::local_options(cli.num_colors = console_colors())
+  sym = console_style()
+  width = max(20L, cli::console_width())
+  rows = c(paste0("  ", sym$blue(sym$agent), " ", state$text))
+  for (kind in names(members)) {
+    n = length(members[[kind]])
+    if (!n) next
+    take = seq_len(min(n, 8L))
+    labels = members[[kind]][take]
+    for (i in take) {
+      model = state$models[[kind]][[i]]
+      if (!nzchar(model)) next
+      model = tryCatch(cmd_model_label(model), error = function(e) model)
+      labels[[i]] = paste0(labels[[i]], " (", console_escape(model, FALSE), ")")
+    }
+    more = if (n > 8L) paste0("+", n - 8L, " more")
+    lines = console_terms(c(labels, more), width - 12L, sep = ", ")
+    lead = paste0("    ", kind, "  ")
+    rows = c(rows, paste0(c(lead, rep(strrep(" ", nchar(lead)), length(lines) - 1L)), lines))
+  }
+  console_write(sym$dim(console_wrap(rows, width)))
+  NULL
 }
 
 #' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), after
@@ -951,8 +1015,10 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
 #' (console_context_left()); the status and reason when it did not end idle, the reason's line
 #' breaks one space (curl's errors take two lines). A term whose value is unknown (IC-74) is left
 #' out, as is a cost that is not above 0 (a free or local model)
+#' CLI terms label selection/reporting; native terms show both when reported identity differs.
 #' @noRd
-console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL) {
+console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL,
+                               response_model = NULL) {
   word = if (identical(status, "idle")) "done" else console_escape(status %||% "?", FALSE)
   if (!identical(status, "idle") && rlang::is_string(reason) && nzchar(reason)) {
     reason = gsub("\\s*(\r\n|\r|\n)\\s*", " ", reason, perl = TRUE)
@@ -964,6 +1030,20 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL)
   if (identical(model, "default")) {
     model = tryCatch(console_cli_default(paste0(usage$provider[[n]], "/default")),
                      error = function(e) NULL) %||% model
+  }
+  reported = if (rlang::is_string(response_model) && nzchar(response_model)) {
+    substr(redact(response_model, "context"), 1L, 200L)
+  }
+  if (n && rlang::is_string(model) && (identical(usage$route[[n]], "plan-cli") ||
+      (!is.null(reported) && !identical(model, response_model)))) {
+    selected = substr(redact(model, "context"), 1L, 200L)
+    model = if (is.null(reported)) {
+      paste("selected", selected)
+    } else if (identical(model, response_model)) {
+      paste("reported", reported)
+    } else {
+      paste0("selected ", selected, "; reported ", reported)
+    }
   }
   tokens = format_count(unlist(usage[intersect(cols, names(usage))]))
   cost = function(x) if (sum(x, na.rm = TRUE) > 0) format_cost(x)
@@ -1020,8 +1100,9 @@ console_on_agent_start = function(event, ctx) {
   live = session_live(s)
   run = live$run
   if (console_child_shown(run)) {
-    rec$child = list(label = console_escape(agent_label(run), FALSE), run = run)
     model = live$adapter$worker_spec$model %||% session_data(s)$model
+    rec$child = list(label = console_escape(agent_label(run), FALSE), run = run, model = model)
+    model = tryCatch(cmd_model_label(model), error = function(e) model)
     console_child_line(rec, paste0("(", console_escape(model, FALSE), ")"), " started")
   }
   NULL
@@ -1033,6 +1114,15 @@ console_on_before_request = function(event, ctx) {
   rec = console_record(event)
   if (is.null(rec)) return(NULL)
   rec$request_pending = TRUE
+  if (!is.null(rec$child)) {
+    worker = !is.null(session_live(rec$session)$adapter$worker_spec)
+    rec$child$model = if (worker) session_live(rec$session)$adapter$worker_spec$model else
+      event$model %||% rec$child$model
+    rec$what = if (worker) "working" else "thinking"
+    console_group_notice(rec)
+    if (verbosity() >= 2L && !isTRUE(getOption("gptr.quiet")) &&
+        is.null(the$live_row) && cli::is_dynamic_tty()) console_live_start(rec)
+  }
   if (verbosity() < 1L || !console_foreground(rec)) return(NULL)
   if (verbosity() >= 3L) {
     console_pause_one(rec)
@@ -1053,6 +1143,7 @@ console_on_before_request = function(event, ctx) {
 console_on_message_update = function(event, ctx) {
   rec = console_record(event)
   delta = event$delta
+  if (!is.null(rec$child) && identical(event$kind, "text")) rec$what = "responding"
   if (is.null(rec) || !is.character(delta) || !console_render_on(rec)) return(NULL)
   kind = event$kind %||% "text"
   think = identical(kind, "thinking") &&
@@ -1148,6 +1239,10 @@ console_on_tool_start = function(event, ctx) {
   # the r tool evaluates in this process: the live row cannot tick or read keys until it returns
   if (identical(event$tool_name, "r") && is.null(rec$frozen)) rec$frozen = event$tool_call_id
   if (!console_foreground(rec)) {
+    rec$what = console_tool_name(event$tool_name)
+    if (!is.null(rec$child) && verbosity() >= 2L && !isTRUE(getOption("gptr.quiet"))) {
+      console_child_line(rec, console_escape(rec$what, FALSE))
+    }
     if (!is.null(rec$frozen) && !is.null(rec$child) && isTRUE(the$live_row$on)) the$live_row$draw()
     return(NULL)
   }
@@ -1185,6 +1280,7 @@ console_on_tool_end = function(event, ctx) {
   rec = console_record(event)
   if (is.null(rec)) return(NULL)
   if (identical(rec$frozen, event$tool_call_id)) rec$frozen = NULL
+  if (!is.null(rec$child)) rec$what = "thinking"
   key = paste0("t", event$tool_call_id)
   call = get0(key, envir = rec$tools, inherits = FALSE)
   if (!is.null(call)) {
@@ -1215,6 +1311,12 @@ console_on_tool_end = function(event, ctx) {
 #' @noRd
 console_on_retry = function(event, ctx) {
   rec = console_record(event)
+  if (!is.null(rec$child)) {
+    rec$what = "retrying"
+    if (verbosity() >= 2L && !isTRUE(getOption("gptr.quiet"))) {
+      console_child_line(rec, sprintf("retrying in %.1f s", as.numeric(event$delay %||% 0)))
+    }
+  }
   if (is.null(rec) || !console_render_on(rec)) return(NULL)
   console_pause_one(rec)
   console_gap(rec, "notice")
@@ -1263,6 +1365,7 @@ console_on_agent_end = function(event, ctx) {
   if (is.null(rec)) return(NULL)
   on.exit(console_drop(event$run), add = TRUE)
   on.exit(console_queue_left(rec, event$status), add = TRUE)
+  owns_row = identical(the$live_row$rec, rec)
   console_live_stop(rec)
   run = rec$child$run
   if (!is.null(run)) {
@@ -1281,13 +1384,35 @@ console_on_agent_end = function(event, ctx) {
       why = c(text_lines(event$reason), event$status, "?")[[1L]]
       console_child_line(rec, paste0("failed", k, ": ", console_escape(why, FALSE)))
     }
+    state = console_group_state(g)
+    if (!is.null(state) && !length(state$queued)) console_group_notice(rec)
+    kids = console_kids()
+    if (owns_row && length(kids)) console_live_start(kids[[1L]])
   }
   if (!console_foreground(rec)) return(NULL)
   # the rows charged to the session during the run by other sessions: its sub-agents' (IC-66)
   d = session_data(rec$session)
   u = d$usage
   kids = u$cost[seq_len(nrow(u)) > rec$u0 & !(u$session %in% d$id) & !duplicated(u$request_id)]
-  terms = console_status_line(event$status, event$reason, event$usage, kids)
+  reported = NULL
+  n = NROW(event$usage)
+  usage = event$usage
+  if (n) {
+    id = event$usage$request_id[[n]]
+    state = session_live(rec$session)$adapter
+    if (identical(event$usage$route[[n]], "plan-cli") &&
+        identical(state$pcli_request_id, id) && rlang::is_string(state$pcli_model_arg)) {
+      usage$model[[n]] = state$pcli_model_arg
+    }
+    for (e in rev(entries_path(d))) {
+      m = e$message
+      if (identical(m$role, "assistant") && identical(m$request_id, id)) {
+        reported = m$response_model
+        break
+      }
+    }
+  }
+  terms = console_status_line(event$status, event$reason, usage, kids, reported)
   sym = console_style()
   v = verbosity()
   if (v == 1L) {

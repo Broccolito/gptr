@@ -15,10 +15,11 @@ scores: the confidence), \code{"confidence"} (decisions: \code{abs(2 * p - 1)}) 
 columns \code{FALSE} and \code{TRUE}).}
 }
 \value{
-A named numeric vector, or a matrix for \code{what = "probabilities"}.
+A numeric vector preserving the names of \code{x} (including no names), or a matrix for
+\code{what = "probabilities"}.
 }
 \description{
-System 1 calls (\code{peter(question, x, model = jev)}) return typed vectors: a \code{gptr_decision}
+System 1 calls (\code{peter(question, x, model = "jev")}) return typed vectors: a \code{gptr_decision}
 (logical), a \code{gptr_choice} (character) or a \code{gptr_score} (double, the expected 0-based level).
 They work in \verb{if()}, \verb{while()}, \code{ifelse()}, \code{table()}, \code{sum()} and comparisons like the bare
 vectors, and carry the model's probabilities as attributes. \code{gptr_prob()} reads them.

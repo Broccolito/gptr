@@ -611,6 +611,20 @@ test_that("a turn's block holds recorded code, outputs, decision, value and head
   expect_identical(attr(doc_block_lines(s, 1L, site, 2L), "header")$call, 2L)
 })
 
+test_that("a note that already starts with the Decision marker is not marked twice", {
+  site = list(format = "r", prompt_hash = prompt_hash("p"), args_hash = NULL, template = "p")
+  last = function(note) {
+    s = doc_test_session(list(doc_test_turn("m = mean(x)", note = note)))
+    utils::tail(as.character(doc_block_lines(s, 1L, site, 1L)), 1L)
+  }
+  expect_identical(last("## Decision: Use the arithmetic mean."),
+                   "## Decision: Use the arithmetic mean.")
+  expect_identical(last("decision: lower case"), "## Decision: lower case")
+  expect_identical(last("Use the arithmetic mean."), "## Decision: Use the arithmetic mean.")
+  expect_false(any(grepl("Decision", as.character(doc_block_lines(
+    doc_test_session(list(doc_test_turn("m = 1", note = "## Decision:"))), 1L, site, 1L)))))
+})
+
 test_that("the output of a dropped expression is dropped with it when outputs are per expression", {
   code = "fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(fit)\npeter$out(\"o1a2b3c\", lines = 1)"
   s = doc_test_session(list(doc_test_turn(code, outputs = list(character(), character(),

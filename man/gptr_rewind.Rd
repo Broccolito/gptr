@@ -69,10 +69,15 @@ Protected files and files that configure R or gptr (\code{.env}, \code{.Renviron
 \code{renv.lock}, keys under \verb{.ssh/}; see \link{gptr_security}) are never copied to the checkpoint store,
 so a turn's edit or deletion of one is not undone. Directories are not tracked: an empty
 directory a turn created stays. Files outside the project and \code{tempdir()} are restored only
-after you confirm each path. After a full restore the model is told nothing (the next
-request's prefix is byte-identical to the earlier request at the target); after a partial one
-the next prompt carries a short \verb{<rewind>} block listing what was not restored. Model code may
-rewind another session only when you approve that call.
+after you confirm each path. Automatic file scans are bounded by time, entry and capture
+limits (see \link{gptr_options}); a scan that stops early is reported as incomplete coverage of the
+calls and turns that could write files (R code that only reads and assigns objects cannot).
+The files gptr's tools name (write and edit targets, literal paths in R code) are backed up
+before the call; other changes to unvisited files (computed paths in R code, shell commands, a
+CLI's own edits) have no automatic backup. After a full restore the model is told nothing (the
+next request's prefix is byte-identical to the earlier request at the target); after a partial
+one the next prompt carries a short \verb{<rewind>} block listing what was not restored. Model code
+may rewind another session only when you approve that call.
 }
 \section{Options}{
 
@@ -88,10 +93,12 @@ settings key \code{checkpoint}).
 \item \code{gptr.checkpoint_days} (\code{30}): unreferenced blobs older than this many days are deleted.
 \item \code{gptr.checkpoint_turns} (\code{100}): file checkpoints older than this many turns are not
 restored.
-\item \code{gptr.checkpoint_track_file_max} (\code{1e6}), \code{gptr.checkpoint_track_total} (\code{1e8}): bytes per
-file and in all of the baseline taken at the first mutating call.
+\item \code{gptr.checkpoint_track_file_max} (\code{1e6}): bytes; the largest file the first scan stores.
+\item \code{gptr.checkpoint_track_total} (\code{1e8}): bytes one automatic scan stores in all.
 \item \code{gptr.checkpoint_capture_max} (\code{5e7}): bytes; a larger changed file gets no stored copy.
-\item \code{gptr.checkpoint_scan_budget} (\code{0.25}): seconds; slower walks switch to one scan per turn.
+\item \code{gptr.checkpoint_scan_budget} (\code{0.25}): seconds; slower scans switch to one scan per turn.
+\item \code{gptr.checkpoint_scan_timeout} (\code{2}): seconds; the longest an automatic scan runs. An
+incomplete scan also switches to one scan per turn.
 \item \code{gptr.checkpoint_rng} (\code{TRUE}): report changes of the random-number state.
 \item \code{gptr.checkpoint_close_devices} (\code{FALSE}): close graphics devices an undone turn opened.
 }

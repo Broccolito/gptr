@@ -9,6 +9,32 @@
 # read-only, Codex's own tools switched off, gptr's hook in front of every tool, never resumed,
 # and checked before its reply is kept.
 
+#' The installed Codex CLI's raw catalog (no app-server, thread or inference). Older CLIs
+#' without the documented debug command leave the shipped catalog in place.
+#' @noRd
+pcli_codex_models = function() {
+  path = pcli_find("codex")
+  help = pcli_run(path, c("debug", "models", "--help"), timeout = 3)
+  if (!is.null(pcli_run_failure(help)) ||
+      !grepl("model catalog as JSON", help$stdout %||% "", fixed = TRUE)) return(NULL)
+  res = pcli_run(path, c("debug", "models"), timeout = 30)
+  if (!is.null(pcli_run_failure(res))) pcli_catalog_error("codex")
+  obj = tryCatch(json_decode(res$stdout), error = function(e) NULL)
+  if (!is.list(obj) || !is.list(obj$models)) pcli_catalog_error("codex")
+  out = list()
+  for (m in obj$models) {
+    if (!is.list(m) || !identical(m$visibility, "list")) next
+    id = pcli_chr(m$slug)
+    if (is.null(id) || !nzchar(id)) next
+    levels = pcli_model_strings(lapply(m$supported_reasoning_levels,
+                                       function(x) if (is.list(x)) x$effort))
+    out[[length(out) + 1L]] = compact(list(id = id, name = pcli_chr(m$display_name),
+      context = pcli_scalar_num(m$context_window), input = pcli_model_strings(m$input_modalities),
+      reasoning = if (length(levels)) TRUE, thinking_levels = levels))
+  }
+  out
+}
+
 #' A TOML basic string
 #' @noRd
 pcli_toml = function(x) paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x), "\"")
@@ -430,6 +456,7 @@ pcli_codex_build = function(model, context, opts) {
   state = pcli_state(opts)
   pcli_codex_settle(state)
   state$pcli_request_id = context[["request_id"]]
+  state$pcli_model_arg = pcli_model_id(model)
   pcli_track(opts[["session"]], state)
   path = pcli_find("codex")
   probe = pcli_probe(path)
@@ -450,7 +477,7 @@ pcli_codex_build = function(model, context, opts) {
   }
   resume = if (isTRUE(probe$resume) && is.null(role)) state$codex_thread else NULL
   wd = path_norm(getwd())
-  args = pcli_codex_args(pcli_model_id(model), wd, sandbox, state$codex_relay, resume = resume,
+  args = pcli_codex_args(state$pcli_model_arg, wd, sandbox, state$codex_relay, resume = resume,
                          role = role, schema = schema)
   state$cli_api = "cli-codex"
   state$codex_sandbox = sandbox
@@ -475,13 +502,16 @@ pcli_codex_tool_kinds = c("mcp_tool_call", "command_execution", "file_change", "
                          "collab_tool_call")
 
 #' The error text of an `error` or `turn.failed` event: `message`, or `error` as a string or as
-#' an object with `message`; NULL when none is a nonempty string
+#' an object with `message`; NULL when none is a nonempty string. Codex relays a rejected
+#' request's HTTP error body as that text, so a body retry_body_error() reads gives its message.
 #' @noRd
 pcli_codex_why = function(obj) {
   err = obj[["error"]]
   why = pcli_chr(obj[["message"]]) %||% pcli_chr(err) %||%
     (if (is.list(err)) pcli_chr(err[["message"]]))
-  if (is.null(why) || !nzchar(why)) NULL else why
+  if (is.null(why) || !nzchar(why)) return(NULL)
+  body = retry_body_error(why)$message
+  if (nzchar(body)) body else why
 }
 
 #' Usage of turn.completed: input_tokens includes the cached ones (OpenAI semantics, 08 3.9), so
@@ -541,12 +571,17 @@ pcli_codex_tool_name = function(item) {
 #' Emit the informational tool_execution_start/_end events of a Codex tool item (contract 8.5),
 #' marked `informational` since the step runs outside R; calls of gptr's own tools are reported
 #' where they run, mcp_serve_call() (D-192); a command's input drops the shell's `-lc` wrapper
-#' of a single-quoted script or a bare word (D-207)
+#' of a single-quoted script or a bare word (D-207); a web search whose start has no query opens
+#' its row at completion, where Codex reports the query
 #' @noRd
 pcli_codex_tool = function(s, item, phase) {
   kind = pcli_chr(item[["type"]]) %||% ""
   gptr_own = identical(kind, "mcp_tool_call") && identical(item[["server"]], "gptr")
   if (!(kind %in% pcli_codex_tool_kinds) || gptr_own) return(invisible(FALSE))
+  if (identical(phase, "start") && identical(kind, "web_search") &&
+      !nzchar(pcli_chr(item[["query"]]) %||% "")) {
+    return(invisible(FALSE))
+  }
   emit = s$opts[["emit"]]
   if (!is.function(emit)) return(invisible(FALSE))
   id = paste0("codex_", pcli_chr(item[["id"]]) %||% "item")
@@ -758,6 +793,8 @@ pcli_codex_item = function(s, item) {
     # a warning; the bypass flag always adds one
     text = pcli_chr(item[["message"]]) %||% ""
     if (grepl("--dangerously-bypass-hook-trust", text, fixed = TRUE)) s$bypass = TRUE
+    reroute = regmatches(text, regexec("^model rerouted: .+ -> ([^ ]+) \\(.+\\)$", text))[[1L]]
+    if (length(reroute) == 2L) pcli_response_model(s, reroute[[2L]])
   } else if (identical(kind, "reasoning")) {
     text = trimws(pcli_chr(item[["text"]]) %||% "", "right")
     if (nzchar(text)) pcli_text_block(s, text, kind = "thinking")

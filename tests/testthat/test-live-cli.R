@@ -2,12 +2,13 @@
 #
 # Gated: runs only with GPTR_LIVE_TESTS=true. tests/testthat/setup.R moves HOME to a temporary
 # directory, where the CLIs find no sign-in, so these tests also need GPTR_LIVE_HOME set to the
-# real home directory; they point HOME/USERPROFILE back at it for the duration of each test. Each
-# test makes one small model call through the user's own plan and never reads a credential file.
+# real home directory; they point HOME/USERPROFILE back at it for the duration of each test. Most
+# tests make one small model call; the final two test nested ephemeral CLI sessions. None reads a
+# credential file.
 # setup.R's options(gptr.replay = "replay") would refuse these non-offline providers (P08's
 # replay_guard(); the option outranks GPTR_REPLAY), so the helper sets it to "live"; the calls pass
-# .opts = list(context = "none") to limit context and require previously recorded provider
-# consent; the billing
+# .opts = list(context = "none") to limit context. Existing single-route smokes require recorded
+# provider consent; the final two seed consent only in their private test configuration. Billing
 # variables are unset so the CLIs bill the plan and P03 has nothing to warn about.
 #   GPTR_LIVE_TESTS=true GPTR_LIVE_HOME="$HOME" \
 #     Rscript --vanilla -e 'devtools::test(filter = "live-cli")'
@@ -148,4 +149,117 @@ test_that("a codex run in the coaching role acts only through gptr's tools", {
             model = "codex/default", envir = e, mode = "auto", .opts = list(context = "none"))
   expect_identical(e$live_answer, 55L)
   expect_identical(s$status, "idle")
+})
+
+# ---- ephemeral transport delegation (P19/P20) -------------------------------------------------
+# These exercise real delegation with persistence disabled, not ordinary CLI history behavior.
+# Both CLIs must pass discovery, login and confined-run preflight before either sends a prompt.
+
+local_live_cli_delegation = function(.env = parent.frame()) {
+  skip_if_not(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"), "GPTR_LIVE_TESTS is not true")
+  home = Sys.getenv("GPTR_LIVE_HOME")
+  skip_if_not(nzchar(home) && dir.exists(home), "GPTR_LIVE_HOME names no directory")
+  for (asset in c("mcp_relay.R", "codex_hook.R")) {
+    skip_if_not(nzchar(system.file("gptr", asset, package = "gptr")),
+                paste("gptr's", asset, "is unavailable"))
+  }
+  before = if (is.null(pcli_cache$children)) character() else ls(pcli_cache$children)
+  local_gw(workspace = FALSE, .env = .env)
+  # Only the test-owned configuration is acknowledged; the real user settings stay isolated.
+  gptr_config(egress = list(`claude-cli` = "ack", codex = "ack"), .scope = "user")
+  gptr_config(budget = list(tokens = 60000, cost = 1, turns = 4L), record = "off",
+              transcript = "off", .scope = "session")
+  local_gptr_options(cli_turn_timeout = 120, max_attempts = 1L, subagents.max_cli = 2L,
+                     max_turns = 2L, .env = .env)
+  for (cli in c("claude", "codex")) {
+    skip_live_cli(cli, .env = .env)
+    skip_if_not(identical(pcli_login_status(cli), "signed in"),
+                paste("the", cli, "CLI has no confirmed sign-in"))
+  }
+  for (model in c("claude-cli/claude-opus-5-5", "codex/gpt-6-sol")) {
+    refused = tryCatch(coach_model_kind(model), gptr_error_model_refused = identity)
+    if (inherits(refused, "condition")) skip(conditionMessage(refused))
+  }
+  local_live_role("run", .env = .env)
+  withr::defer({
+    ids = if (is.null(pcli_cache$children)) character() else ls(pcli_cache$children)
+    for (id in setdiff(ids, before)) {
+      pcli_hook_shutdown(list(reason = "exit"), list(session = list(id = id)))
+    }
+  }, envir = .env)
+}
+
+test_that("ephemeral Claude Opus delegates a real team to Claude Sonnet and Codex", {
+  local_live_cli_delegation()
+  e = new.env()
+  code = paste0(
+    "live_team = peter(\"Use the gptr r tool to run exactly `live_answer = 6 * 7; ",
+    "gptr_return(live_answer)`, then reply with 42 only.\", ",
+    "agents = list(sonnet = agent(model = \"claude-cli/sonnet\", tools = \"r\"), ",
+    "codex = agent(model = \"codex/gpt-6-sol\", tools = \"r\")), ",
+    ".opts = list(context = \"none\", max_turns = 2L))\n",
+    "gptr_return(live_team$text)"
+  )
+  s = peter(paste("Use only the gptr r tool to execute this exact R code, then reply with",
+                  "the returned reports. Do not edit files or use other tools.\n", code),
+            model = "claude-cli/claude-opus-5-5", envir = e, mode = "auto",
+            tools = c("minimal", "-read", "-edit", "-write"),
+            .opts = list(context = "none", max_turns = 2L))
+  expect_identical(s$status, "idle")
+  expect_identical(s$model, "claude-cli/claude-opus-5-5")
+  team = e$live_team
+  expect_s3_class(team, "gptr_session")
+  expect_identical(team$kind, "team")
+  expect_true(team$id %in% vapply(s$children, function(child) child$id, ""))
+  expect_identical(names(team$children), c("sonnet", "codex"))
+  expect_identical(team$sonnet$model, "claude-cli/claude-sonnet-5-5")
+  expect_identical(team$codex$model, "codex/gpt-6-sol")
+  for (child in team$children) {
+    expect_identical(child$status, "idle")
+    expect_identical(child$envir$live_answer, 42)
+    expect_identical(child$value, 42)
+    expect_match(child$text, "42", fixed = TRUE)
+  }
+  entries = Filter(function(entry) identical(entry$custom_type, "gptr.subagent"),
+                    session_data(team)$entries)
+  expect_identical(vapply(entries, function(entry) entry$data$backend, ""), rep("cli", 2L))
+  expect_match(team$text, "### sonnet (claude-cli/claude-sonnet-5-5)", fixed = TRUE)
+  expect_match(team$text, "### codex (codex/gpt-6-sol)", fixed = TRUE)
+  expect_identical(s$value, team$text)
+  usage = gptr_usage(s, by = "model")
+  expect_setequal(usage$group, c(s$model, team$sonnet$model, team$codex$model))
+  expect_true(all(usage$requests > 0L & usage$output > 0))
+  expect_true(all(session_data(s)$usage$route == "plan-cli"))
+})
+
+test_that("ephemeral Codex delegates a real child to Claude Sonnet", {
+  local_live_cli_delegation()
+  e = new.env()
+  code = paste0(
+    "live_child = peter(\"Use the gptr r tool to run exactly `live_answer = 6 * 7; ",
+    "gptr_return(live_answer)`, then reply with 42 only.\", ",
+    "model = \"claude-cli/sonnet\", ",
+    ".opts = list(context = \"none\", max_turns = 2L))\n",
+    "gptr_return(live_child$text)"
+  )
+  s = peter(paste("Use only the gptr MCP r tool to execute this exact R code, then reply with",
+                  "the returned report. Do not edit files or use other tools.\n", code),
+            model = "codex/gpt-6-sol", envir = e, mode = "auto",
+            tools = c("minimal", "-read", "-edit", "-write"),
+            .opts = list(context = "none", max_turns = 2L))
+  expect_identical(s$status, "idle")
+  expect_identical(s$model, "codex/gpt-6-sol")
+  child = e$live_child
+  expect_s3_class(child, "gptr_session")
+  expect_true(child$id %in% vapply(s$children, function(candidate) candidate$id, ""))
+  expect_identical(child$model, "claude-cli/claude-sonnet-5-5")
+  expect_identical(child$status, "idle")
+  expect_identical(child$envir$live_answer, 42)
+  expect_identical(child$value, 42)
+  expect_match(child$text, "42", fixed = TRUE)
+  expect_identical(s$value, child$text)
+  usage = gptr_usage(s, by = "model")
+  expect_setequal(usage$group, c(s$model, child$model))
+  expect_true(all(usage$requests > 0L & usage$output > 0))
+  expect_true(all(session_data(s)$usage$route == "plan-cli"))
 })

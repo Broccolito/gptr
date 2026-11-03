@@ -2,6 +2,7 @@
   "stop_reason": "error",
   "error_message": "The Responses stream ended before a terminal response event.",
   "response_id": "resp_t1",
+  "response_model": "fixture-1",
   "content": [
     {
       "type": "tool_call",

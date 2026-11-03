@@ -210,7 +210,7 @@ s1_emu_outcome = function(msg, err, questions, model) {
     return(s1_failure(if (aborted) "aborted" else err[["class"]], err[["status"]],
                       paste0("Emulated System 1 request ", what, as.character(text)[1L]),
                       err[["request_id"]] %||% (if (is.list(msg)) msg[["request_id"]]),
-                      model[["id"]], err[["retry_after"]]))
+                      model[["id"]], err[["retry_after"]], s1_emu_usage(msg)))
   }
   rid = msg[["request_id"]]
   if (!rlang::is_string(rid)) rid = NA_character_
@@ -321,13 +321,13 @@ s1_emu_start = function(model, questions, stream_opts = list(), jobs = s1_emu_jo
 #' The s1_dispatch() shape; `safety` is the run's protected safety record (s1_ready()), for the
 #' preflight and every request.
 #' @noRd
-s1_emulate = function(model, states, questions, safety = NULL) {
+s1_emulate = function(model, states, questions, safety = NULL, before = NULL, after = NULL) {
   model = s1_emu_ready(model, safety)
   s1_emu_notice(model)
   jobs = s1_emu_jobs()
   on.exit(s1_emu_release(jobs), add = TRUE)
   s1_dispatch(model, states, questions, s1_emu_start(model, questions, list(safety = safety), jobs),
-              "emulated:structured", FALSE)
+              "emulated:structured", FALSE, before = before, after = after)
 }
 
 #' classify$run of the s1-emulate adapter: one state, canonical answers or a condition

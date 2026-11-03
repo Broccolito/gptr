@@ -350,7 +350,8 @@ test_that("an allowed edit whose change the ask showed sums it up once (review o
                      ui = ui_console_spec(function(prompt, ...) "y"))
   out = utils::capture.output(peter("add a title", model = fake))
   expect_identical(sum(out == "    -plot(n)"), 1L)
-  expect_identical(out[match("  ? Allow edit?", out) + 2L], "    edited fit.R - +1")
+  expect_match(out[match("  ? Allow edit?", out) + 2L],
+               "^    edited fit[.]R - [+]1( - [1-9][0-9]*[.][0-9] s)?$")
   expect_identical(readLines(file.path(root, "fit.R")), c("n = 10", "plot(n)", "title('n')"))
   # a call that was not asked keeps its result's diff
   call = list(id = "c1", name = "edit", input = list(path = "fit.R"))
@@ -647,6 +648,7 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
   # outside a run they go to the console history
   expect_identical(rl$kept, c("h$config$codex", "y"))
   # a secret is never kept
+  local_mocked_bindings(tty_secret = function() "SAVED")
   rl = local_readline(c("sk-typed-ahead", "sk-answer"), secs = c(0.001, 1.5))
   utils::capture.output(expect_identical(ui_console_read("Key: ", secret = TRUE), "sk-answer"))
   expect_identical(rl$kept, character())
@@ -654,7 +656,8 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
 
 test_that("a T console's answers are read on the input band, as its prompts are (visual round 1)", {
   local_console_test()
-  local_mocked_bindings(console_class = function() "T", console_background = function() "dark")
+  local_mocked_bindings(console_class = function() "T", console_background = function() "dark",
+                        tty_secret = function() "SAVED")
   withr::local_options(cli.num_colors = 256L, cli.unicode = TRUE)
   rl = local_readline(c("y", "sk-answer"))
   out = written(function() {
@@ -716,7 +719,7 @@ test_that("a terminal reads a secret with its echo off, then restores it (cheat-
   log = character()
   local_mocked_bindings(tty_modes = function(modes = "-g") {
     log <<- c(log, paste(modes, collapse = " "))
-    if (identical(modes, "-g")) "SAVED"
+    if (identical(modes, "-g")) "SAVED" else character()
   })
   # gptr_readline() itself, reading from `typed()` and logging the read among the modes
   real = gptr_readline
@@ -758,40 +761,24 @@ test_that("a terminal reads a secret with its echo off, then restores it (cheat-
   expect_identical(log, c("SAVED", "read", "CALL"))
 })
 
-test_that("a console that shows a secret as typed says so once (cheat-sheet review)", {
+test_that("secret reads refuse consoles without hidden input before reading", {
   local_console_test()
-  withr::local_options(width = 80L)
-  old = the$once
-  the$once = new.env(parent = emptyenv())
-  withr::defer(assign("once", old, envir = the))
-  local_readline(rep("sk-typed", 7L))
-  note = c("    This console shows the key as you type; gptr_env() loads keys from a file",
-           "    instead.")
-  shown = function(cls, secret = TRUE) {
+  rl = local_readline(rep("ordinary-answer", 4L))
+  refused = function(cls) {
     local_live_console(cls)
-    out = NULL
-    rows = utils::capture.output({
-      out = ui_console_read("Key: ", secret = secret)
-    })
-    expect_identical(out, "sk-typed")
-    cli::ansi_strip(rows)
+    expect_error(ui_console_read("Key: ", secret = TRUE), "hidden",
+                 class = "gptr_error_not_available")
+    expect_identical(rl$i, 0L)
   }
-  # an IDE console, R.app, Windows or IRkernel (no terminal of its own), once in the session
-  expect_identical(shown("L"), note)
-  expect_identical(shown("L"), character())
-  # a terminal where stty fails, also once
-  the$once = new.env(parent = emptyenv())
-  expect_identical(shown("T"), note)
-  expect_identical(shown("D"), character())
-  the$once = new.env(parent = emptyenv())
-  expect_identical(shown("L", secret = FALSE), character())
-  # a terminal that reads it without echo says nothing
-  local_mocked_bindings(tty_modes = function(modes = "-g") if (identical(modes, "-g")) "SAVED")
-  expect_identical(shown("T"), character())
-  # Emacs' comint (M-x shell, ESS) shows and keeps what is typed whatever the tty's echo (review of
-  # Tasks 22-27)
+  refused("L")
+  refused("T")
+  refused("D")
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    if (identical(modes, "-g")) "SAVED" else character()
+  })
   withr::local_envvar(INSIDE_EMACS = "29.1,comint")
-  expect_identical(shown("D"), note)
+  refused("D")
+  expect_identical(ui_console_read("Name: "), "ordinary-answer")
 })
 
 test_that("a terminal: gptr_login() reads a key without showing it (cheat-sheet review)", {
@@ -1194,6 +1181,24 @@ test_that("the rstudio UI has no UI outside RStudio and then denies", {
   expect_false(rs$has_ui())
   expect_identical(rs$permission(ui_request("unlink('x')"))$decision, "deny")
   expect_true(is.na(rs$select("t", c("a", "b"))))
+})
+
+test_that("the rstudio UI keeps the line feeds of gptr's own prompts and escapes the rest", {
+  skip_if_not_installed("rstudioapi")
+  shown = list()
+  local_mocked_bindings(ui_rstudio = function() TRUE)
+  local_mocked_bindings(askForPassword = function(prompt) {
+    shown$password <<- prompt
+    "x"
+  }, showPrompt = function(title, message, default = "") {
+    shown$prompt <<- c(title, message)
+    "1"
+  }, .package = "rstudioapi")
+  rs = ui_rstudio_spec()
+  rs$input("API key\nDestination: https://x.test\u202e", secret = TRUE)
+  expect_identical(shown$password, "API key\nDestination: https://x.test<U+202E>")
+  expect_identical(rs$select("Sign in\nStorage: here", c("Go", "Skip")), 1L)
+  expect_identical(shown$prompt, c("gptr", "Sign in\nStorage: here\n1: Go\n2: Skip"))
 })
 
 test_that("the scripted UI answers in order, logs and fails closed when empty (12.2)", {

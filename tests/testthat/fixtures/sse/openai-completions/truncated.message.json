@@ -2,6 +2,7 @@
   "stop_reason": "error",
   "error_message": "The stream ended without a finish_reason.",
   "response_id": "chatcmpl-1",
+  "response_model": "deepseek-r1",
   "content": [
     {
       "type": "text",

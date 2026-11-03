@@ -434,7 +434,7 @@ Summary.gptr_s1 = function(...) {
 
 #' Probabilities and confidence of System 1 answers
 #'
-#' System 1 calls (`peter(question, x, model = jev)`) return typed vectors: a `gptr_decision`
+#' System 1 calls (`peter(question, x, model = "jev")`) return typed vectors: a `gptr_decision`
 #' (logical), a `gptr_choice` (character) or a `gptr_score` (double, the expected 0-based level).
 #' They work in `if()`, `while()`, `ifelse()`, `table()`, `sum()` and comparisons like the bare
 #' vectors, and carry the model's probabilities as attributes. `gptr_prob()` reads them.
@@ -474,7 +474,8 @@ Summary.gptr_s1 = function(...) {
 #'   scores: the confidence), `"confidence"` (decisions: `abs(2 * p - 1)`) or `"probabilities"`
 #'   (a matrix with one row per element and one column per option or level; for decisions the
 #'   columns `FALSE` and `TRUE`).
-#' @return A named numeric vector, or a matrix for `what = "probabilities"`.
+#' @return A numeric vector preserving the names of `x` (including no names), or a matrix for
+#'   `what = "probabilities"`.
 #' @section System 1 options:
 #' `gptr.s1_max_active` (8) concurrent requests, `gptr.s1_rounds` (3) bounded retry rounds,
 #' `gptr.s1_state_max` (2000) characters of a piped session's state and `gptr.s1_max_elements`
@@ -645,7 +646,13 @@ s1_preflight = function(model, provider, safety = NULL) {
 
 #' Explicit preparation of a selected model (IC-74, contract 7.5); never used under replay
 #' @noRd
-s1_prepare = function(ref, safety = NULL) model_prepare(ref, safety = safety)
+s1_prepare = function(ref, safety = NULL, replay = NULL) {
+  model_prepare(ref, safety = safety, replay = replay)
+}
+
+#' Does Ollama serve this model (natively or through a provider at an Ollama endpoint)?
+#' @noRd
+s1_ollama_route = function(model, provider) catalog_ollama_route(model, provider)
 
 #' The configured System 1 reference, or NULL when none is usable (contract 7.5, IC-74)
 #' @noRd
@@ -664,7 +671,8 @@ s1_cost = function(usage, model) {
 #' Unknown token counts stay NA (IC-74). A NULL, NA or "" `request_id` gets a fresh id; any other
 #' value that is not one string is refused by usage_row() (D-015).
 #' @noRd
-s1_usage_log = function(model, route, input, output, request_id, session_id, started, seconds) {
+s1_usage_log = function(model, route, input, output, request_id, session_id, started, seconds,
+                         parent_id = NA_character_) {
   u = usage_cost(usage_new(input = input, output = output), model)
   api = model[["api"]]
   if (!rlang::is_string(api)) api = "unknown"
@@ -674,8 +682,10 @@ s1_usage_log = function(model, route, input, output, request_id, session_id, sta
   }
   msg = msg_assistant(list(), api = api, provider = model[["provider"]], model = model[["id"]],
                       usage = u, route = route, request_id = rid)
-  usage_log_append(usage_row(msg, session = session_id, agent = "s1", parent_id = NA_character_,
-                             started = started, seconds = seconds, multiplier = 1))
+  row = usage_row(msg, session = session_id, agent = "s1", parent_id = parent_id,
+                  started = started, seconds = seconds, multiplier = 1)
+  usage_log_append(row)
+  invisible(row)
 }
 
 #' One System 2 request on the reactor (emulation; contract 8.4); returns the transfer or task id

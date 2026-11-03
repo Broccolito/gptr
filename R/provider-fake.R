@@ -124,6 +124,9 @@ fake_request = function(n, model, context) {
   }
   k = length(messages)
   results = list()
+  while (k >= 1L && identical(messages[[k]]$role, "operator") &&
+         length(messages[[k]]$content) == 1L &&
+         identical(messages[[k]]$content[[1L]]$kind, "gptr_runtime")) k = k - 1L
   while (k >= 1L && identical(messages[[k]]$role, "tool_result")) {
     results = c(list(messages[[k]]), results)
     k = k - 1L

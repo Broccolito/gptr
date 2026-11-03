@@ -223,6 +223,9 @@ gptr_wait = function(x, timeout = Inf) {
 #' idle session the item is taken when the next run starts. The queue lives in the R process;
 #' items still queued when it ends are not saved. In a script replayed from its document, a steer
 #' the replayed block already recorded is not sent again.
+#' From model code during a run, `gptr_steer()` needs an allowing permission decision (a person's,
+#' in every mode but `yolo`; see [gptr_security]); otherwise it signals
+#' `gptr_error_permission`.
 #'
 #' @param s A session.
 #' @param text The message (secrets are redacted before it is queued).
@@ -249,6 +252,9 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
 #' Aborts the run of a session (or of each session in a list): transfers are canceled, child
 #' processes stopped, the partial turn recorded as aborted, queued items moved to `dropped`, and
 #' the status set to `aborted`. Idle sessions are left alone.
+#' From model code during a run, `gptr_cancel()` needs an allowing permission decision (a person's,
+#' in every mode but `yolo`; see [gptr_security]); otherwise it signals
+#' `gptr_error_permission`.
 #'
 #' @param x A session or a list of sessions.
 #' @return `x`, invisibly.
@@ -275,6 +281,9 @@ gptr_cancel = function(x) {
 #' Registers a session-scoped hook (rank 0) for one cataloged event (such as `message_end`,
 #' `tool_call`, `turn_end`) or a plugin channel containing `:`. The handler is
 #' `function(event, ctx)` and returns what the event allows. Forks never copy listeners.
+#' From model code during a run, `gptr_on()` needs an allowing permission decision (a person's,
+#' in every mode but `yolo`; see [gptr_security]); otherwise it signals
+#' `gptr_error_permission`.
 #'
 #' @param s A session.
 #' @param event An event name; Claude and Codex hook names are refused with the gptr name.

@@ -19,7 +19,7 @@ writeLines(c("---", "name: s11-skill", "description: S11 conformance skill.", "-
 
 # The fake model behind the s11 adapter: a tool call when asked, else a text answer.
 s11_reply = function(context) {
-  msgs = context$messages
+  msgs = Filter(function(m) !identical(m$content[[1L]]$kind, "gptr_runtime"), context$messages)
   last = msgs[[length(msgs)]]
   if (identical(last$role, "tool_result")) return(list(text = "s11 tool result seen"))
   text = msg_text(last)
@@ -378,8 +378,8 @@ test_that("the console dispatches the command and the prompt template", {
   out = s11_capture(peter(model = "s11prov/s11-model", envir = new.env()))
   expect_true(s11_used("command"))
   expect_true(any(grepl("s11 command ran", out, fixed = TRUE)))
-  expect_match(msg_text(s11_last_request()$messages[[length(s11_last_request()$messages)]]),
-               "Say hello politely", fixed = TRUE)
+  prompts = Filter(function(m) identical(m$role, "user"), s11_last_request()$messages)
+  expect_match(msg_text(prompts[[length(prompts)]]), "Say hello politely", fixed = TRUE)
   s11_mark("prompt_template")
 })
 

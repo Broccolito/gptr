@@ -113,6 +113,7 @@ arch_layer_table = function() {
     "doc-knitr.R", "L5", "P15",
     "ckpt-objects.R", "L4", "P16",
     "ckpt-files.R", "L4", "P16",
+    "ckpt-scan.R", "L4", "P16",
     "ckpt-rewind.R", "L4", "P16",
     "skill-discover.R", "L4", "P17",
     "skill-templates.R", "L4", "P17",
@@ -163,22 +164,30 @@ arch_kernel_sdk = function() {
 # P11's code_targets() (IC-31, sections 7.11 and 7.16); P19's sub-agents (section 7.6 consumers) and
 # the dedicated session of P18's gptr_mcp_serve() (section 6.3) create sessions with P06's
 # session_new(); a served MCP call runs P06's tool_call_hook(), its tool and the checkpointers as
-# the loop does (tool_run(), tool_execute_frame(), checkpoint_before(), checkpoint_after()),
-# words a denial and why it did not run as the loop does (perm_denial_text(), perm_refused()) and
-# binds P10's r-call marker for a served `r` call (r_call_new()), the
-# console's /model checks a reference with P06's model_canonical() (IC-79), /model and /status name
-# the full id behind a CLI's `default` with P20's pcli_default_model() (section 11.10, D-226), the
-# console takes back the person's queued steers with session_unqueue() (section 7.6, D-242), and its
-# run status and /context measure the context left against P07's compact_threshold() of
-# prompt_model()'s record (IC-77, D-245); P19's team and fan-out routes refuse the System 1
-# arguments with P08's route_refuse_s1_args() (section 6.1.1 step 5, D-250); P29's coaching
-# children (gptr-child.R) are scheduled, registered and revived with P19's worker helpers and
-# carry the person's rules from P11 (section 3.2, IC-86), and a harness's rules (gptr-tailor.R)
-# match calls with P11's rule_hit() and rule_glob_re(), are checked against P11's risk tables and
-# find a made file with P10's bounded walk_tree(), and its coaching skills may not take a name
-# P17's skill_discover() lists (08 section 3.2); P18's own write of a project's trust-gated
-# .gptr/mcp.json carries the trust over with P08's trust_holds() and trust_carry(), as
-# settings_write() does (IC-52)
+# the loop does (tool_run(), tool_execute_frame(), checkpoint_before(), checkpoint_after()), words a
+# denial and why it did not run as the loop does (perm_denial_text(), perm_refused()) and binds
+# P10's r-call marker for a served `r` call (r_call_new()); P19 chooses a backend with P06's
+# model_canonical() before starting a child (section 7.19), and its worker freezes P05's
+# model_default("system1") role (section 11.11). The console's /model checks a reference with the
+# same canonical helper (IC-79), /model and /status name the full id behind a CLI's `default` with
+# P20's pcli_default_model() (section 11.10, D-226), the console takes back the person's queued
+# steers with session_unqueue() (section 7.6, D-242), and its run status and /context measure the
+# context left against P07's compact_threshold() of prompt_model()'s record (IC-77, D-245); P19's
+# team and fan-out routes refuse the System 1 arguments with P08's route_refuse_s1_args() (section
+# 6.1.1 step 5, D-250); P13 commits nested decisions through P06's usage_add_durable(),
+# usage_row_store(), budget_check() and session_by_id() (section 7.13), and P19's worker proxy
+# charges the decisions of its worker with P13's s1_charge_row() (section 11.11, D-321); the console
+# validates conversational choices through P06's kernel_model_ref(); P29's coaching children
+# (gptr-child.R) are scheduled, registered and revived with P19's worker helpers and carry the
+# person's rules from P11 (section 3.2, IC-86), and a harness's rules (gptr-tailor.R) match calls
+# with P11's rule_hit() and rule_glob_re(), are checked against P11's risk tables and find a made
+# file with P10's bounded walk_tree(), and its coaching skills may not take a name P17's
+# skill_discover() lists (08 section 3.2); P18's own write of a project's trust-gated .gptr/mcp.json
+# carries the trust over with P08's trust_holds() and trust_carry(), as settings_write() does
+# (IC-52). Explicit provider inventory uses the existing P08 egress and replay guards before its L1
+# HTTP request (contract 6.2 and 7.5). P03's child environment forwards a session login with P08's
+# provider_credential() and provider_base_url(), which resolve and bind it as a request
+# would (D-315).
 arch_contract_edges = function() {
   gptr_child = c("subagent_schedule", "subagent_limit", "worker_registry", "worker_registry_apply",
                  "worker_spec_revive", "worker_key_provider", "perm_rules_effective",
@@ -186,12 +195,18 @@ arch_contract_edges = function() {
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp",
                     "mcp", "console", "console", "console", "console", "console", "subagent",
-                    rep("gptr", length(gptr_child)), "mcp", "mcp"),
+                    "subagent", "s1", "s1", "s1", "console", "s1", "subagent", "subagent",
+                    rep("gptr", length(gptr_child)), "mcp", "mcp", rep("catalog", 4L), "console",
+                    "auth", "auth"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
                "tool_execute_frame", "checkpoint_before", "checkpoint_after", "perm_denial_text",
                "perm_refused", "r_call_new", "model_canonical", "pcli_default_model",
                "session_unqueue", "compact_threshold", "prompt_model", "route_refuse_s1_args",
-               gptr_child, "trust_holds", "trust_carry")
+               "model_canonical", "usage_add_durable", "budget_check", "usage_row_store",
+               "kernel_model_ref", "session_by_id", "model_default", "s1_charge_row",
+               gptr_child, "trust_holds", "trust_carry", "egress_check", "egress_safety",
+               "replay_guard", "replay_mode", "entries_path", "provider_credential",
+               "provider_base_url")
   )
 }
 

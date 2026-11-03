@@ -18,25 +18,22 @@ inspect, reuse or modify.
 
 ## Installation
 
-gptr requires R 4.2 or later and has no compiled code. This README
-describes version 1.0.0.
-
-**Development version from GitHub:**
-
-``` r
-if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak")
-pak::pak("Broccolito/gptr@main")
-```
-
-**Released version from CRAN:**
+gptr is on CRAN. It requires R 4.2 or later and has no compiled code.
 
 ``` r
 install.packages("gptr")
 ```
 
-Choose one route. If `packageVersion("gptr")` is below 1.0.0, install
-from GitHub before following these examples. After installation, load
-the package:
+The development version on GitHub gets fixes and features before they
+reach CRAN:
+
+``` r
+if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak")
+pak::pak("Broccolito/gptr")
+```
+
+This README describes gptr 1.0.1; `packageVersion("gptr")` shows yours.
+After installation, load the package:
 
 ``` r
 library(gptr)
@@ -68,6 +65,9 @@ peter()
 With no default model set, the console offers the available CLI routes
 and saves your choice. Enter `/exit` to return to R. CLI sign-in is
 separate from API credentials.
+
+Use `gptr_models(provider = "codex", refresh = TRUE)` to refresh that
+CLI's advertised model choices; see `?gptr_models` for listing limits.
 
 **Local Ollama model.** Start Ollama separately and install a chat model
 that supports tool calls. Select an installed model, for example:
@@ -261,8 +261,8 @@ removed: use `peter("your prompt")$text` and pass a data frame to
 
 If pak reports `Subprocess is busy or cannot start`, or loading gptr
 reports a missing or corrupt `gptr.rdb`, restart R and reinstall before
-loading the package. You can also install from GitHub with
-`remotes::install_github("Broccolito/gptr")` if remotes is installed.
+loading the package. The development version also installs with
+`remotes::install_github("Broccolito/gptr")`.
 
 ## License and acknowledgments
 

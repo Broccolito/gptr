@@ -532,9 +532,10 @@ test_that("a recorded ConverseStream runs a tool through the agent loop (scripte
   s = session_new("versa-test/us.anthropic.claude-opus-4-8", "auto", home = new.env())
   session_run(s, msg_user("How many rows?"))
   expect_identical(vapply(s$messages, function(m) m$role, ""),
-                   c("user", "assistant", "tool_result", "assistant"))
-  expect_identical(msg_text(s$messages[[4L]]), "There are 32 rows.")
-  expect_identical(s$messages[[3L]]$tool_call_id, "tooluse_7")
+                   c("user", "operator", "assistant", "tool_result", "assistant"))
+  expect_identical(s$messages[[2L]]$content[[1L]]$kind, "gptr_runtime")
+  expect_identical(msg_text(s$messages[[5L]]), "There are 32 rows.")
+  expect_identical(s$messages[[4L]]$tool_call_id, "tooluse_7")
   expect_length(wire$requests, 2L)
   expect_true(all(vapply(wire$requests, function(r) is.function(r$sign), NA)))
   second = json_decode(wire$requests[[2L]]$body)

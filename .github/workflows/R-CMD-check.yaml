@@ -110,12 +110,12 @@ jobs:
 
   macos:
     runs-on: macos-latest
-    name: macos-latest (release, shard ${{ matrix.shard }}/5)
+    name: macos-latest (release, shard ${{ matrix.shard }}/8)
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
@@ -123,7 +123,7 @@ jobs:
       _R_CHECK_CRAN_INCOMING_: false
       # The pty console tests time against the runner's load (CI-96)
       TESTTHAT_PARALLEL: false
-      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/5
+      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/8
       # R's code analysis does not depend on the OS, and the Linux and Windows whole checks run it
       _R_CHECK_USE_CODETOOLS_: false
     steps: *shard-steps
@@ -152,6 +152,10 @@ jobs:
           PKG_SYSREQS: 'false'
         with:
           extra-packages: any::devtools
+      - &install-source-workers
+        name: Install current source for R workers
+        timeout-minutes: 5
+        run: R CMD INSTALL --no-docs --no-multiarch .
       - name: Prove the connection gate detects a leak
         if: matrix.shard == 1
         timeout-minutes: 5
@@ -346,6 +350,7 @@ jobs:
         with:
           dependencies: '"hard"'
           extra-packages: any::testthat any::pkgload
+      - *install-source-workers
       - name: Copy-safety suites
         timeout-minutes: 16
         run: |
@@ -369,6 +374,7 @@ jobs:
           PKG_SYSREQS: 'false'
         with:
           extra-packages: any::rtiktoken any::pkgload
+      - *install-source-workers
       - name: Token ratchet
         timeout-minutes: 10
         run: Rscript --vanilla dev/bench/tokens/run.R --check

@@ -13,7 +13,8 @@ test_that("the ask schema and description are byte-identical to contract 9.2", {
   expect_identical(spec$description, paste0(
     "Ask the user one to four questions and wait for the answers, when a decision changes the ",
     "result and cannot be inferred. The user may always type their own answer. Not for ",
-    "permission to run code: the harness asks for that itself."))
+    "permission to run code: the harness asks for that itself. Answers are visible to the ",
+    "model; use gptr_login(..., scope = \"session\") for credentials."))
   expect_identical(as.character(json_encode(ask_parameters())), paste0(
     "{\"type\":\"object\",\"required\":[\"questions\"],\"properties\":{\"questions\":",
     "{\"type\":\"array\",\"maxItems\":4,\"items\":{\"type\":\"object\",\"required\":",

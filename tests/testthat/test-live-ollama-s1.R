@@ -21,9 +21,14 @@ live_png = function(colour) {
   on.exit(unlink(path), add = TRUE)
   ok = tryCatch({
     grDevices::png(path, width = 64, height = 64)
+    device = grDevices::dev.cur()
+    on.exit({
+      if (device %in% grDevices::dev.list()) grDevices::dev.off(device)
+    }, add = TRUE)
+    graphics::par(mar = rep(0, 4))
     graphics::plot.new()
     graphics::rect(0.1, 0.1, 0.9, 0.9, col = colour, border = NA)
-    grDevices::dev.off()
+    grDevices::dev.off(device)
     TRUE
   }, error = function(e) FALSE)
   if (!ok) skip("no PNG graphics device")

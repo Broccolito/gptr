@@ -2,6 +2,7 @@
   "stop_reason": "length",
   "raw_stop_reason": "incomplete.max_output_tokens",
   "response_id": "resp_i1",
+  "response_model": "fixture-1",
   "content": [
     {
       "type": "text",

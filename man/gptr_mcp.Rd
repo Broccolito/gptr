@@ -7,7 +7,8 @@
 gptr_mcp(server = NULL, tools = FALSE, refresh = FALSE)
 }
 \arguments{
-\item{server}{A server name, or \code{NULL} for all.}
+\item{server}{A server name selecting which tools to list or caches to refresh, or \code{NULL}
+for all. The server listing (\code{tools = FALSE}) always includes all configured servers.}
 
 \item{tools}{\code{TRUE} to list tools instead of servers.}
 

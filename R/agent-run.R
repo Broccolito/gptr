@@ -471,9 +471,11 @@ run_target = function(run) {
   run$model
 }
 
-#' The model record of `ref` for the run's next request: a selected Ollama model is prepared
-#' (discovered when its evidence is missing or stale, then resolved again; 07 section 2), as System
-#' 1 does; a provider registered for the session only is left to provider_stream()'s preflight
+#' The model record of `ref` for the run's next request, after the consent and replay checks: a
+#' selected Ollama model is prepared (discovered when its evidence is missing or stale, then
+#' resolved again; 07 section 2), as System 1 does; another globally registered provider is
+#' inventoried through provider_ready(prepare = TRUE); a provider registered for the session only
+#' is left to provider_stream()'s preflight
 #' @noRd
 run_model_ready = function(run, ref) {
   sid = session_data(run$shell)$id
@@ -485,20 +487,21 @@ run_model_ready = function(run, ref) {
   egress_check(rec$provider, pr, run$opts$safety %||% list(),
                 context = context_mode(call$args$opts))
   replay_guard(pr %||% rec, mode = replay_mode(call$args$replay))
-  if (!catalog_ollama_route(rec, provider_get(rec$provider)) ||
-      !is.null(registry_model_spec(ref, sid))) {
-    return(rec)
-  }
-  model_prepare(ref, safety = stream_safety(NULL, run))
+  if (!is.null(registry_model_spec(ref, sid))) return(rec)
+  provider_ready(rec, pr, safety = stream_safety(NULL, run), prepare = TRUE,
+                   replay = call$args$replay)
 }
 
 #' Resolve a model reference for a session: P05's catalog, else a provider spec registered for
-#' this session only (04 section 6.1), narrowed to the named model; an id may hold a colon (an
-#' Ollama tag, IC-74), so `:<suffix>` is a thinking level only when it is one
+#' this session only (04 section 6.1), named alone for its first model or narrowed to a model;
+#' an id may hold a colon (an Ollama tag, IC-74), so `:<suffix>` is a thinking level only when
+#' it is one
 #' @noRd
 run_model_resolve = function(ref, sid) {
   rec = model_resolve(ref, strict = FALSE)
   if (!is.null(rec)) return(rec)
+  pr = registry_get("provider", ref, session = sid)
+  if (inherits(pr, "gptr_provider") && length(pr$models)) return(model_resolve(pr))
   if (grepl("/", ref, fixed = TRUE)) {
     pr = tryCatch(registry_get("provider", sub("/.*$", "", ref), session = sid),
                   error = function(e) NULL)
@@ -622,6 +625,25 @@ path_model_ref = function(path) {
 #' @noRd
 run_build = function(run, target) {
   s = run$shell
+  d = session_data(s)
+  messages = project_messages(d$entries, d$leaf, target)
+  block = run_identity(run, target, messages)
+  previous = NULL
+  for (m in rev(messages)) {
+    if (!identical(m$role, "operator")) next
+    for (b in m$content) {
+      if (identical(b$kind, "gptr_runtime")) {
+        previous = b$text
+        break
+      }
+    }
+    if (!is.null(previous)) break
+  }
+  if (!identical(previous, block$text)) {
+    note = msg_operator("reminder", block$text)
+    note$content = list(block)
+    run_append_message(run, note)
+  }
   if (ext_service_has("request.build")) {
     req = ext_service_get("request.build")(s, target, NULL)
     req$context$messages = images_elide(s, req$context$messages, target)
@@ -630,8 +652,42 @@ run_build = function(run, target) {
   }
   req$context$request_id = req$context$request_id %||% id_new("q", 12L)
   req$context$session_id = req$context$session_id %||% session_data(s)$id
-  req$tokens_est = req$tokens_est %||% 0
+  est = prompt_request_estimate(req$context, target$api, req$context$session_id)
+  req$tokens_est = est$total
+  req$components = est$components
   req
+}
+
+#' Small current-request identity context: configuration and reported metadata have separate
+#' labels. Changes append an operator entry so the request remains an append-only history.
+#' @noRd
+run_identity = function(run, target, messages) {
+  quote = function(x) encodeString(substr(x %||% "unknown", 1L, 200L), quote = '"')
+  reported = NULL
+  for (m in rev(messages)) {
+    if (identical(m$role, "assistant") && identical(m$provider, target$provider) &&
+        identical(m$api, target$api) && identical(m$model, target$id) && !msg_failed(m)) {
+      if (rlang::is_string(m$response_model) && nzchar(m$response_model)) {
+        reported = m$response_model
+      }
+      break
+    }
+  }
+  cli = target$api %in% c("cli-claude", "cli-codex")
+  requested = session_data(run$shell)$model
+  route = if (identical(requested, target$ref)) {
+    paste0("requested/resolved ", quote(target$ref))
+  } else {
+    paste0("requested ", quote(requested), "; resolved ", quote(target$ref))
+  }
+  body = paste0("Current request in gptr/Peter (R): ", route, " via ", quote(target$api), ".",
+    if (cli) paste0(" CLI model argument: ", quote(pcli_model_id(target)), "."),
+    " Prior completed response_model: ", if (is.null(reported)) "not reported" else quote(reported),
+    ". Current response metadata may arrive after generation; ",
+    "console footers show it when supplied. Configuration does not verify backend identity. ",
+    "Use gptr::gptr_models()/gptr::gptr_providers() for R-session routes; ",
+    "CLI helper/delegate choices are separate.")
+  block_context("gptr_runtime", body)
 }
 
 #' The fallback request before P07 is loaded: the projected messages after image elision (so the
@@ -1028,7 +1084,7 @@ run_wait = function(runs, timeout = Inf, background = FALSE) {
                NA))
   }
   if (done()) return(invisible(TRUE))
-  allow = if (reactor_depth() == 0L) NULL else vapply(runs, function(r) r$id, "")
+  allow = if (reactor_nested()) vapply(runs, function(r) r$id, "")
   ok = reactor_pump(until = done, slice_ms = 100L, allow_runs = allow, timeout = timeout)
   invisible(isTRUE(ok) || done())
 }
@@ -1968,9 +2024,17 @@ ctx_state_restorable = function(prior) {
 #' Pure resolution (IC-74) that refuses what session_set_model() refuses (D-017); the level
 #' travels as a `:<level>` suffix, except for a router, which chooses its own.
 #' @noRd
-kernel_model_ref = function(ref, thinking = NULL, session = NULL) {
-  m = model_canonical(ref, strict = TRUE, session = session)
+kernel_model_ref = function(ref, thinking = NULL, session = NULL, strict = TRUE) {
+  provider = inherits(ref, "gptr_provider")
+  m = if (provider) {
+    model_resolve(ref, strict = strict)
+  } else if (rlang::is_string(ref) && startsWith(ref, "emulate:")) {
+    list(ref = ref, type = "classifier")
+  } else {
+    model_canonical(ref, strict = strict, session = session)
+  }
   stream_chat_model(m)
+  if (provider) ref = m$ref
   if (is.null(thinking) || startsWith(m$ref, "router:")) return(ref)
   paste0(m$ref, ":", thinking)
 }

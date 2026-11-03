@@ -29,7 +29,9 @@ gptr_tool(
 \item{description}{Model-facing description; direct tools stay under 400 estimated tokens.}
 
 \item{parameters}{A JSON Schema list with \code{type = "object"}, a \verb{function(ctx)} evaluated once
-when a session freezes its prompt, or \code{NULL} to derive the schema from \code{fun}'s formals.}
+when a session freezes its prompt, or \code{NULL} to derive the schema from \code{fun}'s formals.
+Derived properties are strings, \code{...} is omitted and arguments without defaults are
+required. Supply an explicit schema for other types.}
 
 \item{execute}{\verb{function(input, ctx)} returning a \code{\link[=gptr_tool_result]{gptr_tool_result()}}, text, a list or \code{NULL}.}
 

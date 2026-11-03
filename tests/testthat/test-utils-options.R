@@ -31,7 +31,8 @@ test_that("every documented option of contract section 3.1 has a default entry",
     "undo_capture_max", "undo_max_bytes", "undo_spill_max", "undo_turns", "checkpoint",
     "checkpoint_disk_bytes", "checkpoint_days", "checkpoint_turns",
     "checkpoint_track_file_max", "checkpoint_track_total", "checkpoint_capture_max",
-    "checkpoint_scan_budget", "checkpoint_rng", "checkpoint_close_devices",
+    "checkpoint_scan_budget", "checkpoint_scan_timeout", "checkpoint_rng",
+    "checkpoint_close_devices",
     "redact_min_chars", "redact_patterns", "stream_hold_max", "env_export", "prompt_secrets",
     "deprecations", "history", "s1_max_active", "s1_rounds", "s1_state_max",
     "s1_max_elements", "doc_output_lines", "doc_source_frames", "skills_budget",
@@ -75,6 +76,31 @@ test_that("an IRkernel session can prompt but does not count as a watching human
   expect_false(gptr_has_human())
   withr::local_options(knitr.in.progress = TRUE)
   expect_false(gptr_can_prompt())
+})
+
+test_that("a Jupyter request with allow_stdin = false asks nothing, said once (IC-43)", {
+  # IRkernel installs its executor's readline() in base; the executor holds the request
+  kernel_readline = function(allow) {
+    local({
+      current_request = list(content = list(allow_stdin = allow))
+      function(prompt = "") ""
+    })
+  }
+  the$once[["message:jupyter_no_stdin"]] = NULL
+  local_gptr_options(quiet = FALSE)
+  expect_true(jupyter_stdin(kernel_readline(TRUE)))
+  expect_true(jupyter_stdin(function(prompt = "") ""))
+  expect_true(jupyter_stdin(base::readline))
+  expect_message(expect_false(jupyter_stdin(kernel_readline(FALSE))),
+                 "takes no input.*nbconvert", class = "gptr_message_notice")
+  expect_no_message(expect_false(jupyter_stdin(kernel_readline(FALSE))))
+  withr::local_options(gptr.interactive = NULL, jupyter.in_kernel = TRUE,
+                       knitr.in.progress = NULL)
+  withr::local_envvar(TESTTHAT = "false", `_R_CHECK_PACKAGE_NAME_` = "")
+  local_mocked_bindings(gptr_is_interactive = function() FALSE,
+                        jupyter_stdin = function() FALSE, .package = "gptr")
+  expect_false(gptr_can_prompt())
+  expect_false(gptr_confirm("Record gptr blocks into nb.ipynb?", default = FALSE))
 })
 
 test_that("testthat and R CMD check never count as a human", {

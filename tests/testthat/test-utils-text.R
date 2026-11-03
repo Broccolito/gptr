@@ -86,7 +86,30 @@ test_that("spill_write() redacts and names the file by its stem", {
   expect_identical(readLines(path, encoding = "UTF-8"), c("key [secret:KEY]", "second line"))
 })
 
-test_that("clean_terminal() drops ANSI and OSC sequences, collapses progress and caps lines", {
+test_that("a cut keeps lines over 400 characters as 400-character pieces", {
+  local_out_store()
+  lines = c(strrep("a", 1000), sprintf("row %d", 1:300))
+  res = truncate_output(lines, budget_tokens = 400)
+  kept = strsplit(res$text, "\n", fixed = TRUE)[[1]]
+  expect_identical(kept[1], strrep("a", 400))
+  expect_identical(kept[length(kept)], "row 300")
+  expect_identical(res$total_lines, 303L)
+  expect_identical(out_get(res$out_id), c(strrep("a", c(400, 400, 200)), sprintf("row %d", 1:300)))
+  expect_identical(truncate_output(lines[1:2], budget_tokens = 1000)$text,
+                   paste(lines[1:2], collapse = "\n"))
+})
+
+test_that("a cut splits a long non-ASCII line in linear time", {
+  skip_on_cran()
+  local_out_store()
+  t = system.time(res <- truncate_output(paste0(strrep("a", 3e6), "é"), budget_tokens = 4000))
+  expect_lt(t[["elapsed"]], 5)
+  pieces = out_get(res$out_id)
+  expect_identical(nchar(pieces), c(rep(400L, 7500L), 1L))
+  expect_identical(pieces[c(1L, 7501L)], c(strrep("a", 400), "é"))
+})
+
+test_that("clean_terminal() drops ANSI and OSC sequences, collapses progress, keeps long lines", {
   x = c(
     "\033[31mred\033[0m text",
     "\033]8;;https://example.org\aa link\033]8;;\a",
@@ -96,7 +119,7 @@ test_that("clean_terminal() drops ANSI and OSC sequences, collapses progress and
   )
   out = clean_terminal(x)
   expect_identical(out[1:4], c("red text", "a link", "100%", "done"))
-  expect_identical(out[5], paste0(strrep("z", 400), " ...[+50 chars]"))
+  expect_identical(out[5], strrep("z", 450))
   expect_identical(clean_terminal(c("abc\rdef", "a\rb\rc\r", "x")), c("def", "c", "x"))
 })
 
@@ -106,7 +129,7 @@ test_that("clean_terminal() is linear on one long line", {
     out = clean_terminal(c(strrep("a", 1e7), paste0(strrep("b", 1e7), "\rc\r", strrep("d", 1e7))))
   })
   expect_lt(t[["elapsed"]], 10)
-  expect_identical(out, paste0(strrep(c("a", "d"), 400), " ...[+", 1e7 - 400, " chars]"))
+  expect_true(identical(out, strrep(c("a", "d"), 1e7)))
 })
 
 test_that("listings print at most 20 rows, a count line and the footer", {
@@ -122,4 +145,21 @@ test_that("listings print at most 20 rows, a count line and the footer", {
   expect_false(any(grepl("item21", printed, fixed = TRUE)))
   expect_output(print(new_listing(df[0, ], "gptr_demo")), "# 0 rows", fixed = TRUE)
   expect_output(print(new_listing(df[1, ], "gptr_demo")), "# 1 row", fixed = TRUE)
+})
+
+test_that("listings print numbers in fixed notation", {
+  local_reproducible_output(width = 80)
+  printed = capture.output(print(new_listing(data.frame(id = c("a", "b"),
+                                                       context = c(200000, 1e6)), "demo")))
+  expect_true(any(grepl("200000", printed, fixed = TRUE)))
+  expect_true(any(grepl("1000000", printed, fixed = TRUE)))
+  expect_false(any(grepl("e+0", printed, fixed = TRUE)))
+})
+
+test_that("listing footers wrap at word boundaries to the console width", {
+  local_reproducible_output(width = 80)
+  footer = paste(rep("advertisement does not verify access;", 8), collapse = " ")
+  printed = capture.output(print(new_listing(data.frame(id = "a"), "demo", footer = footer)))
+  expect_true(all(nchar(printed) <= 80))
+  expect_identical(paste(printed[-seq_len(match("# 1 row", printed))], collapse = " "), footer)
 })
