@@ -9607,3 +9607,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   environment (D-346)"; test-eval-guard.R "eval_assign_targets finds assignments, replacements,
   assign(), := and set*()"; test-eval-core.R "an object local()'s code only reads is not reported
   as modified (D-346)". Evidence: progress/fixes-1.0.1/lane-I.md.
+
+## D-347 - Fixes 1.0.1 lane I Reading the trust decision is level 0 (2026-11-02)
+- Rule (amends IC-53 item 3): `gptr_trust()`'s row in `risk-functions.csv` is level 0 `read`, and
+  `by_args()` adds level 4 `control` for any `trust` other than `NULL` (a value the code computes
+  included), as for `gptr_cache()`, `gptr_scrub()` and `gptr_jobs()`. A function value
+  (`lapply(dirs, gptr_trust)`) is control, since its arguments are unknown. Formerly every call was
+  level 4, so `print(gptr::gptr_trust("."))` asked a person even in `auto`, although the function
+  returns at once when `trust` is `NULL` and only the recording path calls
+  `session_control_check()`. `?gptr_security` already names only changes to gptr's configuration.
+  `gptr_config()` and `gptr_permissions()` with no arguments keep their level 4 rows (no report
+  asked for them; their recording paths are guarded at run time).
+- Contract-visible: 04 `gptr_trust()` and IC-53 item 3; `risk-functions.csv`.
+- Tests: test-perm-classify.R "gptr's own configuration is the control category, level 4 (IC-53,
+  IC-54)" (read forms level 0, write and computed forms 4); test-perm-gate.R "control actions need
+  a person in every mode, plan included (IC-53, IC-54)" (the read form runs in `auto`). Evidence:
+  progress/fixes-1.0.1/lane-I.md.

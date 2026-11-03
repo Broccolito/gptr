@@ -22,7 +22,7 @@ test_that("the shipped risk tables have the contract columns and levels (contrac
 
 test_that("gptr's configuration exports and hooks are level 4 control rows (IC-53)", {
   tab = risk_table("functions")
-  control = c("gptr_config", "gptr_permissions", "gptr_trust", "gptr_init", "gptr_env",
+  control = c("gptr_config", "gptr_permissions", "gptr_init", "gptr_env",
               "gptr_register", "gptr_reload", "gptr_on", "gptr_mcp_add", "gptr_mcp_remove",
               "gptr_mcp_serve", "gptr_login", "gptr_logout", "gptr_doc", "gptr_resume",
               "gptr_fork", "gptr_steer", "gptr_cancel", "gptr_rewind")
@@ -587,6 +587,8 @@ test_that("18's blind spots and user methods get the amended levels (IC-54)", {
 test_that("gptr's own configuration is the control category, level 4 (IC-53, IC-54)", {
   root = local_project()
   control = c("gptr_permissions(allow = 'r(level<=3)')", "gptr_trust('.', TRUE)",
+              "gptr::gptr_trust(trust = FALSE)", "gptr_trust('.', flag)",
+              "lapply(dirs, gptr_trust)",
               "gptr_register(gptr_hook('permission_request', function(event, ctx) NULL))",
               "options(gptr.critical_guard = FALSE)", "Sys.setenv(GPTR_REPLAY = 'live')",
               "Sys.setenv(ANTHROPIC_API_KEY = 'x')", "Sys.unsetenv('GPTR_PROJECT_ROOT')",
@@ -604,6 +606,10 @@ test_that("gptr's own configuration is the control category, level 4 (IC-53, IC-
   }
   expect_identical(gptr_risk("gptr_cache()", root = root)$level, 0L)
   expect_identical(gptr_risk("gptr_scrub()", root = root)$level, 0L)
+  # reading the trust decision changes nothing (D-347)
+  for (code in c("print(gptr::gptr_trust('.'))", "gptr_trust(getwd(), NULL)")) {
+    expect_identical(gptr_risk(code, root = root)$level, 0L, label = code)
+  }
   expect_identical(gptr_risk("options(digits = 3)", root = root)$level, 2L)
   expect_identical(gptr_risk("writeLines('x', 'AGENTS.md')", root = root)$level, 3L)
 })

@@ -1319,8 +1319,9 @@ project `.env` auto-discovery, provider base-URL overrides, project skills and p
 model fields of project agent files.
 The record includes the trust fingerprint of the trust-gated files (IC-52). Conditions: `invalid_argument`. Side
 effects: writes `trust.json` (atomic, under a short file lock). Emits nothing (`project_trust` is the first-decision
-event raised when untrusted resources are first used, IC-71). Called from model code during a run it is a
-`control`-category action (IC-53).
+event raised when untrusted resources are first used, IC-71). Called from model code during a run, recording
+(`trust = TRUE` or `FALSE`, or a value the code computes) is a `control`-category action (IC-53); reading is level 0
+(D-347).
 
 ```r
 d = tempfile("proj"); dir.create(d)
@@ -4995,7 +4996,7 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode` and `gptr.unsafe_no_permissions`; the run's gate
    reads only the snapshot.
 3. `risk-functions.csv` gains category `control`, level 4, `ask_human`: `gptr_config`, `gptr_permissions`,
-   `gptr_trust`, `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
+   `gptr_trust` (`trust = TRUE` or `FALSE`), `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
    `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune, clear),
    `gptr_scrub` (`dry_run = FALSE`), and `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`, `gptr_rewind`
    on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` and
