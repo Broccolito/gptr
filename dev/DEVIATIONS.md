@@ -9581,21 +9581,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-auth-childenv.R "a session login reaches workers as its provider's key, bound to the
   endpoint".
 
-## D-316 - 1.0.1 lane B Stdio slot consent ignores R's working directory and credentials (2026-11-02)
+## D-316 - 1.0.1 lane B Stdio slot consent ignores R's working directory and the environment (2026-11-02)
 - Rule (review #104 correctness and design): `mcp_stdio_binding()` hashed `getwd()` for a server
-  without a configured `cwd` and the whole expanded environment, the slot's own `${VAR}` value
-  included, so a remembered slot aborted with "changed since credential entry" after `setwd()`, in
-  an R session started elsewhere, or once the slot's variable was set. The binding keeps the raw
-  configuration (`mcp_cache_key()`), the resolved command's path and contents, the expanded
-  arguments, the configured working directory and the source file, and takes the expanded
-  environment without its secret-like entries (`mcp_secret_name()`): credentials a slot may replace
-  are not a destination, while a non-secret placeholder such as a host still invalidates consent
-  when its value changes. The executable's content hash stays (the review proposed dropping it):
-  an updated launcher is a changed executable, and the error says to log in again. The login
-  prompt names "R's working directory when the server starts" when no `cwd` is configured.
-- Contract-visible: `?gptr_login` (`slot`); 04 `gptr_login()` paragraph.
-- Tests: test-auth-setup.R "a remembered stdio slot survives setwd() and credential variables, not a
-  new host".
+  without a configured `cwd`, the expanded arguments and the whole expanded environment, the slot's
+  own `${VAR}` value included, so a remembered slot aborted with "changed since credential entry"
+  after `setwd()`, in an R session started elsewhere, or once any placeholder's variable was set or
+  rotated (a PAT under a name such as `GH_PAT`, a `DATABASE_URL`, a `--token ${X}` argument). The
+  binding is now the configuration as written (`mcp_cache_key()`: command, arguments, `env` and
+  `cwd` before expansion), its source file and the resolved executable's path and contents. What
+  placeholders expand to is the user's environment, trusted like the allowlisted variables
+  (`PATH`, `HOME`, proxies, certificate files) the server inherits anyway; binding a part of it gave
+  no protection those do not already bypass, and broke remembered logins. The executable's content
+  hash stays (the review proposed dropping it): an updated launcher is a changed executable, and
+  the error says to log in again. The login prompt names "R's working directory when the server
+  starts" when no `cwd` is configured.
+- Contract-visible: `?gptr_login` (`slot`); 04 `gptr_login()` paragraph; the MCP guide.
+- Tests: test-auth-setup.R "a remembered stdio slot survives setwd() and environment values, not a
+  config edit".
 
 ## D-317 - 1.0.1 lane B Credential entry says what happened and where it went (2026-11-02)
 - Rule (live credential test): `/skip` and `/cancel` typed at the hidden prompt skip and cancel,

@@ -176,7 +176,8 @@ browser for you; an authentication error names the sign-in function to run. Cred
 stored separately from the MCP configuration. A stdio server takes credentials from its `env`
 placeholders, or from `gptr_login("mcp:<server>", slot = "VAR")` for a declared secret entry
 such as `VAR = "${VAR}"`: the value reaches only that server's process. A change to the server's
-configuration or executable asks you to log in again; changing R's working directory does not.
+configuration or executable asks you to log in again; changing R's working directory or an
+environment variable does not.
 
 ## Serve your R session
 

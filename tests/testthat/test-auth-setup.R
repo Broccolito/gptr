@@ -294,25 +294,29 @@ test_that("stdio slots reach only the owned child environment and edits invalida
   expect_false(file.exists(auth_store_path()))
 })
 
-test_that("a remembered stdio slot survives setwd() and credential variables, not a new host", {
+test_that("a remembered stdio slot survives setwd() and environment values, not a config edit", {
   local_user_dirs()
-  withr::local_envvar(DEMO_API_TOKEN = NA, DEMO_HOST = NA)
+  withr::local_envvar(DEMO_API_TOKEN = NA, DEMO_PAT = NA, DEMO_HOST = NA, DEMO_ARG = NA)
   key = paste0("stdio-user-canary-", strrep("w", 20))
-  spec = list(name = "demo", command = rscript_path(), args = list("--vanilla"),
-              env = list(DEMO_API_TOKEN = "${DEMO_API_TOKEN}", DEMO_HOST = "${DEMO_HOST}"))
+  spec = list(name = "demo", command = rscript_path(), args = list("--vanilla", "${DEMO_ARG}"),
+              env = list(DEMO_API_TOKEN = "${DEMO_API_TOKEN}", GH_PAT = "${DEMO_PAT}",
+                         DEMO_HOST = "${DEMO_HOST}"))
   local_mocked_bindings(mcp_server_get = function(name, session = NULL) spec)
   ui = local_scripted_ui(list(key))
   expect_true(gptr_login("mcp:demo", method = "key", slot = "DEMO_API_TOKEN"))
   expect_match(ui$log$prompt, "Working directory: R's working directory when", fixed = TRUE)
-  slot = function() {
+  slot = function(spec) {
     env = mcp_stdio_credentials(spec, mcp_expand_spec(spec))
     secret_value(env$DEMO_API_TOKEN, secret_bound_origin(env$DEMO_API_TOKEN))
   }
-  withr::with_dir(withr::local_tempdir(), expect_identical(slot(), key))
-  withr::with_envvar(c(DEMO_API_TOKEN = "ambient-token-12345678"),
-                     expect_identical(slot(), key))
-  withr::with_envvar(c(DEMO_HOST = "elsewhere.example"),
-                     expect_error(slot(), "changed", class = "gptr_error_untrusted"))
+  withr::with_dir(withr::local_tempdir(), expect_identical(slot(spec), key))
+  withr::with_envvar(c(DEMO_API_TOKEN = "ambient-token-12345678",
+                       DEMO_PAT = paste0("ghp_", strrep("r", 36)),
+                       DEMO_HOST = "elsewhere.example", DEMO_ARG = "--token=rotated-123456"),
+                     expect_identical(slot(spec), key))
+  edited = spec
+  edited$args = list("--vanilla", "--quiet")
+  expect_error(slot(edited), "changed", class = "gptr_error_untrusted")
   expect_true("mcp:demo:env:DEMO_API_TOKEN" %in% names(auth_store_read()))
   expect_true(gptr_logout("mcp:demo"))
   expect_false("mcp:demo:env:DEMO_API_TOKEN" %in% names(auth_store_read()))
