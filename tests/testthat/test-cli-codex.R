@@ -269,6 +269,21 @@ test_that("a Codex shell step shows its command without the shell's -lc wrapper"
                    "  \u258e codex_shell  {\"command\":\"set -e\\nmake check\"}")
 })
 
+test_that("a Codex web search row shows the query Codex reports when the search completes", {
+  skip_on_cran()
+  opts = stub_opts()
+  n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+  item = list(id = "ws_1", type = "web_search", query = "", action = list(type = "other"))
+  push_obj(n, list(type = "item.started", item = item))
+  item$query = "R lm weights"
+  item$action = list(type = "search", query = "R lm weights")
+  push_obj(n, list(type = "item.completed", item = item))
+  tools = Filter(function(e) startsWith(e$type, "tool_execution"), opts$log$events)
+  expect_identical(vapply(tools, function(e) e$type, ""),
+                   c("tool_execution_start", "tool_execution_end"))
+  expect_identical(tools[[1L]]$input$query, "R lm weights")
+})
+
 test_that("Codex reports other servers' MCP calls, not gptr's own; reasoning is thinking", {
   skip_on_cran()
   opts = stub_opts()
