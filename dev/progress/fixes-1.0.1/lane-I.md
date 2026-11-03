@@ -1,7 +1,8 @@
 # gptr 1.0.1 fixes, lane I: tool output and the permission classifier (2026-11-02)
 
 Branch `claude/fix-I` from `04dca16a`. Three medium findings from the live orchestration and
-discovery runs, each confirmed by a verifier; all three are fixed. Decisions D-345..D-347.
+discovery runs, each confirmed by a verifier; all three are fixed. Decisions D-345..D-347; the
+verifier's follow-up (I-4..I-6 below) added D-348 and amended D-345 and D-346.
 
 ## I-1 - Output lines reach the model whole (`e6862df1`, D-345)
 - Defect: `clean_terminal()` cut every line at 400 characters with ` ...[+N chars]` before
@@ -63,9 +64,40 @@ discovery runs, each confirmed by a verifier; all three are fixed. Decisions D-3
 - `arch-layers|lint-rules|s11-conformance|tool-r|ext-specs|agent-dispatch` PASS 938. Lint clean
   on every changed R and test file; `document` rewrote only `man/gptr_risk.Rd`.
 
+## Follow-up after verification
+- I-4 (`fcd61db4`, D-345 amended): `truncate_output()` split long lines with `substring()`,
+  which rescans a non-ASCII string from its start for every piece, so a 3e6-character line with
+  one `é` took about 10 s (1e7 about 100 s). The pieces are now cut by code points
+  (`utf8ToInt()`, `split()`, `intToUtf8()`): the same pieces in 0.08 s. Red: test-utils-text.R
+  "a cut splits a long non-ASCII line in linear time" 10.4 s >= 5 s; green PASS.
+- I-5 (`3315f358`, D-348): after D-345 a helper view left out a line larger than its budget:
+  `peter$sh()` of one 50,000-character line and `tail-line` printed only the notice and
+  `tail-line`, `print(peter$out(id))` of it said `index the value`, and a one-line minified
+  `@file` was `not attached`. `view_lines()` (utils-text.R) now shows, when such a view must cut,
+  each line over 400 characters as its first 400 and ` ...[+N chars]` before the view cuts by
+  lines; used by `bridge_view_lines()` (sh, py, sql and job prints), `budget_head_tail()`
+  (`peter$out()` and `peter$help()` values) and `repl_file_block()` (marked `truncated`). These
+  views keep the line count of the value or store the model indexes, so they do not split pieces
+  as `truncate_output()` does. Red: test-bridge-sh.R, test-tool-namespace.R and
+  test-console-repl.R FAIL 5; green. Live: `peter$sh()` of the verifier's command printed the
+  418-character head line and `tail-line`.
+- I-6 (`0ca5ae4e`, D-346 amended; low): `eval_guard_targets_walk()` kept local()'s own
+  environment through nested `eval()`, `evalq()`, `with()`, `local(envir =)` and a `local` the
+  code binds, unlike `gptr_risk()`; the record said both walkers kept the old reading. The walker
+  now leaves the own reading at any `risk_unknown_funs` call and does not take it once the code
+  has bound `local`. Red: test-eval-guard.R FAIL 5; green. A `local` only the session binds is
+  still read as base R's there (the walker has no environment; it can only miss a same-valued
+  reassignment, as `modified` comes from the environment diff).
+
+- Checks after the follow-up: `utils-text|eval-format|bridge-sh|bridge-lang|tool-namespace|
+  console-repl` PASS 1533 SKIP 6; `perm-classify|eval-guard|perm-plan|perm-gate|risk-forms|
+  env-snapshot|ckpt-objects|eval-core` PASS 3281; `mcp-server|tool-r|tool-read|ext-specs|
+  agent-dispatch|arch-layers|lint-rules|s11-conformance|session-object|doc-blocks|doc-formats`
+  PASS 2769 FAIL 3 (the base's `test-mcp-server.R:284-289`); `console-completion|bridge-jobs|
+  bridge-py|knit|gptr-child|subagent-team|copy-eval` PASS 1011 SKIP 6. Lint clean on every changed
+  file; `document` no drift; `dev/bench/tokens/run.R --check` OK.
+
 ## Deferred
 - None of this lane's findings. Optional, not done: `gptr_config()` and `gptr_permissions()`
   with no arguments are still level 4 (the verifier's same-root-cause note; no live report, and
-  their recording paths are guarded at run time). The helper views (`peter$sh()`, `peter$py()`
-  prints, `peter$out()` values) keep whole lines, so a single line larger than their budget is
-  left out with a notice naming it, not cut into pieces.
+  their recording paths are guarded at run time).
