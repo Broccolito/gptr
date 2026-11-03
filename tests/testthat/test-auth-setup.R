@@ -84,6 +84,19 @@ test_that("login refuses unsupported hidden input and missing humans before read
   expect_false(file.exists(auth_store_path()))
 })
 
+test_that("an OAuth paste fallback without hidden input refuses before the browser opens", {
+  local_user_dirs()
+  st = ui_scripted_state(list(1L))
+  ui = ui_scripted_spec(st)
+  ui$has_secret_input = function() FALSE
+  withr::local_options(gptr.ui = ui, gptr.interactive = TRUE)
+  local_mocked_bindings(oauth_loopback_ok = function() FALSE,
+                        oauth_open_browser = function(url) stop("must not open a browser"))
+  expect_error(gptr_login("openrouter", method = "oauth", scope = "session"),
+               "hidden", class = "gptr_error_not_available")
+  expect_identical(st$log$method, "select")
+})
+
 test_that("provider login binds the configured endpoint and refuses an endpoint edit", {
   local_user_dirs()
   withr::local_envvar(OPENROUTER_API_KEY = NA_character_)

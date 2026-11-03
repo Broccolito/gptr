@@ -516,6 +516,7 @@ oauth_redirect_setup = function(port = NULL, path = "/callback", state = NULL) {
   st$query = NULL
   nested = reactor_depth() > 0L || isTRUE(reactor_get()$tool_depth > 0L)
   if (nested || !oauth_loopback_ok()) {
+    oauth_need_hidden()                                   # before the browser opens
     p = if (is.null(port)) port_candidates(1L)[1L] else as.integer(port)
     uri = paste0("http://127.0.0.1:", p, path)
     return(list(redirect_uri = uri, close = function() invisible(NULL),
@@ -624,10 +625,9 @@ oauth_key_exchange = function(id, flow, client) {
   list(type = "api_key", key = oauth_post(flow$token, body, "key", id)$key)
 }
 
-#' Masked entry of a key, token or client id through the UI (P11: rstudioapi::askForPassword()
-#' or a no-echo read)
+#' The UI, when it can read without echo; else a classed refusal before anything is read
 #' @noRd
-oauth_ask = function(what, optional = FALSE) {
+oauth_need_hidden = function() {
   ui = oauth_ui()
   hidden = is.function(ui$has_secret_input) &&
     isTRUE(tryCatch(ui$has_secret_input(), error = function(e) FALSE))
@@ -636,6 +636,14 @@ oauth_ask = function(what, optional = FALSE) {
                       "terminal with echo disabled or an RStudio password dialog."),
                "not_available", member = "hidden credential input", provided_by = "UI backend")
   }
+  ui
+}
+
+#' Masked entry of a key, token or client id through the UI (P11: rstudioapi::askForPassword()
+#' or a no-echo read)
+#' @noRd
+oauth_ask = function(what, optional = FALSE) {
+  ui = oauth_need_hidden()
   v = tryCatch(ui$input(what, secret = TRUE), error = function(e) {
     gptr_abort("Hidden credential input failed; no credential was stored.", "not_available",
                member = "hidden credential input", provided_by = "UI backend")
