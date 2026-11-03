@@ -36,6 +36,10 @@ results, which may include data values or plots, rather than an automatic serial
 the full dataset. [Execution model](execution-model.html) explains copies, separate
 workers and file-backed objects.
 
+![Three routes, one workspace. An API model and a command-line tool's provider are beyond your
+computer and need your consent once; a local Ollama model is not, and the R code any of them
+returns passes the same permission gate into your session.](figures/model-routes.svg)
+
 The same call works in a function, a loop or a script. This guide executes only scripted fake
 providers; examples that connect to real services are shown without running them.
 
@@ -70,6 +74,12 @@ Select a canonical `"provider/model"` reference to make the route explicit. Cata
 as `sonnet` also work. For a default, use `gptr_config(model = ..., .scope = "user")`; pass
 `model = ...` to override it for one call. [Configuration](configuration.html) explains scope
 and precedence.
+
+For a model that reasons, choose its effort with `.opts = list(thinking = "high")` or with a
+suffix on the reference, such as `"openai/gpt-6-sol:high"`; either way the level stays with the
+session for later turns. The levels are `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`,
+`"xhigh"` and `"max"`. A model without the requested level uses the closest one it has,
+preferring a higher one, and says so.
 
 ### API providers
 
@@ -115,6 +125,16 @@ local-only inference is on. Consent does not pre-approve tool actions. Read `?gp
 before using sensitive data. `gptr_login("openrouter")`
 offers an interactive login; `gptr_login("anthropic", method = "key")` offers masked key entry.
 These credentials are separate from a command-line tool's sign-in.
+
+Before a key is typed or a browser sign-in starts, `gptr_login()` shows where the credential
+goes and where it will be kept. `scope` chooses the store: the default `"user"` remembers it in
+gptr's `auth.json` (mode 0600 on Unix), `"session"` keeps it in this R process only, with no
+file or environment variable, and `"keyring"` uses the operating system's credential store
+through the optional keyring package. Leave a key blank or type `/skip` to skip; `/cancel` or
+an interrupt cancels. Peter can run the same call while it helps you set up a provider or an MCP
+server: `gptr_login(..., scope = "session")` needs your approval, you type the value at the
+hidden prompt, and the value never reaches the model. Hidden input is not encryption;
+`gptr_logout()` removes a stored credential.
 
 An OpenAI-compatible service can use the existing completions adapter. Register its endpoint,
 credential variable and the model metadata supplied by your service:
@@ -272,7 +292,7 @@ other = gptr_fake_provider(list("An association does not establish causation."),
 session = peter("Describe how mpg relates to wt.", mtcars, model = fake)
 session |> peter("Add a caveat.", model = other)
 #> An association does not establish causation.
-#> idle . other/other-1 . 2 turns . 3.4k tokens . $0.0000 . s2ce6889652
+#> idle . other/other-1 . 2 turns . 3.5k tokens . $0.0000 . s84e729c2cd
 ```
 
 ## Put calls in functions and scripts

@@ -57,7 +57,7 @@ is_rct = peter("Is this a randomized trial?", abstracts, model = judge)
 is_rct
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 gptr_prob(is_rct)
 #>  trial cohort  pilot
 #>   0.94   0.07   0.55
@@ -90,7 +90,7 @@ studies = data.frame(
 peter("Was allocation randomized?", studies, model = judge)
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 
 record = list(abstract = abstracts[["trial"]], sample_size = 200L,
               allocation = "randomized")
@@ -115,6 +115,9 @@ confidence is each engine's own measure of concentration: the probabilities 0.90
 0.05 give 0.85 on Jev and 0.64 on Clef (see `?gptr_prob`), so re-tune `min_confidence` when
 you switch engine.
 
+![A yes/no decision, read as P(yes). The default threshold of 0.5 makes each probability TRUE or
+FALSE; min_confidence = 0.8 makes any answer between 0.1 and 0.9 NA.](figures/decision-threshold.svg)
+
 
 ``` r
 screened = peter("Is this a randomized trial?", abstracts, model = judge,
@@ -123,7 +126,7 @@ screened = peter("Is this a randomized trial?", abstracts, model = judge,
 screened
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)    NA (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 names(abstracts)[!is.na(screened) & screened]
 #> [1] "trial"
 names(abstracts)[is.na(screened)]
@@ -178,7 +181,7 @@ tissue = peter("Which tissue is this?", samples, model = judge,
 tissue
 #>             s1             s2             s3
 #>  lung (p=0.91) liver (p=0.88) brain (p=0.80)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 gptr_prob(tissue)
 #>   s1   s2   s3
 #> 0.91 0.88 0.80
@@ -195,7 +198,7 @@ severity = peter("Rate this event's severity.",
 severity
 #>                a                b
 #> 0.20 (conf 0.85) 1.88 (conf 0.90)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 gptr_prob(severity, "probabilities")
 #>   mild moderate severe
 #> a 0.85     0.10   0.05
@@ -264,7 +267,7 @@ session = peter("Summarize mtcars in one sentence.", model = summary_model)
 
 session |> peter("Did the analysis succeed?", model = judge)
 #> [1] TRUE (p=0.94)
-#> judge-s1-1.0 . calibration unknown . 2026-10-30
+#> judge-s1-1.0 . calibration unknown . 2026-11-02
 session$turns
 #> [1] 1
 ```
@@ -272,6 +275,12 @@ session$turns
 The piped classifier receives a bounded description of the session's status, designated
 value and last answer. It adds no agent turn. Judging the answer text is not verification of
 the calculations or saved artifacts; validate those in R.
+
+The direction also reverses: an agent can call a decision model from its own R code, for example
+to screen thousands of abstracts and analyze only those kept. One call is one batch. It keeps the
+order of its inputs, sends each distinct input once and runs at most eight requests at a time by
+default (`gptr.s1_max_active`); the answers are charged to the session that asked and to its
+budgets. See [Teams and background](teams-and-background.html#system-1-decision-leaves).
 
 ## Native Jev, local Ollama and explicit emulation
 

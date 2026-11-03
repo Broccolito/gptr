@@ -243,6 +243,12 @@ be read-only in a scratch environment, where intermediate bindings can change wh
 workspace is preserved. Settings and policies are described in
 [Configuration](configuration.html) and `?gptr_security`.
 
+Peter can also ask you up to four questions of its own when a decision changes the result. A
+choice also takes your own words; at a text question `/skip` skips it and `/cancel` dismisses
+the questions. Answers reach the model, so type no secret there: a credential goes through
+`gptr_login(..., scope = "session")`, which needs your approval and reads the value with hidden
+input ([Language models](language-models.html)).
+
 ## Type while Peter works
 
 A message you type while Peter works is queued as one of two kinds. A **steer** reaches the
@@ -273,6 +279,10 @@ back the newest message not yet delivered, to edit and send again; Ctrl-U clears
 recording document keeps what you sent, steers included
 ([Record, replay and export](script-as-history.html)).
 
+![Steer and follow-up, read from the top. What you send while Peter works is written into the
+transcript at once, as steer> or next>; Peter reads a steer at its next step, and a follow-up
+runs after the answer as the next prompt.](figures/steer-next.svg)
+
 A question (an approval, a choice) waits until you stop typing for a second, or three seconds
 while the draft has text, so a key meant for the draft never answers it. The draft stays through
 questions, through Ctrl-C and the pause menu, and to the next prompt, where Enter sends it. Keys
@@ -297,6 +307,10 @@ cannot read it while Peter works:
 
 During `peter("...")` at R's prompt, outside the chat, typed lines stay R's next input in every
 console.
+
+While sub-agents work, the console counts those finished, active and waiting, names each with
+its model and shows their tool calls and retries as progress; see
+[Teams and background](teams-and-background.html).
 
 ## Pause, continue and leave
 
