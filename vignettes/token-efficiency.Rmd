@@ -62,7 +62,7 @@ view$sections
 #> 4    modes   T0     84
 #> 5  context   T0    152
 view$total_tokens
-#> [1] 1919
+#> [1] 1920
 ```
 
 `gptr_prompt()` inspects the system sections and tool definitions with estimated token counts;

@@ -74,7 +74,7 @@ survey_peter = gptr_tailor(
   )
 )
 survey_peter
-#> <gptr_harness 4d2986b751b7> built on peter (gptr 1.0.1)
+#> <gptr_harness 8e6dff89c49b> built on peter (gptr 1.0.1)
 #> fixed: mode = "auto"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review 1 round(s), rules none
@@ -127,7 +127,7 @@ co = survey_peter$coaching
 co$review = NULL
 quick_peter = gptr_tailor(survey_peter, mode = "edits", coaching = co)
 quick_peter
-#> <gptr_harness 9ed71d43a4e5> built on peter (gptr 1.0.1)
+#> <gptr_harness f146d1eb7b14> built on peter (gptr 1.0.1)
 #> fixed: mode = "edits"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review none, rules none
@@ -320,7 +320,7 @@ path = tempfile(fileext = ".rds")
 saveRDS(survey_peter, path)
 their_peter = gptr_tailor(readRDS(path))
 their_peter
-#> <gptr_harness e6b5155b2479> built on peter (gptr 1.0.1)
+#> <gptr_harness 6d0e7be57de7> built on peter (gptr 1.0.1)
 #> fixed: mode = "auto"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review 1 round(s), rules none
