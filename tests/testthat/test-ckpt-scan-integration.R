@@ -114,6 +114,28 @@ test_that("real partial checkpoints preserve targeted writes and report native c
   expect_identical(scan_integration_bytes(unknown), unknown_after)
 })
 
+test_that("a CLI-served write to a real scanned file past the capture limit is undone", {
+  skip_on_cran()
+  root = local_project(files = list("bulk/sub/target.R" = "before"))
+  local_gptr_options(checkpoint_scan_timeout = 20, checkpoint_scan_budget = 1000, quiet = TRUE)
+  expect_true(all(file.create(file.path(root, "bulk", sprintf("f%03d.R", seq_len(300L))))))
+  target_rel = "bulk/sub/target.R"
+  ck = ckpt_ck_new("s0000000905")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  expect_true(tr$complete)
+  expect_true(target_rel %in% tr$stat$path)
+  expect_false(target_rel %in% names(tr$hash))
+  call = list(id = "c", name = "write", input = list(path = target_rel, content = "served"))
+  token = ckpt_files_before(ck, call, turn = 1L, sync = FALSE)
+  expect_true(token$exact)
+  writeLines("served", file.path(root, target_rel))
+  frag = ckpt_files_after(ck, call, token)
+  expect_identical(frag$coverage, "complete")
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
+  expect_identical(readLines(file.path(root, target_rel)), "before")
+})
+
 test_that("real complete scans detect same-size edits with an unchanged timestamp", {
   root = local_project(files = list("racy.R" = "AAAA"))
   local_gptr_options(checkpoint_scan_timeout = 15, checkpoint_scan_budget = 1000)

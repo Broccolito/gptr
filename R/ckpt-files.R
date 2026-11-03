@@ -434,9 +434,9 @@ ckpt_stat_refresh = function(tr, rel) {
 #' made outside gptr (once per turn in per-turn mode); predicted paths get explicit pre-images.
 #' A known path that changed since the tracker's scan is left to the recording scan ("?"), whose
 #' pre-image is the content at the start of the turn. A call served to a CLI route does not
-#' `sync`: the edits its child made since the turn's start are recorded, never absorbed (IC-65),
-#' and a known target must match its prior content hash, never metadata alone. A target no scan
-#' observed gets its state just before the call on every route (D-313).
+#' `sync`: the edits its child made since the turn's start are recorded, never absorbed (IC-65).
+#' On every route a known target must still hold what the last scan saw (ckpt_as_scanned()), and a
+#' target no scan observed gets its state just before the call (D-313).
 #' @return A token.
 #' @noRd
 ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
@@ -451,17 +451,9 @@ ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
     rel = ckpt_walked(tr, p)
     state = ckpt_explicit_state(p, tr$root)
     # A target no scan observed is backed up immediately before our own call; a known one must
-    # still hold what the tracker saw, by content on a CLI route, whose child may have changed it.
+    # still hold what the tracker saw.
     known = !is.na(rel) && (isTRUE(tr$complete) || rel %in% c(tr$stat$path, tr$absent))
-    exact = !known || if (!sync) {
-      if (nzchar(state)) {
-        rel %in% names(tr$hash) && identical(state, tr$hash[[rel]])
-      } else {
-        !rel %in% tr$stat$path
-      }
-    } else {
-      ckpt_as_scanned(tr, rel, state)
-    }
+    exact = !known || ckpt_as_scanned(tr, rel, state)
     tr$explicit[p] = if (exact) state else "?"
     tr$explicit_mode[p] = ckpt_modes(p)
   }

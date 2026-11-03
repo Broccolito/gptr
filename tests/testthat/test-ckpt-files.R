@@ -602,7 +602,7 @@ test_that("files over the capture cap and symbolic links are not restorable", {
   expect_true(nzchar(Sys.readlink(file.path(proj, "link.md"))))
 })
 
-test_that("CLI calls cannot promote an unhashed file's metadata to an original pre-image", {
+test_that("CLI calls back up an unhashed target only while its size and mtime match the scan", {
   local_gptr_options(checkpoint_track_file_max = 10)
   proj = local_project(files = list("edited.csv" = strrep("o", 20), "kept.csv" = strrep("o", 20)))
   ck = ckpt_ck_new("s0000000034")
@@ -616,11 +616,12 @@ test_that("CLI calls cannot promote an unhashed file's metadata to an original p
   rows = stats::setNames(frag$files, vapply(frag$files, function(r) r$path, ""))
   expect_false(rows[["edited.csv"]]$restorable)
   expect_match(rows[["edited.csv"]]$reason, "no pre-image")
-  expect_false(rows[["kept.csv"]]$restorable)
+  expect_true(rows[["kept.csv"]]$restorable)
   u = ckpt_files_undo(ck, frag)
   expect_identical(u$ok[u$item == "file edited.csv"], FALSE)
+  expect_true(u$ok[u$item == "file kept.csv"])
   expect_identical(readLines(file.path(proj, "edited.csv")), "served")
-  expect_identical(readLines(file.path(proj, "kept.csv")), "served")
+  expect_identical(readLines(file.path(proj, "kept.csv")), strrep("o", 20))
 })
 
 test_that("undo restores mode bits; old rows, later edits and missing copies are not written", {

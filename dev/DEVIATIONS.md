@@ -4440,9 +4440,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   the served call's fragment or in the turn scan; an aborted run has no `turn_end`, so on a CLI
   route `agent_end` scans too, after builtin:cli has stopped the child (builtin:checkpoints loads
   after builtin:cli; review: a cancelled Codex turn's own edits were absorbed by the next sync,
-  files `0/0`). A scanned target is captured only while its content matches the last scan's hash,
-  so a child's edit of it never becomes a pre-image (the turn scan records it with the turn-start
-  content); a target no scan observed gets its state just before the served call (D-313).
+  files `0/0`). A scanned target is captured only while it is as the last scan saw it (its hash,
+  or without one its size and mtime), so a child's edit of it does not become a pre-image (the
+  turn scan records it with the turn-start content); a target no scan observed gets its state
+  just before the served call (D-313).
 - Contract-visible: 04 IC-79 (served calls are checkpointed; contract edges `checkpoint_before`,
   `checkpoint_after`).
 - Tests: mcp-server, cli-claude, cli-codex, ckpt-files, ckpt-rewind (an aborted turn), arch-layers.
@@ -9641,27 +9642,38 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   edits"; test-ckpt-rewind.R "R code that can write no file skips only the files checkpointer".
   Evidence: progress/fixes-1.0.1/lane-A.md.
 
-## D-313 - P16 Peter's own writes to unobserved targets are undone on every route (2026-11-02)
+## D-313 - P16 Peter's own writes to unobserved or unbacked targets are undone on every route (2026-11-02)
 - Rule (review of #98): a predicted target that no scan observed (outside the walk, or beyond a
   partial inventory: not in the tracker's rows or proven absences) gets its state just before the
-  call as its explicit pre-image on every route, as API routes did. On a CLI route (`sync =
-  FALSE`) a target a scan observed still needs a matching content hash (or proven absence); else
-  the turn's recording scan, which holds the turn-start observation, records it. So `/undo`
-  reverts Peter's own approved edit of an unscanned file and removes a file Peter created, and the
-  report and the `<rewind>` block name both.
+  call as its explicit pre-image on every route, as API routes did. A target a scan observed gets
+  one on every route while it still holds what that scan saw (`ckpt_as_scanned()`): its content
+  hash, or, for a file the scan inventoried without a backup (past the capture limit or the
+  baseline size), its size and modification time, or its proven absence; else the turn's
+  recording scan, which holds the turn-start observation, records it. This withdraws #98's
+  content-hash-only rule for CLI routes (`sync = FALSE`; its record,
+  progress/first-response-bounded-scans.md, "Matching size and modification time alone do not
+  prove ...") and restores 1.0.0's (D-201). So `/undo` reverts Peter's own approved edit of an
+  unscanned or unbacked file and removes a file Peter created, and the report and the `<rewind>`
+  block name both.
 - Why: #98 marked such targets "?" on CLI routes and dropped their rows, so `/undo` on claude-cli
   and codex left Peter's own edit and new file in place, named neither, and reported only "file
-  coverage"; the same prompt on an API route restored both.
-- Trade-off: a native CLI edit of such a file earlier in the same turn is not undone (no scan saw
-  the original), as for any unscanned file; the row restores the content from just before
-  Peter's call.
+  coverage"; the same prompt on an API route restored both. In a project of 257 to 2,000 entries
+  a complete scan backs up 256 files, so most served edits there had no pre-image.
+- Trade-off: a native CLI edit of an unscanned file earlier in the same turn is not undone (no
+  scan saw the original), as for any unscanned file; the row restores the content from just
+  before Peter's call. A native edit of a file without a backup that keeps its size and
+  modification time becomes the pre-image, as an unpredicted write's does on API routes (D-312,
+  as in 1.0.0); one that changes either is recorded by the turn scan without a pre-image.
 - Contract-visible: 04 sections 7.16, IC-65 and IC-79 (section 15, which also stops claiming a
   full walk); 03 section 6.16 Files; D-201 edited in place.
 - Tests: test-ckpt-partial.R "a CLI-served write to a target no scan observed is undone to its
   prior state", "a CLI-served write that creates an unobserved target is removed by undo", "a
-  CLI-served write outside the project is undone to its state before the call";
+  CLI-served write outside the project is undone to its state before the call", "a CLI-served
+  write to a scanned file without a backup is undone while it is as seen"; test-ckpt-files.R "CLI
+  calls back up an unhashed target only while its size and mtime match the scan";
   test-ckpt-scan-integration.R "real partial checkpoints preserve targeted writes and report
-  native coverage honestly". Evidence: progress/fixes-1.0.1/lane-A.md.
+  native coverage honestly", "a CLI-served write to a real scanned file past the capture limit is
+  undone". Evidence: progress/fixes-1.0.1/lane-A.md.
 
 ## D-314 - P16 Checkpoint notices are console lines for the person (2026-11-02)
 - Rule (review and live tests of #98): the coverage notice reads "File undo covers part of <root>:

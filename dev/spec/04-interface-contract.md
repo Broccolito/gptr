@@ -3067,13 +3067,14 @@ item (D-312).
 
 Predicted targets of gptr-controlled writes are backed up immediately before the call,
 independently of automatic coverage, with the existing protected/control/link/type and byte
-checks. For a target a scan observed, CLI-served calls using `sync = FALSE` require a matching
-prior content hash for an existing file, or verified prior absence for a creation; size and
-modification time alone cannot prove original contents, so a late copy cannot become an original
-for an earlier native CLI edit, and the turn's recording scan, which holds the turn-start
-observation, records the change instead. A target no scan observed gets its state just before
-the call as its pre-image on every route, so undo reverts Peter's own write or removes the file it
-created; an earlier native CLI edit of it in the same turn is not undone (D-313).
+checks. On every route, CLI-served calls using `sync = FALSE` included, a target a scan observed
+gets a pre-image only while it still holds what that scan saw: its content hash, or for a file
+the scan inventoried without a backup its size and modification time, or its proven absence for
+a creation; else the turn's recording scan, which holds the turn-start observation, records the
+change, so a late copy does not become an original for an earlier native CLI edit that changed
+the file's size or time. A target no scan observed gets its state just before the call as its
+pre-image, so undo reverts Peter's own write or removes the file it created; an earlier native
+CLI edit of it in the same turn is not undone (D-313).
 Preserve guarded restores and R-object checkpointing. Unpredicted writes by R code, a shell or a CLI
 outside coverage have no complete-undo guarantee. File discovery stays scoped and on demand through
 `ls`, `find` and `read`; provider startup requires no full-folder inventory.
@@ -5807,8 +5808,9 @@ totals line names the model and the context left.
   runs between the checkpointers' `before` and `after` (`checkpoint_before()`, `checkpoint_after()`), as a call of
   the loop does, so `/undo` restores what it changed (#24); on a CLI route the files checkpointer then records the
   edits the child made since the turn's start rather than absorbing them: a scanned target gets a pre-image only
-  while its content matches the last scan's hash (or its absence was proven), else the turn's recording scan
-  records it, and a target no scan observed gets its state just before the call (7.16, D-313). A served `r` call made while a run is live draws
+  while it is as the last scan saw it (its hash, or without one its size and time, or its proven absence), else
+  the turn's recording scan records it, and a target no scan observed gets its state just before the call (7.16,
+  D-313). A served `r` call made while a run is live draws
   its plots as the loop's `r` tool does (`plots = "auto"`: on the person's device when one is open or a human is
   present), so a CLI route's plots reach the screen (#42); without a run they stay offscreen (`"capture"`). A
   long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a refreeze

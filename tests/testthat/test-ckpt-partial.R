@@ -189,25 +189,27 @@ test_that("a CLI-served write outside the project is undone to its state before 
   expect_identical(readLines(target), "native CLI edit")
 })
 
-test_that("CLI metadata matches cannot prove uncaptured original contents", {
-  local_project(files = list("known.R" = "old"))
-  old_time = as.POSIXct(1e9, origin = "1970-01-01", tz = "UTC")
-  Sys.setFileTime("known.R", old_time)
-  local_mocked_bindings(ckpt_scan_run = function(...) partial_scan("known.R"))
-  ck = ckpt_ck_new("s0000000210")
-  tr = ckpt_files_tr(ck)
-  ckpt_files_sync(tr)
-  writeBin(charToRaw("new\n"), "known.R")
-  Sys.setFileTime("known.R", old_time)
-  expect_identical(as.numeric(file.mtime("known.R")), tr$stat$mtime)
-  expect_identical(file.size("known.R"), tr$stat$size)
-  call = list(id = "c", name = "write", input = list(path = "known.R", content = "own"))
-  tok = ckpt_files_before(ck, call, sync = FALSE)
-  expect_false(tok$exact)
-  writeLines("own", "known.R")
-  frag = ckpt_files_after(ck, call, tok)
-  expect_length(frag$files, 0L)
-  expect_identical(frag$coverage, "partial")
+test_that("a CLI-served write to a scanned file without a backup is undone while it is as seen", {
+  for (native in c(FALSE, TRUE)) {
+    local_project(files = list("known.R" = "old"))
+    # a complete scan that inventoried known.R without a backup (a capture limit)
+    local_mocked_bindings(ckpt_scan_run = function(...) partial_scan("known.R", complete = TRUE))
+    ck = ckpt_ck_new("s0000000213")
+    tr = ckpt_files_tr(ck)
+    ckpt_files_sync(tr)
+    if (native) writeLines("a longer native CLI edit", "known.R")
+    call = list(id = "c", name = "write", input = list(path = "known.R", content = "own"))
+    tok = ckpt_files_before(ck, call, sync = FALSE)
+    expect_identical(tok$exact, !native)
+    writeLines("own", "known.R")
+    frag = ckpt_files_after(ck, call, tok)
+    expect_identical(paths_of(frag), c(known.R = "modified"))
+    expect_identical(frag$coverage, "complete")
+    # a native edit since the scan leaves no original to restore, and is reported as such
+    expect_identical(frag$files[[1L]]$restorable, !native)
+    expect_identical(all(ckpt_files_undo(ck, frag)$ok), !native)
+    expect_identical(readLines("known.R"), if (native) "own" else "old")
+  }
 })
 
 test_that("a partial sync gives no pre-image to an edit or deletion made outside gptr", {
