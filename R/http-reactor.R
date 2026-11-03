@@ -134,6 +134,15 @@ reactor_task = function(fn, run = NULL) {
   id
 }
 
+#' Call the task `id` (when registered) in the next pump iteration, before the seconds it asked
+#' to wait have passed
+#' @noRd
+reactor_task_due = function(id) {
+  t = if (rlang::is_string(id)) reactor_get()$tasks[[id]]
+  if (!is.null(t)) t$next_at = -Inf
+  invisible(NULL)
+}
+
 #' Queue one R-evaluating tool of a run in the FIFO
 #' @param run the `gptr_run` (or its id) the tool belongs to.
 #' @param fn zero-argument function executing the tool.

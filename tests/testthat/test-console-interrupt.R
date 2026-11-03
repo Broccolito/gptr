@@ -1030,7 +1030,8 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   drv$wait_for("STATUS-TTFT idle")
   expect_true(drv$has("tok04"))
 
-  # 2. SIGINT while a tool runs, then [s]teer: the steer arrives after the tool result
+  # 2. SIGINT while a tool runs, then [s]teer, its text read at `steer> ` (D-303): the steer
+  # arrives after the tool result
   drv$send("step_tool()")
   drv$wait_for("Sys.sleep(3)")
   Sys.sleep(0.5)
@@ -1038,7 +1039,7 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   drv$wait_for("Paused")
   drv$wait_for(pty_asked())
   drv$send("s")
-  drv$wait_for(pty_asked())
+  drv$wait_for("steer> ")
   drv$send("use base R only")
   drv$wait_for("STEER-AFTER-TOOL TRUE")
 

@@ -727,7 +727,8 @@ console_queued = function(s) {
 #' (`rec$sent`, console_send()) or a sub-agent it shows runs, whose
 #' run pumps the reactor inside the parent's r call, on a dynamic console of an interactive R (not
 #' class P), but not in R.app, whose console gives everything after a carriage return the input's
-#' colour
+#' colour. It is drawn over the row it takes over (a prompt's, at its run's start), never cleared
+#' first, so no blank row shows between them (#108)
 #' @noRd
 console_live_start = function(rec) {
   if (is.null(rec$child)) {
@@ -739,7 +740,7 @@ console_live_start = function(rec) {
     if (!cli::is_dynamic_tty() || console_class() == "P" || platform_gui() == "AQUA") {
       return(invisible(NULL))
     }
-    console_live_stop()
+    if (!is.null(row)) reactor_cancel(row$task)
     row = console_live()
     row$rec = rec
     the$live_row = row

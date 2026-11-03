@@ -1673,7 +1673,7 @@ request's `asks even in auto mode: <reason>`, then the question `  ? Allow r?` (
 keys, `    y yes · a always (session) · p always (project) · n no · ? more` (the keys bold, what they do dim; 68
 columns whatever the tool or who asks, wrapped between the options in a narrower console), with C0/C1 controls,
 bidi and zero-width characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after
-the person's chevron `› ` (ASCII `>> `) at column 0, with R's readline, echo on and Enter required; no single key
+the person's chevron two columns in, `  › ` (ASCII `  >> `) [D-301], with R's readline, echo on and Enter required; no single key
 answers. `a` adds a session rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`) and `p`
 the same rule for the project, both offered only when the request suggests one; a remembered answer adds one dim
 line, `    allowed r(fn:FindNeighbors,FindClusters) for this session` (or `project`). `?` opens the detail view
@@ -1686,7 +1686,7 @@ text that the tool result gives the model as the person's own instruction (`n us
 (`  ? sub-agent alpha: allow r?`; a nested `peter()` by its quoted prompt and number). Choices and inputs (the `ask`
 tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices
 (`    1  dplyr`, the number bold), a dim hint (`Choose a number, or type your own answer; Enter = base`; an input's
-`Enter = <default>`), then `› `; each part word-wraps at the console width less the margin, under its own text (a
+`Enter = <default>`), then `  › `; each part word-wraps at the console width less the margin, under its own text (a
 title's later rows at column 4, a choice's under its label). Every console prompt first clears the live row (an
 answer's held row continues after it, D-245), and its lines reach the console, in its colours, even from inside the parent's `r` evaluation (never its tool result). An
 invalid answer is explained (`a` or `p` where nothing can be remembered says why); five (`?` is none) end in a
@@ -2246,7 +2246,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; the live row redrawn by a reactor task; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.
   Glyphs and colours come from one style table, `console_style()` [IC-82, D-245]: the logo's cursor shapes (`›`
-  the person, `▎` a tool call, `▌` the agent, whose live row's block does not move, `↳` a queued message), ASCII where
+  the person, `▎` a tool call, `▌` the agent, whose live row's block does not move, `↳` a message taken back or a draft kept), ASCII where
   the output is not UTF-8 and in Windows consoles outside Windows Terminal and RStudio; the logo's red and a
   darker logo blue (basic red and blue below 256 colours), dim, and an input band in a terminal (T class) whose
   background its answer to OSC 11 or `COLORFGBG` gives, under the prompts, the live row and the person's lines;
@@ -2254,7 +2254,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   Where the renderer is active (verbosity 2 on a dynamic TTY; `capture.output()` of an
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
   lines, notices, prompts, the status line) keep a two-column margin and wrap at
-  width - 4 (an answer's prose at 100 columns at most, a readable measure in a wide console [D-245]), while the person's lines (an answer, a queued or delivered message) start at column 0; one blank
+  width - 4 (an answer's prose at 100 columns at most, a readable measure in a wide console [D-245]), while the person's messages to the agent (`peter> `, `steer> `, `next> `) start at column 0 and an
+  answer at column 2 [D-301]; one blank
   line separates text, tool, notice, prompt, the person's lines and status blocks (and two prompts, and two text
   blocks in a row [D-208], but not a question from the tool block it is asked in [D-243], nor the tool blocks of
   consecutive requests, which group as those of one response [D-245]) and follows the input

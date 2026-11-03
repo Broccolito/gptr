@@ -155,6 +155,24 @@ test_that("a launch boundary clears the live row without a line feed, in R GUIs 
   }
 })
 
+test_that("a row a launch cleared shows again at the next pump, not a second later (#108)", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L, quiet = FALSE)
+  withr::local_options(cli.dynamic = TRUE)
+  w = launch_record()
+  shown = function() isTRUE(the$live_row$shown)
+  utils::capture.output({
+    launch_request(w)
+    # the row shows from the run's start, so its task has drawn it and waits a second
+    reactor_pump(timeout = 0.01)
+    with_interrupt_policy(function() {
+      signalCondition(launch_condition())
+      expect_false(shown())
+      expect_true(reactor_pump(shown, timeout = 0.5))
+    }, list(w$run))
+  })
+})
+
 test_that("nested and background launches do not inject foreground display bytes", {
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
