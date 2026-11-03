@@ -35,6 +35,9 @@ ollama_fixture = function() {
 
 local_ollama_server = function(models = ollama_fixture(), version = "0.35.1",
                                .env = parent.frame()) {
+  # Every HTTP request is replaced below; allow explicit inventory despite suite replay mode.
+  withr::local_options(gptr.replay = NULL, .local_envir = .env)
+  withr::local_envvar(GPTR_REPLAY = "auto", .local_envir = .env)
   srv = new.env(parent = emptyenv())
   srv$models = models
   srv$version = version

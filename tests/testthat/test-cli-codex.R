@@ -80,6 +80,7 @@ test_that("build() starts one exec per turn with a fresh private relay mailbox",
              messages = list(msg_user("Summarise x")),
              params = list(cli_mode = "edits", cli_budget = list(turns = 4)))
   spec = pcli_codex_build(stub_model("codex"), ctx, opts)
+  expect_identical(opts$state$pcli_model_arg, "gpt-6-sol")
   dir = opts$state$codex_relay
   withr::defer(unlink(dir, recursive = TRUE))
   expect_true(dir.exists(dir))

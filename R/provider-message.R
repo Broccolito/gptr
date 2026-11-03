@@ -195,7 +195,7 @@ msg_block_types = list(
   user = c("text", "image", "context"),
   assistant = c("text", "thinking", "tool_call", "opaque"),
   tool_result = c("text", "image"),
-  operator = "text"
+  operator = c("text", "context")
 )
 
 #' Required string fields of each block type

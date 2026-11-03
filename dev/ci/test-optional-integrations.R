@@ -311,7 +311,9 @@ testthat::test_that("affected process files retain only their named native platf
       "Windows wire log refuses escaping file links, dangling or not"),
     "test-utils-paths.R" =
       "Windows junctions and file links keep control and secret paths guarded")
-  testthat::expect_identical(optional_os_skips$unix, windows_only)
+  testthat::expect_identical(optional_os_skips$unix, c(windows_only, list(
+    "test-cli-codex.R" =
+      "on Windows the hook command runs through PowerShell, logs its start, denies a tool")))
   for (file in names(windows_only)) for (name in windows_only[[file]]) {
     testthat::expect_true(optional_allowed_skip(file, name, FALSE))
     testthat::expect_false(optional_allowed_skip(file, name, TRUE))
@@ -1185,6 +1187,34 @@ testthat::test_that("nested ACL diagnostics remain mandatory on both hosts", {
   }
 })
 
+
+testthat::test_that("Codex hook guards preserve native cases and Linux shell coverage", {
+  file = "test-cli-codex.R"
+  shell = "the hook command in the argv runs through the shell, logs its start, denies a tool"
+  powershell = "on Windows the hook command runs through PowerShell, logs its start, denies a tool"
+  testthat::expect_identical(optional_os_skips$windows[[file]], c(shell, powershell))
+  testthat::expect_identical(optional_os_skips$unix[[file]], powershell)
+  rows = lapply(optional_titles[[file]], record)
+  for (windows in c(FALSE, TRUE)) {
+    guards = if (windows) c(shell, powershell) else powershell
+    guarded = c(rows, if (!windows) list(record(shell)),
+      lapply(guards, record, passed = 0L, skipped = 1L))
+    result = optional_gate(guarded, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_identical(result$mandatory_cases, optional_titles[[file]])
+    testthat::expect_identical(result$platform_guard_cases, guards)
+    for (name in c(shell, powershell)) {
+      testthat::expect_false(optional_allowed_skip("test-cli-claude.R", name, windows))
+    }
+    testthat::expect_error(optional_gate(c(guarded,
+      list(record("unknown Codex hook guard", skipped = 1L))), file, windows), "Skipped")
+    guarded[[1L]]$skipped = 1L
+    testthat::expect_error(optional_gate(guarded, file, windows), "Skipped")
+  }
+  testthat::expect_false(optional_allowed_skip(file, shell, FALSE))
+  testthat::expect_error(optional_gate(c(rows, list(record(shell, skipped = 1L))),
+                                      file, FALSE), "Skipped")
+})
 
 testthat::test_that("fixed Codex control cases remain mandatory without capability guards", {
   file = "test-cli-codex.R"

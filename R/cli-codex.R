@@ -9,6 +9,32 @@
 # read-only, Codex's own tools switched off, gptr's hook in front of every tool, never resumed,
 # and checked before its reply is kept.
 
+#' The installed Codex CLI's raw catalog (no app-server, thread or inference). Older CLIs
+#' without the documented debug command leave the shipped catalog in place.
+#' @noRd
+pcli_codex_models = function() {
+  path = pcli_find("codex")
+  help = pcli_run(path, c("debug", "models", "--help"), timeout = 3)
+  if (!is.null(pcli_run_failure(help)) ||
+      !grepl("model catalog as JSON", help$stdout %||% "", fixed = TRUE)) return(NULL)
+  res = pcli_run(path, c("debug", "models"), timeout = 30)
+  if (!is.null(pcli_run_failure(res))) pcli_catalog_error("codex")
+  obj = tryCatch(json_decode(res$stdout), error = function(e) NULL)
+  if (!is.list(obj) || !is.list(obj$models)) pcli_catalog_error("codex")
+  out = list()
+  for (m in obj$models) {
+    if (!is.list(m) || !identical(m$visibility, "list")) next
+    id = pcli_chr(m$slug)
+    if (is.null(id) || !nzchar(id)) next
+    levels = pcli_model_strings(lapply(m$supported_reasoning_levels,
+                                       function(x) if (is.list(x)) x$effort))
+    out[[length(out) + 1L]] = compact(list(id = id, name = pcli_chr(m$display_name),
+      context = pcli_scalar_num(m$context_window), input = pcli_model_strings(m$input_modalities),
+      reasoning = if (length(levels)) TRUE, thinking_levels = levels))
+  }
+  out
+}
+
 #' A TOML basic string
 #' @noRd
 pcli_toml = function(x) paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x), "\"")
@@ -450,7 +476,8 @@ pcli_codex_build = function(model, context, opts) {
   }
   resume = if (isTRUE(probe$resume) && is.null(role)) state$codex_thread else NULL
   wd = path_norm(getwd())
-  args = pcli_codex_args(pcli_model_id(model), wd, sandbox, state$codex_relay, resume = resume,
+  state$pcli_model_arg = pcli_model_id(model)
+  args = pcli_codex_args(state$pcli_model_arg, wd, sandbox, state$codex_relay, resume = resume,
                          role = role, schema = schema)
   state$cli_api = "cli-codex"
   state$codex_sandbox = sandbox
@@ -758,6 +785,8 @@ pcli_codex_item = function(s, item) {
     # a warning; the bypass flag always adds one
     text = pcli_chr(item[["message"]]) %||% ""
     if (grepl("--dangerously-bypass-hook-trust", text, fixed = TRUE)) s$bypass = TRUE
+    reroute = regmatches(text, regexec("^model rerouted: .+ -> ([^ ]+) \\(.+\\)$", text))[[1L]]
+    if (length(reroute) == 2L) pcli_response_model(s, reroute[[2L]])
   } else if (identical(kind, "reasoning")) {
     text = trimws(pcli_chr(item[["text"]]) %||% "", "right")
     if (nzchar(text)) pcli_text_block(s, text, kind = "thinking")

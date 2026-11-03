@@ -2639,9 +2639,10 @@ test_that("recorded code is never sent as context, in a script or a console bloc
   expect_identical(sent("s_ab12cd", c("n = 1", forged)), list(replay = "text", live = list()))
 })
 
-# What the person's messages (user and operator roles) of request `n` say, one string each
+# What the person's messages and steering relays of request `n` say, one string each
 doc_said = function(fake, n = length(fake_requests(fake))) {
-  msgs = Filter(function(m) m$role %in% c("user", "operator"), fake_requests(fake)[[n]]$messages)
+  msgs = Filter(function(m) identical(m$role, "user") || identical(m$kind, "steer_relay"),
+                 fake_requests(fake)[[n]]$messages)
   vapply(msgs, msg_text, "")
 }
 
@@ -3526,7 +3527,9 @@ test_that("a replayed session keeps the recorded steers and every replayed turn 
   e = doc_e2e_source(f)
   expect_identical(session_data(e$s)$history_source, "store")
   expect_length(fake_requests(x$fake), 5L)
-  expect_length(live(e, 6L), 14L)
+  msgs = live(e, 6L)
+  expect_length(msgs, 15L)
+  expect_identical(msgs[[2L]]$content[[1L]]$kind, "gptr_runtime")
   d = session_data(e$s)
   on_path = vapply(entries_path(d), function(en) en$id, "")
   said = Filter(function(en) en$type %in% c("message", "custom_message"), d$entries)
@@ -3545,7 +3548,8 @@ test_that("a replayed session keeps the recorded steers and every replayed turn 
   expect_identical(session_data(e$s)$history_source, "reconstructed")
   expect_length(fake_requests(x$fake), 6L)
   msgs = live(e, 7L)
-  expect_length(msgs, 14L)
+  expect_length(msgs, 15L)
+  expect_identical(tail(msgs, 1L)[[1L]]$content[[1L]]$kind, "gptr_runtime")
   expect_identical(vapply(msgs[c(4, 7, 12)], function(m) m$origin_text, ""), unname(steers))
 })
 

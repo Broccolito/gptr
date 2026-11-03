@@ -5,7 +5,7 @@
 # Each fixture in dev/bench/tokens/fixtures/*.json scripts one north-star session: its prompts,
 # attached objects, the model's replies (tool calls with recorded results) and model switches.
 # The runner drives gptr's real context assembly: it freezes the prompt, renders the first
-# message and turn blocks, and calls request_build() before every scripted reply, so the counts
+# message and turn blocks, and calls run_build() before every scripted reply, so the counts
 # measure what gptr would send. The volatile <environment> block is pinned by the fixture and the
 # machine's <r_env> section by its stand-in; other texts owned by plans that are not loaded yet
 # come from the stand-ins of tests/testthat/fixtures/bench/prefix-baseline.json (only when no
@@ -118,6 +118,7 @@ bench_case = function(fx, standins, tok) {
                  session = sid)
   }
   prompt_freeze(s, list(interactive = isTRUE(fx$human)))
+  run = run_new(s, list(), NULL)
   target = model_resolve(refs[1])
   frozen = session_data(s)$frozen
   prefix = tok(frozen$tools_json) + tok(frozen$t0) + tok(frozen$t1)
@@ -149,7 +150,7 @@ bench_case = function(fx, standins, tok) {
                            message = msg_user(c(blocks, list(block_text(turn$prompt))),
                                               source = turn$source %||% "pipe")))
     for (st in turn$steps) {
-      req = request_build(s, target)
+      req = run_build(run, target)
       pay = lapply(req$context$messages, bench_message_payload)
       m$requests = m$requests + 1
       m$input_total = m$input_total + prefix + sum(vapply(pay, function(p) tok(p$text), 0)) +

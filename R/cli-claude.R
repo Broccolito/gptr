@@ -11,6 +11,65 @@
 
 # ---- build (Task 5) ----------------------------------------------------------------------------
 
+#' Initialize an empty Claude SDK session and retain only its model catalog; no user message
+#' is sent. Keep stdin open until the response, then retire the supervised child.
+#' @noRd
+pcli_claude_catalog = function(args) {
+  path = pcli_find("claude")
+  p = proc_spawn(path[[1L]], c(as.character(path[-1L]), args), stdin = "|",
+                 env = child_env("cli-claude", set = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1",
+                   CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1", CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")),
+                 wd = path_norm(tempdir()))
+  on.exit({
+    tryCatch(kill_all(p, grace = 0), error = function(e) NULL)
+    proc_release(p)
+  }, add = TRUE)
+  id = "gptr_models"
+  request = list(type = "control_request", request_id = id,
+                 request = list(subtype = "initialize", hooks = NULL, skills = list()))
+  p$write_input(paste0(json_encode(request), "\n"))
+  deadline = Sys.time() + 30
+  bytes = 0
+  repeat {
+    p$poll_io(50L)
+    lines = p$read_output_lines()
+    p$read_error_lines()
+    bytes = bytes + sum(nchar(lines, type = "bytes"))
+    if (bytes > 1024^2) pcli_catalog_error("claude")
+    for (line in lines) {
+      obj = tryCatch(json_decode(line), error = function(e) NULL)
+      if (!is.list(obj)) next
+      response = obj$response
+      if (!is.list(response) || !identical(obj$type, "control_response") ||
+          !identical(response$request_id, id)) next
+      if (!identical(response$subtype, "success") || !is.list(response$response) ||
+          !is.list(response$response$models)) pcli_catalog_error("claude")
+      return(list(models = response$response$models))
+    }
+    if (!p$is_alive() || Sys.time() >= deadline) pcli_catalog_error("claude")
+  }
+}
+
+#' The selectable identifiers and effort levels reported by Claude's initialize response
+#' @noRd
+pcli_claude_models = function() {
+  args = c("-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+            "--system-prompt", "", "--tools", "", "--strict-mcp-config", "--mcp-config",
+            '{"mcpServers":{}}', "--setting-sources", "", "--disable-slash-commands",
+            "--no-session-persistence")
+  obj = pcli_claude_catalog(args)
+  out = list()
+  for (m in obj$models) {
+    if (!is.list(m)) next
+    id = pcli_chr(m$value)
+    if (is.null(id) || !nzchar(id)) next
+    out[[length(out) + 1L]] = compact(list(id = id, name = pcli_chr(m$displayName),
+      reasoning = if (isTRUE(m$supportsEffort) || isTRUE(m$supportsAdaptiveThinking)) TRUE,
+      thinking_levels = pcli_model_strings(m$supportedEffortLevels)))
+  }
+  out
+}
+
 #' The claude argv of architecture 8.3 in its exact order, then the budget flags (IC-65,
 #' IC-66), the documented --bare opt-out when the probe found one, and --resume (never --bare)
 #'
@@ -147,6 +206,7 @@ pcli_claude_build = function(model, context, opts) {
   state$pcli_request_id = context[["request_id"]]
   pcli_track(opts[["session"]], state)
   model_id = pcli_model_id(model)
+  state$pcli_model_arg = model_id
   par = pcli_params(context)
   parts = pcli_split(context[["messages"]] %||% list())
   role = the$coach_role
@@ -326,6 +386,9 @@ pcli_claude_forward = function(ev, s) {
 #' @noRd
 pcli_claude_stream = function(event, s) {
   if (!is.list(event)) return(invisible(NULL))
+  if (identical(event[["type"]], "message_start")) {
+    pcli_response_model(s, event[["message"]][["model"]])
+  }
   if (identical(event[["type"]], "message_start") || is.null(s$inner)) {
     s$map = integer()
     inner_opts = list(emit = function(ev) pcli_claude_forward(ev, s),
@@ -434,7 +497,7 @@ pcli_claude_system = function(obj, s) {
   sid = pcli_sid(obj[["session_id"]])
   if (!is.null(sid)) s$state$claude_session = sid
   model = pcli_chr(obj[["model"]])
-  if (!is.null(model)) s$response_model = model
+  pcli_response_model(s, model)
   src = obj[["apiKeySource"]]
   if (is.null(src) || identical(src, "none")) return(invisible(NULL))
   why = paste0("The claude CLI reported apiKeySource ", src, ": this turn would be billed to ",

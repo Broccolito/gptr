@@ -2,6 +2,7 @@
   "stop_reason": "stop",
   "raw_stop_reason": "completed",
   "response_id": "resp_b1",
+  "response_model": "fixture-1",
   "content": [
     {
       "type": "thinking",

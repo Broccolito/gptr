@@ -2,6 +2,7 @@
   "stop_reason": "error",
   "error_message": "server_error: The model failed to generate a response.",
   "response_id": "resp_f1",
+  "response_model": "fixture-1",
   "content": [
     {
       "type": "text",

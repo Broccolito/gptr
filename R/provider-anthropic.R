@@ -748,7 +748,8 @@ anthropic_normaliser = function(model, opts) {
       seen$start = TRUE
       m = obj$message
       st$response_id = m$id
-      if (!is.null(m$model) && !identical(m$model, model$id)) st$response_model = m$model
+      rmodel = m[["model"]]
+      if (rlang::is_string(rmodel) && nzchar(rmodel)) st$response_model = rmodel
       anthropic_usage(st, m$usage)
       return(FALSE)
     }

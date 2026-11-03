@@ -300,7 +300,8 @@ test_that(oracle_title(loop_recs, "L01"), {
   local_fake_provider(list("Hello from gptr!"))
   s = test_session()
   run_text(s, "Hi")
-  expect_identical(roles(s), c("user", "assistant"))
+  expect_identical(roles(s), c("user", "operator", "assistant"))
+  expect_identical(s$messages[[2L]]$content[[1L]]$kind, "gptr_runtime")
 })
 
 test_that(oracle_title(loop_recs, "L02"), {
@@ -416,8 +417,9 @@ test_that(oracle_title(loop_recs, "L10"), {
                                   "done"))
   run_text(test_session(), "go")
   req = fake_requests(fake)[[2L]]
-  expect_identical(req_roles(req), c("user", "assistant", rep("tool_result", 4L)))
-  expect_identical(vapply(req$messages[3:6], msg_text, ""), c("2", "3", "4", "5"))
+  expect_identical(req_roles(req), c("user", "operator", "assistant", rep("tool_result", 4L)))
+  results = Filter(function(m) identical(m$role, "tool_result"), req$messages)
+  expect_identical(vapply(results, msg_text, ""), c("2", "3", "4", "5"))
 })
 
 test_that(oracle_title(loop_recs, "L11"), {
@@ -428,8 +430,8 @@ test_that(oracle_title(loop_recs, "L11"), {
   local_fake_provider(list(fake_tool("slow"), "ack steers", "summary"))
   box$s = test_session()
   run_text(box$s, "go")
-  expect_identical(roles(box$s), c("user", "assistant", "tool_result", "operator", "operator",
-                                   "assistant", "user", "assistant"))
+  expect_identical(roles(box$s), c("user", "operator", "assistant", "tool_result", "operator",
+                                   "operator", "assistant", "user", "assistant"))
 })
 
 test_that(oracle_title(loop_recs, "L12"), {
@@ -440,11 +442,13 @@ test_that(oracle_title(loop_recs, "L12"), {
   local_fake_provider(list(fake_tool("slow"), "ack steers", "summary"))
   box$s = test_session()
   run_text(box$s, "go")
-  txt = vapply(box$s$messages, msg_text, "")
-  expect_match(txt[[4L]], "STEER-1", fixed = TRUE)
-  expect_no_match(txt[[4L]], "STEER-2", fixed = TRUE)
-  expect_match(txt[[5L]], "STEER-2", fixed = TRUE)
-  expect_match(txt[[7L]], "FOLLOWUP", fixed = TRUE)
+  steers = Filter(function(m) identical(m$kind, "steer_relay"), box$s$messages)
+  expect_length(steers, 2L)
+  expect_match(msg_text(steers[[1L]]), "STEER-1", fixed = TRUE)
+  expect_no_match(msg_text(steers[[1L]]), "STEER-2", fixed = TRUE)
+  expect_match(msg_text(steers[[2L]]), "STEER-2", fixed = TRUE)
+  users = Filter(function(m) identical(m$role, "user"), box$s$messages)
+  expect_match(msg_text(users[[2L]]), "FOLLOWUP", fixed = TRUE)
 })
 
 test_that(oracle_title(loop_recs, "L13"), {

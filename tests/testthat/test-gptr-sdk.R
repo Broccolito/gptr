@@ -158,7 +158,8 @@ test_that("a blank steer is refused by gptr_steer() and by a pipe into a running
   roles = vapply(s$messages, function(m) m$role, "")
   expect_identical(msg_text(s$messages[[which(roles == "tool_result")]]),
                    "gptr_error_invalid_argument 0")
-  expect_false("operator" %in% roles)
+  operators = Filter(function(m) identical(m$role, "operator"), s$messages)
+  expect_identical(vapply(operators, function(m) m$content[[1L]]$kind, ""), "gptr_runtime")
   expect_identical(s$text, "done")
 })
 

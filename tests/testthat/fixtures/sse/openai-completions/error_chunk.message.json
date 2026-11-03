@@ -2,6 +2,7 @@
   "stop_reason": "error",
   "error_message": "Upstream provider failed",
   "response_id": "chatcmpl-1",
+  "response_model": "deepseek-r1",
   "content": [
     {
       "type": "text",

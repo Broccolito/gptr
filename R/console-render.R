@@ -1015,8 +1015,10 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
 #' (console_context_left()); the status and reason when it did not end idle, the reason's line
 #' breaks one space (curl's errors take two lines). A term whose value is unknown (IC-74) is left
 #' out, as is a cost that is not above 0 (a free or local model)
+#' CLI terms label selection/reporting; native terms show both when reported identity differs.
 #' @noRd
-console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL) {
+console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL,
+                               response_model = NULL) {
   word = if (identical(status, "idle")) "done" else console_escape(status %||% "?", FALSE)
   if (!identical(status, "idle") && rlang::is_string(reason) && nzchar(reason)) {
     reason = gsub("\\s*(\r\n|\r|\n)\\s*", " ", reason, perl = TRUE)
@@ -1028,6 +1030,20 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL)
   if (identical(model, "default")) {
     model = tryCatch(console_cli_default(paste0(usage$provider[[n]], "/default")),
                      error = function(e) NULL) %||% model
+  }
+  reported = if (rlang::is_string(response_model) && nzchar(response_model)) {
+    console_escape(substr(redact(response_model, "context"), 1L, 200L), FALSE)
+  }
+  if (n && rlang::is_string(model) && (identical(usage$route[[n]], "plan-cli") ||
+      (!is.null(reported) && !identical(model, response_model)))) {
+    selected = console_escape(substr(redact(model, "context"), 1L, 200L), FALSE)
+    model = if (is.null(reported)) {
+      paste("selected", selected)
+    } else if (identical(model, response_model)) {
+      paste("reported", reported)
+    } else {
+      paste0("selected ", selected, "; reported ", reported)
+    }
   }
   tokens = format_count(unlist(usage[intersect(cols, names(usage))]))
   cost = function(x) if (sum(x, na.rm = TRUE) > 0) format_cost(x)
@@ -1378,7 +1394,25 @@ console_on_agent_end = function(event, ctx) {
   d = session_data(rec$session)
   u = d$usage
   kids = u$cost[seq_len(nrow(u)) > rec$u0 & !(u$session %in% d$id) & !duplicated(u$request_id)]
-  terms = console_status_line(event$status, event$reason, event$usage, kids)
+  reported = NULL
+  n = NROW(event$usage)
+  usage = event$usage
+  if (n) {
+    id = event$usage$request_id[[n]]
+    state = session_live(rec$session)$adapter
+    if (identical(event$usage$route[[n]], "plan-cli") &&
+        identical(state$pcli_request_id, id) && rlang::is_string(state$pcli_model_arg)) {
+      usage$model[[n]] = state$pcli_model_arg
+    }
+    for (e in rev(entries_path(d))) {
+      m = e$message
+      if (identical(m$role, "assistant") && identical(m$request_id, id)) {
+        reported = m$response_model
+        break
+      }
+    }
+  }
+  terms = console_status_line(event$status, event$reason, usage, kids, reported)
   sym = console_style()
   v = verbosity()
   if (v == 1L) {

@@ -505,7 +505,8 @@ test_that("returns = through the run loop on Responses: instruction and validati
   session_run(s, msg_user("How many rows?"), list(returns = count_schema()))
   expect_identical(s$value$n, 32L)
   expect_identical(vapply(s$messages, function(m) m$role, ""),
-                   c("user", "assistant", "tool_result", "assistant"))
+                   c("user", "operator", "assistant", "tool_result", "assistant"))
+  expect_identical(s$messages[[2L]]$content[[1L]]$kind, "gptr_runtime")
   expect_match(wire$requests[[2L]]$url, "/responses$")
   # the run's returns schema reaches the wire as the closing developer instruction (IC-71)
   first = json_decode(wire$requests[[1L]]$body)

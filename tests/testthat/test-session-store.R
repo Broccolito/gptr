@@ -140,6 +140,36 @@ test_that("operator, model_change, compaction and custom entries have their JSON
   expect_identical(x[[4L]]$data$to, "auto")
 })
 
+test_that("operator context and its canonical timestamp survive file replay", {
+  local_store()
+  s = test_session()
+  msg = msg_operator("reminder", "", timestamp = 1)
+  msg$content = list(block_context("gptr_runtime", "selected route",
+                                  attrs = list(provider = "fake"), anchor = TRUE),
+                     block_text("plain"))
+  session_append(s, entry_message(msg))
+  entry = session_data(s)$entries[[1L]]
+  expect_true(all(vapply(entry$message$content, block_ok, NA, msg_block_types[["operator"]])))
+  expect_identical(entry$message$timestamp, iso_ms(entry$timestamp))
+  expect_identical(msg$timestamp, 1)
+  restored = store_read(s$file)$entries[[1L]]$message
+  wire = function(m) json_encode(msg_to_json(m))
+  expect_identical(wire(restored), wire(entry$message))
+  expect_identical(restored$content[[1L]], msg$content[[1L]])
+  expect_identical(restored$content[[2L]], block_text("plain"))
+})
+
+test_that("legacy plain operator entries retain their JSON shape", {
+  old = json_decode(paste0('{"type":"custom_message","id":"1234abcd","parentId":null,',
+    '"timestamp":"1970-01-01T00:00:00.004Z","customType":"gptr.operator",',
+    '"content":[{"type":"text","text":"old"}],"display":false,',
+    '"details":{"kind":"steer_relay","originText":"old"}}'))
+  entry = entry_from_json(old)
+  expect_identical(entry$message,
+                   msg_operator("steer_relay", "old", origin_text = "old", timestamp = 4))
+  expect_identical(entry_to_json(entry), old)
+})
+
 test_that("opening a file whose last byte is not LF appends LF and a gptr.recovered entry", {
   s = written_session()
   d = session_data(s)
@@ -273,7 +303,8 @@ test_that(oracle_title(store_recs, "S33"), {
   expect_true(any(vapply(first$content, function(b) {
     identical(b$type, "context") && identical(b$kind, "checkpoint")
   }, NA)))
-  expect_identical(req_roles(req), c("user", "user", "assistant", "tool_result"))
+  expect_identical(req_roles(req), c("user", "user", "operator", "assistant", "tool_result"))
+  expect_identical(req$messages[[3L]]$content[[1L]]$kind, "gptr_runtime")
 })
 
 test_that(oracle_title(store_recs, "S35"), {
@@ -455,7 +486,8 @@ test_that("a fork that copies no gptr.frozen entry freezes its own, the first of
   expect_true(length(session_data(f0)$frozen) > 0L)
   entries = lapply(readLines(f0$file, encoding = "UTF-8")[-1L], json_decode)
   types = vapply(entries, function(e) e$customType %||% e$type, "")
-  expect_identical(types, c("gptr.frozen", "message", "message"))
+  expect_identical(types, c("gptr.frozen", "message", "gptr.operator", "message"))
+  expect_identical(entries[[3L]]$content[[1L]]$gptr$context, "gptr_runtime")
   expect_false(identical(entries[[1L]]$id, d$entries[[1L]]$id))
 })
 
@@ -476,7 +508,8 @@ test_that("a fork of a source still in its first turn freezes its own prompt", {
   expect_identical(f$text, "branch answer")
   entries = lapply(readLines(f$file, encoding = "UTF-8")[-1L], json_decode)
   types = vapply(entries, function(e) e$customType %||% e$type, "")
-  expect_identical(types, c("gptr.frozen", "message", "message"))
+  expect_identical(types, c("gptr.frozen", "message", "gptr.operator", "message"))
+  expect_identical(entries[[3L]]$content[[1L]]$gptr$context, "gptr_runtime")
 })
 
 test_that("forkOf.entry is the last entry the fork copied when a label trails the cut", {

@@ -180,7 +180,7 @@ google_normaliser = function(model, opts) {
     rid = responses_str(ch[["responseId"]])
     if (is.null(st$response_id) && nzchar(rid)) st$response_id = rid
     mv = responses_str(ch[["modelVersion"]])
-    if (nzchar(mv) && !identical(mv, model$id)) st$response_model = mv
+    if (nzchar(mv)) st$response_model = mv
     google_usage(st, ch[["usageMetadata"]])
     cands = ch[["candidates"]]
     cand = if (is.list(cands) && length(cands)) cands[[1L]]

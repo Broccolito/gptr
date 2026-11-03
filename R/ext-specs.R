@@ -1030,7 +1030,10 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #'   `api = "bedrock-converse"`, `region`: the AWS region requests are signed for).
 #' @param type `"chat"`, `"classifier"` (System 1) or `"cli"`.
 #' @param headers Named list of non-secret header strings.
-#' @param discover `function()` listing models on request, or `NULL`.
+#' @param discover `function()` returning a data frame with `id`, a list of sparse model
+#'   records (at least `id`), or `NULL` when unsupported. Runs on explicit refresh or before
+#'   first use after consent, cached for five minutes. An empty listing is a successful result;
+#'   an error keeps prior catalog entries. Report only actual capabilities and limits.
 #' @param status `function()` reporting cached provider status, or `NULL`.
 #' @param aliases Alternative names of the provider.
 #' @param local Endpoint locality hint permitting unknown model ids. Resolved model locality is

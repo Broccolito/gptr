@@ -559,6 +559,10 @@ s1_guards = function(target, replay = NULL) {
   p = target$provider
   replay_guard(p %||% target$model, "System 1 call", replay_mode(replay))
   egress_check(target$model[["provider"]], p)
+  if (isTRUE(target$by_ref) && !s1_ollama_native(target$model)) {
+    s1_prepare(target$ref, safety = target[["safety"]], replay = replay)
+  }
+  invisible(TRUE)
 }
 
 # ---- results ----------------------------------------------------------------------------------

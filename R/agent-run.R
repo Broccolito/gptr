@@ -485,11 +485,9 @@ run_model_ready = function(run, ref) {
   egress_check(rec$provider, pr, run$opts$safety %||% list(),
                 context = context_mode(call$args$opts))
   replay_guard(pr %||% rec, mode = replay_mode(call$args$replay))
-  if (!catalog_ollama_route(rec, provider_get(rec$provider)) ||
-      !is.null(registry_model_spec(ref, sid))) {
-    return(rec)
-  }
-  model_prepare(ref, safety = stream_safety(NULL, run))
+  if (!is.null(registry_model_spec(ref, sid))) return(rec)
+  provider_ready(rec, pr, safety = stream_safety(NULL, run), prepare = TRUE,
+                   replay = call$args$replay)
 }
 
 #' Resolve a model reference for a session: P05's catalog, else a provider spec registered for
@@ -625,6 +623,25 @@ path_model_ref = function(path) {
 #' @noRd
 run_build = function(run, target) {
   s = run$shell
+  d = session_data(s)
+  messages = project_messages(d$entries, d$leaf, target)
+  block = run_identity(run, target, messages)
+  previous = NULL
+  for (m in rev(messages)) {
+    if (!identical(m$role, "operator")) next
+    for (b in m$content) {
+      if (identical(b$kind, "gptr_runtime")) {
+        previous = b$text
+        break
+      }
+    }
+    if (!is.null(previous)) break
+  }
+  if (!identical(previous, block$text)) {
+    note = msg_operator("reminder", block$text)
+    note$content = list(block)
+    run_append_message(run, note)
+  }
   if (ext_service_has("request.build")) {
     req = ext_service_get("request.build")(s, target, NULL)
     req$context$messages = images_elide(s, req$context$messages, target)
@@ -633,8 +650,42 @@ run_build = function(run, target) {
   }
   req$context$request_id = req$context$request_id %||% id_new("q", 12L)
   req$context$session_id = req$context$session_id %||% session_data(s)$id
-  req$tokens_est = req$tokens_est %||% 0
+  est = prompt_request_estimate(req$context, target$api, req$context$session_id)
+  req$tokens_est = est$total
+  req$components = est$components
   req
+}
+
+#' Small current-request identity context: configuration and reported metadata have separate
+#' labels. Changes append an operator entry so the request remains an append-only history.
+#' @noRd
+run_identity = function(run, target, messages) {
+  quote = function(x) encodeString(substr(x %||% "unknown", 1L, 200L), quote = '"')
+  reported = NULL
+  for (m in rev(messages)) {
+    if (identical(m$role, "assistant") && identical(m$provider, target$provider) &&
+        identical(m$api, target$api) && identical(m$model, target$id) && !msg_failed(m)) {
+      if (rlang::is_string(m$response_model) && nzchar(m$response_model)) {
+        reported = m$response_model
+      }
+      break
+    }
+  }
+  cli = target$api %in% c("cli-claude", "cli-codex")
+  requested = session_data(run$shell)$model
+  route = if (identical(requested, target$ref)) {
+    paste0("requested/resolved ", quote(target$ref))
+  } else {
+    paste0("requested ", quote(requested), "; resolved ", quote(target$ref))
+  }
+  body = paste0("Current request in gptr/Peter (R): ", route, " via ", quote(target$api), ".",
+    if (cli) paste0(" CLI model argument: ", quote(pcli_model_id(target)), "."),
+    " Prior completed response_model: ", if (is.null(reported)) "not reported" else quote(reported),
+    ". Current response metadata may arrive after generation; ",
+    "console footers show it when supplied. Configuration does not verify backend identity. ",
+    "Use gptr::gptr_models()/gptr::gptr_providers() for R-session routes; ",
+    "CLI helper/delegate choices are separate.")
+  block_context("gptr_runtime", body)
 }
 
 #' The fallback request before P07 is loaded: the projected messages after image elision (so the

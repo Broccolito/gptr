@@ -839,7 +839,9 @@ test_that("returns = through the run loop: a typed value and the tool calls kept
   session_run(s, msg_user("How many rows?"), list(returns = count_schema()))
   expect_identical(s$value$n, 32L)
   expect_identical(vapply(s$messages, function(m) m$role, ""),
-                   c("user", "assistant", "tool_result", "assistant"))
+                   c("user", "operator", "assistant", "tool_result", "operator", "assistant"))
+  expect_identical(s$messages[[2L]]$content[[1L]]$kind, "gptr_runtime")
+  expect_identical(s$messages[[5L]]$content[[1L]]$kind, "gptr_runtime")
   expect_length(wire$requests, 2L)
   expect_match(wire$requests[[1L]]$url, "/v1/messages$")
   # the run's returns schema reaches the wire through P07's request context (IC-71)

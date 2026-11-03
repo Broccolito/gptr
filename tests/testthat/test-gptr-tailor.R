@@ -850,7 +850,7 @@ test_that("a refusal stops the reminders, but a coaching denial does not (08 3.2
   fake = local_fake_provider(list(fake_tool("r", code = "fit = stepAIC(m)"), "Done.", "Checked.",
                                   "more"))
   s = h("a", model = fake, envir = new.env())
-  expect_match(msg_text(s$messages[[3L]]), "denied by the coaching rule", fixed = TRUE)
+  expect_match(last_result(s), "denied by the coaching rule", fixed = TRUE)
   expect_length(fake_requests(fake), 3L)
   # your own rule's denial: no review
   mine = gptr_tailor(peter, mode = "auto", rules = rules, coaching = list(review = review))

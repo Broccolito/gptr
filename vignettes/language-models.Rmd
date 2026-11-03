@@ -40,7 +40,12 @@ providers; examples that connect to real services are shown without running them
 `gptr_providers()` lists configured routes and credential sources without making a request.
 `gptr_models()` searches the catalog already available on disk. Neither listing proves that an
 account can make a model request. `check = TRUE` probes provider reachability and CLI versions;
-`refresh = TRUE` updates a catalog or asks a local server which models it has installed.
+`gptr_models(provider = "openai", refresh = TRUE)` asks that provider for its advertised models
+after consent, using the configured credential. Without a provider, refresh updates the offline
+models.dev catalog. The `availability` and `checked_at` columns describe the last provider listing;
+advertisement does not verify inference or billing access. A failed refresh keeps prior models.
+Supported providers are also inventoried before real use, with a short process cache; native
+Ollama preparation continues to verify the selected installed model. See `?gptr_models` for limits.
 
 `gptr_providers(check_login = TRUE)` adds CLI-reported `signed in`, `not signed in` or `unknown`
 states by running supported local status commands. It does not make a model request or verify
@@ -182,6 +187,11 @@ Install and sign in to the `claude` or `codex` tool outside gptr, following that
 The executable must be on `PATH`, or you can give its path with the `gptr.cli_path` option.
 Then choose `model = "claude-cli"` (alias `claude_code`) or `model = "codex"` (alias
 `codex-cli`); `/model` in the console accepts the same names.
+
+Refresh a CLI's advertised model choices with
+`gptr_models(provider = "codex", refresh = TRUE)`; use `"claude-cli"` for Claude Code.
+CLI inventories may contain cached or bundled choices and do not verify account access;
+see `?gptr_models` for listing limits.
 
 
 ``` r

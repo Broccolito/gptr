@@ -205,6 +205,13 @@ Independent children: Shiny artifact apps (own event loop, parent-PID watchdog).
 
 ### 2.2 Allowed dependencies
 
+Provider inventory is a narrow cross-layer exception: L1 `catalog_inventory()` calls P08's
+`egress_check()`, `egress_safety()`, `replay_mode()` and `replay_guard()` before provider contact,
+retaining the call's explicit replay override. This protects
+explicit `gptr_models(provider = ..., refresh = TRUE)` as well as consented runtime preparation;
+ordinary catalog listing and model resolution remain offline (interface contract §6.2, §7.5).
+The console may read `entries_path()` to match the reported model to the last request in its footer.
+
 | Layer (areas) | May call | Talks upward only through |
 |---|---|---|
 | L0 (`utils`, `json`, `ext`, `http`, `proc`, `auth`) | base R, Imports, L0 | return values; callbacks registered by upper layers |
