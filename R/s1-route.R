@@ -768,24 +768,17 @@ s1_session = function(session = NULL) {
   if (inherits(run$shell, "gptr_session")) run$shell else NULL
 }
 
-#' The session a System 1 call is charged to: the piped session, else the running session
+#' Append the process System 1 accounting row of a call no session owns (contract 4.3 and 7.5):
+#' one row per call that made requests; token counts the service did not report stay unknown
+#' (NA, IC-74)
 #' @noRd
-s1_session_id = function(session) {
-  if (!is.null(session)) return(session_data(session)$id)
-  run = run_current()
-  if (is.null(run) || is.null(run$session)) NA_character_ else as.character(run$session)
-}
-
-#' Append the process System 1 accounting row (contract 4.3 and 7.5): one row per call that
-#' made requests; token counts the service did not report stay unknown (NA, IC-74)
-#' @noRd
-s1_log_usage = function(target, res, session, started) {
+s1_log_usage = function(target, res, started) {
   route = if (identical(target$engine, "emulated:structured")) "emulated" else "system-one"
   rids = res[["request_ids"]]
   rid = if (length(rids)) rids[1L] else NULL
   u = res[["usage"]]
-  s1_usage_log(target$model, route, u[["input"]], u[["output"]], rid, s1_session_id(session),
-               started, max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))))
+  s1_usage_log(target$model, route, u[["input"]], u[["output"]], rid, NA_character_, started,
+               max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))))
   invisible(NULL)
 }
 
@@ -977,7 +970,7 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
       answers[i] = list(got[["answer"]])
     }
     version = res$model_version %||% version
-    if (is.null(session)) s1_log_usage(target, res, session, started)
+    if (is.null(session)) s1_log_usage(target, res, started)
   }
   list(answers = answers, conditions = conditions, cached = cached, version = version, res = res,
        identity = identity)
