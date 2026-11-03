@@ -109,15 +109,15 @@ test_that("RStudio's console offers the pause menu; its s steers the run (steeri
   out = notices(with_interrupt_policy(function() run_wait(run), list(run), mode = "repl"))
   # one steer, from the menu; the tool resumed and the run went on to its end
   expect_identical(sources, "pause_menu")
-  expect_identical(log$prompts, rep(paste0(person, " "), 2L))
+  # the key under the menu's question, the text at its receipt's word (D-301)
+  expect_identical(log$prompts, c(paste0("  ", person, " "), "steer> "))
   expect_identical(run$status, "idle")
   msgs = fake_requests(fake)[[2L]]$messages
   expect_identical(msg_text(msgs[[length(msgs)]]),
                    "The user sent this message while you were working: use mpg")
-  # delivered as the person's line at the boundary, right before the next request's output
-  shown = which(out == paste(person, "use mpg"))
-  expect_length(shown, 1L)
-  expect_identical(out[shown + 1L], "ack")
+  # read at its receipt's word, the line read is the receipt: nothing is written again for it,
+  # when it is sent or at the boundary
+  expect_false(any(grepl("use mpg", out, fixed = TRUE)))
 })
 
 test_that("a block pasted at the pause menu's steer question is one steer (review round 1)", {
@@ -247,16 +247,16 @@ test_that("the pause menu is a console question: its keys under it, read at the 
     out = notices(with_interrupt_policy(function() fake_interrupt(), runs, mode = mode))
     list(out = out, prompts = log$prompts)
   }
-  # a blank row, `? Paused` and under its text the keys as an approval's, read at the person's
-  # chevron at column 0
+  # a blank row, `? Paused` and under its text the keys as an approval's, read at the answer's
+  # chevron under the question (D-301)
   keys = "    s steer - f follow-up - c continue - a abort - b background"
   m = menu()
   expect_identical(m$out, c("", "  ? Paused", keys))
-  expect_identical(m$prompts, ">> ")
+  expect_identical(m$prompts, "  >> ")
   testthat::local_reproducible_output(width = 80, unicode = TRUE)
   m = menu()
   expect_identical(m$out[[3L]], gsub(" - ", " \u00b7 ", keys, fixed = TRUE))
-  expect_identical(m$prompts, "\u203a ")
+  expect_identical(m$prompts, "  \u203a ")
   # at 60 columns the keys wrap between the options, a row never ending in the separator
   testthat::local_reproducible_output(width = 60, unicode = FALSE)
   expect_identical(menu()$out[-1L], c("  ? Paused",
@@ -341,18 +341,46 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
   texts = vapply(q$follow_up, function(i) i$text, "")
   expect_true("then plot it" %in% texts)
   expect_true(any(grepl("s steer - f follow-up - c continue - a abort", err, fixed = TRUE)))
-  # [s] and [f] read their text at the chevron of their own question, whose queue line leaves the
-  # text out, as it shows right above it (review)
-  expect_identical(log$prompts, rep(">> ", 4L))
-  sym = console_style()
-  steer = which(err == "  ? Steer")
-  follow = which(err == "  ? Follow-up")
-  expect_length(c(steer, follow), 2L)
-  expect_identical(err[steer + 1L], paste0(sym$queued, " steer"))
-  expect_identical(err[follow + 1L], paste0(sym$queued, " follow-up"))
-  expect_false(any(grepl("use only mpg", err, fixed = TRUE)))
+  # [s] and [f] read their text at their receipt's word, so the line read is the receipt, never
+  # written again, and no question title stands above it (D-301)
+  expect_identical(log$prompts, c("  >> ", "steer> ", "  >> ", "next> "))
+  expect_false(any(err %in% c("  ? Steer", "  ? Follow-up")))
+  expect_false(any(grepl("use only mpg|then plot it", err)))
   expect_false(any(grepl("[gptr] steering", err, fixed = TRUE) |
                      grepl("follow-up queued", err, fixed = TRUE)))
+})
+
+test_that("on a CLI route the pause menu's steer says it waits for the CLI's answer (P30 review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  live = session_live(s)
+  live$run = list(model = list(type = "cli"))
+  withr::defer(assign("run", NULL, envir = live))
+  local_menu_answers(c("s", "use only mpg"))
+  err = notices(with_interrupt_policy(function() {
+    fake_interrupt()
+    "done"
+  }, list(run), mode = "call"))
+  # under the line read at `steer> `, which is its receipt, the note alone
+  expect_identical(sum(err == paste0(strrep(" ", 7L), "(after the CLI's answer)")), 1L)
+  expect_false(any(grepl("use only mpg", err, fixed = TRUE)))
+})
+
+test_that("!code read at the pause menu's `steer> ` says it runs after the answer (P30 review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  rd = new.env(parent = emptyenv())
+  rd$typed = character()
+  local_mocked_bindings(console_repl_prompt = function() list(reader = rd))
+  local_menu_answers(c("s", "!ls"))
+  err = notices(with_interrupt_policy(function() {
+    fake_interrupt()
+    "done"
+  }, list(run), mode = "call"))
+  # the next prompt, as at the composer; one receipt, the note saying what `steer> ` did not
+  expect_identical(rd$typed, "!ls")
+  expect_identical(sum(err == paste0(strrep(" ", 7L), "(runs after this answer)")), 1L)
+  expect_false(any(grepl("!ls", err, fixed = TRUE)))
 })
 
 test_that("the pause menu leaves the answer's held row to continue after it (visual review)", {
@@ -373,22 +401,21 @@ test_that("the pause menu leaves the answer's held row to continue after it (vis
   expect_true(which(out == "  ? Paused") < length(out))
 })
 
-test_that("in the console margin the menu's rows are an approval's, its prompt at column 0", {
+test_that("in the console margin the menu's rows are an approval's, its prompt under them", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   log = local_menu_answers(c("s", "use only mpg"))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
-  # the menu starts on a line of its own (a terminal may have echoed ^C); its [s] asks for the text
-  # under a title, and the queue line is right under that, as under any question
+  # the menu starts on a line of its own (a terminal may have echoed ^C); its [s] reads the text at
+  # `steer> `, the receipt's word
   expect_identical(err, c("", "  ? Paused",
-                          "    s steer - f follow-up - c continue - a abort - b background",
-                          "  ? Steer", "-> steer"))
-  expect_identical(log$prompts, c(">> ", ">> "))
+                          "    s steer - f follow-up - c continue - a abort - b background"))
+  expect_identical(log$prompts, c("  >> ", "steer> "))
 })
 
-test_that("the pause menu and its text question say a T console's draft is kept (review)", {
+test_that("the pause menu says once that a T console's draft is kept (review)", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   log = local_menu_answers(c("s", "use only mpg"))
@@ -400,10 +427,12 @@ test_that("the pause menu and its text question say a T console's draft is kept 
   the$tty = list(keys = TRUE)
   withr::defer(assign("tty", tty, envir = the))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  # once: the [s] text right after it reads at `steer> ` (D-301)
   kept = "    -> draft kept, back after your answer - and colour by gear"
-  expect_identical(err[2:6], c("  ? Paused",
+  expect_identical(err[2:4], c("  ? Paused",
                                "    s steer - f follow-up - c continue - a abort - b background",
-                               kept, "  ? Steer", kept))
+                               kept))
+  expect_identical(sum(err == kept), 1L)
 })
 
 test_that("the output of resumed code and its result stay one block below the menu (review)", {
@@ -532,11 +561,11 @@ test_that("keys read with Ctrl-C answer the pause menu and its text question (st
     list(x = x, out = out, rest = rd$after_interrupt)
   }
   sym = console_style()
-  # an answer is echoed at the person's chevron, as readline leaves it
-  expect_identical(ahead("s\r"), list(x = "s", out = paste0(sym$person, " s"), rest = ""))
+  # an answer is echoed at the answer's chevron under the question, as readline leaves it
+  answer = paste0("  ", sym$person, " s")
+  expect_identical(ahead("s\r"), list(x = "s", out = answer, rest = ""))
   # a line that is no key is kept in the history, never sent; the key after it answers
-  expect_identical(ahead("foo\rs\r"),
-                   list(x = "s", out = c(kept_line("foo"), paste0(sym$person, " s")), rest = ""))
+  expect_identical(ahead("foo\rs\r"), list(x = "s", out = c(kept_line("foo"), answer), rest = ""))
   # the lines after the answer wait for the next question; [s]'s text question takes any line
   a = ahead("s\ruse the median\r")
   expect_identical(a[c("x", "rest")], list(x = "s", rest = "use the median\n"))
@@ -561,8 +590,8 @@ test_that("a line begun with Ctrl-C begins the answer the question reads (review
   expect_identical(console_ask(function(x) x %in% c("", "s", "c")), "s")
   # `use the med` read with the Ctrl-C and `ian` typed later steer `use the median`
   rd$after_interrupt = "use the med"
-  expect_identical(console_ask(function(x) TRUE), "use the median")
-  expect_identical(rl$prompts, paste0(sym$person, c(" s", " use the med")))
+  expect_identical(console_ask(function(x) TRUE, "steer> "), "use the median")
+  expect_identical(rl$prompts, c(paste0("  ", sym$person, " s"), "steer> use the med"))
   expect_identical(rd$after_interrupt, "")
 })
 
@@ -612,7 +641,7 @@ test_that("nested policies show one menu and the inner runs join the outer one",
   })
   expect_null(res)
   expect_identical(box$seen, c("u0000run1", "u0000run2"))
-  expect_identical(log$prompts, ">> ")
+  expect_identical(log$prompts, "  >> ")
   expect_setequal(aborted$aborted, c("u0000run1", "u0000run2"))
 })
 
@@ -863,7 +892,7 @@ test_that("a [b]ackground refusal is a notice and the menu asks again", {
   expect_identical(res, "kept running")
   expect_true(any(startsWith(err, "  cannot run in the background - Background sessions need")))
   expect_false(any(grepl("[gptr]", err, fixed = TRUE)))
-  expect_identical(log$prompts, c(">> ", ">> "))
+  expect_identical(log$prompts, c("  >> ", "  >> "))
 })
 
 test_that("the policy is the console.interrupt_policy service of builtin:console", {

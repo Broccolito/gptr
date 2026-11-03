@@ -232,13 +232,16 @@ console_reader = function(stdin = FALSE, echo = stdin) {
 #' shows, below 256 colours (`NO_COLOR` too), nor on the Linux console. Keys typed meanwhile are
 #' the reader `rd`'s, each line read as the composer reads it (console_line_text()): each line they
 #' end that is not blank is a next prompt of its own, as readline would have read it, the rest a
-#' draft at the prompt (console_idle()). Asked after the first-use setup, whose menu reads first
+#' draft at the prompt (console_idle()); what the terminal echoed of them before the probe turned
+#' the echo off is erased first (tty_echo_erase(), its cursor report asked with the query). Asked
+#' after the first-use setup, whose menu reads first
 #' @noRd
 repl_background = function(rd) {
   if (cli::num_ansi_colors() < 256L || identical(Sys.getenv("TERM"), "linux")) {
     return(invisible(NULL))
   }
-  got = tty_query("\033]11;?\033\\\033[c")
+  got = tty_query("\033]11;?\033\\\033[6n\033[c")
+  console_cat(tty_echo_erase(got))
   bg = background_reply(got)
   if (!is.na(bg)) the$background = bg
   lines = console_typed_split(tty_unreply(got))
@@ -249,6 +252,28 @@ repl_background = function(rd) {
   draft = if (part) typed[[length(typed)]] else ""
   if (nzchar(draft)) rd$compose = list(draft = draft)
   invisible(NULL)
+}
+
+#' The bytes that erase what the terminal echoed of keys typed before tty_query()'s answer `got`,
+#' the text before its cursor report (`ESC [ row ; col R`): at peter()'s start the echo is on until
+#' the probe turns it off, and the banner was drawn after the echo (P30 follow-up). The rows the
+#' text took from column 1, at `width`, its edit keys applied (console_line_text()), are left and
+#' cleared (`ESC [ <n> A`, `ESC [ J`) where its last row's width fits the reported column, else the
+#' cursor's row alone; "" where nothing was typed or no report came
+#' @noRd
+tty_echo_erase = function(got, width = cli::console_width()) {
+  at = regexpr("\033\\[[0-9]+;[0-9]+R", got)
+  if (at < 0L) return("")
+  echoed = tty_unreply(substr(got, 1L, at - 1L))
+  if (!nzchar(echoed)) return("")
+  col = as.integer(sub(".*;([0-9]+)R$", "\\1", regmatches(got, at)))
+  lines = strsplit(paste0(echoed, " "), "\r\n|\r|\n", perl = TRUE)[[1L]]
+  lines[[length(lines)]] = sub(" $", "", lines[[length(lines)]])
+  w = cli::ansi_nchar(vapply(lines, console_line_text, ""), type = "width")
+  n = length(w)
+  up = sum(pmax(1L, ceiling(w[-n] / width))) + w[[n]] %/% width
+  if (w[[n]] %% width + 1L != col) up = 0L
+  paste0(if (up > 0L) paste0("\033[", up, "A"), "\r\033[J")
 }
 
 #' Does this REPL read a terminal, whose typed lines wait on fd 0 while an answer runs (IC-76)? A
@@ -756,7 +781,11 @@ console_call_release = function(rs) {
 #' a question) a D console reads fd 0 in tty_drain_mode(), so the partial line the question would
 #' take as its answer is read too; it goes to the console history, its echoed row erased first.
 #' With `accept` (a question's drain, after its rows) the first whole line that `accept(line)` takes
-#' (typed_answer()) is not routed but returned: typed once the question showed, it answers it.
+#' (typed_answer()) is not routed but returned: typed once the question showed, it answers it. What
+#' was typed before the run starts, which a question drains (the egress question before the first
+#' request), no run takes yet: a T console's keys are its composer's draft (line ends and Tab as
+#' blanks, cursor keys and Ctrl-C dropped), a D console's lines go to the history (console_keep());
+#' never the question's answer (D-306).
 #' @return The reactor task's next interval, or FALSE to end; with `accept`, the answer it read,
 #'   else TRUE where it read fd 0, FALSE where it did not
 #' @noRd
@@ -766,7 +795,26 @@ console_typed = function(drain = FALSE, accept = NULL) {
   if (is.null(rd) || !repl_terminal(rs)) return(FALSE)
   pol = policy_find()
   target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
-  if (is.null(target)) return(if (is.null(accept)) 0.05 else FALSE)
+  if (is.null(target)) {
+    if (!drain) return(if (is.null(accept)) 0.05 else FALSE)
+    # read in tty_drain_mode(), as a D console's drain always is: the question reads in the saved
+    # modes, where a partial line waits for a line end
+    modes = tty_drain_mode()
+    if (length(modes) == 1L) on.exit(tty_modes(modes), add = TRUE)
+    if (isTRUE(the$tty$keys)) {
+      keys = gsub("\033(\\[[0-?]*[ -/]*[@-~]|O.)|\003", "", console_typed_chars(rd, 0L),
+                  perl = TRUE)
+      rd$compose = console_compose(rd$compose, gsub("[\r\n\t]", " ", keys), reactor_now(),
+                                   "steer", console_complete)$state
+    } else {
+      lines = tty_line_edit(typed_join(rd, console_typed_lines(rd, 0L)))
+      if (isTRUE(attr(lines, "partial"))) {
+        console_cat(paste0("\r", strrep(" ", max(0L, cli::console_width() - 1L)), "\r"))
+      }
+      console_keep(lines[nzchar(trimws(lines))])
+    }
+    return(if (is.null(accept)) 0.05 else FALSE)
+  }
   read = if (is.null(accept)) 0.05 else TRUE
   s = target$session
   if (isTRUE(the$tty$keys)) {
@@ -822,12 +870,12 @@ typed_answer = function(lines, accept) {
 
 #' Route the lines typed for a run of session `s` (IC-76, D-242): /command and !code lines, and the
 #' lines that continue a held !code line still incomplete (typed_code_open()), wait in the reader
-#' for the next prompt, each entry (a !code line with its continuation) shown as a follow-up's
-#' queue line; the others become one message queued on `s` as the `type_ahead` setting says (a
-#' follow-up waits with the held lines, after those typed before its first line); a partial line
-#' `part` goes to the console history. Their lines go between the answer's whole rows, above the
-#' live row (D-245). A cursor key's escape sequence (CSI, SS3) is dropped, as the composer drops it,
-#' and a line it alone made with it
+#' for the next prompt, each entry (a !code line with its continuation) shown by a follow-up's
+#' receipt (console_receipt()); the others become one message queued on `s` as the `type_ahead`
+#' setting says (a follow-up waits with the held lines, after those typed before its first line); a
+#' partial line `part` goes to the console history. Their receipts go between the answer's whole
+#' rows, above the live row (D-245). A cursor key's escape sequence (CSI, SS3) is dropped, as the
+#' composer drops it, and a line it alone made with it
 #' @noRd
 console_typed_route = function(rd, s, lines, part = "") {
   esc = "\033(\\[[0-?]*[ -/]*[@-~]|O.)"
@@ -843,7 +891,7 @@ console_typed_route = function(rd, s, lines, part = "") {
   if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(invisible(NULL))
   hold = function(k) {
     for (x in split(lines[k], cumsum(!cont[k]))) {
-      console_queue_line(s, paste(x, collapse = "\n"), "follow_up")
+      console_receipt(s, paste(x, collapse = "\n"), "follow_up")
     }
     rd$typed = c(rd$typed, lines[k])
   }
@@ -890,27 +938,52 @@ typed_code_open = function(held) {
 #' The frame binds the REPL state (`.gptr_repl`, found by the context blocks) and
 #' `.gptr_interrupt_barrier`, so the policy of this call's run is the outermost one and its
 #' re-signalled interrupt ends here. A failed call keeps its session (the condition's `$session`,
-#' else a new gptr_last()); a stray run left by an early interrupt is aborted. On a terminal the
-#' call's console_typed() task reads what is typed, in the call's modes until it ends (tty_call():
-#' a T console's keys, a D console's lines without echo; IC-76, D-243); the end of its run settles
-#' what it held (console_queue_left()), and keys read with a Ctrl-C that no question took
-#' (console_ahead()) are the composer's draft at the next prompt. `men`: the prompt's @mentions.
+#' else a new gptr_last()); the REPL takes the session before the call's modes return, as a Ctrl-C
+#' held while they do ends the call (tty_restore()); a stray run left by an early interrupt is
+#' aborted. On a terminal the call's console_typed() task reads what is typed, in the call's modes
+#' until it ends (tty_call(): a T console's keys, a D console's lines without echo; IC-76, D-243);
+#' the end of its run settles what it held (console_queue_left()), and keys read with a Ctrl-C that
+#' no question took (console_ahead()) are the composer's draft at the next prompt. `men`: the
+#' prompt's @mentions.
+#' `rs$started`, the time it was sent, is its run's live row's clock (console_on_agent_start()); at
+#' verbosity 2+ the row shows from then, through the checks before the run (a CLI's model listing,
+#' consent questions), on a record of its own (`sent`) that the run's takes over (#98 review).
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
 console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) {
+  rs$started = as.numeric(Sys.time())
   .gptr_repl = rs
   .gptr_interrupt_barrier = TRUE
   force(.gptr_repl)
   force(.gptr_interrupt_barrier)
   on.exit(console_call_release(rs), add = TRUE)
+  sent = list2env(list(t0 = rs$started, sent = TRUE))
+  on.exit(console_live_stop(sent), add = TRUE)
   cl = console_call(rs, text, men)
   rs$sending = cl
   notes = rs$notes
   before = gptr::gptr_last()
   res = console_reading(rs, function() {
-    tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
-             error = function(e) list(status = "error", error = e),
-             interrupt = function(e) list(status = "interrupt"))
+    if (verbosity() >= 2L) console_live_start(sent)
+    res = tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
+                   error = function(e) list(status = "error", error = e),
+                   interrupt = function(e) list(status = "interrupt"))
+    # the REPL's session before the modes return, as a Ctrl-C held there ends this call
+    s = NULL
+    if (inherits(res$value, "gptr_session")) {
+      s = res$value
+    } else if (inherits(res$error$session, "gptr_session")) {
+      s = res$error$session
+    } else {
+      last = gptr::gptr_last()
+      if (inherits(last, "gptr_session") && !identical(last, before)) s = last
+    }
+    if (!is.null(s)) {
+      rs$session = s
+      # the notes this turn took, which /retry sends again (cmd_retry())
+      rs$sent = list(id = s$id, turns = s$turns, notes = if (!length(rs$notes)) notes)
+    }
+    res
   })
   # keys read with a Ctrl-C that no question took (after [a]) are typed at the next prompt
   rd = rs$reader
@@ -919,20 +992,6 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
     rd$after_interrupt = ""
     rd$compose = console_compose(rd$compose, left, reactor_now(), "steer", console_complete,
                                  TRUE)$state
-  }
-  s = NULL
-  if (inherits(res$value, "gptr_session")) {
-    s = res$value
-  } else if (inherits(res$error$session, "gptr_session")) {
-    s = res$error$session
-  } else {
-    last = gptr::gptr_last()
-    if (inherits(last, "gptr_session") && !identical(last, before)) s = last
-  }
-  if (!is.null(s)) {
-    rs$session = s
-    # the notes this turn took, which /retry sends again (cmd_retry())
-    rs$sent = list(id = s$id, turns = s$turns, notes = if (!length(rs$notes)) notes)
   }
   if (identical(res$status, "interrupt") && !is.null(rs$session)) console_abort_stray(rs$session)
   res
@@ -992,10 +1051,10 @@ console_wait = function(rs, ss, pump) {
 #' <model> - <mode> - .gptr/ found`, `objects: ` and up to six names of the evaluation environment,
 #' then the keys in bold, `/help lists commands - tab completes after @ ! / - ctrl-c twice leaves`:
 #' the tab only where the REPL completes (after ! and / in RStudio's console, which puts other words
-#' in backticks), the console's own interrupt key, which does not pause at the prompt. In Positron,
-#' whose console holds what is typed while peter works as R code, a line says so and that the key,
-#' then s, steers, in the live row's words (`ctrl-c, then s, to steer`). A blank line ends it, after
-#' the yolo notice
+#' in backticks), the console's own interrupt key, which does not pause at the prompt. Where the
+#' console holds what is typed while peter works (console_typed_fate()), a line says what becomes
+#' of it and that the key, then s, steers, in the live row's words (`ctrl-c, then s, to steer`). A
+#' blank line ends it, after the yolo notice
 #' @noRd
 repl_banner = function(rs) {
   sym = console_style()
@@ -1009,6 +1068,7 @@ repl_banner = function(rs) {
   # rows of whole terms (console_terms()), at the content width
   width = max(20L, cli::console_width() - 2L * nchar(console_pad()))
   terms = function(x) console_terms(x, width, sym$dim(sep))
+  fate = console_typed_fate()
   console_notice(paste(c(
     sym$dim(console_terms(c(paste("gptr", utils::packageVersion("gptr")),
                             console_escape(c(repl_model(rs), repl_mode(rs)), FALSE), ws), width)),
@@ -1019,12 +1079,25 @@ repl_banner = function(rs) {
     terms(c(key("/help", " lists commands"),
             if (isTRUE(rs$reader$complete)) key("tab", paste0(" completes after ", after)),
             key(esc, " twice leaves"))),
-    if (console_menu_available() && front_end() == "positron") {
-      terms(c(sym$dim("text typed while peter works waits as R code"),
-              paste0(key(esc, ", then "), key("s", ", to steer"))))
+    if (!is.null(fate)) {
+      terms(c(sym$dim(fate), paste0(key(esc, ", then "), key("s", ", to steer"))))
     }), collapse = "\n"))
   mode_notice(repl_mode(rs))
   console_write("")
+}
+
+#' What becomes of text typed while peter works where the console holds it and only the pause menu
+#' steers (D-304), in the banner's and /help's words: Positron's console keeps it as R code;
+#' RStudio's, R.app's and Windows' Rterm run each line as the next prompt. NULL elsewhere: a
+#' terminal's composer reads the keys, and where the pause menu is not offered nobody can answer it
+#' @noRd
+console_typed_fate = function() {
+  fe = front_end()
+  if (!console_menu_available() || !(fe %in% c("positron", "rstudio", "rgui") || is_windows())) {
+    return(NULL)
+  }
+  if (fe == "positron") "text typed while peter works waits as R code" else
+    "lines typed while peter works run after its answer"
 }
 
 #' A notice when background sessions wait for approval; P21 asks at their gptr_wait() (IC-57), the
@@ -1042,10 +1115,13 @@ repl_waiting_notice = function(rs) {
   invisible(NULL)
 }
 
-#' Print an error on stderr: escaped, its line feeds kept
+#' Print an error on stderr: escaped, its line feeds kept; a prompt the person declined to send
+#' (`declined`: a question's no, D-307) is a dim notice on stdout, as no error happened
 #' @noRd
 repl_error = function(e) {
-  console_notice("Error: ", console_escape(conditionMessage(e)), .error = TRUE)
+  text = console_escape(conditionMessage(e))
+  if (isTRUE(e$declined)) return(console_notice(console_style()$dim(text)))
+  console_notice("Error: ", text, .error = TRUE)
 }
 
 #' The line under a sent prompt that names what its @mentions resolved to (D-244): dim, the
@@ -1061,7 +1137,7 @@ mention_line = function(said) {
 #' (mention_line()); the answer is printed here when the renderer hooks did not stream it
 #' (verbosity < 2), any other value is printed. A prompt to a session that runs (in the
 #' background: after the pause menu's `[b]`, or `background = TRUE`) steers it (route_continue()),
-#' so its queue line says so, `<queued glyph> steer<sep><text>` (console_queue_line()), once sent
+#' so once sent its receipt says so, `steer> <text>` (console_receipt())
 #' @noRd
 repl_turn = function(rs, text) {
   men = repl_mentions(text, repl_eval_env(rs))
@@ -1082,7 +1158,7 @@ repl_turn = function(rs, text) {
     return(invisible(NULL))
   }
   if (!identical(res$status, "ok")) return(invisible(NULL))
-  if (steer) return(console_queue_line(s, text, "steer"))
+  if (steer) return(console_receipt(s, text, "steer"))
   value = res$value
   if (!inherits(value, "gptr_session")) {
     console_out(print_lines(value))
@@ -1171,9 +1247,11 @@ repl_main = function(rs) {
   }
   repeat {
     if (rs$exit) break
-    repl_waiting_notice(rs)
-    line = tryCatch(withCallingHandlers(repl_read_logical(rs$reader, repl_prompt(rs)),
-                                        gptr_warning = warned), interrupt = function(e) FALSE)
+    # a Ctrl-C as the prompt comes, right after a run's footer too, is the prompt's
+    line = tryCatch({
+      repl_waiting_notice(rs)
+      withCallingHandlers(repl_read_logical(rs$reader, repl_prompt(rs)), gptr_warning = warned)
+    }, interrupt = function(e) FALSE)
     if (isFALSE(line)) {
       rs$interrupts = rs$interrupts + 1L
       # an interrupted readline() leaves its prompt's row open (the hint, too, ends it first)
@@ -1359,15 +1437,17 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 #' and `... ` waits for Enter (text typed there is added); a pasted fence or `"""` block is read
 #' up to its closer at once, a block pasted at an approval or a choice is kept in the console
-#' history and the question asked again, and one pasted at the pause menu's `? Steer` or
-#' `? Follow-up` is the whole text. A last pasted line without a newline waits for Enter at the
+#' history and the question asked again, and one pasted at the pause menu's `steer> ` or
+#' `next> ` is the whole text. A last pasted line without a newline waits for Enter at the
 #' next prompt, so a two-line paste without a final newline answers a question with its first
 #' line. Elsewhere (Homebrew or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted
 #' lines arrive one at a time, as typed lines do (at a question the first one answers it); wrap a
 #' multi-line paste in `"""`. Lines typed, pasted or run from a
 #' script before a question (an approval, a choice) appeared never answer it: while an answer
 #' runs they are queued for the agent as `type_ahead` says (below; a /command or !code line waits
-#' for the next prompt), otherwise they go to the console history. Answer after the prompt.
+#' for the next prompt), otherwise they go to the console history. Answer after the prompt, which
+#' is indented two columns under the question: only what you send to the agent starts at the left
+#' edge, as `peter> `, `steer> ` or `next> `.
 #'
 #' What you type while peter works, and the key that pauses it, depend on the console:
 #'
@@ -1383,37 +1463,38 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'   Rscript, pipes, knitr \tab nothing; \code{.stdin = TRUE} reads the pipe \tab none
 #' }
 #'
-#' In terminal R and an IDE's Terminal tab what you type while peter works is a draft on the
-#' bottom row, under the transcript, so it never mixes into the answer; a block pasted there is
-#' one message where the terminal supports bracketed paste. Enter sends it as a steer: the agent
-#' reads it at its next step boundary, when the response in flight ends after the results of all
-#' its tool calls (an answer about to end gets one more request), and it then shows as your own
-#' line. Tab sends it as a follow-up: the next
-#' prompt, sent as its own run once the answer ends. `type_ahead = "follow_up"` ([gptr_config()])
-#' swaps the two keys. A draft that starts with `/` or `!` is always a follow-up, so `/command`
-#' and `!code` lines run at the next prompt, in the order typed. The bottom row counts what is
-#' queued; Up on an empty draft takes back the newest message not yet delivered, to edit and send
-#' again, and Ctrl-U clears the draft. A question (an approval, a choice) waits until typing
-#' pauses for a second, or three while the draft has text, and the draft stays: through
-#' questions, Ctrl-C and the pause menu, and to the next prompt, where Enter sends it. Keys typed
-#' while R code runs in this process (the `r` tool) show when it returns. Such code that reads
-#' the terminal through `readline()` or `menu()` inside another function shows only that read's
-#' prompt (the text printed before it shows when the code returns, the typed answer never), and
-#' Ctrl-C at that read aborts the answer instead of pausing it. A steer the answer did not take
-#' (it ended first) is the next prompt; after an abort or an error nothing queued is sent: the
-#' queued text and the draft go to the console history, and Up recalls them. Under
-#' TERM=dumb or in ESS a line typed with Enter is queued as `type_ahead` says. On the CLI routes
-#' (`claude-cli`, `codex`) the agent reads a steer after the CLI's answer, which is often the
-#' whole run.
+#' In terminal R and an IDE's Terminal tab what you type while peter works is a draft on the bottom
+#' row, under the transcript, so it never mixes into the answer; a block pasted there is one message
+#' where the terminal supports bracketed paste. Enter sends it as a steer and writes it into the
+#' transcript at once, as `steer> <text>`: the agent reads it at its next step boundary, when the
+#' response in flight ends after the results of all its tool calls (an answer about to end gets one
+#' more request). Tab sends it as a follow-up, written as `next> <text>`: the next prompt, sent as
+#' its own run once the answer ends. `type_ahead = "follow_up"` ([gptr_config()]) swaps the two
+#' keys. A draft that starts with `/` or `!` is always a follow-up, so `/command` and `!code` lines
+#' run at the next prompt, in the order typed. The bottom row counts what is queued (`1 steer
+#' queued`); Up on an empty draft takes back the newest message not yet delivered, to edit and send
+#' again, and Ctrl-U clears the draft. A question (an approval, a choice) waits until typing pauses
+#' for a second, or three while the draft has text, and the draft stays: through questions, Ctrl-C
+#' and the pause menu, and to the next prompt, where Enter sends it. Keys typed while R code runs in
+#' this process (the `r` tool) show when it returns. Such code that reads the terminal through
+#' `readline()` or `menu()` inside another function shows only that read's prompt (the text printed
+#' before it shows when the code returns, the typed answer never), and Ctrl-C at that read aborts
+#' the answer instead of pausing it. A steer the answer did not take (it ended first) is the next
+#' prompt; after an abort or an error nothing queued is sent: the queued text and the draft go to
+#' the console history, and Up recalls them. Under TERM=dumb or in ESS a line typed with Enter is
+#' queued as `type_ahead` says. On the CLI routes (`claude-cli`, `codex`) the agent reads a steer
+#' after the CLI's answer, which is often the whole run: once the run has sent its request, the
+#' receipt says so, `(after the CLI's answer)`; a steer sent before the first request goes with it.
 #'
-#' RStudio, R.app, Positron and Windows consoles hold what is typed until R reads again. In
-#' RStudio, R.app and Windows consoles a line typed while peter works is the next prompt, one
-#' prompt per line, unless a question comes first: it reads the line, queues it as `type_ahead`
-#' says and asks again. Positron's console keeps typed text as R code, which runs after `peter()`
-#' returns, and clears it at Ctrl-C. To steer in these consoles, pause and press `s` (Windows'
-#' Rgui cannot pause). In RStudio an Esc first closes RStudio's own completion list, if open, then
-#' clears a line being typed, so the menu comes at the next Esc. During `peter("...")` at R's
-#' prompt, outside the chat, typed lines stay R's next input.
+#' RStudio, R.app, Positron and Windows consoles hold what is typed until R reads again. In RStudio,
+#' R.app and Windows consoles a line typed while peter works is the next prompt, one prompt per
+#' line, unless a question comes first: it reads the line, queues it as `type_ahead` says and asks
+#' again. Positron's console keeps typed text as R code, which runs after `peter()` returns, and
+#' clears it at Ctrl-C. To steer in these consoles, pause and press `s` (Windows' Rgui cannot
+#' pause), as their banner and bottom row say: `esc, then s, to steer` in RStudio and R.app,
+#' `ctrl-c, then s, to steer` in Positron and Windows' Rterm. In RStudio an Esc first closes
+#' RStudio's own completion list, if open, then clears a line being typed, so the menu comes at the
+#' next Esc. During `peter("...")` at R's prompt, outside the chat, typed lines stay R's next input.
 #'
 #' Tab completes only after `@` (objects, then files), `@obj$` (its members), `peter$`, a leading
 #' `/` (commands) and on a `!` or `!!` line (R code), never in plain text: in terminal R, R in an
@@ -1427,12 +1508,12 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'
 #' The pause key opens a pause menu while an answer runs, with the keys `s` steer, `f` follow-up,
 #' `c` continue, `a` abort and, for a foreground call (a chat turn included) when available, `b`
-#' background. `s` and `f` ask for the text and queue it as Enter and Tab do; in a `peter("...")`
-#' call a follow-up is sent when the agent would otherwise stop. A key typed right after the pause
-#' key answers the menu. Continuing leaves the work as if it had not paused, and pressing the
-#' pause key again aborts. Abort keeps the partial session; what you queued and the draft go to
-#' the history, unsent. Background returns to the chat prompt and keeps the run: what was
-#' queued for after the answer and the draft go to the history, unsent, as after an abort, and
+#' background. `s` and `f` read the text at `steer> ` and `next> ` and queue it as Enter and Tab do;
+#' in a `peter("...")` call a follow-up is sent when the agent would otherwise stop. A key typed
+#' right after the pause key answers the menu. Continuing leaves the work as if it had not paused,
+#' and pressing the pause key again aborts. Abort keeps the partial session; what you queued and the
+#' draft go to the history, unsent. Background returns to the chat prompt and keeps the run: what
+#' was queued for after the answer and the draft go to the history, unsent, as after an abort, and
 #' another prompt steers the running session. Nothing runs it while the chat waits for input: use
 #' `!!gptr::gptr_wait(gptr::gptr_last())` there to continue it, its answer then shown as a prompt's
 #' and Enter steering it. Under Rscript, background runs advance only inside blocking gptr calls.

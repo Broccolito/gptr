@@ -35,17 +35,25 @@ console_write = function(lines) {
   invisible(NULL)
 }
 
-#' The person's rows at column 0 (D-242): `glyph`, a space and the escaped `text`, wrapped inside
-#' the console width with the later rows under the text; for a finite `n` (a held line), its lines
-#' joined by a blank, as the live row shows them, and cut to `n` rows of that width, the cut marked
-#' with an ellipsis
+#' The person's rows at column 0 (D-242): `glyph`, a space and the escaped `text`, a tab a blank,
+#' as on the live row, wrapped inside the console width with the later rows under the text, a word
+#' wider than a row (unspaced CJK text) broken at its width; for a finite `n` (a held line), its
+#' lines joined by a blank, as the live row shows them, and cut to `n` rows of that width, the cut
+#' marked with an ellipsis
 #' @noRd
 console_person_rows = function(glyph, text, n = Inf) {
   lead = paste0(glyph, " ")
   width = max(20L, cli::console_width() - 1L - nchar(lead))
-  lines = console_lines(text)
+  lines = gsub("\t", " ", console_lines(text), fixed = TRUE)
   if (is.finite(n)) lines = paste(lines, collapse = " ")
-  rows = console_wrap(lines, width)
+  rows = unlist(lapply(console_wrap(lines, width), function(row) {
+    out = character()
+    while (cli::ansi_nchar(row, type = "width") > width) {
+      out = c(out, cli::ansi_strtrim(row, width, ellipsis = ""))
+      row = cli::ansi_substr(row, cli::ansi_nchar(out[[length(out)]]) + 1L, cli::ansi_nchar(row))
+    }
+    c(out, row)
+  }))
   if (is.finite(n)) {
     ell = console_style()$ellipsis
     more = length(rows) > n
@@ -141,8 +149,9 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     st$on[[name]] = !st$on[[name]]
     restyle()
   }
-  # The margin opens every non-empty row; a pending blank line is written only before more text.
-  # A row is held until its line end
+  # The margin opens every non-empty row; a pending blank line is written only before more text,
+  # and not where before_output() wrote one (other output came between, D-245). A row is held
+  # until its line end
   emit = function(x) {
     if (!nzchar(x)) return(invisible())
     if (st$bol && !startsWith(x, "\n")) {
@@ -155,7 +164,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     if (!st$bol) return(invisible())
     x = st$row
     st$row = ""
-    if (is.function(before_output)) before_output(x)
+    if (is.function(before_output) && isTRUE(before_output(x))) x = sub("^\n", "", x)
     console_cat(x)
     invisible()
   }
@@ -558,15 +567,17 @@ console_child_shown = function(run) {
     verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
 }
 
-#' A scheduled group's completed count, active phases and queued names
+#' A scheduled group's completed count, active phases and the names of the members not started
+#' yet, `pending` (counted only when there are some): the live row's `queued` is the person's
+#' messages (IC-82), so the group's word differs from it (D-309)
 #' @noRd
 console_group_state = function(group) {
-  if (!is.environment(group) || is.null(group$labels)) return(NULL)
-  queued = vapply(group$runs, is.null, NA)
+  if (is.null(group)) return(NULL)
+  pending = vapply(group$runs, is.null, NA)
   done = vapply(group$runs, function(r) isTRUE(r$settled), NA)
-  active = which(!queued & !done)
+  active = which(!pending & !done)
   labels = console_escape(group$labels, FALSE)
-  models = group$models %||% rep("", group$n)
+  models = group$models
   phases = character(length(active))
   for (j in seq_along(active)) {
     i = active[[j]]
@@ -574,13 +585,13 @@ console_group_state = function(group) {
     models[[i]] = rec$child$model %||% models[[i]]
     phases[[j]] = console_escape(rec$what %||% "thinking", FALSE)
   }
-  counts = c(paste(length(active), "active"), paste(sum(queued), "queued"))
+  counts = c(paste(length(active), "active"), if (any(pending)) paste(sum(pending), "pending"))
   short = paste(c(paste0("sub-agents ", sum(done), "/", group$n), counts),
                 collapse = console_style()$sep)
   text = paste(c(paste0("sub-agents ", sum(done), "/", group$n, " done"), counts),
                collapse = console_style()$sep)
-  list(active = stats::setNames(phases, labels[active]), queued = labels[queued],
-       models = list(active = models[active], queued = models[queued]),
+  list(active = stats::setNames(phases, labels[active]), pending = labels[pending],
+       models = list(active = models[active], pending = models[pending]),
        text = text, short = short)
 }
 
@@ -591,7 +602,7 @@ console_group_notice = function(rec) {
   group = rec$child$run$group
   state = console_group_state(group)
   if (is.null(state) || !length(state$active)) return(NULL)
-  members = list(active = names(state$active), queued = state$queued)
+  members = list(active = names(state$active), pending = state$pending)
   shown = list(members = members, models = state$models)
   if (identical(group$shown, shown)) return(NULL)
   group$shown = shown
@@ -612,8 +623,8 @@ console_group_notice = function(rec) {
       labels[[i]] = paste0(labels[[i]], " (", console_escape(model, FALSE), ")")
     }
     more = if (n > 8L) paste0("+", n - 8L, " more")
-    lines = console_terms(c(labels, more), width - 12L, sep = ", ")
-    lead = paste0("    ", kind, "  ")
+    lead = paste0("    ", format(kind, width = 7L), "  ")
+    lines = console_terms(c(labels, more), width - nchar(lead), sep = ", ")
     rows = c(rows, paste0(c(lead, rep(strrep(" ", nchar(lead)), length(lines) - 1L)), lines))
   }
   console_write(sym$dim(console_wrap(rows, width)))
@@ -658,7 +669,9 @@ console_render_on = function(rec) {
 #' Other output is about to appear for the foreground records of `runs` (every tracked run when
 #' NULL): it opens a block of `kind` (none when NULL). The writes themselves clear the live row and
 #' redraw it after them (gptr_message_write()); a question (`kind = "prompt"`) or a launched
-#' process (`kind = NULL`), which writes to the terminal past gptr, first clears it, and the row's
+#' process (`kind = NULL`), which writes to the terminal past gptr, first clears it (a question also
+#' with no foreground record, as a nested call's, D-301; a launch also where a sub-agent's record
+#' owns the row, a direct team's or fan-out's, whose children are no foreground), and the row's
 #' task draws it again once the run waits (a T console's question draws it when it has its answer,
 #' console_asked()). A question in a T console first waits for typing to pause
 #' (console_ask_wait()); a question of a terminal call then reads in the saved modes from before its
@@ -677,9 +690,14 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
     lapply(runs, function(run) console_record(list(run = run$id)))
   }
   recs = Filter(function(rec) !is.null(rec) && console_foreground(rec, tools), recs)
-  if (length(recs) && identical(kind, "prompt")) console_ask_wait()
-  if (identical(kind, "prompt")) tty_question(TRUE)
-  if (length(recs) && !identical(kind, "notice") && !is.null(the$live_row)) the$live_row$clear()
+  ask = identical(kind, "prompt")
+  if (length(recs) && ask) console_ask_wait()
+  if (ask) tty_question(TRUE)
+  row = the$live_row
+  if (!is.null(row) && (ask || (length(recs) || !is.null(row$rec$child)) &&
+                          !identical(kind, "notice"))) {
+    row$clear()
+  }
   if (!is.null(kind)) for (rec in recs) console_gap(rec, kind)
   invisible(length(recs) > 0L)
 }
@@ -688,22 +706,15 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
 #' where lines keep the margin, written on a finished line; blocks of one kind group, so the tool
 #' rows of consecutive requests group as those of one response (D-245), except prompts, and a
 #' question and the tool block it is asked in are one (it asks under the call it gates, D-243).
-#' The live row below them is no block. Queue lines held while the answer's text block was open
-#' (`rec$queued`, console_queue_line()) are written first, as the person's block, when any other
-#' block starts
+#' The live row below them is no block. TRUE (invisibly) when it wrote the blank line
 #' @noRd
 console_gap = function(rec, kind) {
-  if (length(rec$queued) && !identical(kind, "text")) {
-    rows = unlist(lapply(rec$queued, `[[`, "rows"))
-    rec$queued = NULL
-    console_gap(rec, "person")
-    console_write(rows)
-  }
   same = identical(rec$last, kind) && !identical(kind, "prompt")
   join = paste(rec$last, kind) %in% c("tool prompt", "prompt tool")
-  if (!same && !join && nzchar(console_pad())) console_cat("\n")
+  gap = !same && !join && nzchar(console_pad())
+  if (gap) console_cat("\n")
   rec$last = kind
-  invisible(NULL)
+  invisible(gap)
 }
 
 #' Normal progress: ordinary stdout display. Callers keep
@@ -743,14 +754,11 @@ console_render_resume = function(runs) {
   invisible(NULL)
 }
 
-#' A record-only callback: a rendered row opens a text block
+#' A record-only callback: a rendered row opens a text block; TRUE when its blank row was written
 #' @noRd
 console_stream_output = function(rec) {
   force(rec)
-  function(text) {
-    console_gap(rec, "text")
-    invisible(NULL)
-  }
+  function(text) console_gap(rec, "text")
 }
 
 #' End the partial lines of a record (before a tool line; `cut` when the answer is cut off)
@@ -804,8 +812,9 @@ console_msg_text = function(msg) {
   paste(text[!is.na(text)], collapse = "\n")
 }
 
-#' The preview lines of a tool input: its code, its one-line command, its path, its questions,
-#' else compact JSON
+#' The preview lines of a tool input (split on CRLF, CR and LF): its code, its one-line command, its
+#' path (inside the project relative to it, as the approval's rows show it), its questions, else
+#' compact JSON
 #' @noRd
 console_preview = function(input) {
   text = if (is.character(input$code) && length(input$code)) {
@@ -813,7 +822,8 @@ console_preview = function(input) {
   } else if (rlang::is_string(input$command) && !grepl("\n", input$command, fixed = TRUE)) {
     input$command
   } else if (is.character(input$path) && length(input$path)) {
-    input$path[[1L]]
+    path = input$path[[1L]]
+    if (is_abs_path(path)) path_rel(path) else path
   } else if (is.list(input$questions)) {
     n = length(input$questions)
     paste0(n, if (n == 1L) " question" else " questions")
@@ -822,7 +832,7 @@ console_preview = function(input) {
   } else {
     ""
   }
-  strsplit(text, "\n", fixed = TRUE)[[1L]]
+  strsplit(text, "\r\n|\r|\n", perl = TRUE)[[1L]]
 }
 
 #' The term after a call's first line that counts its other lines (D-187): `  (+N more lines)`
@@ -882,6 +892,9 @@ console_call_line = function(call, width, kind = "act") {
                 agent = paste0(sym$blue(sym$agent), " ", name),
                 paste0(sym$red(sym$tool), " ", cli::style_bold(name)))
   arg = c(lines, "")[[1L]]
+  if (!code) {
+    arg = console_cut_middle(arg, width - cli::ansi_nchar(paste0("  ", head, "  "), type = "width"))
+  }
   if (nzchar(arg) && kind == "act") {
     arg = if (mcp && !code) sym$dim(arg) else console_code(arg, lang)
   }
@@ -892,6 +905,23 @@ console_call_line = function(call, width, kind = "act") {
     return(as.character(cli::ansi_strtrim(one, width)))
   }
   c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L, width))
+}
+
+#' `text` cut to `width` display columns in its middle, the ellipsis there, so its start and its
+#' end stay: a path keeps its file name (its last `/` and what follows) where that leaves room
+#' before it, else half the width is its end; whole when it fits
+#' @noRd
+console_cut_middle = function(text, width) {
+  w = function(x) cli::ansi_nchar(x, type = "width")
+  if (w(text) <= width) return(text)
+  ell = console_style()$ellipsis
+  room = max(2L, width - w(ell))
+  end = sub("^.*(/[^/]*)$", "\\1", text)
+  if (identical(end, text) || w(end) >= room) {
+    end = text
+    while (w(end) > room %/% 2L) end = substring(end, 2L)
+  }
+  paste0(cli::ansi_strtrim(text, room - w(end), ellipsis = ""), ell, end)
 }
 
 #' Rows wrapped to `width` display columns with their spaces kept (code, a diff): a row breaks at
@@ -1091,12 +1121,21 @@ console_render_custom = function(s, n0) {
 }
 
 #' agent_start: track the run; a sub-agent of a foreground call says that it started with the
-#' model it calls (a worker proxy's session model is `worker/worker`, D-188)
+#' model it calls (a worker proxy's session model is `worker/worker`, D-188). A foreground run's
+#' live row shows from here at verbosity 2+, before its model is prepared (a CLI's model listing,
+#' checkpoints), its clock from the console prompt's Enter (`rs$started`, console_send()), as the
+#' person waits from then (#98 review: nothing on screen for 10 s, then `thinking 0s`)
 #' @noRd
 console_on_agent_start = function(event, ctx) {
   s = ctx$session
   if (!inherits(s, "gptr_session") || !rlang::is_string(event$run)) return(NULL)
   rec = console_track(event$run, s)
+  if (console_foreground(rec)) {
+    rs = console_repl_find()
+    rec$t0 = rs$started %||% rec$t0
+    if (!is.null(rs)) rs$started = NULL
+    if (verbosity() >= 2L) console_live_start(rec)
+  }
   live = session_live(s)
   run = live$run
   if (console_child_shown(run)) {
@@ -1108,7 +1147,9 @@ console_on_agent_start = function(event, ctx) {
   NULL
 }
 
-#' before_request: announce waiting; at verbosity 3 also a request line
+#' before_request: mark the request pending; for a child set its model and phase (`working` for a
+#' worker, else `thinking`), print a changed group roster and start the live row at verbosity 2+;
+#' announce waiting; at verbosity 3 also a request line
 #' @noRd
 console_on_before_request = function(event, ctx) {
   rec = console_record(event)
@@ -1120,8 +1161,9 @@ console_on_before_request = function(event, ctx) {
       event$model %||% rec$child$model
     rec$what = if (worker) "working" else "thinking"
     console_group_notice(rec)
-    if (verbosity() >= 2L && !isTRUE(getOption("gptr.quiet")) &&
-        is.null(the$live_row) && cli::is_dynamic_tty()) console_live_start(rec)
+    if (verbosity() >= 2L && !isTRUE(getOption("gptr.quiet")) && is.null(the$live_row)) {
+      console_live_start(rec)
+    }
   }
   if (verbosity() < 1L || !console_foreground(rec)) return(NULL)
   if (verbosity() >= 3L) {
@@ -1135,15 +1177,16 @@ console_on_before_request = function(event, ctx) {
   NULL
 }
 
-#' message_update: stream text deltas through the markdown renderer (after an abort, the text held
-#' when it came under a dim `received before the abort:`); thinking at verbosity 3; on a
-#' CLI route, whose one request runs a whole agent turn, the first line of each thinking block at
-#' verbosity 2, with the live row below it
+#' message_update: a text delta makes the live row's word `responding`, the main agent's as a
+#' sub-agent's, until the next request or tool; stream text deltas through the markdown renderer
+#' (after an abort, the text held when it came under a dim `received before the abort:`); thinking
+#' at verbosity 3; on a CLI route, whose one request runs a whole agent turn, the first line of
+#' each thinking block at verbosity 2, with the live row below it
 #' @noRd
 console_on_message_update = function(event, ctx) {
   rec = console_record(event)
   delta = event$delta
-  if (!is.null(rec$child) && identical(event$kind, "text")) rec$what = "responding"
+  if (!is.null(rec) && identical(event$kind, "text")) rec$what = "responding"
   if (is.null(rec) || !is.character(delta) || !console_render_on(rec)) return(NULL)
   kind = event$kind %||% "text"
   think = identical(kind, "thinking") &&
@@ -1199,7 +1242,8 @@ console_result_block = function(rec, call, result) {
 }
 
 #' message_end: close the streamed answer, cut (finish(cut = TRUE)) when it was aborted, failed or
-#' truncated, or print it whole when nothing was streamed; for a tool result, its result lines
+#' truncated, or print it whole when nothing was streamed, so the next answer's text opens a block
+#' of its own; for a tool result, its result lines
 #' @noRd
 console_on_message_end = function(event, ctx) {
   rec = console_record(event)
@@ -1219,6 +1263,8 @@ console_on_message_end = function(event, ctx) {
     rec$think = NULL
     rec$md = NULL
     rec$md_index = NULL
+    # the next answer's text (a steer's) opens its own block, a blank line between (#41)
+    if (identical(rec$last, "text")) rec$last = NULL
   } else if (identical(msg$role, "tool_result")) {
     call = get0(paste0("t", msg$tool_call_id), envir = rec$tools, inherits = FALSE) %||%
       list(id = msg$tool_call_id, name = msg$tool_name, input = list())
@@ -1385,7 +1431,7 @@ console_on_agent_end = function(event, ctx) {
       console_child_line(rec, paste0("failed", k, ": ", console_escape(why, FALSE)))
     }
     state = console_group_state(g)
-    if (!is.null(state) && !length(state$queued)) console_group_notice(rec)
+    if (!is.null(state) && !length(state$pending)) console_group_notice(rec)
     kids = console_kids()
     if (owns_row && length(kids)) console_live_start(kids[[1L]])
   }
@@ -1430,8 +1476,6 @@ console_on_agent_end = function(event, ctx) {
   if (v < 2L) return(NULL)
   if (!is.null(rec$think)) rec$think$finish()
   if (!is.null(rec$md)) rec$md$finish(cut = !identical(event$status, "idle"))
-  # a held steer's row gives way: the kept list, the next prompt's echo or its delivery names it
-  rec$queued = Filter(function(x) !x$drop, rec$queued)
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
   # in rows ending at whole terms (console_terms()), at the content width; a status with its reason
@@ -1547,18 +1591,18 @@ console_on_shutdown = function(event, ctx) {
   NULL
 }
 
-#' queue_update: a user's message the loop takes (a steer at its step boundary) is the person's line
-#' at column 0, the person's glyph and the text (ASCII `>> <text>`), on the band, before the next
-#' request's output (D-242). The steers' queue lines still held (console_queue_line()) are dropped:
-#' the loop takes every queued steer at once, and the deliveries say what they said
+#' queue_update: a user's message the loop takes (a steer at its step boundary) that showed no
+#' receipt when it was sent (D-301: a pipe into the running session, gptr_steer()) is the person's
+#' rows as a receipt's, `steer> <text>` (`next> ` for a follow-up), on the band, before the next
+#' request's output (D-242); the console's own sources (`repl`, `pause_menu`) showed theirs
+#' (console_receipt())
 #' @noRd
 console_on_queue_update = function(event, ctx) {
   rec = console_record(event)
-  if (is.null(rec) || !identical(event$op, "take") || !(event$source %in% queue_user_sources) ||
+  if (is.null(rec) || !identical(event$op, "take") || !(event$source %in% c("pipe", "api_user")) ||
       !console_render_on(rec)) return(NULL)
-  rows = console_person_rows(console_style()$person, event$text)
+  rows = console_person_rows(if (identical(event$which, "steer")) "steer>" else "next>", event$text)
   console_pause_one(rec)
-  if (identical(event$which, "steer")) rec$queued = Filter(function(x) !x$drop, rec$queued)
   console_gap(rec, "person")
   console_write(console_band(rows))
   NULL

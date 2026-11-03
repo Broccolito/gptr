@@ -174,7 +174,7 @@ test_that("/help's keys follow the console, as the banner does (review of Tasks 
     expect_false(grepl(w, rstudio, fixed = TRUE), info = w)
   }
   for (w in c("tab after ! or /, complete the word", "esc pause the answer",
-              "A line typed while peter works is the next prompt.")) {
+              "Lines typed while peter works run after its answer; esc, then s, to steer.")) {
     expect_true(grepl(w, rstudio, fixed = TRUE), info = w)
   }
   # Positron: no completion, and typed text waits as R code, as its banner says

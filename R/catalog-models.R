@@ -1936,7 +1936,7 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
     ""
   }
   new_listing(df, "gptr_models",
-              footer = paste0("catalog ", ctg$generated, " (", ctg$source, "), ",
-                total, " models; gptr_models(refresh = TRUE) updates it; ",
-                "provider advertisement does not verify inference or billing access", failure))
+              footer = paste0("catalog ", ctg$generated, " (", ctg$source, "), ", total,
+                              " models; refresh = TRUE updates it; advertised does not verify ",
+                              "access", failure))
 }

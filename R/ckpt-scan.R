@@ -21,7 +21,8 @@ ckpt_entry_max = 2000L
 #' between entries and before each capture, or at an interrupt the person continues from, and keeps
 #' what it completed; a filesystem call that blocks is not cut short.
 #' @return `list(walk, hash, mode, absent, not_files, uncaptured, complete, reason, seconds)`:
-#'   `complete` when it reached every entry, else `reason` says why it stopped or what it missed.
+#'   `complete` when it reached every entry, else `reason` says in plain words why it stopped or
+#'   what it missed (the coverage notice quotes it).
 #' @noRd
 ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE) {
   started = proc.time()[["elapsed"]]
@@ -46,7 +47,9 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
   st$bytes = 0
   st$halt = FALSE
   st$interrupted = FALSE
-  st$reason = if (nrow(old) > ckpt_entry_max) "entry limit" else ""
+  too_many = paste0("the folder has more than ", format(ckpt_entry_max, big.mark = ","),
+                    " entries")
+  st$reason = if (nrow(old) > ckpt_entry_max) too_many else ""
   # paths as vectors, not environment names: those are translated to the native encoding
   st$seen = character()
   st$listed = list()
@@ -57,7 +60,8 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
   halted = function() {
     if (!st$halt && (st$interrupted || proc.time()[["elapsed"]] - started >= timeout)) {
       st$halt = TRUE
-      incomplete(if (st$interrupted) "interrupted" else "time limit")
+      incomplete(if (st$interrupted) "it was interrupted" else
+        "it ran out of time (gptr.checkpoint_scan_timeout)")
     }
     st$halt
   }
@@ -100,7 +104,7 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
     st$visited = st$visited + 1L
     if (is_abs_path(rel) || any(strsplit(rel, "/", fixed = TRUE)[[1L]] %in% c("", ".", "..")) ||
           ancestors_linked(rel)) {
-      return(incomplete("unavailable path"))
+      return(incomplete("a path could not be read"))
     }
     full = fs_path(file.path(root, rel))
     if (known && ic && absent(rel, exact = TRUE)) {
@@ -114,7 +118,11 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
       return("dir")
     }
     if (is.na(info$mtime) && !link) {
-      if (known && absent(rel)) st$absent = c(st$absent, rel) else incomplete("unavailable path")
+      if (known && absent(rel)) {
+        st$absent = c(st$absent, rel)
+      } else {
+        incomplete("a path could not be read")
+      }
       return(NULL)
     }
     size = pmax(info$size, 0, na.rm = TRUE)
@@ -173,7 +181,7 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
       frontier = frontier[-1L]
       names = entries(if (nzchar(parent)) file.path(root, parent) else root)
       if (is.null(names)) {
-        incomplete("unreadable directory")
+        incomplete("a folder could not be read")
         next
       }
       names = names[order(!grepl(ckpt_source_re, names), names)]
@@ -187,10 +195,10 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
         if (halted()) return()
         rel = rels[[i]]
         if (valid[[i]] && rel %in% st$seen) next
-        if (st$visited >= ckpt_entry_max) return(incomplete("entry limit"))
+        if (st$visited >= ckpt_entry_max) return(incomplete(too_many))
         if (!valid[[i]]) {
           st$visited = st$visited + 1L
-          incomplete("invalid file name")
+          incomplete("a file name is not valid UTF-8")
           next
         }
         if (isTRUE(ignore_eval(rules, rel, dir.exists(fs_path(file.path(root, rel))), ic))) {
@@ -200,11 +208,11 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
         }
         if (identical(inspect(rel, cls[[i]]), "dir")) frontier = c(frontier, rel)
       }
-      if (st$visited >= ckpt_entry_max && length(frontier)) return(incomplete("entry limit"))
+      if (st$visited >= ckpt_entry_max && length(frontier)) return(incomplete(too_many))
     }
   }
   tryCatch(withCallingHandlers(scan(), interrupt = function(cnd) st$interrupted = TRUE),
-           error = function(e) incomplete("scan error"))
+           error = function(e) incomplete("an error stopped it"))
   list(walk = data.frame(path = st$path, size = st$size, mtime = st$mtime, link = st$link),
        hash = st$hash, mode = st$mode, absent = st$absent, not_files = st$not_files,
        uncaptured = st$uncaptured, complete = !nzchar(st$reason), reason = st$reason,

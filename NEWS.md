@@ -37,6 +37,20 @@ gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version insta
   rewind fully. Folder discovery remains available on demand through `ls`, `find` and `read`.
 * Interrupting an MCP request while its initial message is being sent now sends cancellation,
   including when progress arrives before the send completes.
+* What you send while Peter works stays in the console's transcript. A steer (Enter, or the
+  pause menu's `s`) is written at once as `steer> <text>` and a follow-up (Tab, or `f`) as
+  `next> <text>`, at the left edge like the `peter> ` prompt. It used to show only on the bottom
+  row, which disappears while R code runs and when the terminal scrolls, and reached the
+  transcript only when the agent took it, marked like an answer. The bottom row counts what is
+  queued (`1 steer queued`). Answers to a question are read two columns in, under it, so an
+  answer no longer looks like a message to the agent.
+* Typing does not steer in RStudio, R.app or Windows' Rterm, so their banner and `/help` now say
+  how to: `esc, then s, to steer` (Rterm: `ctrl-c, then s, to steer`); the bottom row says it
+  too and adds `typed lines run after this answer`.
+* A question asked while the bottom row is shown, such as a provider consent, no longer leaves
+  copies of that row in RStudio's console or draws it between the question and its answer.
+* A Ctrl-C pressed just as an answer ends no longer leaves `peter()` or turns the terminal's echo
+  off (seen with `TERM=dumb`); the console stays and keeps its session.
 * MCP clients no longer stall while gptr waits for a child process, and a served tool cannot run
   inside another served tool's wait.
 * Plugin setup rejects a marketplace root, and a bundle without usable resources, with a
@@ -55,15 +69,16 @@ gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version insta
 * Rejected or unsent System 1 requests cost a known zero, a worker's decisions are charged at the
   System 1 model's price, and `peter()` warns when an agent option such as `backend =` is passed as
   context.
-* `/skip` and `/cancel` typed at a hidden credential prompt skip or cancel instead of being stored,
-  `gptr_login()` reports what it stored and where, and a session login reaches worker sub-agents
-  and coaching runs.
+* `/skip` and `/cancel` (in any case) typed at a hidden credential prompt skip or cancel instead of
+  being stored, `gptr_login()` reports what it stored and where, and a session login reaches worker
+  sub-agents and coaching runs.
 * Client snippets of `gptr_mcp_serve()`, `$config` and Codex `$env` no longer show the bearer token
   in Jupyter or knitr output, or in `format()` and `str()`. An explicit `mode =` on a resumed chat
-  applies when the console opens, so `/mcp serve` uses it.
+  applies when the console opens, so `/mcp serve` uses it; in plan mode the server answers
+  read-only R calls and refuses writes.
 * Notebooks run unattended (`jupyter nbconvert --execute`, papermill) no longer wait for an answer
-  to a gptr question; console recordings into `.Rmd` and `.qmd` replay; the notebook bound with
-  `gptr_doc()` is the one recorded.
+  to a gptr question; console recordings into `.Rmd` and `.qmd` load gptr and keep `!` lines, so
+  the documents knit; the notebook bound with `gptr_doc()` is the one recorded.
 * Lines of R output reach the model whole instead of being cut at 400 characters; assignments
   inside `local()` and reading a trust decision are no longer flagged as risky.
 * `peter$search()` keeps callable members, skills and tools ahead of help pages, and a bare plugin

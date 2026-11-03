@@ -279,7 +279,8 @@ plan_on_agent_end = function(event, ctx) {
 }
 
 #' Policy `plan`: write/edit denied; `r` only when every call is known read-only (IC-54), no
-#' existing object changes and it evaluates in a scratch overlay (IC-15). Control calls are left
+#' existing object changes and it evaluates in a scratch overlay (IC-15): the call's own `envir`
+#' (a served call, whose overlay no run holds), else the context's. Control calls are left
 #' to the guards, which ask a person (05 P11 acceptance 6); every other call of the same code
 #' must still pass the allowlist.
 #' @noRd
@@ -310,7 +311,7 @@ plan_policy_check = function(call, ctx) {
                                         paste(utils::head(changed, 5L), collapse = ", "), ")"),
                          call))
   }
-  env = ctx$envir
+  env = call$envir %||% ctx$envir
   if (!is.environment(env) || identical(env, globalenv()) ||
         identical(env, session_home(ctx$session))) {
     return(perm_decision("deny", "plan mode needs a scratch environment for r", call))

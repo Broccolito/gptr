@@ -418,15 +418,19 @@ test_that("the banner names the console's key and promises nothing it lacks (rev
                                          "  ctrl-c twice leaves"))
 })
 
-test_that("in Positron the banner says typed text waits as R code (steering review)", {
+test_that("in Positron, RStudio and Windows the banner says how to steer (D-304)", {
   skip_on_cran()
   local_gptr_options(interactive = TRUE)
   expect_identical(utils::tail(banner_rows("positron", complete = FALSE), 3L), c(
     "/help lists commands - ctrl-c twice leaves",
     "text typed while peter works waits as R code - ctrl-c, then s, to steer", ""))
-  for (fe in c("terminal", "rstudio")) {
-    expect_false(any(grepl("waits as R code", banner_rows(fe))), info = fe)
-  }
+  expect_identical(utils::tail(banner_rows("rstudio"), 2L), c(
+    "lines typed while peter works run after its answer - esc, then s, to steer", ""))
+  expect_false(any(grepl("then s, to steer", banner_rows("terminal"))))
+  # Windows' Rterm has no composer: a typed line is the next prompt there too
+  local_mocked_bindings(is_windows = function() TRUE)
+  expect_identical(utils::tail(banner_rows("terminal"), 2L), c(
+    "lines typed while peter works run after its answer - ctrl-c, then s, to steer", ""))
   # no menu, no line: nobody can answer it
   local_gptr_options(interactive = FALSE)
   expect_false(any(grepl("waits as R code", banner_rows("positron"))))
@@ -943,9 +947,9 @@ test_that("a prompt to a session that runs, in the background, says it steers (s
   d = session_data(s)
   d$status = "running"
   expect_identical(written(function() repl_turn(rs, "now compare the groups")),
-                   paste0(queue_line("steer", "now compare the groups"), "\n"))
+                   paste0(receipt_line("steer", "now compare the groups"), "\n"))
   d$status = "waiting"
-  expect_match(written(function() repl_turn(rs, "x")), queue_line("steer", "x"), fixed = TRUE)
+  expect_match(written(function() repl_turn(rs, "x")), receipt_line("steer", "x"), fixed = TRUE)
   # a refused send shows its error alone
   sent = list(status = "error", error = simpleError("refused"))
   out = written(function() utils::capture.output(repl_turn(rs, "x"), type = "message"))
@@ -954,6 +958,25 @@ test_that("a prompt to a session that runs, in the background, says it steers (s
   sent = list(status = "ok", value = s)
   d$status = "idle"
   expect_no_match(written(function() repl_turn(rs, "x")), "steer")
+})
+
+test_that("a chat prompt that steers a running session is the console's own item (P30 review)", {
+  local_console_test()
+  s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  rs = repl_state(s, new.env())
+  d = session_data(s)
+  d$status = "running"
+  withr::defer({
+    d$status = "idle"
+    d$queue = list(steer = list(), follow_up = list())
+  })
+  expect_identical(written(function() repl_turn(rs, "now compare the groups")),
+                   paste0(receipt_line("steer", "now compare the groups"), "\n"))
+  # source repl: its receipt was written as it was sent, so its take writes nothing again (D-301);
+  # `s |> peter()` in code stays a pipe, shown as the loop takes it
+  expect_identical(vapply(d$queue$steer, function(it) it$source, ""), "repl")
+  peter(s, "and log2")
+  expect_identical(vapply(d$queue$steer, function(it) it$source, ""), c("repl", "pipe"))
 })
 
 test_that("console_send() keeps the session of a failed call and reports the error", {
@@ -1075,7 +1098,7 @@ test_that("piped .stdin: a nested prompt and its echo reach stdout from an untee
   })
   expect_identical(out, c("  | r  x = 1", "  ? sub-agent a: allow r?",
                           "    y yes - a always (session) - p always (project) - n no - ? more",
-                          ">> y"))
+                          "  >> y"))
   expect_identical(home$ans$decision, "allow")
   expect_false(any(grepl("allow", vapply(res$events, function(e) e$text %||% "", ""))))
 })
@@ -1089,7 +1112,8 @@ test_that("the stdin UI never echoes a secret answer", {
     got = c(ui$input("Token", secret = TRUE), ui$input("Name"))
   })
   expect_identical(got, c("FAKE-TOKEN-123", "plain"))
-  expect_identical(out, c("? Token", ">> ", "? Name", ">> plain"))
+  # each read under its question; a secret's shows nothing typed (D-301)
+  expect_identical(out, c("? Token", "  >> ", "? Name", "  >> plain"))
 })
 
 test_that("the stdin UI refuses secret input without hidden capability before reading", {
@@ -1245,6 +1269,26 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
   expect_match(written(function() console_run(NULL, new.env())), "peter> \n$")
 })
 
+test_that("a Ctrl-C as the prompt comes is the prompt's: the hint, and the console stays (P30)", {
+  skip_on_cran()
+  local_console_test()
+  box = local_readline("/exit")
+  # live steering test: a Ctrl-C right after a run's footer landed in the loop's notice check and
+  # left peter()
+  first = TRUE
+  local_mocked_bindings(repl_waiting_notice = function(rs) {
+    if (first) {
+      first <<- FALSE
+      signalCondition(structure(class = c("interrupt", "condition"),
+                                list(message = "", call = NULL)))
+    }
+  })
+  out = tryCatch(utils::capture.output(console_run(NULL, new.env())),
+                 interrupt = function(e) "left")
+  expect_true("ctrl-c again leaves - /exit" %in% out)
+  expect_identical(box$i, 1L)
+})
+
 test_that("a line at the readline limit is reported at once and not sent", {
   skip_on_cran()
   local_console_test()
@@ -1318,7 +1362,7 @@ test_that("a macOS terminal: a paste is one turn, a fence echoes once, Ctrl-D ne
   pty$send("x\r")
   Sys.sleep(0.4)
   pty$send("half\004")
-  expect_true(pty$wait("1 queued   >> half"))
+  expect_true(pty$wait("1 steer queued   >> half"))
   expect_true(pty$wait("peter> half"))
   expect_identical(pty$seen("GOT SLOW END"), 2L)
   pty$send("\025")
@@ -1517,7 +1561,7 @@ test_that("a T REPL asks the background once at its start; else COLORFGBG decide
   }
   # the terminal's answer wins over COLORFGBG
   expect_identical(run("T"), "dark")
-  expect_identical(asked, "\033]11;?\033\\\033[c")
+  expect_identical(asked, "\033]11;?\033\\\033[6n\033[c")
   # only a T console is asked: COLORFGBG decides elsewhere
   for (cls in c("D", "L", "P")) expect_identical(run(cls), "light", info = cls)
   expect_length(asked, 1L)
@@ -1535,6 +1579,36 @@ test_that("a T REPL asks the background once at its start; else COLORFGBG decide
                                          repl_background(rd)))
   withr::with_envvar(c(TERM = "linux"), repl_background(rd))
   expect_length(asked, 3L)
+})
+
+test_that("keys the terminal echoed before the probe are erased before the banner (follow-up)", {
+  # on the cursor's row: that row is cleared
+  expect_identical(tty_echo_erase("abc\033[5;4R\033[?62c", 20L), "\r\033[J")
+  # a line ended, then text wrapped over two rows: the rows above it too
+  got = paste0("ls\n", strrep("x", 25L), "\033[9;6R\033[?62c")
+  expect_identical(tty_echo_erase(got, 20L), "\033[2A\r\033[J")
+  # edit keys as the terminal applied them
+  expect_identical(tty_echo_erase("plox\177t\033[9;5R\033[?62c", 20L), "\r\033[J")
+  # a report the text does not fit (keys typed once the echo was off): the cursor's row alone
+  expect_identical(tty_echo_erase(paste0(strrep("x", 25L), "\033[9;2R\033[?62c"), 20L),
+                   "\r\033[J")
+  # nothing typed, or no report: nothing is written
+  expect_identical(tty_echo_erase("\033[9;1R\033[?62c", 20L), "")
+  expect_identical(tty_echo_erase("abc\033[?62c", 20L), "")
+  # the probe asks where the cursor is, writes the erase and keeps the text as the draft
+  local_console_test()
+  withr::local_options(cli.num_colors = 256L, cli.width = 80L)
+  withr::local_envvar(TERM = "xterm-256color")
+  asked = NULL
+  local_mocked_bindings(tty_query = function(query, ...) {
+    asked <<- query
+    "Make these\033[3;11R\033[?62c"
+  })
+  rd = console_reader()
+  out = utils::capture.output(repl_background(rd))
+  expect_identical(asked, "\033]11;?\033\\\033[6n\033[c")
+  expect_identical(out, "\r\033[J")
+  expect_identical(rd$compose$draft, "Make these")
 })
 
 test_that("keys typed before or during the probe are the reader's, never lost (IC-82)", {
@@ -1644,7 +1718,7 @@ test_that("a terminal answering the probe has its prompt on the band, reset afte
     "fake = gptr_fake_provider(function(req) paste0('GOT ', req$last_user, ' END'))",
     "invisible(peter(model = fake, envir = new.env()))"
   ))
-  expect_true(pty$wait("\033]11;?\033\\\033[c", timeout = 120))
+  expect_true(pty$wait("\033]11;?\033\\\033[6n\033[c", timeout = 120))
   pty$send("\033]11;rgb:ffff/ffff/ffff\033\\\033[?62;22c")
   expect_true(pty$wait("\033[48;5;255mpeter> \033[K"))
   pty$send("hi\r")
@@ -1666,7 +1740,7 @@ test_that("a terminal answering the probe late still has the answer read by it (
     "fake = gptr_fake_provider(function(req) paste0('GOT [', req$last_user, '] END'))",
     "invisible(peter(model = fake, envir = new.env()))"
   ))
-  expect_true(pty$wait("\033]11;?\033\\\033[c", timeout = 120))
+  expect_true(pty$wait("\033]11;?\033\\\033[6n\033[c", timeout = 120))
   # over ssh or on a loaded machine: after the probe's first cap, 250 ms
   Sys.sleep(0.4)
   pty$send("\033]11;rgb:ffff/ffff/ffff\033\\\033[?62;22c")
@@ -1721,10 +1795,9 @@ test_that("a terminal: a run sent to the background shows again while the consol
   pty$send("use base")
   expect_true(pty$wait(paste0(person, " use base")))
   pty$send(" R\r")
-  expect_true(pty$wait(queue_line("steer", "use base R", utf8)))
-  # in the console's palette, as before the wait: the steer on the band, the status line grey
-  # (visual round 2)
-  expect_true(pty$wait(paste0("\033[48;5;237m", person, " use base R")))
+  # its receipt at once, in the console's palette, as before the wait: on the band (visual round 2),
+  # the status line grey
+  expect_true(pty$wait(paste0("\033[48;5;237m", receipt_line("steer", "use base R"))))
   expect_true(pty$wait("use base R END"))
   expect_true(pty$wait("\033[38;5;244mdone"))
   expect_true(pty$wait("peter[auto]> "))

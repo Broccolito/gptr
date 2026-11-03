@@ -389,15 +389,68 @@ test_that("a fork's served calls evaluate in its overlay; a plan-mode parent sta
   expect_false(res$isError)
   expect_identical(get("y_child", envir = session_home(f), inherits = FALSE), 42)
   expect_false(exists("y_child", envir = x$envir, inherits = FALSE))
-  # at an idle console a plan-mode session has no run, hence no scratch overlay (IC-15): P11's
-  # plan policy refuses every r call then
+  # at an idle console a plan-mode session has no run: a read-only r call evaluates in a fresh
+  # scratch overlay of its home (IC-15, D-351), and anything that changes something is refused
   p = local_served_session("plan")
-  for (code in c("saveRDS(d, 'd.rds')", "nrow(d)")) {
-    res = mcp_dispatch_local(r_call(code), session_data(p$session)$id)$result
-    expect_true(res$isError)
+  id = session_data(p$session)$id
+  res = mcp_dispatch_local(r_call("z = nrow(d)\nz"), id)$result
+  expect_false(res$isError)
+  expect_match(res$content[[1L]]$text, "32", fixed = TRUE)
+  expect_false(exists("z", envir = p$envir, inherits = FALSE))
+  for (code in c("saveRDS(d, 'd.rds')", "d$x = 1", "d <<- 1", "assign('zz', 1, globalenv())")) {
+    res = mcp_dispatch_local(r_call(code), id)$result
+    expect_true(res$isError, label = code)
     expect_match(res$content[[1L]]$text, "plan mode", fixed = TRUE)
+    # no allow rule loosens plan mode, so none is offered
+    expect_false(grepl("gptr_permissions", res$content[[1L]]$text, fixed = TRUE))
   }
   expect_false(file.exists("d.rds"))
+  expect_false(exists("zz", envir = globalenv(), inherits = FALSE))
+  expect_identical(p$envir$d, mtcars)
+})
+
+test_that("a plan-mode served r call runs a nested read-only sh call; a writing one is refused", {
+  skip_on_cran()
+  root = local_project(files = list("note.txt" = "hello"))
+  p = local_served_session("plan")
+  id = session_data(p$session)$id
+  served = function(code) mcp_dispatch_local(r_call(code), id)$result
+  # the nested gate reads the call's overlay as the plan policy does for the call itself (D-351)
+  for (cmd in c("echo hi", "ls", "cat note.txt")) {
+    res = served(paste0("peter$sh('", cmd, "')$stdout"))
+    expect_false(res$isError, label = cmd)
+  }
+  expect_match(served("peter$sh('cat note.txt')$stdout")$content[[1L]]$text, "hello", fixed = TRUE)
+  for (code in c("peter$sh('touch made.txt')", "x = 'touch'; peter$sh(paste(x, 'made.txt'))",
+                 "peter$script('made.R')")) {
+    res = served(code)
+    expect_true(res$isError, label = code)
+    expect_match(res$content[[1L]]$text, "plan mode", fixed = TRUE)
+    expect_false(grepl("scratch environment", res$content[[1L]]$text, fixed = TRUE))
+  }
+  expect_false(file.exists(file.path(root, "made.txt")))
+})
+
+test_that("a served refusal offers what a person can do, never an allow rule that cannot work", {
+  local_gptr_options(quiet = FALSE)
+  y = local_served_session("manual")
+  text = function(code) {
+    mcp_dispatch_local(r_call(code), y$session)$result$content[[1L]]$text
+  }
+  out = utils::capture.output({
+    asked = text("a = 2")
+    critical = text("unlink('/gptr-none-x')")
+  })
+  expect_match(asked, paste("Ask the user to run it at the R prompt or to allow it with",
+                            "gptr_permissions(allow = ...). Nothing in this call ran."),
+               fixed = TRUE)
+  expect_match(critical, "a critical action (level 4); nobody can approve it", fixed = TRUE)
+  expect_match(critical, "Ask the user to run it at the R prompt. Nothing in this call ran.",
+               fixed = TRUE)
+  expect_false(grepl("gptr_permissions", critical, fixed = TRUE))
+  # the person's notice offers the rule only for the call it can allow
+  notices = gsub("\\s+", " ", paste(out, collapse = " "))
+  expect_identical(lengths(regmatches(notices, gregexpr("Allow it with", notices))), 1L)
 })
 
 test_that("a served call asks a person only while a pump runs (IC-57)", {

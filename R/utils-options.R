@@ -146,14 +146,22 @@ tty_call = function(keys) {
   invisible(tty)
 }
 
-#' Restore the modes a console call saved (tty_call()), once
+#' Restore the modes a console call saved (tty_call()), once, as one unit a Ctrl-C does not cut:
+#' that Ctrl-C kills the stty child too, in the terminal's foreground group, so the modes are read
+#' back and set again where they did not take; it is raised as the unit ends (Sys.sleep() checks),
+#' in the caller's scope: R would raise it at a later statement, past the console's guard too
 #' @noRd
 tty_restore = function(tty = the$tty) {
   if (identical(the$tty, tty)) the$tty = NULL
   saved = tty$saved
   if (is.null(saved)) return(invisible(NULL))
   tty$saved = NULL
-  tty_modes(c(saved, if ("paste" %in% tty$set) "-paste"))
+  back = c(saved, if ("paste" %in% tty$set) "-paste")
+  suspendInterrupts({
+    tty_modes(back)
+    if (!identical(tty_modes(), saved)) tty_modes(back)
+  })
+  Sys.sleep(0)
   invisible(NULL)
 }
 
@@ -256,23 +264,29 @@ tty_query = function(query, ms = 1500) {
   got
 }
 
-#' Text without the terminal's answers to tty_query(), an OSC reply (`ESC ] ... BEL` or `ST`) and
-#' DA1's `ESC [ ? ... c`, so a reply that comes late is never typed text (IC-82)
+#' Text without the terminal's answers to tty_query(), an OSC reply (`ESC ] ... BEL` or `ST`), a
+#' cursor report (`ESC [ row ; col R`) and DA1's `ESC [ ? ... c`, so a reply that comes late is
+#' never typed text (IC-82)
 #' @noRd
 tty_unreply = function(x) {
-  gsub("\033\\][^\a\033]*(\a|\033\\\\)?|\033\\[\\?[0-9;]*c", "", x, perl = TRUE)
+  gsub("\033\\][^\a\033]*(\a|\033\\\\)?|\033\\[[0-9]+;[0-9]+R|\033\\[\\?[0-9;]*c", "", x,
+       perl = TRUE)
 }
 
 #' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its
 #' own copy of readline() as `read` (console_reader()). The seconds it waited go to
 #' `the$readline_secs` (readline_answer()); readline() keeps only 255 bytes of a prompt, so one
 #' over 200 bytes, or in the console margin (D-186) one wider than its content row, is printed
-#' whole (word-wrapped in the margin) and read after "> " (in the margin too) (IC-75). With `hide`
+#' whole (word-wrapped in the margin) and read after "> " (in the margin too) (IC-75). A live row
+#' shown is cleared first, so none sits between a question and its prompt, nor stays in a console
+#' that cannot erase a row once a line ends after it (RStudio); it is drawn again only once the
+#' read returns (D-301). With `hide`
 #' (a secret's tty_secret()) it reads with the echo off, the last mode set before the read, and
 #' restores `hide` first on exit, also after an interrupt; GNU readline and libedit then draw
 #' nothing typed, nor the Enter, whose newline follows the answer (IC-77)
 #' @noRd
 gptr_readline = function(prompt = "", read = readline, hide = NULL) {
+  if (!is.null(the$live_row)) the$live_row$clear()
   pad = console_pad()
   text = trimws(prompt, "left")
   if (nchar(prompt, type = "bytes") > 200L || (nzchar(pad) &&
@@ -289,10 +303,14 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
     on.exit(tty_modes(tty$set), add = TRUE)
   } else if (isTRUE(tty$quiet)) {
     # readline shows what it reads only where the echo is on as it starts; its prompt erases a key
-    # the terminal echoed in that moment (tty_question())
+    # the terminal echoed in that moment (tty_question()), after its leading blanks, which it then
+    # steps over: macOS libedit in TERM=dumb draws an answer over a prompt whose hidden start is
+    # followed by a blank and a wide glyph (two blanks, U+203A, a blank)
     tty$quiet = FALSE
     tty_modes(tty$saved)
-    prompt = paste0("\001\r\033[K\002", prompt)
+    lead = attr(regexpr("^ *", prompt), "match.length")
+    prompt = paste0(strrep(" ", lead), "\001\r\033[K", if (lead) paste0("\033[", lead, "C"), "\002",
+                    substring(prompt, lead + 1L))
   }
   if (!is.null(hide)) {
     on.exit(tty_modes(hide), add = TRUE, after = FALSE)
@@ -409,12 +427,18 @@ jupyter_stdin = function(read = readline) {
   FALSE
 }
 
-#' Yes/no question; `default` when nobody can answer. Never askYesNo().
+#' Yes/no question; `default` when nobody can answer. Never askYesNo(). It is the UI's question
+#' where the UI asks one (the ui.get service's `confirm`: the console's, under it, D-306), else
+#' `<question> [y/N] ` at readline
 #' @noRd
 gptr_confirm = function(question, default = FALSE) {
   check_string(question, "question")
   check_flag(default, "default")
   if (!gptr_can_prompt()) return(default)
+  ui = if (ext_service_has("ui.get")) {
+    tryCatch(ext_service_get("ui.get")(NULL), error = function(e) NULL)
+  }
+  if (is.function(ui$confirm)) return(isTRUE(ui$confirm(question, default)))
   hint = if (default) " [Y/n] " else " [y/N] "
   answer = tolower(trimws(readline_answer(paste0(question, hint))))
   if (!nzchar(answer)) return(default)

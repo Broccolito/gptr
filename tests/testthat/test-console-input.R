@@ -105,7 +105,8 @@ test_that("Up on an empty draft takes back; as a batch of its own or its end (re
     list("\033[A", "abc", "abc", NULL),
     list("\033[Ax", "", "x", NULL),
     list("\033[A\033[A", "", "", back),
-    # keys read as one batch after an in-process tool: Ctrl-U, then Up
+    # a batch ending in Up, as console_keys() cuts typed keys: Ctrl-U, then Up; after a newline
+    # it is dropped, as console_keys() cuts it off first
     list("\025\033[A", "x", "", back),
     list("x\n\033[A", "", "", sent("steer", "x"))
   ))
@@ -297,7 +298,8 @@ test_that("Tab completes a trigger word and never queues it; other drafts go as 
     list("\t", "x$y", "", sent("follow_up", "x$y")),
     list("\t", "wow! x", "", sent("follow_up", "wow! x")),
     list("\t", "", "", NULL),
-    # keys read as one batch after an in-process tool: a Tab at its end is the key, one inside text
+    # a Tab ending a batch, as console_keys() cuts typed keys, is the key; one inside a batch is
+    # text, as in a paste
     list("then plot\t", "", "", sent("follow_up", "then plot")),
     list("use @mtc\t", "", "use @mtcars", NULL),
     list("a\tb", "", "a\tb", NULL)
@@ -317,15 +319,16 @@ live_rows = function(states, width) {
 }
 
 live_states = list(
-  rstudio = list(what = "thinking", secs = 6, queued = 1, key = "Esc", pause = TRUE, typed = TRUE),
-  positron = list(what = "thinking", secs = 6, queued = 1, key = "Ctrl-C", pause = TRUE,
+  rstudio = list(what = "thinking", secs = 6, queued = "steer", key = "Esc", pause = TRUE,
+                 steer = TRUE, typed = TRUE),
+  positron = list(what = "thinking", secs = 6, queued = "steer", key = "Ctrl-C", pause = TRUE,
                   steer = TRUE),
   menu = list(what = "r", secs = 65, key = "Ctrl-C", pause = TRUE),
   hint = list(what = "thinking", secs = 6, draft = ""),
   follow = list(what = "thinking", secs = 6, draft = "", enter = "follow_up"),
-  queue = list(what = "thinking", secs = 6, queued = 2, draft = "",
+  queue = list(what = "thinking", secs = 6, queued = c("follow_up", "steer"), draft = "",
                newest = list(kind = "steer", text = "use log(mpg)\ninstead")),
-  draft = list(what = "thinking", secs = 6, queued = 1,
+  draft = list(what = "thinking", secs = 6, queued = "steer",
                draft = "and plot the residuals against the fitted values please"),
   question = list(what = "edit", secs = 11, question = TRUE, draft = "and plot the residu"),
   complete = list(what = "thinking", secs = 3, candidates = c("@mtcars", "@mtcars_copy"),
@@ -334,47 +337,46 @@ live_states = list(
 
 test_that("the live row says what the run does, its queue and the person's draft (D-243)", {
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
+  # the queue is counted, its kind named where one waits; the receipts show the text (D-301)
   expect_identical(live_rows(live_states, 80L), list(
-    rstudio = "▌ thinking 6s · 1 queued · esc pause · typed lines run next",
-    positron = "▌ thinking 6s · 1 queued · ctrl-c, then s, to steer",
+    rstudio = "▌ thinking 6s · 1 steer queued · esc, then s, to steer",
+    positron = "▌ thinking 6s · 1 steer queued · ctrl-c, then s, to steer",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer · tab follow-up · ctrl-c pause",
     follow = "▌ thinking 6s   enter follow-up · tab steer · ctrl-c pause",
-    queue = paste("▌ thinking 6s · 2 queued   ↳ steer · use log(mpg) instead",
-                  "· ↑ edit"),
+    queue = "▌ thinking 6s · 2 queued   ↑ edit",
     draft = "▌ thinking 6s   › and plot the residuals against the fitted values please",
     question = "▌ edit 11s · question waiting   › and plot the residu",
     complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
   ))
   # one collapse rule: whole terms go from the right (the hint's, then the queue and a waiting
-  # question), then the queued message is cut, keeping its head; the draft keeps its tail
+  # question); the draft keeps its tail
   expect_identical(live_rows(live_states, 40L), list(
-    rstudio = "▌ thinking 6s · 1 queued · esc pause",
-    positron = "▌ thinking 6s · 1 queued",
+    rstudio = "▌ thinking 6s · 1 steer queued",
+    positron = "▌ thinking 6s · 1 steer queued",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer",
     follow = "▌ thinking 6s   enter follow-up",
-    queue = "▌ thinking 6s   ↳ steer · use log(mpg)…",
+    queue = "▌ thinking 6s · 2 queued   ↑ edit",
     draft = "▌ 6s   › …inst the fitted values please",
     question = "▌ edit 11s   › and plot the residu",
     complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
   ))
   expect_identical(live_rows(live_states, 30L), list(
-    rstudio = "▌ thinking 6s · 1 queued",
-    positron = "▌ thinking 6s · 1 queued",
+    rstudio = "▌ thinking 6s",
+    positron = "▌ thinking 6s",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer",
     follow = "▌ thinking 6s",
-    queue = "▌ thinking 6s   ↳ steer · us…",
+    queue = "▌ thinking 6s · 2 queued",
     draft = "▌ 6s   › …itted values please",
     question = "▌ 11s   › and plot the residu",
     complete = "▌ @mtcars  @mtc…   › use @mtc"
   ))
-  # a whole message never ends in an ellipsis; the time is the floor
-  follow_up = list(what = "thinking", secs = 28, queued = 1, draft = "",
+  # no queued text on the row; the time is the floor
+  follow_up = list(what = "thinking", secs = 28, queued = "follow_up", draft = "",
                    newest = list(kind = "follow_up", text = "then save the plot as plot.png"))
-  expect_identical(console_live_row(follow_up, 80L),
-                   "▌ thinking 28s · 1 queued   ↳ follow-up · then save the plot as plot.png")
+  expect_identical(console_live_row(follow_up, 80L), "▌ thinking 28s · 1 follow-up queued   ↑ edit")
   expect_identical(console_live_row(follow_up, 25L), "▌ thinking 28s")
   expect_identical(console_live_row(follow_up, 12L), "▌ 28s")
   # every row fits width - 1 as the terminal draws it: the glyphs are one column, wide
@@ -388,13 +390,136 @@ test_that("the live row says what the run does, its queue and the person's draft
   expect_identical(console_live_row(list(secs = 0), 4L), "")
   withr::local_options(cli.unicode = FALSE)
   expect_identical(live_rows(live_states[c("queue", "draft")], 80L), list(
-    queue = "# thinking 6s - 2 queued   -> steer - use log(mpg) instead - Up edit",
+    queue = "# thinking 6s - 2 queued   Up edit",
     draft = "# thinking 6s   >> and plot the residuals against the fitted values please"
   ))
 })
 
-test_that("Positron's row says Ctrl-C, then s, steers there (steering review)", {
+test_that("a question clears the live row first; none is drawn before its answer (P30, D-305)", {
+  local_live_console("L")
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 60L)
+  # a row that erases cleanly (RStudio's, a terminal's), shown, at the sink written() reads
+  row = console_live()
+  row$erase = TRUE
+  row$sinks = sink.number() + 1L
+  the$live_row = row
+  withr::defer(assign("live_row", NULL, envir = the))
+  show = function() written(function() row$draw(list(what = "r", secs = 1)))
+  show()
+  # every read clears it before its prompt, as gptr_confirm()'s question is the prompt
+  seen = NA
+  read = function(p) {
+    seen <<- row$shown
+    "y"
+  }
+  out = written(function() gptr_readline("Trust this project? [y/N] ", read = read))
+  expect_false(seen)
+  expect_identical(out, "\r\033[K")
+  # a question too long for readline's prompt is written first, and no row is drawn after it, where
+  # RStudio would keep it in the transcript (live check: two stale rows after one consent question)
+  show()
+  long = paste(rep("Send this request to the provider?", 8L), collapse = " ")
+  out = written(function() gptr_readline(long, read = function(p) "y"))
+  expect_false(grepl("\u258c", out, fixed = TRUE))
+  expect_false(row$shown)
+  # a console question clears it before its rows, also with no foreground run on record
+  show()
+  written(function() console_before_message(kind = "prompt", tools = TRUE))
+  expect_false(row$shown)
+})
+
+test_that("the live row shows from the run's start, its clock from the prompt's Enter (#98)", {
+  local_project()
+  local_live_console("T")
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 1L, cli.width = 60L)
+  local_fake_provider(list("ok"))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  run = run_new(s, list(), NULL)
+  live = session_live(s)
+  live$run = run
+  withr::defer({
+    console_drop(run$id)
+    live$run = NULL
+  })
+  # the console's send of a prompt: Enter was 5 s ago (provider checks, a CLI's model listing)
+  rs = list2env(list(started = as.numeric(Sys.time()) - 5))
+  send = function() {
+    .gptr_repl = rs
+    force(.gptr_repl)
+    console_on_agent_start(ev_new("agent_start", run = run$id), live$ctx)
+  }
+  out = written(send)
+  rec = console_record(list(run = run$id))
+  expect_identical(the$live_row$rec, rec)
+  expect_match(out, "thinking 5s", fixed = TRUE)
+  expect_null(rs$started)
+})
+
+test_that("a prompt's live row shows from Enter, before its run starts; a refusal ends it (#98)", {
+  local_project()
+  local_live_console("T")
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 1L, cli.unicode = TRUE,
+                       cli.width = 60L)
+  # the checks before the run: a CLI's model listing, consent; here they refuse
+  seen = new.env(parent = emptyenv())
+  local_mocked_bindings(gateway_guards = function(...) {
+    seen$shown = isTRUE(the$live_row$shown)
+    stop("refused")
+  })
+  rs = repl_state(NULL, new.env())
+  rs$model = gptr_fake_provider(list("ok"))
+  res = NULL
+  out = written(function() res <<- console_send(rs, "hello"))
+  expect_identical(res$status, "error")
+  expect_true(seen$shown)
+  # no run takes a message yet; Ctrl-C stops the call
+  expect_match(out, "▌ thinking 0s · ctrl-c stop", fixed = TRUE)
+  expect_null(the$live_row)
+  expect_identical(trimws(utils::tail(term_rows(out), 1L)), "")
+  # a T console's composer reads the keys once the run starts: they steer and pause it then; a
+  # draft a question before the run kept shows (D-306)
+  tty = the$tty
+  the$tty = list(keys = TRUE)
+  withr::defer(assign("tty", tty, envir = the))
+  rd = new.env()
+  local_mocked_bindings(console_repl_prompt = function() list(reader = rd))
+  sent = list2env(list(sent = TRUE, t0 = as.numeric(Sys.time()) - 3, what = "thinking"))
+  row = function() c(console_live_row(console_live_state(sent), 80L))
+  expect_identical(row(), "▌ thinking 3s   enter steer · tab follow-up · ctrl-c pause")
+  rd$compose = list(draft = "draft words")
+  expect_identical(row(), "▌ thinking 3s   › draft words")
+})
+
+test_that("a launch clears a sub-agent group's row, which no foreground record owns (#99 review)", {
+  local_live_console("T")
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 60L)
+  row = console_live()
+  row$erase = TRUE
+  row$sinks = sink.number() + 1L
+  the$live_row = row
+  withr::defer(assign("live_row", NULL, envir = the))
+  show = function() written(function() row$draw(list(what = "sub-agents 0/2", secs = 1)))
+  # a direct team's row is a child's: a process the child launches writes past gptr
+  row$rec = list2env(list(child = list(label = "alpha")))
+  show()
+  expect_identical(written(function() console_before_message(kind = NULL)), "\r\033[K")
+  expect_false(row$shown)
+  # a notice is written through the row, which draws again after it
+  show()
+  written(function() console_before_message())
+  expect_true(row$shown)
+})
+
+test_that("Positron's and RStudio's rows say the key, then s, steers there (steering review)", {
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
+  # RStudio holds a typed line for the next prompt: typing there never steers (D-301)
+  rstudio = list(what = "thinking", secs = 6, steer = TRUE, typed = TRUE, pause = TRUE,
+                 key = "Esc")
+  expect_identical(console_live_row(rstudio, 80L),
+                   "▌ thinking 6s · esc, then s, to steer · typed lines run after this answer")
+  expect_identical(console_live_row(rstudio, 60L), "▌ thinking 6s · esc, then s, to steer")
   state = list(what = "thinking", secs = 6, steer = TRUE, pause = TRUE, key = "Ctrl-C")
   expect_identical(console_live_row(state, 80L), "▌ thinking 6s · ctrl-c, then s, to steer")
   # the term goes whole, as every term does
@@ -408,22 +533,22 @@ test_that("while R code runs in this process the row has no clock and says keys 
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   r = list(what = "r", secs = 5, frozen = TRUE, key = "Ctrl-C", pause = TRUE)
   states = list(keys = c(r, draft = ""), draft = c(r, draft = "and plot"), ide = r,
-                queued = c(r, queued = 1, draft = "p1 third line"),
-                all = c(r, queued = 2, question = TRUE, draft = "and plot"),
+                queued = c(r, queued = "steer", draft = "p1 third line"),
+                all = c(r, list(queued = c("steer", "steer")), question = TRUE, draft = "and plot"),
                 asks = c(r, question = TRUE, draft = ""),
                 widest = c(r, draft = "and plot", status_w = 26L))
   # with a draft the status words say keys wait too, before the queue (steering review); a question
   # waiting reads keys, so its row has the clock and the keys (review of Tasks 22-27)
   expect_identical(live_rows(states, 80L), list(
     keys = "▌ r · keys show when r returns", draft = "▌ r · keys wait   › and plot",
-    ide = "▌ r · ctrl-c pause", queued = "▌ r · keys wait · 1 queued   › p1 third line",
+    ide = "▌ r · ctrl-c pause", queued = "▌ r · keys wait · 1 steer queued   › p1 third line",
     all = "▌ r 5s · 2 queued · question waiting   › and plot",
     asks = "▌ r 5s · question waiting   enter steer · tab follow-up · ctrl-c pause",
     widest = paste0("▌ r · keys wait", strrep(" ", 13L), "   › and plot")
   ))
   # a long draft keeps its tail; the cue and the queue go whole
   long = strrep("abcdefghij", 12L)
-  states = list(long = c(r, queued = 1, draft = long))
+  states = list(long = c(r, queued = "steer", draft = long))
   expect_identical(live_rows(states, 80L)$long, paste0("▌ r   › …", substring(long, 51L)))
   expect_identical(live_rows(states, 40L)$long, paste0("▌ r   › …", substring(long, 91L)))
 })
@@ -451,7 +576,7 @@ test_that("during a sub-agent the row ticks and shows the queue; keys wait in it
   withr::local_options(cli.dynamic = TRUE)
   local_live_console()
   newest = NULL
-  local_mocked_bindings(console_queued = function(s) as.integer(!is.null(newest)),
+  local_mocked_bindings(console_queued = function(s) if (!is.null(newest)) "steer",
                         console_newest = function(s, rd) newest,
                         console_repl_prompt = function() list(reader = list(compose = list())),
                         console_render_on = function(rec) FALSE, front_end = function() "terminal")
@@ -481,21 +606,20 @@ test_that("during a sub-agent the row ticks and shows the queue; keys wait in it
   hint = "▌ sub-agent 'a' #1 7s   enter steer · tab follow-up · ctrl-c pause"
   expect_identical(c(row(80L), row(120L)), c(hint, hint))
   newest = list(kind = "steer", text = "s11 during the sub-agent")
-  expect_identical(row(80L),
-                   "▌ sub-agent 'a' #1 7s · 1 queued   ↳ steer · s11 during the sub-agent · ↑ edit")
+  expect_identical(row(80L), "▌ sub-agent 'a' #1 7s · 1 steer queued   ↑ edit")
   # the sub-agent's own r call evaluates in this process; the hint names the tool, not the label
   kid$frozen = TRUE
-  expect_identical(row(80L), "▌ sub-agent 'a' #1 · 1 queued · keys show when r returns")
+  expect_identical(row(80L), "▌ sub-agent 'a' #1 · 1 steer queued · keys show when r returns")
   # once it returns, the parent's r call is the one that runs
   rm(list = "u_kid", envir = active)
-  expect_identical(row(80L), "▌ r · 1 queued · keys show when r returns")
+  expect_identical(row(80L), "▌ r · 1 steer queued · keys show when r returns")
   # the row's task draws while a sub-agent shows, though a tool is on the stack
   written(function() console_live_start(parent))
   pass = function() written(reactor_get()$tasks[[the$live_row$task]]$fn)
   expect_identical(pass(), "")
   kid$frozen = NULL
   assign("u_kid", kid, envir = active)
-  expect_match(pass(), "sub-agent 'a' #1 [0-9]+s · 1 queued")
+  expect_match(pass(), "sub-agent 'a' #1 [0-9]+s · 1 steer queued")
 })
 
 test_that("a sub-agent's long label gives way to its number before the person's text (review)", {
@@ -505,10 +629,11 @@ test_that("a sub-agent's long label gives way to its number before the person's 
   draft = "s11 during the sub-agent"
   steer = list(kind = "steer", text = "s1 use the median")
   expect_identical(live_rows(list(
-    draft = c(kid, draft = draft), queued = c(kid, queued = 1, draft = "", list(newest = steer)),
+    draft = c(kid, draft = draft),
+    queued = c(kid, queued = "steer", draft = "", list(newest = steer)),
     frozen = c(kid, frozen = TRUE, draft = ""), wide = c(kid, draft = "")), 60L), list(
     draft = "▌ sub-agent #1 4s   › s11 during the sub-agent",
-    queued = "▌ sub-agent #1 4s · 1 queued   ↳ steer · s1 use the median",
+    queued = "▌ sub-agent #1 4s · 1 steer queued   ↑ edit",
     frozen = "▌ sub-agent #1 · keys show when r returns",
     wide = "▌ sub-agent #1 4s   enter steer · tab follow-up"
   ))
@@ -519,9 +644,9 @@ test_that("a sub-agent's long label gives way to its number before the person's 
                    "▌ 4s   › s11 during the sub-agent")
 })
 
-test_that("the live row counts its group and shows active phases without hiding queued work", {
+test_that("the live row counts its group and shows active phases without hiding pending work", {
   withr::local_options(cli.unicode = FALSE, cli.num_colors = 1L)
-  local_mocked_bindings(console_queued = function(s) 0L,
+  local_mocked_bindings(console_queued = function(s) character(),
                         console_repl_prompt = function() list(reader = NULL))
   active = console_state()$active
   runs = lapply(1:2, function(i) {
@@ -530,7 +655,7 @@ test_that("the live row counts its group and shows active phases without hiding 
     r$settled = FALSE
     r
   })
-  group = list2env(list(n = 3L, labels = c("alpha", "beta", "gamma"),
+  group = list2env(list(n = 3L, labels = c("alpha", "beta", "gamma"), models = rep("", 3L),
                         runs = c(runs, list(NULL))))
   recs = lapply(1:2, function(i) {
     runs[[i]]$group = group
@@ -543,9 +668,14 @@ test_that("the live row counts its group and shows active phases without hiding 
   withr::defer(rm(list = vapply(runs, function(r) r$id, ""), envir = active))
   parent = list(session = NULL, t0 = as.numeric(Sys.time()), what = "r")
   state = console_live_state(parent)
-  expect_match(state$what, "sub-agents 0/3 done - 2 active - 1 queued", fixed = TRUE)
+  expect_match(state$what, "sub-agents 0/3 done - 2 active - 1 pending", fixed = TRUE)
   expect_match(state$what, "alpha r, beta thinking", fixed = TRUE)
-  expect_identical(state$short, "sub-agents 0/3 - 2 active - 1 queued")
+  expect_identical(state$short, "sub-agents 0/3 - 2 active - 1 pending")
+  # `queued` is the person's messages only, never the members not started (#99 review)
+  row = console_live_row(utils::modifyList(state, list(queued = c("steer", "steer"), draft = "")),
+                         120L)
+  expect_identical(lengths(regmatches(row, gregexpr("queued", row))), 1L)
+  expect_match(row, "1 pending [0-9]+s - 2 queued")
   for (width in c(20L, 40L, 80L, 120L)) {
     row = console_live_row(c(state, draft = "use the median"), width)
     expect_lte(cli::ansi_nchar(row, type = "width"), width - 1L)
@@ -554,7 +684,13 @@ test_that("the live row counts its group and shows active phases without hiding 
   rm(list = runs[[1L]]$id, envir = active)
   withr::defer(assign(runs[[1L]]$id, recs[[1L]], active))
   expect_match(console_live_state(parent)$what,
-               "sub-agents 1/3 done - 1 active - 1 queued", fixed = TRUE)
+               "sub-agents 1/3 done - 1 active - 1 pending", fixed = TRUE)
+  # a direct group's row counts the group's time, not its owner's, which a later child takes over
+  # (#99 review: the clock went back from 1.2 s to 0.9 s)
+  group$t0 = as.numeric(Sys.time()) - 30
+  recs[[2L]]$t0 = as.numeric(Sys.time()) - 2
+  expect_gte(console_live_state(recs[[2L]])$secs, 30)
+  expect_lt(console_live_state(parent)$secs, 30)
   withr::local_options(cli.dynamic = TRUE)
   local_live_console()
   recs[[2L]]$what = "working"
@@ -608,14 +744,14 @@ test_that("a leading ! takes the chevron's place; / and ! drafts say when they r
   states = list(
     bang = list(what = "thinking", secs = 6, draft = "!summary(fuel$mpg)"),
     twice = list(what = "thinking", secs = 6, draft = "!!x = 1"),
-    slash = list(what = "thinking", secs = 6, queued = 1, draft = "/mode"),
+    slash = list(what = "thinking", secs = 6, queued = "steer", draft = "/mode"),
     spaced = list(what = "thinking", secs = 6, draft = "  /mode"),
     text = list(what = "thinking", secs = 6, draft = "wow! /x")
   )
   expect_identical(live_rows(states, 80L), list(
     bang = "▌ thinking 6s   runs after this answer   ! summary(fuel$mpg)",
     twice = "▌ thinking 6s   runs after this answer   ! !x = 1",
-    slash = "▌ thinking 6s · 1 queued   runs after this answer   › /mode",
+    slash = "▌ thinking 6s · 1 steer queued   runs after this answer   › /mode",
     spaced = "▌ thinking 6s   runs after this answer   ›   /mode",
     text = "▌ thinking 6s   › wow! /x"
   ))
@@ -864,7 +1000,7 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
                                                       fixed = TRUE))), 4L)
   expect_identical(r$prompts, character())
   expect_identical(r$kept, character())
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   expect_identical(r$draft, "")
   # a Tab at a batch's end off a trigger word does nothing here either; Enter sends
   r = idle_read("and label", list(" it\t", "\r"))
@@ -915,7 +1051,7 @@ test_that("a draft at the prompt completes a trigger word; several are listed ab
 test_that("a bracketed paste at the prompt's editor stays in the draft until Enter (D-263)", {
   r = idle_read("note:", list("\033[200~a\rb\r\033[201~", " c\r"))
   expect_identical(r$x, "note:a\nb\n c")
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   # one whose end marker never comes keeps Enter adding lines; Ctrl-C hands the draft over
   r = idle_read("x", list("\033[200~a\r", "\r", ctrl_c), "next")
   expect_identical(r$x, "next")
@@ -972,7 +1108,7 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
   expect_identical(r$rows, "")
   expect_identical(r$prompts, "peter> ")
   expect_identical(r$kept, character())
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   # Ctrl-C adds the draft to the history and lists it, as Codex clears its composer
   r = idle_read("and plot", list(ctrl_c), "next")
   expect_identical(r$x, "next")
@@ -981,7 +1117,7 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
   expect_identical(r$prompts, "peter> ")
   expect_identical(r$kept, "and plot")
   expect_null(r$draft)
-  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   # in character mode Ctrl-C is a key read like any other; the keys before it count (review)
   r = idle_read("and plot", list(" it\003x"), "next")
   expect_identical(r$rows, c(kept_line("and plot it"), "", ""))
@@ -1031,7 +1167,7 @@ test_that("a hand-over keeps the editor's modes until readline is called, which 
   expect_false(is.null(the$tty))
   expect_identical(rd$handed, the$tty)
   written(function() expect_identical(rd$read("peter> "), "X"))
-  expect_identical(at_read$stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(at_read$stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   expect_null(at_read$tty)
   expect_identical(at_read$prompt, "\001\r\033[K\002peter> ")
   expect_null(the$tty)
@@ -1039,7 +1175,7 @@ test_that("a hand-over keeps the editor's modes until readline is called, which 
   # where R's readline does not read the tty the editor restores at once, and the prompt is plain
   local_mocked_bindings(console_readline_tty = function() FALSE)
   expect_null(idle("\025"))
-  expect_identical(stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   expect_null(rd$handed)
   written(function() rd$read("peter> "))
   expect_identical(at_read$prompt, "peter> ")
@@ -1047,7 +1183,7 @@ test_that("a hand-over keeps the editor's modes until readline is called, which 
   local_mocked_bindings(console_readline_tty = function() TRUE)
   at_read = NULL
   expect_identical(idle("x\r"), "and colourx")
-  expect_identical(stty, c("-g", keys_mode, "SAVED -paste"))
+  expect_identical(stty, c("-g", keys_mode, "SAVED -paste", "-g"))
   expect_null(rd$handed)
   expect_null(at_read)
 })

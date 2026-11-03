@@ -55,7 +55,7 @@ test_that("the entry cap leaves undiscovered files unknown", {
   # Count real ignored entries without making the entry-cap assertion race slow Windows I/O.
   result = ckpt_scan_run(root, c(ckpt_prune(root), "f*"), baseline = TRUE)
   expect_false(result$complete)
-  expect_identical(result$reason, "entry limit")
+  expect_identical(result$reason, "the folder has more than 2,000 entries")
   expect_equal(nrow(result$walk), 0L)
   expect_length(result$absent, 0L)
 })
@@ -131,7 +131,7 @@ test_that("the time budget stops a scan between entries and keeps what it comple
   })
   result = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
   expect_false(result$complete)
-  expect_identical(result$reason, "time limit")
+  expect_identical(result$reason, "it ran out of time (gptr.checkpoint_scan_timeout)")
   expect_identical(result$walk$path, "a.R")
   expect_identical(names(result$hash), "a.R")
   expect_false(is.null(ckpt_blob_find(result$hash[["a.R"]])))
@@ -142,7 +142,7 @@ test_that("a zero budget scans nothing and invalid budgets are refused", {
   local_gptr_options(checkpoint_scan_timeout = 0)
   result = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
   expect_false(result$complete)
-  expect_identical(result$reason, "time limit")
+  expect_identical(result$reason, "it ran out of time (gptr.checkpoint_scan_timeout)")
   expect_equal(nrow(result$walk), 0L)
   for (bad in list(-1, "2", NA_real_, c(1, 2))) {
     local_gptr_options(checkpoint_scan_timeout = bad)
@@ -165,7 +165,7 @@ test_that("an interrupt the person continues from stops the scan and keeps its r
   result = withCallingHandlers(ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE),
                                interrupt = function(cnd) invokeRestart("resume"))
   expect_false(result$complete)
-  expect_identical(result$reason, "interrupted")
+  expect_identical(result$reason, "it was interrupted")
   expect_identical(names(result$hash), "a.R")
   # an interrupt that aborts keeps unwinding
   expect_identical(tryCatch(ckpt_scan_run(root, ckpt_prune(root)), interrupt = identity), interrupt)

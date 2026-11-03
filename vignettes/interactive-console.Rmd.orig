@@ -89,9 +89,10 @@ for client configuration and the limits of synchronous tool waits.
 
 ## Enter prompts, objects and your own R
 
-Ask in ordinary language. `@x` attaches a visible R object by name, and `@analysis.R` adds the
-beginning of a text file. A path of letters and digits in any script, `.`, `_`, `-`, `~` and
-`/` needs no quotes; quote any other path, such as `@"analysis notes.txt"` (Tab leaves the
+Ask in ordinary language. `@x` attaches an object of the console's workspace by name (copy a
+package's data in first, as `!fuel = mtcars` does), and `@analysis.R` adds the beginning of a
+text file. A path of letters and digits in any script, `.`, `_`, `-`, `~` and `/` needs no
+quotes; quote any other path, such as `@"analysis notes.txt"` (Tab leaves the
 quotes to you). When no file or object has the whole name, a mention reads its leading ASCII
 letters, digits, `.`, `_`, `-`, `~` and `/`, so `@x` may run into text written without spaces.
 A mention is a word that starts with `@`, so `me@example.org` stays text.
@@ -99,13 +100,14 @@ Files take precedence when a mention matches both a file and an object. A file m
 at most its first 40 lines, and the files of one prompt share about 2,000 tokens; binary files
 contribute a description rather than their contents.
 For a larger file, ask the agent to read the relevant section. Under the prompt you send, a dim
-line says what each mention attached, such as `@ mtcars (data.frame, 32 x 11)` or
+line says what each mention attached, such as `@ fuel (data.frame, 32 x 11)` or
 `@ analysis.R (first 40 lines)`, or that a name was not found and was sent as text.
 
 ```text
-peter> Compare @mtcars columns mpg and wt.
+peter> !fuel = mtcars
+peter> Compare @fuel columns mpg and wt.
 peter> Explain the approach in @analysis.R.
-peter> !head(mtcars[, c("mpg", "wt")])
+peter> !head(fuel[, c("mpg", "wt")])
 peter> Now suggest a diagnostic plot.
 ```
 
@@ -145,15 +147,17 @@ input limit; use an `@file` or a multiline prompt instead.
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 and `... ` waits for Enter, where text you type is added. A pasted fence or `"""` block is read up
 to its closer at once, a block pasted at an approval or a choice is kept in the console history
-and the question asked again, and one pasted at the pause menu's `? Steer` or `? Follow-up` is
-the whole text. A last pasted line without a newline waits for Enter at the next prompt, so a
+and the question asked again, and one pasted at the pause menu's `steer> ` or `next> ` is the
+whole text. A last pasted line without a newline waits for Enter at the next prompt, so a
 two-line paste without a final newline answers a question with its first line. Homebrew or
 conda R, Linux terminals, RStudio, R.app, Positron and Windows deliver pasted lines one at a
 time, as typed lines (at a question the first one answers it), so wrap a multi-line paste in
 `"""` there. Lines typed, pasted or run from a
 script before a question appears (an approval, a choice) never answer it: while an answer runs
 they are queued for the agent as `type_ahead` says (a `/command` or `!code` line waits for the
-next prompt), otherwise they go to the console history. Answer after the prompt.
+next prompt), otherwise they go to the console history. Answer after the prompt, which is
+indented two columns under the question: only what you send to the agent starts at the left
+edge, as `peter> `, `steer> ` or `next> `.
 
 ```text
 peter> """
@@ -281,13 +285,14 @@ cannot read it while Peter works:
 
 - In RStudio, R.app and Windows consoles a line typed during an answer is the next prompt, one
   prompt per line, unless a question comes first: the question reads the line, queues it as
-  `type_ahead` says and asks again. RStudio hides such a line at its next output, and its bottom
-  row says `typed lines run next`.
+  `type_ahead` says and asks again. RStudio hides such a line at its next output. The bottom row
+  there and in Windows' Rterm says `typed lines run after this answer`.
 - Positron's console keeps typed text as R code, which runs after `peter()` returns, and clears
   it at Ctrl-C.
-- To steer in these consoles, pause and press `s` (Windows' Rgui cannot pause). In RStudio an
-  Esc first closes RStudio's own completion list, if open, then clears a line being typed, so the
-  menu comes at the next Esc.
+- To steer in these consoles, pause and press `s` (Windows' Rgui cannot pause), as their banner
+  and bottom row say: `esc, then s, to steer` in RStudio and R.app, `ctrl-c, then s, to steer`
+  in Positron and Windows' Rterm. In RStudio an Esc first closes RStudio's own completion list,
+  if open, then clears a line being typed, so the menu comes at the next Esc.
 
 During `peter("...")` at R's prompt, outside the chat, typed lines stay R's next input in every
 console.
@@ -300,9 +305,9 @@ its model and shows their tool calls and retries as progress; see
 
 The pause key opens a pause menu while an answer or tool runs:
 
-- `s` **steer** asks for a new instruction and delivers it at the next step boundary.
-- `f` **follow-up** queues a prompt: in the chat it is the next prompt, sent once the answer
-  ends; in a `peter("...")` call it is sent when the agent would otherwise stop.
+- `s` **steer** reads a new instruction at `steer> ` and delivers it at the next step boundary.
+- `f` **follow-up** reads a prompt at `next> `: in the chat it is the next prompt, sent once the
+  answer ends; in a `peter("...")` call it is sent when the agent would otherwise stop.
 - `c` **continue** resumes the work as if it had not paused.
 - `a` **abort** stops it and retains the partial session; what you queued and the draft go to
   the history, unsent.

@@ -73,11 +73,11 @@ test_that("/skip and /cancel at the hidden prompt skip and cancel instead of sto
   local_user_dirs()
   key = paste0("kept-canary-", strrep("k", 24))
   auth_store_set("openrouter", list(type = "api_key", key = key))
-  ui = local_scripted_ui(list("/skip", "/cancel", " /cancel "))
-  status = vapply(1:3, function(i) {
+  ui = local_scripted_ui(list("/skip", "/cancel", " /cancel ", "/SKIP", " /Skip ", "/CANCEL"))
+  status = vapply(1:6, function(i) {
     attr(gptr_login("openrouter", method = "key"), "status")
   }, "")
-  expect_identical(status, c("skipped", "cancelled", "cancelled"))
+  expect_identical(status, c("skipped", rep("cancelled", 2L), rep("skipped", 2L), "cancelled"))
   expect_identical(auth_store_read()$openrouter$key, key)
   expect_match(ui$log$prompt, "type /skip to skip; type /cancel", fixed = TRUE)
 })
@@ -474,14 +474,14 @@ test_that("nested and served-tool OAuth redirects use hidden paste without a lis
 })
 
 test_that("ordinary text questions can be submitted, skipped and cancelled", {
-  answers = c("research-project", "/skip", "/cancel")
+  answers = c("research-project", "/skip", " /Skip ", "/CANCEL")
   i = 0L
   res = ui_questions_via(function(...) NA_integer_, function(...) {
     i <<- i + 1L
     answers[[i]]
-  }, lapply(letters[1:3], function(id) list(id = id, type = "text", question = id)))
+  }, lapply(letters[1:4], function(id) list(id = id, type = "text", question = id)))
   expect_identical(res$answers, list(a = "research-project"))
-  expect_identical(res$skipped, "b")
+  expect_identical(res$skipped, c("b", "c"))
   expect_true(res$cancelled)
   expect_match(ask_text_answers(list(list(id = "b")), res$answers, res$skipped),
                 "- b: (skipped)", fixed = TRUE)
