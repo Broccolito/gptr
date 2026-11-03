@@ -1717,7 +1717,7 @@ Nested calls are recorded in the outer result's `details$nested` (at most 20) [0
 An `ask` with no human stops the run with `status = "blocked"` and a classed `gptr_error_permission` stating
 the action and how to allow it (`mode = auto`, a rule, or `gptr_permissions()`); the session is attached to
 the condition. `options(gptr.noninteractive_ask = "deny")` returns a denial to the model instead [P-A §6.7]. In a
-non-interactive `manual` run the `ask` tool stays declared (+145 tokens), and calling it stops the run with status
+non-interactive `manual` run the `ask` tool stays declared (+166 tokens), and calling it stops the run with status
 `blocked` and `gptr_error_noninteractive` carrying the questions (NS-12: "stops with a clear error instead of
 guessing") [IC-68]. Plan mode (`mode = plan`) uses the `readonly` preset: `read`, and `r` evaluated in a scratch
 `new.env(parent = envir)` where only calls known to be read-only run (an allowlist; anything else is denied as

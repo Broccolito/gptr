@@ -5902,12 +5902,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
     read the ECHO flag when they start and then draw nothing typed, so the newline of Enter is
     written after the answer. Where R reads no terminal or stty fails (R.app, Windows, IRkernel,
     radian; RStudio, and Positron with rstudioapi installed, ask in their own dialog,
-    `rstudioapi::askForPassword()`, as before), one dim row above the chevron says once in the
-    session `This console shows the key as you type; gptr_env() loads keys from a
-    file instead.` R's history never held a `readline()` answer. Contract-visible: 04 section 15.10
-    IC-77. Tests: test-console-ui.R "a terminal reads a secret with its echo off, then restores it
-    (cheat-sheet review)", "a console that shows a secret as typed says so once (cheat-sheet
-    review)", "a terminal: gptr_login() reads a key without showing it (cheat-sheet review)".
+    `rstudioapi::askForPassword()`, as before), secret entry is refused before reading (#104; it
+    first said once that the console shows the key as typed), and the refusal names
+    `gptr_env(path)` or a remembered login made once in RStudio or terminal R on Unix (1.0.1 lane
+    B). R's history never held a `readline()` answer. Contract-visible: 04 section 15.10 IC-77.
+    Tests: test-console-ui.R "a terminal reads a secret with its echo off, then restores it
+    (cheat-sheet review)", "secret reads refuse consoles without hidden input before reading", "a
+    terminal: gptr_login() reads a key without showing it (cheat-sheet review)".
 - Cheat-sheet review (2026-10-23, console-1): the first-use setup menu adds
   `4  Cancel and return to R`, its default, so its hint reads
   `Choose a number; Enter = Cancel and return to R` and Enter cancels at once; before, it had no
@@ -5943,10 +5944,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
     (the drain, Task 2). Tests: test-console-typing.R "a question drains fd 0 before it reads: lines
     steer, a partial line is kept".
   - A secret read in Emacs' comint (M-x shell, ESS: `INSIDE_EMACS` names it) is no hidden read
-    (`tty_secret()` gives NULL), so the dim row says once that this console shows the key as typed:
-    comint's buffer shows the text and keeps it in its input ring whatever the tty's echo, while
-    gptr set `-echo` there and said nothing. Contract-visible: 04 section 15.10 IC-77. Tests:
-    test-console-ui.R "a console that shows a secret as typed says so once (cheat-sheet review)".
+    (`tty_secret()` gives NULL), so it is refused before reading, as on other consoles without
+    hidden input (#104): comint's buffer shows the text and keeps it in its input ring whatever the
+    tty's echo, while gptr set `-echo` there and said nothing. Contract-visible: 04 section 15.10
+    IC-77. Tests: test-console-ui.R "secret reads refuse consoles without hidden input before
+    reading".
   - The width the live row pads its status to (`status_w`) counts the lasting words only, not
     `keys wait` or `question waiting`, which go when `r` returns or the question is asked: one row
     with both kept every later draft of the run 20 columns from its status
