@@ -11405,6 +11405,12 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   541 s; they took 0.67 to 1.13 times that, the same ratio for every file in a shard, so the rest
   of the spread is the runner's speed. Shard 1 was the slowest on macOS (16.3) and Windows (13.9),
   which the head start corrects.
+- The PR's second run took 16.1 minutes; macOS shards 14.3 to 15.6 (shard 1 14.4). Two Linux jobs
+  ran long only because the Ubuntu mirror was slow: the system libraries took 5.2 and 7.5 minutes
+  (70 MB at 165 kB/s), which pushed a connection shard with 7.9 minutes of tests to 20.0. `main`'s
+  runs show the same (3.7 and 7.7 minutes). `.github/actions/system-libraries` now keeps apt's
+  downloads in GitHub's cache, keyed by the runner image and its package list, so only the first
+  job of an image fetches them; dropping recommended packages would save only 8 % (136 to 125 MB).
 - Tests: test-zzz.R "CI shards run each test file once, Windows native ones in shard 1 (D-239)"
   adds that a file's time decides its shard, that names match exactly, that shard 1's head start
   leaves its share to the others, and that the table names only existing test files with a column

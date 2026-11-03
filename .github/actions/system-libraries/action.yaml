@@ -6,10 +6,21 @@ description: >-
 runs:
   using: composite
   steps:
+    # The packages apt downloads, cached per runner image and package list: a slow Ubuntu mirror
+    # (70 MB in 7 minutes on 2026-11-03) then costs only the first job of an image
+    - id: image
+      shell: bash
+      run: echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/apt-archives
+        key: apt-${{ steps.image.outputs.image }}-${{ hashFiles('.github/actions/system-libraries/action.yaml') }}
     - name: Install the R dependencies' system libraries
       shell: bash
       run: |
         set -euo pipefail
+        archives="$RUNNER_TEMP/apt-archives"
+        mkdir -p "$archives/partial"
         sudo apt-get update
         packages=(
           libcurl4-openssl-dev libssl-dev xz-utils cmake make libuv1-dev zlib1g-dev
@@ -18,7 +29,9 @@ runs:
           libfribidi-dev libharfbuzz-dev python3 libxml2-dev
           libgit2-dev libprotobuf-dev libprotoc-dev protobuf-compiler
         )
-        sudo apt-get install -y "${packages[@]}"
+        sudo apt-get install -y -o Dir::Cache::Archives="$archives" \
+          -o APT::Keep-Downloaded-Packages=true "${packages[@]}"
+        sudo chown -R "$(id -u):$(id -g)" "$archives"
         for package in "${packages[@]}"; do
           [[ "$(dpkg-query -W -f='${Status}' "$package")" == 'install ok installed' ]]
         done
