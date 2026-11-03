@@ -3,6 +3,9 @@
 This is a patch update (1.0.0 -> 1.0.1). It fixes a long delay before the first agent response
 by bounding automatic file checkpoint scans across folder sizes and layouts. Incomplete undo
 coverage is reported; predicted targets are backed up separately before gptr's own write tools.
+It also fixes MCP waits and plugin setup diagnostics, corrects help pages, and adds model
+listings, sub-agent model selection, hidden credential entry and clearer console progress;
+NEWS.md lists each change. No exported function was removed or changed incompatibly.
 
 The preceding major update (0.7.0 -> 1.0.0) was a complete rewrite by the same maintainer. gptr now
 runs language model agents in an existing R session, where generated code can inspect and modify

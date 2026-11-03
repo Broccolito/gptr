@@ -186,8 +186,9 @@ figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
         <h2>Set up</h2>
         <p>OpenAI for live calls; <a href="#offline">Try it offline</a> needs no key and defines <code>fake</code> and <code>s</code> for page 2.</p>
         <dl>
-          <dt>pak::pak("Broccolito/gptr@main")
-library(gptr)</dt><dd>R 4.2+; first install pak with <code>install.packages("pak")</code> if needed.</dd>
+          <dt>install.packages("gptr")
+library(gptr)</dt><dd>From CRAN; R 4.2+.</dd>
+          <dt>pak::pak("Broccolito/gptr")</dt><dd>Development version from GitHub; install pak first if needed.</dd>
           <dt>gptr_login("openai")</dt><dd>Interactive R: enter your OpenAI key, masked.</dd>
           <dt>gptr_providers(); gptr_models("gpt")</dt><dd>List the routes; search the offline model catalog.</dd>
           <dt>gptr_config(model = "gpt",
@@ -346,9 +347,9 @@ abstracts[rct]; sum(rct)</dt><dd>P(yes); subset and count these typed answers.</
     </div>
   </div>
   <footer class="foot">
-    <span>gptr 1.0.0 · Apache License 2.0</span>
+    <span>gptr 1.0.1 · Apache License 2.0</span>
     <span class="spacer"></span>
-    <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-10</span>
+    <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-11</span>
   </footer>
 </section>
 
@@ -531,9 +532,9 @@ h = gptr_tailor(readRDS("h.rds"))</dt><dd>Rebuild a saved harness; checks it and
     </div>
   </div>
   <footer class="foot">
-    <span>gptr 1.0.0 · Apache License 2.0</span>
+    <span>gptr 1.0.1 · Apache License 2.0</span>
     <span class="spacer"></span>
-    <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-10</span>
+    <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-11</span>
   </footer>
 </section>
 </main>

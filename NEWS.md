@@ -1,5 +1,31 @@
 # gptr 1.0.1
 
+gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version installs with
+`pak::pak("Broccolito/gptr")`.
+
+## New features
+
+* `gptr_models(provider = , refresh = TRUE)` lists the models a provider or the `claude` and
+  `codex` command-line tools advertise, after consent and under the replay guard. Listings say
+  when they were checked, and a failed refresh keeps the earlier entries. The console footer
+  separates the model you selected from the model the provider reports.
+* Sub-agents resolve model aliases before a backend is chosen and inherit their parent's model
+  unless the call or the agent names another; API providers, Claude Code and Codex share one
+  selection path. An agent can run typed System 1 decisions in bounded parallel batches from its
+  R code; each answer is charged to the session that asked and to its budget.
+* The terminal console shows sub-agents while they work: completed, active and queued counts,
+  each child's model, and its tool and retry progress. Direct team and fan-out calls return
+  visibly, so their reports print.
+* `peter$search()` and `peter$help()` find the installed package's exported functions and help
+  pages, so an agent can look up setup functions such as `gptr_mcp_add()`;
+  `peter$help("gptr::name", source = TRUE)` returns a function's definition.
+* Assisted setup can ask for a credential with hidden input, showing where it goes and how it is
+  stored; the value never reaches the model, and you can skip or cancel. `gptr_login()` gains
+  `scope = "session"` (this R process only) and `scope = "keyring"` (the operating system's
+  keyring). Questions accept `/skip` and `/cancel`.
+* `/mcp serve` returns from the chat to R's prompt while the MCP server keeps serving;
+  `gptr_last() |> peter()` resumes the chat.
+
 ## Bug fixes
 
 * Automatic file checkpoints no longer inventory and copy a whole working directory before
@@ -10,6 +36,14 @@
   on demand through `ls`, `find` and `read`.
 * Interrupting an MCP request while its initial message is being sent now sends cancellation,
   including when progress arrives before the send completes.
+* MCP clients no longer stall while gptr waits for a child process, and a served tool cannot run
+  inside another served tool's wait.
+* Plugin setup rejects a marketplace root, and a bundle without usable resources, with a
+  diagnostic that names the fix; an invalid configured plugin path is reported instead of being
+  skipped silently.
+* Help pages for callbacks, custom backends, inferred tool schemas, images, approvals and side
+  effects now match the implementation; project-scoped MCP servers need an initialized
+  workspace (`gptr_init()`).
 
 # gptr 1.0.0
 
