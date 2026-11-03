@@ -126,6 +126,38 @@ test_that("Quarto and Jupyter locations come from their environment variables", 
   expect_identical(doc_match_anchor(doc_rmd_calls(un), a)$line1, 6L)
 })
 
+test_that("a kernel without JPY_SESSION_NAME picks the bound notebook, else the one match", {
+  fixture = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
+  proj = local_project()
+  local_no_running_document()
+  local_gptr_options(quiet = FALSE)
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = NA)
+  # copies that sort first: JupyterLab's Duplicate and an nbconvert --output notebook
+  for (f in c("notebook.ipynb", "notebook-Copy1.ipynb", "notebook.executed.ipynb")) {
+    expect_true(file.copy(fixture, file.path(proj, f)))
+  }
+  nb = path_norm(file.path(proj, "notebook.ipynb"))
+  call = doc_bare_call(quote(peter("summarise the mpg column")), "summarise the mpg column")
+  local_doc_binding(nb, "ipynb")
+  site = doc_locate(call)
+  expect_identical(site$path, nb)
+  expect_true(site$top_level)
+  # unbound (or bound to a transcript), several notebooks hold the call: none is recorded or
+  # replayed, the call is no console turn, and a notice says so once
+  local_doc_binding(file.path(proj, "t.R"))
+  expect_message({
+    site = doc_locate(call)
+  }, "notebook-Copy1.ipynb, notebook.executed.ipynb, notebook.ipynb.*gptr_doc",
+  class = "gptr_message_notice")
+  expect_null(site$path)
+  expect_false(site$top_level)
+  expect_false(doc_route_match(call))
+  expect_no_message(doc_locate(call))
+  unlink(file.path(proj, c("notebook-Copy1.ipynb", "notebook.executed.ipynb")))
+  expect_identical(doc_locate(call)$path, nb)
+})
+
 test_that("calls in no document go to the console transcript target, if any", {
   proj = local_project()
   local_no_running_document()

@@ -1216,9 +1216,10 @@ doc_recover = function(path, defer = FALSE) {
 
 #' Is this notebook open in the Jupyter kernel of this process? (IC-50: never written then) The
 #' kernel runs the notebook `JPY_SESSION_NAME` names; when that names no existing file,
-#' doc_site_jupyter() finds the notebook by content among those in the working directory, so
-#' each of them may be the open one, and so is a notebook this kernel queued pending blocks for
-#' (a cell may have changed the working directory since). Only `.ipynb` files are notebooks.
+#' doc_site_jupyter() takes the bound notebook or finds one by content among those in the working
+#' directory, so each of them may be the open one, and so is a notebook this kernel queued pending
+#' blocks for (a bound one elsewhere, or a cell changed the working directory since). Only
+#' `.ipynb` files are notebooks.
 #' @noRd
 doc_notebook_attached = function(path) {
   if (!isTRUE(getOption("jupyter.in_kernel")) || !identical(doc_format_of(path), "ipynb")) {

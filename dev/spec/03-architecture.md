@@ -1826,7 +1826,8 @@ nothing (the user's control-flow code is the REQ-26(c) record). Undone turns bec
 **Locating and writing.** `doc_locate()` precedence: validated srcref (text must contain this prompt; reject
 `.active-rstudio-document`) > `source()`/`sys.source()` frame (identical-expression match, read inside
 `tryCatch` with an off switch: CRAN grey zone [14 fact-check]) > knitr/Quarto (`QUARTO_DOCUMENT_PATH`) >
-IRkernel (`JPY_SESSION_NAME`, then content) > `Rscript --file=` > IDE (rstudioapi, guarded) > console. Calls
+IRkernel (`JPY_SESSION_NAME`, then the bound notebook, then the one notebook in the working directory holding the
+call; several such notebooks: no site and a notice, D-341) > `Rscript --file=` > IDE (rstudioapi, guarded) > console. Calls
 are matched by content and ordinal, never stale line numbers. Writes use raw bytes preserving EOL, BOM and the
 final newline, a temp file in the same directory then `file.rename()`, an md5 conflict check with re-locate and
 retry (with rename retries and an in-place fallback on Windows, and case-insensitive path keys on Windows and

@@ -9579,3 +9579,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   IC-43; 03 section 6 (UI backends); vignette("script-as-history").
 - Tests: test-utils-options.R "a Jupyter request with allow_stdin = false asks nothing, said once
   (IC-43)". Evidence: progress/fixes-1.0.1/lane-G.md.
+
+## D-341 - v1.0.1 lane G A kernel records into the bound notebook, never a look-alike (2026-11-02)
+- Rule (notebook site; live findings disc, docs): without a `JPY_SESSION_NAME` that names a file
+  (nbconvert, papermill, VS Code), `doc_site_jupyter()` takes the `gptr_doc()` binding when that
+  notebook holds the call, else the one notebook in the working directory that does. When several
+  do (JupyterLab's `-Copy1`, an `nbconvert --output` notebook), the notebook the kernel runs is
+  unknown: one notice per folder names them and says to call `gptr_doc()`, and the call goes the
+  nested path (no site path: neither recorded nor replayed, and no console turn). Before, the
+  first match by file name won, so a copy that sorts first took the blocks or failed the replay.
+- Contract-visible: 03 section 6.9 (locate precedence); `?gptr_doc` (unchanged: a binding already
+  names the document).
+- Tests: test-doc-locate.R "a kernel without JPY_SESSION_NAME picks the bound notebook, else the
+  one match". Evidence: progress/fixes-1.0.1/lane-G.md.
