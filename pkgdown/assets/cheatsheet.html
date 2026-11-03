@@ -189,7 +189,7 @@ figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
           <dt>install.packages("gptr")
 library(gptr)</dt><dd>From CRAN; R 4.2+.</dd>
           <dt>pak::pak("Broccolito/gptr")</dt><dd>Development version from GitHub; install pak first if needed.</dd>
-          <dt>gptr_login("openai")</dt><dd>Interactive R: enter your OpenAI key, masked.</dd>
+          <dt>gptr_login("openai")</dt><dd>Interactive R: enter your OpenAI key, hidden. Kept for future sessions; <code>scope = "session"</code> or <code>"keyring"</code> keeps it elsewhere.</dd>
           <dt>gptr_providers(); gptr_models("gpt")</dt><dd>List the routes; search the offline model catalog.</dd>
           <dt>gptr_config(model = "gpt",
   .scope = "user")</dt><dd>Save a default model (session, project or user).</dd>
@@ -447,6 +447,10 @@ gptr_blocks("analysis.R")</dt><dd>Replay; list fresh/stale/edited/undone blocks.
       <section class="panel">
         <h2>Learn more</h2>
         <p><a href="https://broccolito.github.io/gptr/articles/">Guides</a>, <a href="https://broccolito.github.io/gptr/articles/tailor-and-coach.html">Harnesses and coaching</a>, and the <a href="https://broccolito.github.io/gptr/reference/">function reference</a>.</p>
+        <dl>
+          <dt>peter$search("mcp server")
+peter$help("gptr::gptr_mcp_add")</dt><dd>Search gptr's functions, members, tools and skills; read one's help, as Peter does.</dd>
+        </dl>
       </section>
     </div>
 
@@ -499,8 +503,8 @@ off = gptr_register(up)</dt><dd>Register a tool; off() removes it.</dd>
           <dt>team = peter("Review mtcars.", mtcars,
   agents = list(
     stats = gptr_agent(system = "Stats"),
-    code = gptr_agent(system = "Code")),
-  mode = "auto")</dt><dd>Named roles; <code>team$stats$text</code> reads one.</dd>
+    code = gptr_agent(model = "gpt:low")),
+  mode = "auto")</dt><dd>Named roles, each with its own model if set; <code>team$stats$text</code> reads one.</dd>
           <dt>fan = peter("Count rows; gptr_return().",
   list(mtcars, iris), parallel = 2,
   mode = "auto")</dt><dd>One child per element; values in fan$value. <code>gptr_parallel()</code>: unrecorded calls; use separate envir values.</dd>
@@ -523,7 +527,9 @@ gptr_wait(bg)</dt><dd>Experimental; wait finishes the run.</dd>
           <dt>x = c(1, 2, 3)
 q = "Mean x; gptr_return() it."
 h = gptr_coach(q, x, harness = h,
-  check=function(r) isTRUE(r$value==2))</dt><dd>Kept only if acceptance checks pass. Optional <code>coach = "claude_code"</code> needs its CLI login.</dd>
+  check=function(r) isTRUE(r$value==2))
+h = gptr_coach(q, x, harness = h, k = 2,
+  strategy = "sequential")</dt><dd>Kept only if acceptance checks pass; a coached harness can be coached again, here in rounds that build on each other. Optional <code>coach = "claude_code"</code> needs its CLI login.</dd>
           <dt>saveRDS(h, "h.rds")
 h = gptr_tailor(readRDS("h.rds"))</dt><dd>Rebuild a saved harness; checks it and shows fixed code.</dd>
           <dt>gptr_tailor(h, dir = "my-harness")</dt><dd>Write a new Markdown output folder; gptr never reads it back.</dd>
