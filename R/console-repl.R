@@ -6,12 +6,16 @@
 #'
 #' `call` is the gateway's `gptr_call` record of the console call (contract 7.8): its resolved
 #' identifiers, budget and `.opts` apply to the first prompt, also on a piped session, and its
-#' plain-symbol context objects are attached to it.
+#' plain-symbol context objects are attached to it. Its explicit `mode =` changes a continued
+#' session at once, as /mode does, so the banner, the prompt and /mcp serve use it.
 #' @noRd
 repl_state = function(session, envir, stdin = FALSE, call = NULL) {
   check_class(session, "gptr_session", "s", null = TRUE)
   check_env(envir, "envir")
   check_flag(stdin, "stdin")
+  if (!is.null(session) && isTRUE(call$args$mode_given)) {
+    session_set_mode(session, call$ids$mode, source = "user")
+  }
   rs = new.env(parent = emptyenv())
   rs$session = session
   rs$envir = envir
