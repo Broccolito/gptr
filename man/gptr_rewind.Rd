@@ -72,12 +72,12 @@ directory a turn created stays. Files outside the project and \code{tempdir()} a
 after you confirm each path. Automatic file scans are bounded by time, entry and capture
 limits (see \link{gptr_options}); a scan that stops early is reported as incomplete coverage of the
 calls and turns that could write files (R code that only reads and assigns objects cannot).
-Predicted write targets are
-backed up separately before gptr's tools, but native CLI edits to unvisited files have no
-automatic backup. After a full restore the model is told nothing (the next
-request's prefix is byte-identical to the earlier request at the target); after a partial one
-the next prompt carries a short \verb{<rewind>} block listing what was not restored. Model code may
-rewind another session only when you approve that call.
+The files gptr's tools name (write and edit targets, literal paths in R code) are backed up
+before the call; other changes to unvisited files (computed paths in R code, shell commands, a
+CLI's own edits) have no automatic backup. After a full restore the model is told nothing (the
+next request's prefix is byte-identical to the earlier request at the target); after a partial
+one the next prompt carries a short \verb{<rewind>} block listing what was not restored. Model code
+may rewind another session only when you approve that call.
 }
 \section{Options}{
 

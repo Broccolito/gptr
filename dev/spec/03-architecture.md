@@ -2125,9 +2125,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   of automatic coverage. A CLI-served call without synchronization cannot treat content of a
   scanned path first seen after the child started as a turn-start pre-image (the turn's recording
   scan has that one); a target no scan observed gets its state just before the call on every
-  route, so undo reverts Peter's own write [D-313]. Arbitrary native CLI/shell writes
-  outside coverage are not guaranteed undo. Project discovery remains scoped and on demand through
-  `ls`, `find` and `read`, rather than requiring a complete startup inventory. Never capture a
+  route, so undo reverts Peter's own write [D-313]. Unpredicted writes by R code, a shell or a
+  CLI outside coverage are not guaranteed undo. Project discovery remains scoped and on demand
+  through `ls`, `find` and `read`, rather than requiring a complete startup inventory. Never capture a
   `protected` or `control` path (`.env`, `.Renviron`, keys), whose rewind row reads "no pre-image"
   [D-298]; the store is anchored to the tracker's project root, not the working directory.
   Restores are 3-way (user edits after the turn are kept); never through symlinks or hard links;

@@ -3074,8 +3074,8 @@ for an earlier native CLI edit, and the turn's recording scan, which holds the t
 observation, records the change instead. A target no scan observed gets its state just before
 the call as its pre-image on every route, so undo reverts Peter's own write or removes the file it
 created; an earlier native CLI edit of it in the same turn is not undone (D-313).
-Preserve guarded restores and R-object checkpointing. Arbitrary native CLI/shell writes outside
-coverage have no complete-undo guarantee. File discovery stays scoped and on demand through
+Preserve guarded restores and R-object checkpointing. Unpredicted writes by R code, a shell or a CLI
+outside coverage have no complete-undo guarantee. File discovery stays scoped and on demand through
 `ls`, `find` and `read`; provider startup requires no full-folder inventory.
 
 Example calls:
