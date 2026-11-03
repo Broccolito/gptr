@@ -293,7 +293,7 @@ new_listing = function(df, class, footer = NULL) {
 }
 
 #' Print a listing: at most 20 rows, a count line (naming as.data.frame() when rows are left out),
-#' then the footer
+#' then the footer wrapped to the console width
 #'
 #' @param x A listing data frame.
 #' @param ... Ignored.
@@ -316,7 +316,7 @@ print.gptr_listing = function(x, ...) {
   }
   cat(count, "\n", sep = "")
   footer = attr(x, "footer", exact = TRUE)
-  if (length(footer)) cat(footer, sep = "\n")
+  if (length(footer)) cat(strwrap(footer, width = cli::console_width()), sep = "\n")
   invisible(x)
 }
 

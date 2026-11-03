@@ -132,3 +132,11 @@ test_that("listings print numbers in fixed notation", {
   expect_true(any(grepl("1000000", printed, fixed = TRUE)))
   expect_false(any(grepl("e+0", printed, fixed = TRUE)))
 })
+
+test_that("listing footers wrap at word boundaries to the console width", {
+  local_reproducible_output(width = 80)
+  footer = paste(rep("advertisement does not verify access;", 8), collapse = " ")
+  printed = capture.output(print(new_listing(data.frame(id = "a"), "demo", footer = footer)))
+  expect_true(all(nchar(printed) <= 80))
+  expect_identical(paste(printed[-seq_len(match("# 1 row", printed))], collapse = " "), footer)
+})
