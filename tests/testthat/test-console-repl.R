@@ -370,9 +370,9 @@ test_that("a console opened in yolo shows the yolo notice with its banner (IC-78
   expect_length(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 3L)
 })
 
-# The banner's rows in front end `fe`, its reader completing or not
-banner_rows = function(fe = "terminal", complete = TRUE, env = new.env()) {
-  local_mocked_bindings(front_end = function() fe)
+# The banner's rows in front end `fe`, its reader completing or not, on Windows or not
+banner_rows = function(fe = "terminal", complete = TRUE, env = new.env(), windows = FALSE) {
+  local_mocked_bindings(front_end = function() fe, is_windows = function() windows)
   rs = repl_state(NULL, env)
   rs$model = "fake/fake-1"
   rs$reader = list(complete = complete)
@@ -428,8 +428,7 @@ test_that("in Positron, RStudio and Windows the banner says how to steer (D-304)
     "lines typed while peter works run after its answer - esc, then s, to steer", ""))
   expect_false(any(grepl("then s, to steer", banner_rows("terminal"))))
   # Windows' Rterm has no composer: a typed line is the next prompt there too
-  local_mocked_bindings(is_windows = function() TRUE)
-  expect_identical(utils::tail(banner_rows("terminal"), 2L), c(
+  expect_identical(utils::tail(banner_rows("terminal", windows = TRUE), 2L), c(
     "lines typed while peter works run after its answer - ctrl-c, then s, to steer", ""))
   # no menu, no line: nobody can answer it
   local_gptr_options(interactive = FALSE)

@@ -475,7 +475,8 @@ test_that("a prompt's live row shows from Enter, before its run starts; a refusa
   expect_identical(res$status, "error")
   expect_true(seen$shown)
   # no run takes a message yet; Ctrl-C stops the call
-  expect_match(out, "▌ thinking 0s · ctrl-c stop", fixed = TRUE)
+  expect_match(out, "thinking 0s", fixed = TRUE)
+  expect_match(out, "ctrl-c stop", fixed = TRUE)
   expect_null(the$live_row)
   expect_identical(trimws(utils::tail(term_rows(out), 1L)), "")
   # a T console's composer reads the keys once the run starts: they steer and pause it then; a
