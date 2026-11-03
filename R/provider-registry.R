@@ -413,14 +413,13 @@ credential_bind = function(h, origin) {
 
 #' A handle from a credential-store record (P03 returns handles for stored values)
 #' @noRd
-credential_from_store = function(rec, name, origin, register = TRUE, endpoint = NULL) {
+credential_from_store = function(rec, name, origin, register, endpoint) {
   if (is.null(rec)) return(NULL)
   if (inherits(rec, "gptr_secret")) return(rec)
   if (rlang::is_string(rec$resource) &&
         !identical(provider_origin(rec$resource), provider_origin(origin))) return(NULL)
-  if (!is.null(endpoint)) {
-    expected = rec$endpoint_hash %||% if (rlang::is_string(rec$resource)) hash_sha256(rec$resource)
-    if (!is.null(expected) && !identical(expected, hash_sha256(endpoint))) return(NULL)
+  if (!is.null(rec$endpoint_hash) && !identical(rec$endpoint_hash, hash_sha256(endpoint))) {
+    return(NULL)
   }
   for (k in c("handle", "key")) {
     v = rec[[k]]

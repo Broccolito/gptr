@@ -228,12 +228,11 @@ auth_store_set = function(key, record, scope = c("user", "session")) {
     return(invisible(TRUE))
   }
   st$auth[[key]] = NULL
+  auth_record_handles(rec, key, "auth.json")                # registers; the values are kept here
   kfield = if (is.list(rec[["keyring"]])) auth_keyring_field(rec) else NULL
   for (f in intersect(names(rec), auth_secret_fields)) {
     v = rec[[f]]
     if (!rlang::is_string(v) || !nzchar(v)) next
-    origin = if (f %in% c("refresh", "refresh_token")) rec$token_endpoint else rec$resource
-    secret_register(v, auth_secret_name(key, f), source = "auth.json", origin = origin)
     if (f %in% auth_memory_fields) {
       rec[[f]] = NULL
     } else if (identical(f, kfield)) {

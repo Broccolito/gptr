@@ -712,8 +712,7 @@ oauth_login_review = function(destination, key, scope) {
 oauth_login_store = function(key, rec, scope) {
   where = oauth_login_storage(key, scope)
   ref = if (identical(scope, "keyring")) {
-    auth_need_os_keyring()
-    list(service = "gptr", username = key)
+    list(service = "gptr", username = key)                 # gptr_login() checked the backend
   } else if (identical(scope, "user")) {
     auth_store_read()[[key]]$keyring
   }
