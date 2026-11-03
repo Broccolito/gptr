@@ -111,7 +111,9 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 Final checks of the 1.0.1 submission archive are pending. The submission comment will record
 the results for the archive actually uploaded, with archived logs identifying its checked bytes.
 An incoming-check NOTE for an update within seven days of 1.0.0 is expected; this patch fixes a
-substantial startup delay. Any other NOTE, warning or error still needs review before submission.
+substantial startup delay. Naur and Wason in the Description, which the spelling check may flag,
+are the surnames of Peter Naur and Peter Wason, for whom the package is named. Any other NOTE,
+warning or error still needs review before submission.
 The older local R 4.4.3 diagnostic and the earlier R-hub and win-builder archives are separate
 evidence and are not presented as checks of the 1.0.1 tarball.
 
