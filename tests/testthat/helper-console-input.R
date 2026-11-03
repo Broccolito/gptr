@@ -56,7 +56,8 @@ written = function(f) {
   rawToChar(rawConnectionValue(con))
 }
 
-# The rows a terminal shows for `bytes`: \r, \n and \033[K act, other escapes are dropped
+# The rows a terminal shows for `bytes`: \r, \n, \b, \033[K and \033[<n>C act, other escapes are
+# dropped
 term_rows = function(bytes) {
   keys = regmatches(bytes, gregexpr("\033\\[[0-9;]*[A-Za-z]|[\r\n]|[^\r\n\033]", bytes,
                                     perl = TRUE))[[1L]]
@@ -70,8 +71,13 @@ term_rows = function(bytes) {
     }
     if (k %in% c("\r", "\n")) {
       col = 1L
+    } else if (k == "\b") {
+      col = max(1L, col - 1L)
     } else if (k == "\033[K") {
       row = row[seq_len(col - 1L)]
+    } else if (grepl("^\033\\[[0-9]*C$", k)) {
+      col = col + max(1L, as.integer(gsub("\\D", "", k)), na.rm = TRUE)
+      row[seq_len(col - 1L)] = ifelse(is.na(row[seq_len(col - 1L)]), " ", row[seq_len(col - 1L)])
     } else if (!startsWith(k, "\033")) {
       row[[col]] = k
       col = col + 1L
@@ -86,9 +92,10 @@ local_console_stdin = function(lines, .env = parent.frame()) {
                                   .env = .env)
 }
 
-# The end of a question in a pty (or pipe) child (D-243): its last row, then the person's chevron
-# as the prompt, `>>` where the child's output, in this process's locale, is not UTF-8
-pty_asked = function() paste0("\n", if (l10n_info()[["UTF-8"]]) "\u203a" else ">>", " ")
+# The end of a question in a pty (or pipe) child (D-243): its last row, then the answer's prompt
+# under the question, two columns in (D-301), `>>` where the child's output, in this process's
+# locale, is not UTF-8
+pty_asked = function() paste0("\n  ", if (l10n_info()[["UTF-8"]]) "\u203a" else ">>", " ")
 
 # The start of an approval's row for an invalid answer in a pty child (ui_reask()), which a queue
 # line's `not an answer` (a line typed before the question) never is
@@ -99,6 +106,12 @@ pty_reask = function() paste0("not an answer", if (l10n_info()[["UTF-8"]]) " \u0
 queue_line = function(kind, text, utf8 = cli::is_utf8_output()) {
   sym = withr::with_options(list(cli.unicode = utf8), console_style())
   paste0(sym$queued, " ", kind, sym$sep, text)
+}
+
+# The first row of a message's receipt (P30, D-301): `steer> <text>` or `next> <text>`, the same
+# words in every console
+receipt_line = function(kind, text) {
+  paste0(c(steer = "steer>", follow_up = "next>")[[kind]], " ", text)
 }
 
 # The line that lists the person's text gptr will not send (console_keep()): a queue line whose
@@ -126,10 +139,12 @@ skip_if_sigint_ignored = function() {
 # child's last toggle (`raw` keeps its output as written) turned the mode on (D-263); `wait(x)`
 # reads until `x` is shown and consumes the output through it, so the next wait() looks after it;
 # `pending()` reads for 0.5 s and returns what followed, its escapes and a CR at a row's start (a
-# question's prompt clears its row, tty_question()) dropped; `all` keeps
+# question's prompt clears its row, tty_question()) dropped, also one after the prompt's leading
+# blanks, which a cursor move right then steps over (gptr_readline()); `all` keeps
 # everything shown and `seen(x)` counts `x` in it; `interrupt()` sends SIGINT, as a terminal's
-# Ctrl-C does where isig is on (the pty is not the child's controlling terminal, so `\003` is not).
-# The child dies with the test.
+# Ctrl-C does where isig is on (the pty is not the child's controlling terminal, so `\003` is not),
+# and `ctrl_c()` sends it to the child's process group, its stty runs too, as that Ctrl-C reaches
+# the terminal's foreground group. The child dies with the test.
 local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = parent.frame()) {
   dir = withr::local_tempdir("gptr-pty-", .local_envir = .env)
   script = file.path(dir, "child.R")
@@ -173,6 +188,7 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
     p$write_input(x)
   }
   pty$interrupt = function() p$interrupt()
+  pty$ctrl_c = function() system2("kill", c("-s", "INT", "--", paste0("-", p$get_pid())))
   pty$wait = function(x, timeout = 30) {
     deadline = Sys.time() + timeout
     repeat {
@@ -188,7 +204,8 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
   pty$pending = function() {
     deadline = Sys.time() + 0.5
     while (Sys.time() < deadline) read(50L)
-    gsub("\n\r", "\n", gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$out), fixed = TRUE)
+    x = gsub("\n( +)\r\033\\[K\033\\[[0-9]+C", "\n\\1", pty$out)
+    gsub("\n\r", "\n", gsub("\033\\[[0-9;?]*[A-Za-z]", "", x), fixed = TRUE)
   }
   pty$seen = function(x) sum(gregexpr(x, pty$all, fixed = TRUE, useBytes = TRUE)[[1L]] > 0L)
   pty$wait("> ")

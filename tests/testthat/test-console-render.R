@@ -794,6 +794,33 @@ test_that("the ask tool's call line counts its questions in words (visual review
   expect_identical(console_preview(list(questions = list(q, q))), "2 questions")
 })
 
+test_that("a call's path is project-relative, cut in its middle to keep its file name", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE)
+  proj = local_project()
+  rel = "zz_archive/2019/q3/raw/legacy/notes/drafts/methods.qmd"
+  call = list(name = "edit", input = list(path = file.path(proj, rel), edits = list()))
+  # the project-relative path, as the approval's own row and the result row show it
+  expect_identical(console_call_line(call, 120L), paste0("  \u258e edit  ", rel))
+  # too wide: its start and its file name, the cut between them
+  row = console_call_line(call, 50L)
+  expect_identical(cli::ansi_nchar(row, type = "width"), 50L)
+  expect_match(row, "^  \u258e edit  zz_archive/.*\u2026/methods[.]qmd$")
+  # outside the project it stays absolute
+  out = list(name = "read", input = list(path = "/var/data/run-2024/summary.csv"))
+  expect_match(console_call_line(out, 30L, "read"), "\u2026/summary[.]csv$")
+  # text without a file name to keep: half its room each side
+  expect_identical(console_cut_middle(paste(letters, collapse = ""), 11L), "abcde\u2026vwxyz")
+})
+
+test_that("a call's code split on CRLF and CR shows no <U+000D> (P30 follow-up)", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE)
+  expect_identical(console_preview(list(code = "a = 1\r\nb = 2\rc = 3")),
+                   c("a = 1", "b = 2", "c = 3"))
+  rows = console_call_line(list(name = "r", input = list(code = "a = 1\r\nb = 2\r\n")), 80L)
+  expect_false(any(grepl("<U+000D>", rows, fixed = TRUE)))
+  expect_identical(trimws(rows[-1L]), c("a = 1", "b = 2"))
+})
+
 test_that("a diff row wider than the console is cut, its spaces and sign kept (visual review)", {
   withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE)
   row = "+     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"
@@ -1180,10 +1207,10 @@ test_that("on a CLI route the live row keeps its clock around each thinking line
   t0 = rec$t0
   expect_identical(think(1L, "**Plan"), character())
   # padded, the row ends at the line's block, and comes back under it as the request still waits
-  # (the session's queued prompt counts)
+  # (the session's queued prompt counts, its kind named; the key's term gives way at 40 columns)
   expect_identical(sub(" +$", "", think(1L, "ning**\n\nThe body")),
                    c(paste0("\r", strrep(" ", 39L), "\r"), "  Planning",
-                     "\r# thinking 0s - 1 queued - ctrl-c stop"))
+                     "\r# thinking 0s - 1 follow-up queued"))
   think(1L, " goes on.")
   think(2L, "a first line far longer than forty columns")
   expect_identical(the$live_row$task, task)
@@ -1748,7 +1775,7 @@ test_that("inside an evaluation the console margin follows the person's console 
   out = utils::capture.output(eval_r("p = pad(); k = pick()", home, plots = "none", tee = FALSE))
   expect_identical(home$p, "  ")
   expect_identical(home$k, 1L)
-  expect_identical(prompts, ">> ")
+  expect_identical(prompts, "  >> ")
   expect_true("  ? Which format?" %in% out)
 })
 
@@ -1795,11 +1822,11 @@ test_that("fanout shows active and queued names and child tool progress without 
     result = peter("each", list(alpha = 1, beta = 2, gamma = 3), model = fake, parallel = 2)
   })
   text = paste(out, collapse = "\n")
-  expect_match(text, "sub-agents 0/3 done - 2 active - 1 queued", fixed = TRUE)
-  expect_match(text, "active  alpha (fake/fake-1), beta (fake/fake-1)", fixed = TRUE)
-  expect_match(text, "queued  gamma (fake/fake-1)", fixed = TRUE)
+  expect_match(text, "sub-agents 0/3 done - 2 active - 1 pending", fixed = TRUE)
+  expect_match(text, "active   alpha (fake/fake-1), beta (fake/fake-1)", fixed = TRUE)
+  expect_match(text, "pending  gamma (fake/fake-1)", fixed = TRUE)
   expect_match(text, "sub-agent alpha r", fixed = TRUE)
-  expect_match(text, "sub-agents 2/3 done - 1 active - 0 queued", fixed = TRUE)
+  expect_match(text, "sub-agents 2/3 done - 1 active\n", fixed = TRUE)
   expect_false(grepl("PRIVATE CHILD", text, fixed = TRUE))
   expect_identical(result$status, "idle")
   expect_length(console_kids(), 0L)
@@ -1821,7 +1848,7 @@ test_that("a top-level fanout keeps one live row until its last child settles", 
     result = peter("each", list(alpha = 1, beta = 2, gamma = 3), model = fake, parallel = 2)
   })
   expect_true(all(vapply(seen, function(x) startsWith(x, "sub-agents"), NA)))
-  expect_match(paste(unlist(seen), collapse = "\n"), "1 queued", fixed = TRUE)
+  expect_match(paste(unlist(seen), collapse = "\n"), "1 pending", fixed = TRUE)
   expect_match(out, "sub-agents", fixed = TRUE)
   expect_null(the$live_row)
   expect_length(console_kids(), 0L)
@@ -1841,9 +1868,9 @@ test_that("a mixed team names models before queued members start", {
       beta = agent(model = "second/second-1", backend = "inline")
     ), .opts = list(max_active = 1L))
   })
-  queued = grep("queued  beta (second/second-1)", out, fixed = TRUE)
+  queued = grep("pending  beta (second/second-1)", out, fixed = TRUE)
   started = grep("sub-agent beta (second/second-1) started", out, fixed = TRUE)
-  expect_match(paste(out, collapse = "\n"), "active  alpha (first/first-1)", fixed = TRUE)
+  expect_match(paste(out, collapse = "\n"), "active   alpha (first/first-1)", fixed = TRUE)
   expect_true(length(queued) == 1L, info = paste(out, collapse = "\n"))
   expect_length(started, 1L)
   expect_lt(queued, started)
@@ -1867,14 +1894,14 @@ test_that("active rosters follow concrete targets and keep the worker's real mod
       hook_event("before_request", s, run = run$id, model = model), session_live(s)$ctx))
   }
   expect_match(paste(request("first/model"), collapse = "\n"),
-               "active  alpha (first/model)", fixed = TRUE)
+               "active   alpha (first/model)", fixed = TRUE)
   expect_match(paste(request("second/model"), collapse = "\n"),
-               "active  alpha (second/model)", fixed = TRUE)
+               "active   alpha (second/model)", fixed = TRUE)
   expect_output(console_group_notice(rec), NA)
   live = session_live(s)
   live$adapter$worker_spec = list(model = "worker-target/model")
   expect_match(paste(request("worker/worker"), collapse = "\n"),
-               "active  alpha (worker-target/model)", fixed = TRUE)
+               "active   alpha (worker-target/model)", fixed = TRUE)
   expect_identical(rec$child$model, "worker-target/model")
 })
 
@@ -1893,8 +1920,8 @@ test_that("rosters show the full default model selected for each built-in CLI", 
                         runs = list(run, NULL)))
   rec = list(child = list(run = list(group = group)))
   text = paste(utils::capture.output(console_group_notice(rec)), collapse = "\n")
-  expect_match(text, "active  alpha (fakeclaude/default (cli-claude-id))", fixed = TRUE)
-  expect_match(text, "queued  beta (fakecodex/default (cli-codex-id))", fixed = TRUE)
+  expect_match(text, "active   alpha (fakeclaude/default (cli-claude-id))", fixed = TRUE)
+  expect_match(text, "pending  beta (fakecodex/default (cli-codex-id))", fixed = TRUE)
 })
 
 test_that("group rosters escape names, bound large queues and obey quiet and verbosity", {
@@ -1903,7 +1930,7 @@ test_that("group rosters escape names, bound large queues and obey quiet and ver
                        cli.width = 40L)
   run = new.env()
   group = list2env(list(n = 12L, labels = c("{active}\033[2J", paste0("queued", 1:11)),
-                        runs = c(list(run), rep(list(NULL), 11L))))
+                        models = rep("", 12L), runs = c(list(run), rep(list(NULL), 11L))))
   rec = list(child = list(run = list(group = group)))
   out = utils::capture.output(console_group_notice(rec))
   text = paste(out, collapse = "\n")
@@ -1947,6 +1974,34 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
     session_live(s)$ctx))), "  # sub-agent c failed: aborted")
 })
 
+test_that("the live row says responding while any agent's text streams (P30 follow-up)", {
+  s = render_session()
+  local_gptr_options(verbose = 1L)
+  for (child in list(NULL, list(label = "alpha", run = list2env(list(id = "u_kid"))))) {
+    rec = console_track("u0000test", s)
+    rec$child = child
+    console_on_message_update(hook_event("message_update", s, kind = "text", delta = "Hi"),
+                              session_live(s)$ctx)
+    expect_identical(rec$what, "responding")
+    console_drop("u0000test")
+  }
+})
+
+test_that("the console lists sub-agents by depth, then label (#99 review)", {
+  s = render_session()
+  for (k in list(c("u_kid_z", "z-child", 1L), c("u_kid_a", "a-grand", 2L))) {
+    rec = console_track(k[[1L]], s)
+    rec$child = list(label = k[[2L]], run = list(depth = as.integer(k[[3L]])))
+  }
+  withr::defer({
+    console_drop("u_kid_z")
+    console_drop("u_kid_a")
+  })
+  # a grandchild never owns the row's text before its parent's sibling
+  expect_identical(unname(vapply(console_kids(), function(r) r$child$label, "")),
+                   c("z-child", "a-grand"))
+})
+
 test_that("a line routed at a question sits under it; a later person's line opens a block", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
@@ -1957,16 +2012,87 @@ test_that("a line routed at a question sits under it; a later person's line open
   withr::defer(console_drop("u0000test"))
   render_events(s, list(hook_event("agent_start", s)))
   rec = console_record(list(run = "u0000test"))
-  # a line the question's read routes sits right under its rows
+  # a line the question's read routes sits right under its rows, its receipt (P30)
   rec$last = "prompt"
-  expect_identical(utils::capture.output(console_queue_line(s, "use base R", "steer")),
-                   queue_line("steer", "use base R"))
-  # the steer delivered after the call the question approved, which printed only output (no
-  # result line closed the block), opens its own block (visual review)
+  expect_identical(utils::capture.output(console_receipt(s, "use base R", "steer")),
+                   receipt_line("steer", "use base R"))
+  # a steer without a receipt (gptr_steer(), a pipe) delivered after the call the question
+  # approved, which printed only output (no result line closed the block), opens its own block
+  # (visual review), in the receipt's words
   rec$last = "prompt"
   took = render_events(s, list(hook_event("queue_update", s, op = "take", which = "steer",
-                                          text = "use base R", source = "repl")))
-  expect_identical(took, c("", ">> use base R"))
+                                          text = "use base R", source = "api_user")))
+  expect_identical(took, c("", receipt_line("steer", "use base R")))
+})
+
+test_that("a message with a receipt is not shown again when the loop takes it (P30, D-301)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  local_mocked_bindings(front_end = function() "terminal")
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  render_events(s, list(hook_event("agent_start", s)))
+  take = function(which, source) {
+    render_events(s, list(hook_event("queue_update", s, op = "take", which = which,
+                                     text = "use base R\nand log2", source = source)))
+  }
+  # typed or sent from the pause menu: its receipt said it when it was sent
+  expect_identical(take("steer", "repl"), character())
+  expect_identical(take("follow_up", "pause_menu"), character())
+  # a pipe into the running session: shown as it is delivered, its later rows under its text
+  expect_identical(take("follow_up", "pipe"), c("", receipt_line("follow_up", "use base R"),
+                                                "      and log2"))
+})
+
+test_that("a receipt is the person's rows: wrapped under the text, a CLI steer says so (D-301)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = TRUE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  long = paste(rep("use base R", 6L), collapse = " ")
+  rows = utils::capture.output(console_receipt(s, long, "follow_up"))
+  expect_identical(substr(rows, 1L, 6L), c("next> ", rep("      ", length(rows) - 1L)))
+  expect_identical(paste(substring(rows, 7L), collapse = " "), long)
+  expect_true(all(nchar(rows, type = "width") <= 39L))
+  # a word wider than the row, as unspaced CJK text is, breaks at the row's width, under the text
+  cjk = paste0("请把中位数残差也报告出来，",
+               "并且解释一下为什么")
+  wide = paste(cjk, strrep("s", 40L), "很长")
+  rows = utils::capture.output(console_receipt(s, wide, "steer"))
+  expect_identical(substr(rows, 1L, 7L), c("steer> ", rep(strrep(" ", 7L), length(rows) - 1L)))
+  expect_true(all(nchar(rows, type = "width") <= 39L))
+  expect_identical(paste(substring(rows, 8L), collapse = ""), gsub(" ", "", wide))
+  # on a CLI route a steer waits for the CLI's answer: said dim after the text, or under it where
+  # its last row is full
+  local_cli_run(s)
+  expect_identical(utils::capture.output(console_receipt(s, "use R", "steer")),
+                   paste(receipt_line("steer", "use R"), "(after the CLI's answer)"))
+  full = strrep("x", 32L)
+  expect_identical(utils::capture.output(console_receipt(s, full, "steer")),
+                   c(receipt_line("steer", full), "       (after the CLI's answer)"))
+  # its follow-up runs after the answer anyway
+  expect_identical(utils::capture.output(console_receipt(s, "then plot", "follow_up")),
+                   receipt_line("follow_up", "then plot"))
+})
+
+test_that("a receipt shows a tab as a blank; a take-back wraps as a receipt does (P30)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = TRUE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  # live steering test: a pasted tab reached the terminal raw, which moved to the next tab stop
+  expect_identical(utils::capture.output(console_receipt(s, "a tab:\there", "steer")),
+                   receipt_line("steer", "a tab: here"))
+  # the take-back was cut to one row with an ellipsis, under a receipt that wrapped
+  sym = console_style()
+  long = paste(rep("use base R", 6L), collapse = " ")
+  rows = utils::capture.output(console_taken_back(s, list(kind = "steer", text = long)))
+  expect_identical(substr(rows, 1L, 2L), c(paste0(sym$queued, " "), rep("  ", length(rows) - 1L)))
+  expect_identical(paste(substring(rows, 3L), collapse = " "),
+                   paste0("steer taken back", sym$sep, long))
+  expect_true(all(nchar(rows, type = "width") <= 39L))
 })
 
 test_that("a foreground run separates text, tool and status blocks once (D-186, D-245)", {

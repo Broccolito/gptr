@@ -29,9 +29,9 @@ test_that("waited background parents show delegation while ordinary background w
   }
   expect_false(grepl("sub-agent", run_case(FALSE), fixed = TRUE))
   waited = run_case(TRUE)
-  expect_match(waited, "sub-agents 0/3 done - 2 active - 1 queued", fixed = TRUE)
-  expect_match(waited, "active  alpha (wait-kid/wait-kid-1)", fixed = TRUE)
-  expect_match(waited, "queued  gamma (wait-kid/wait-kid-1)", fixed = TRUE)
+  expect_match(waited, "sub-agents 0/3 done - 2 active - 1 pending", fixed = TRUE)
+  expect_match(waited, "active   alpha (wait-kid/wait-kid-1)", fixed = TRUE)
+  expect_match(waited, "pending  gamma (wait-kid/wait-kid-1)", fixed = TRUE)
   expect_match(waited, "sub-agent gamma done (3/3)", fixed = TRUE)
 })
 
@@ -66,7 +66,7 @@ test_that("aborting a scheduled fanout cancels active work and leaves queued wor
                              interrupt = identity)
   })
   expect_s3_class(interrupted, "interrupt")
-  expect_match(seen$what, "sub-agents 0/3 done - 2 active - 1 queued", fixed = TRUE)
+  expect_match(seen$what, "sub-agents 0/3 done - 2 active - 1 pending", fixed = TRUE)
   expect_length(fake_requests(kid), 2L)
   expect_length(fake_requests(chat), 1L)
   expect_identical(seen$parent$status, "aborted")
@@ -109,7 +109,7 @@ test_that("a retry keeps its scheduled slot and names its phase before resuming"
   })
   expect_identical(result$status, "idle")
   expect_length(fake_requests(retry), 2L)
-  expect_match(seen$waiting, "sub-agents 0/3 done - 2 active - 1 queued", fixed = TRUE)
+  expect_match(seen$waiting, "sub-agents 0/3 done - 2 active - 1 pending", fixed = TRUE)
   expect_match(seen$waiting, "retryer retrying", fixed = TRUE)
   expect_match(seen$resumed, "retryer thinking", fixed = TRUE)
   expect_length(grep("sub-agent retryer retrying in 0.1 s", term_rows(out), fixed = TRUE), 1L)
@@ -144,7 +144,7 @@ test_that("a failed child hands the live row to its sibling and drains the sched
   expect_identical(result$pending$status, "idle")
   expect_length(fake_requests(queued), 1L)
   expect_identical(seen$owner, "slow")
-  expect_match(seen$what, "sub-agents 1/3 done - 2 active - 0 queued", fixed = TRUE)
+  expect_match(seen$what, "sub-agents 1/3 done - 2 active", fixed = TRUE)
   rows = term_rows(out)
   expect_length(grep("sub-agent bad failed (1/3)", rows, fixed = TRUE), 1L)
   expect_match(out, "sub-agents 2/3 done", fixed = TRUE)
@@ -177,7 +177,7 @@ test_that("a terminal fanout keeps its roster, phases and the parent's composer"
     "main = peter(model = fake, mode = 'auto', envir = new.env())",
     "ops = sum(vapply(kid$log$requests, function(req) sum(vapply(req$messages,",
     "  function(m) identical(m$kind, 'steer_relay'), NA)), 0L))",
-    "cat('CHILD OPERATORS ', ops, '\\n', sep = '')",
+    "cat('CHILD STEERS ', ops, '\\n', sep = '')",
     "cat('ROW CLEARED ', is.null(gptr:::the$live_row), '\\n', sep = '')"
   ), term = "xterm")
   utf8 = l10n_info()[["UTF-8"]]
@@ -185,16 +185,16 @@ test_that("a terminal fanout keeps its roster, phases and the parent's composer"
   sep = if (utf8) " \u00b7 " else " - "
   expect_true(pty$wait("peter[auto]> ", timeout = 120))
   pty$send("ONE\r")
-  expect_true(pty$wait(paste0("sub-agents 0/3 done", sep, "2 active", sep, "1 queued")))
-  expect_true(pty$wait("active  alpha (kid/kid-1), beta (kid/kid-1)"))
-  expect_true(pty$wait("queued  gamma (kid/kid-1)"))
+  expect_true(pty$wait(paste0("sub-agents 0/3 done", sep, "2 active", sep, "1 pending")))
+  expect_true(pty$wait("active   alpha (kid/kid-1), beta (kid/kid-1)"))
+  expect_true(pty$wait("pending  gamma (kid/kid-1)"))
   expect_true(pty$wait("sub-agent alpha r"))
   expect_true(pty$wait("keys show when r returns"))
   # Typed during a child tool, then read while child models wait: it still steers the parent.
   pty$paste("use-median")
   expect_true(pty$wait(paste0(person, " use-median")))
   pty$send("\r")
-  expect_true(pty$wait("1 queued"))
+  expect_true(pty$wait("1 steer queued"))
   pty$paste("next-draft")
   expect_true(pty$wait(paste0(person, " next-draft"), timeout = 30), info = pty$all)
   expect_true(pty$wait("PARENT STEER [use-median]", timeout = 60), info = pty$all)
@@ -203,7 +203,7 @@ test_that("a terminal fanout keeps its roster, phases and the parent's composer"
   expect_true(pty$wait("NEXT [next-draft]", timeout = 30), info = pty$all)
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
-  expect_true(pty$wait("CHILD OPERATORS 0"))
+  expect_true(pty$wait("CHILD STEERS 0"))
   expect_true(pty$wait("ROW CLEARED TRUE"))
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("PRIVATE-CHILD-REPORT"), 0L)
@@ -229,9 +229,9 @@ test_that("a terminal direct fanout prints each report once and leaves no live r
   # At R's actual prompt, so the normal autoprint path must display this visible result.
   pty$send(paste0("peter('each', list(alpha = 1, beta = 2, gamma = 3), model = kid, ",
                    "parallel = 2, mode = 'auto', .opts = list(backend = 'inline'))\r"))
-  expect_true(pty$wait("active  alpha (direct-kid/direct-kid-1)"))
+  expect_true(pty$wait("active   alpha (direct-kid/direct-kid-1)"))
   expect_true(pty$wait("beta (direct-kid/direct-kid-1)"))
-  expect_true(pty$wait("queued  gamma (direct-kid/direct-kid-1)"))
+  expect_true(pty$wait("pending  gamma (direct-kid/direct-kid-1)"))
   expect_true(pty$wait("sub-agents 2/3"))
   expect_true(pty$wait("sub-agent gamma done (3/3)"))
   expect_true(pty$wait("DIRECT-CHILD-REPORT"))

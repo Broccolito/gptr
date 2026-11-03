@@ -1291,9 +1291,9 @@ each item added, taken or withdrawn emits one `queue_update` that names it. Ther
 `resume` restart. It is a console question in every console that offers it [D-243]: `? Paused` (with the
 session's id only when more than one session is paused) and under its text a keys row as an approval's,
 `s steer · f follow-up · c continue · a abort · b background` ([b] for foreground calls only, experimental),
-read at the person's chevron `› ` at column 0. A key or its word answers, Enter alone continues, and anything
-else gets a dim hint naming the keys; [s] and [f] read their text at the same chevron and queue it as a typed
-message is queued [D-242]. Continuing writes no notice, and a terminal console's draft survives the menu; a
+read at the answer's prompt `  › `, under its text [D-303]. A key or its word answers, Enter alone continues, and
+anything else gets a dim hint naming the keys; [s] and [f] read their text at their receipt's word, `steer> ` or
+`next> ` at column 0, so the line read is the receipt, and queue it as a typed message is queued [D-242, D-301]. Continuing writes no notice, and a terminal console's draft survives the menu; a
 second Ctrl-C aborts. Menu output goes to stdout through the console writer, which keeps
 it out of a tool's captured output (the handler may run inside it), and tools record interruption with `on.exit()`,
 never with an exiting `tryCatch(interrupt =)` that would pre-empt the menu (G3 menu fixes). The menu is offered
@@ -1673,7 +1673,7 @@ request's `asks even in auto mode: <reason>`, then the question `  ? Allow r?` (
 keys, `    y yes · a always (session) · p always (project) · n no · ? more` (the keys bold, what they do dim; 68
 columns whatever the tool or who asks, wrapped between the options in a narrower console), with C0/C1 controls,
 bidi and zero-width characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after
-the person's chevron `› ` (ASCII `>> `) at column 0, with R's readline, echo on and Enter required; no single key
+the person's chevron two columns in, `  › ` (ASCII `  >> `) [D-301], with R's readline, echo on and Enter required; no single key
 answers. `a` adds a session rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`) and `p`
 the same rule for the project, both offered only when the request suggests one; a remembered answer adds one dim
 line, `    allowed r(fn:FindNeighbors,FindClusters) for this session` (or `project`). `?` opens the detail view
@@ -1686,7 +1686,7 @@ text that the tool result gives the model as the person's own instruction (`n us
 (`  ? sub-agent alpha: allow r?`; a nested `peter()` by its quoted prompt and number). Choices and inputs (the `ask`
 tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices
 (`    1  dplyr`, the number bold), a dim hint (`Choose a number, or type your own answer; Enter = base`; an input's
-`Enter = <default>`), then `› `; each part word-wraps at the console width less the margin, under its own text (a
+`Enter = <default>`), then `  › `; each part word-wraps at the console width less the margin, under its own text (a
 title's later rows at column 4, a choice's under its label). Every console prompt first clears the live row (an
 answer's held row continues after it, D-245), and its lines reach the console, in its colours, even from inside the parent's `r` evaluation (never its tool result). An
 invalid answer is explained (`a` or `p` where nothing can be remembered says why); five (`?` is none) end in a
@@ -2227,9 +2227,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   bracketed-paste markers, else one batch read on the polling beat) is one message [D-263];
   `/command` and `!code` lines wait for the next prompt, shown as follow-ups, in the order typed with them; after
   an interrupt they go to the console history, unsent [D-242]. The terminal does not echo during the call (modes
-  restored after it, at `q()` too), so typed text shows on the live row (T) or on its dim queue line
-  (`↳ steer · <text>`, D) and, when the run takes it, as the person's line `› <text>` at that step boundary
-  [D-242]; console questions read with the saved modes, which echo (D-221). In T a console question is drawn once
+  restored after it, at `q()` too), so typed text shows on the live row (T) and, once sent, as its receipt
+  `steer> <text>` or `next> <text>` at column 0 on the band, written at once and not again when the run takes it
+  [D-301]; console questions read with the saved modes, which echo (D-221). In T a console question is drawn once
   no key has come for a second (the live row says `question waiting`, and Enter and Tab still queue), what was
   typed going to the composer, whose draft stays and is on the live row again when the question has its answer
   [D-243]. A console question also drains fd 0 just before it reads, under its rows: in T into the composer; in D
@@ -2246,7 +2246,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; the live row redrawn by a reactor task; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.
   Glyphs and colours come from one style table, `console_style()` [IC-82, D-245]: the logo's cursor shapes (`›`
-  the person, `▎` a tool call, `▌` the agent, whose live row's block does not move, `↳` a queued message), ASCII where
+  the person, `▎` a tool call, `▌` the agent, whose live row's block does not move, `↳` a message taken back or a draft kept), ASCII where
   the output is not UTF-8 and in Windows consoles outside Windows Terminal and RStudio; the logo's red and a
   darker logo blue (basic red and blue below 256 colours), dim, and an input band in a terminal (T class) whose
   background its answer to OSC 11 or `COLORFGBG` gives, under the prompts, the live row and the person's lines;
@@ -2254,7 +2254,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   Where the renderer is active (verbosity 2 on a dynamic TTY; `capture.output()` of an
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
   lines, notices, prompts, the status line) keep a two-column margin and wrap at
-  width - 4 (an answer's prose at 100 columns at most, a readable measure in a wide console [D-245]), while the person's lines (an answer, a queued or delivered message) start at column 0; one blank
+  width - 4 (an answer's prose at 100 columns at most, a readable measure in a wide console [D-245]), while the person's messages to the agent (`peter> `, `steer> `, `next> `) start at column 0 and an
+  answer at column 2 [D-301]; one blank
   line separates text, tool, notice, prompt, the person's lines and status blocks (and two prompts, and two text
   blocks in a row [D-208], but not a question from the tool block it is asked in [D-243], nor the tool blocks of
   consecutive requests, which group as those of one response [D-245]) and follows the input
@@ -2280,7 +2281,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   that parses is highlighted by `cli::code_highlight()` in the user's `cli.code_theme`, else in the style table's
   R theme (reserved words red; strings, numbers and constants blue; calls bold; comments dim) [IC-82, D-245];
   other R and other languages are shown as written. The console UI itself clears the live row,
-  keeping its task, before it prompts (D-186); a question, a notice or a queue line goes between
+  keeping its task, before it prompts (D-186); a question, a notice or a receipt goes between
   an answer's whole rows and its held row continues after it, unsplit [D-245].
   Fenced code stays Markdown in every mode: fence lines as written (dim when styled), the body
   verbatim, unwrapped and de-indented by the opener's indentation (CommonMark: a fence indented
@@ -2314,9 +2315,10 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `failed (1/2): <first line of the reason>`, after the agent's blue block [D-245], cut to the console width; `(k/N)` for a team, fan-out or
   `gptr_parallel()` group; a nested `peter()` by its quoted prompt and its number among the parent run's
   children, `'Summarise ...' #2`, D-224). Model code that wraps such calls in `capture.output()` or `sink()`
-  still captures prompts and lines (D-188). Scheduled groups show completed/total, active and queued counts,
+  still captures prompts and lines (D-188). Scheduled groups show completed/total, active and pending counts
+  (`pending`, the members not started, only when there are some; `queued` is the person's messages, D-309),
   with named rosters and model targets on membership changes (eight names per list, then an explicit remainder).
-  Queued children show their requested model; active children use the resolved target when reported by their
+  Pending children show their requested model; active children use the resolved target when reported by their
   backend. Built-in CLI defaults name the full model id passed to the CLI, as `/model` does. At verbosity
   2+ child tool names and retries show progress; their conversations remain in their sessions. The single live
   row shows group counts and active phases, also for direct groups, without changing the parent's composer.

@@ -52,6 +52,47 @@ test_that("a console select outside a run opens its own block in the margin (D-1
   expect_identical(out$shown, c("", "  ? Rewind to", "    1  a", "    2  b", "    Choose a number"))
 })
 
+test_that("gptr_confirm() asks as a console question: keys under it, the chevron (D-306)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  local_console_test()
+  local_gptr_options(verbose = 2L, interactive = TRUE)
+  withr::local_options(cli.dynamic = TRUE)
+  answers = c("/help", "y", "", "no", "")
+  prompts = character()
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
+    prompts <<- c(prompts, prompt)
+    answers[[length(prompts)]]
+  })
+  out = utils::capture.output(yes <- gptr_confirm("Trust this project?"))
+  # the question, then the keys row: no `[y/N]` and no `> ` of a plain readline prompt
+  expect_identical(out, c("", "  ? Trust this project?",
+                          "      y yes \u00b7 n no \u00b7 enter no"))
+  # a console command typed there waits for the next prompt, and the question reads again
+  expect_true(yes)
+  expect_identical(prompts, rep(ui_answer_prompt(), 2L))
+  utils::capture.output(expect_false(gptr_confirm("Trust this project?")))
+  utils::capture.output(expect_false(gptr_confirm("Trust this project?")))
+  # Enter takes the default, which the keys row names
+  out = utils::capture.output(expect_true(gptr_confirm("Send it?", default = TRUE)))
+  expect_identical(out[[3L]], "      y yes \u00b7 n no \u00b7 enter yes")
+})
+
+test_that("an approval's own path row keeps its file name, cut in its middle (P30 follow-up)", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 50L)
+  proj = local_project()
+  rel = "zz_archive/2019/q3/raw/legacy/notes/drafts/methods.qmd"
+  req = list(tool = "edit", input = list(path = file.path(proj, rel)), tool_call_id = "c-path")
+  row = ui_permission_lines(req)[[1L]]
+  expect_match(row, "^  \u258e edit  zz_archive/.*\u2026/methods[.]qmd$")
+  expect_lte(cli::ansi_nchar(row, type = "width"), 50L)
+})
+
+test_that("an approval splits its code on CRLF and CR, no <U+000D> (P30 follow-up)", {
+  expect_identical(ui_request_lines(list(input = list(code = "a = 1\r\nb = 2\rc = 3"))),
+                   c("a = 1", "b = 2", "c = 3"))
+  expect_identical(ui_request_lines(list(input = list(code = "x\033[2J"))), "x<U+001B>[2J")
+})
+
 test_that("questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", {
   # every row under the title is at column 4, under its text (visual review: the hint was at 2)
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
@@ -82,8 +123,8 @@ test_that("questions share one frame: ? and the title, numbered choices, a dim h
   })
   expect_identical(k, "fit")
   expect_identical(out, c("  ? Name?", "    Enter = fit"))
-  # the answer is read after the person's chevron at column 0 (D-245 glyphs)
-  expect_identical(prompts, rep("\u203a ", 2L))
+  # the answer is read after the person's chevron under the question (D-245 glyphs, D-301)
+  expect_identical(prompts, rep("  \u203a ", 2L))
   # ? blue, the title bold, the numbers bold, the hint dim
   withr::local_options(cli.num_colors = 256L)
   out = utils::capture.output(ui_console_select("Pick", c("a", "b"), read = function(...) "1"))
@@ -615,7 +656,8 @@ test_that("an approval asks under the call it gates; a call not shown is printed
   # prints it, and the question names who asks
   at = match("  | r  x = 1", out)
   expect_identical(out[at + 1:2], c("  ? sub-agent 'count' #1: allow r?", keys))
-  expect_identical(prompts, c(">> ", ">> "))
+  # each answer read under its question (D-301)
+  expect_identical(prompts, c("  >> ", "  >> "))
 })
 
 test_that("a remembered answer adds one dim line naming the rule and its scope (D-243)", {
@@ -665,7 +707,8 @@ test_that("a T console's answers are read on the input band, as its prompts are 
     ui_console_read("Key: ", secret = TRUE)
   })
   # readline counts only the chevron (\001 \002); after the read the band is erased below it
-  expect_identical(rl$prompts[[1L]], paste0("\001\033[48;5;237m\002", "\u203a ", "\001\033[K\002"))
+  expect_identical(rl$prompts[[1L]],
+                   paste0("\001\033[48;5;237m\002", "  \u203a ", "\001\033[K\002"))
   expect_match(out, "\033[0m\033[K", fixed = TRUE)
   # a secret is read off the band, as typed with the echo off
   expect_identical(rl$prompts[[2L]], "Key: ")
@@ -836,6 +879,29 @@ test_that("a question drawn over the composer's draft says where it went (steeri
   expect_identical(read("half"), character())
 })
 
+test_that("what was typed before a run starts is never a question's answer (D-306)", {
+  local_console_test()
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, width = 80L)
+  withr::defer(assign("tty", NULL, envir = the))
+  # the egress question comes before the first request: no run of the call is on record yet
+  rd = new.env(parent = emptyenv())
+  typed = "draft\twords\r\033[A"
+  shown = character()
+  local_mocked_bindings(console_repl_find = function() list(reader = rd),
+                        repl_terminal = function(rs) TRUE, policy_find = function() NULL,
+                        console_typed_chars = function(rd, ...) typed,
+                        console_write = function(lines) shown <<- c(shown, lines))
+  # a T console: the composer's draft, back after the answer; its line end and Up act on nothing
+  the$tty = list2env(list(keys = TRUE))
+  expect_false(console_typed(drain = TRUE, accept = function(x) TRUE))
+  expect_identical(rd$compose$draft, "draft words ")
+  # a D console: its lines are kept in the history, said once
+  the$tty = list2env(list(keys = FALSE))
+  typed = "use base R\nhalf"
+  utils::capture.output(expect_false(console_typed(drain = TRUE, accept = function(x) TRUE)))
+  expect_match(shown, "not kept (gptr.history is off) \u00b7 use base R \u00b7 half", fixed = TRUE)
+})
+
 test_that("during a run a line typed before the approval prompt is queued, then it asks again", {
   skip_on_cran()
   local_console_test()
@@ -857,7 +923,7 @@ test_that("during a run a line typed before the approval prompt is queued, then 
   out = utils::capture.output(repl_main(rs))
   expect_identical(e$zz, 2)
   expect_identical(queued, list(list(text = "use base R", as = "steer", source = "repl")))
-  expect_identical(sum(rl$prompts == ">> "), 2L)
+  expect_identical(sum(rl$prompts == "  >> "), 2L)
   expect_identical(rl$kept, character())
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
@@ -865,10 +931,9 @@ test_that("during a run a line typed before the approval prompt is queued, then 
   expect_identical(msg_text(last),
                    "The user sent this message while you were working: use base R")
   expect_false(any(grepl("^ *not an answer", out)))
-  # the console echoed the line at the question, so its queue line does not repeat it: it says the
-  # line was queued, not taken as the answer (visual review)
-  expect_true(queue_line("steer", "not an answer") %in% out)
-  expect_false(queue_line("steer", "use base R") %in% out)
+  # the console echoed the line at the question; its receipt says it went to the agent, not as the
+  # answer (visual review, D-301)
+  expect_identical(sum(out == receipt_line("steer", "use base R")), 1L)
 })
 
 test_that("during a run a !code or /command line typed before a question waits for the prompt", {
@@ -888,8 +953,8 @@ test_that("during a run a !code or /command line typed before a question waits f
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   expect_false(any(grepl("zz2", vapply(reqs[[2L]]$messages, msg_text, ""), fixed = TRUE)))
-  expect_true(queue_line("follow-up", "not an answer") %in% out)
-  expect_false(any(startsWith(out, queue_line("steer", ""))))
+  expect_true(receipt_line("follow_up", "!zz2 = 5") %in% out)
+  expect_false(any(startsWith(out, receipt_line("steer", ""))))
   expect_false(any(grepl("after this answer", out, fixed = TRUE)))
 })
 
@@ -934,7 +999,7 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   rs$mode = "manual"
   out = utils::capture.output(repl_main(rs))
   expect_null(e$zz)
-  expect_identical(sum(fd0$prompts == ">> "), 2L)
+  expect_identical(sum(fd0$prompts == "  >> "), 2L)
   expect_identical(sum(out == "    a pasted block is not an answer - kept in history Up"), 1L)
   expect_identical(kept, '"""\ny\npasted line two\npasted line three\n"""')
   expect_false(any(grepl("^ *not an answer", out)))

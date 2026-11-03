@@ -59,7 +59,7 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   if (length(marks) && marks[[1L]] == "\033[201~") bracket = TRUE
   open = if (length(marks)) marks[[length(marks)]] == "\033[200~" else bracket
   # a Tab or Up that ends a batch without a newline outside a paste is the key after the batch's
-  # text, as keys typed during an in-process tool arrive as one batch
+  # text, as console_keys() cuts typed keys after each one
   key = regmatches(x, regexpr("(\t|\033\\[A|\033OA)$", x))
   if (!open && length(key) && nchar(key) < nchar(x) &&
         !grepl("\n", console_unpasted(x, bracket), fixed = TRUE)) {
@@ -166,8 +166,9 @@ console_trigger = function(line) {
 #' Apply one read batch `chars` of a T console (IC-76, D-243) to the composer of the REPL reader
 #' `rd` (`rd$compose`, console_compose()) for session `s`: a message is queued as its kind says
 #' (policy_enqueue(): a steer for the next step boundary, a follow-up in `rd$typed` for the next
-#' prompt) and Up takes back the newest one (console_newest()), saying so where its queue line was
-#' printed (console_queue_line()); Tab on a trigger word completes it
+#' prompt, its receipt written at once) and Up takes back the newest one (console_newest()) into the
+#' draft, saying so (console_taken_back()), as its receipt stays in the transcript (D-301); Tab on a
+#' trigger word completes it
 #' (console_complete()), and several candidates are kept as `rd$compose$candidates`, which the live
 #' row shows until the next key; the live row is drawn again where it shows. A batch read at most
 #' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, timed
@@ -175,9 +176,15 @@ console_trigger = function(line) {
 #' one there holding more keys than a person types since that read (one in 30 ms, plus one) is a
 #' paste to console_compose(); fewer were typed, as when a late read under load holds Enter and the
 #' next key. Bracketed-paste markers decide first: this rule decides only a batch without them read
-#' while no paste they opened is open (console_compose(), D-263). A Tab or Up that ends a batch
-#' right after a newline is a key of its own, after the message the newline sent (console_compose()
-#' acts once a batch), as when Enter and Up share a late read. Ctrl-C, a key in character mode
+#' while no paste they opened is open (console_compose(), D-263). console_compose() acts once a
+#' batch, so the batch is cut into pieces it takes in turn: one off the beat, outside a paste, where
+#' gptr turned bracketed paste on (tty_call(), so a paste comes marked), is typed keys up to a
+#' paste's start marker (the paste and what follows it one piece, as pasted text may hold an end
+#' marker; none where an end marker comes first), as those piled up while an in-process tool held
+#' the reactor, cut after each Enter, Up and Tab, so each acts after the text before it and Up takes
+#' back what an Enter before it sent (D-306); any other batch only before a Tab or Up that ends it
+#' right after a newline, after the message the newline sent, as when Enter and Up share a late
+#' read. Ctrl-C, a key in character mode
 #' (tty_call()), interrupts as SIGINT would, after the keys before it (in a batch holding a
 #' bracketed-paste marker, read while a paste is open up to 2 s after its last read, or read on the
 #' beat right after such a batch with no empty read between, `rd$compose$pasted`, it is pasted
@@ -197,8 +204,8 @@ console_keys = function(rd, s, chars) {
   # read, console_paste_open()), or read on the beat right after such a batch with no empty read
   # between (the rest of a paste whose text ended it early, split again) holds no Ctrl-C key: its
   # Ctrl-C bytes are pasted text, which the composer drops (D-263)
-  pasted = nzchar(chars) && (console_paste_open(rd$compose, now) ||
-                               (isTRUE(rd$compose$pasted) && gap <= 0.2) ||
+  rest = isTRUE(rd$compose$pasted) && gap <= 0.2
+  pasted = nzchar(chars) && (console_paste_open(rd$compose, now) || rest ||
                                grepl("\033\\[20[01]~", paste0(rd$compose$esc, chars)))
   if (pasted) chars = gsub("\003", "", chars, fixed = TRUE)
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
@@ -207,27 +214,32 @@ console_keys = function(rd, s, chars) {
     rd$after_interrupt = paste0(rd$after_interrupt, after)
     chars = substr(chars, 1L, ctrl_c - 1L)
   }
+  typed = !paste && !rest && !isTRUE(rd$compose$bracket) && "paste" %in% the$tty$set
+  cut = if (typed) "\r\n?|\n|\t|\033\\[A|\033OA" else "[\r\n](?=(?:\t|\033\\[A|\033OA)\\z)"
   compose = function(chars) {
-    if (!nzchar(chars)) return()
-    key = regmatches(chars, regexpr("[\r\n](\t|\033\\[A|\033OA)$", chars))
-    if (length(key)) {
-      compose(substr(chars, 1L, nchar(chars) - nchar(key) + 1L))
-      return(compose(substring(key, 2L)))
+    # typed keys only before a paste's start marker: what follows it may be pasted
+    mark = regexpr("\033\\[20[01]~", chars)
+    n = if (!typed || mark < 0L) nchar(chars) else
+      if (regmatches(chars, mark) == "\033[200~") mark - 1L else 0L
+    head = substr(chars, 1L, n)
+    at = gregexpr(paste0("(?s).*?(?:", cut, "|\\z)"), head, perl = TRUE)
+    pieces = c(regmatches(head, at)[[1L]], substring(chars, n + 1L))
+    for (piece in Filter(nzchar, pieces)) {
+      res = console_compose(rd$compose, piece, now, setting_get("type_ahead", s),
+                            console_complete, paste)
+      rd$compose = res$state
+      act = res$action
+      if (identical(act$type, "send")) {
+        policy_enqueue(s, act$text, act$kind, source = "repl")
+      } else if (identical(act$type, "take_back")) {
+        it = console_newest(s, rd, take = TRUE)
+        rd$compose$draft = it$text %||% ""
+        if (!is.null(it)) console_taken_back(s, it)
+      } else if (identical(act$type, "complete")) {
+        rd$compose$candidates = act$candidates
+      }
+      if (isTRUE(the$live_row$shown)) the$live_row$draw()
     }
-    res = console_compose(rd$compose, chars, now, setting_get("type_ahead", s), console_complete,
-                          paste)
-    rd$compose = res$state
-    act = res$action
-    if (identical(act$type, "send")) {
-      policy_enqueue(s, act$text, act$kind, source = "repl")
-    } else if (identical(act$type, "take_back")) {
-      it = console_newest(s, rd, take = TRUE)
-      rd$compose$draft = it$text %||% ""
-      if (!is.null(it)) console_queue_line(s, it$text, it$kind, taken = TRUE)
-    } else if (identical(act$type, "complete")) {
-      rd$compose$candidates = act$candidates
-    }
-    if (isTRUE(the$live_row$shown)) the$live_row$draw()
   }
   compose(chars)
   if (pasted || isTRUE(rd$compose$pasted)) rd$compose$pasted = pasted
@@ -429,29 +441,30 @@ console_newest = function(s, rd, take = FALSE) {
 #' waiting question, then the person's draft or the keys, fitted to `width - 1` columns
 #'
 #' `state`: `what` (thinking, the running tool's name or `sub-agent a`), `secs` (the run's seconds,
-#' shown as 0s, 59s, 1m 05s), `queued` (the person's messages waiting), `question` (a question
-#' waits), `newest` (list(kind, text): the newest of them), `candidates` (completions, shown in
-#' place of the status words), `draft` (the composer's text; NULL where no composer reads keys),
-#' `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt key),
-#' `pause` (TRUE where the key pauses, else it stops), `steer` (TRUE where only the pause menu
-#' steers: Positron's console holds what is typed as R code) and `typed` (TRUE where a line typed
-#' during the run is the next prompt: RStudio's console), `frozen` (TRUE while R code runs in this
-#' process: no clock, and the keys wait, `<sep>keys show when r returns` with an empty draft, else
-#' `keys wait` among the status words before the queue; not while a question waits, which reads
-#' keys), `band` (TRUE on the input band, its words in the band's grey) and `status_w` (the widest
-#' status a row with a draft had this run: the status is padded to it, so the draft never moves
-#' left; attr "status_w" of the result is this row's lasting width, without `keys wait` and
-#' `question waiting`, 0 for a row of completions, which shows until the next key). In the style
-#' table's glyphs: without a composer the status ends with the key and its verb, as the composer's
-#' keys read, `<sep>esc stop`, with `steer` `<sep>ctrl-c, then s, to steer`, and with `typed`
-#' `<sep>typed lines run next`; with an empty draft the newest message follows, `<queued>
-#' steer<sep><text><sep><up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`;
-#' else `<person> <draft>`, after the hint `runs after this answer` where the draft starts with / or
-#' ! (a follow-up, whatever the key) and the hint fits beside the status at its widest, and a
-#' leading ! takes the person's glyph's place, bold red (Codex's shell mode, D-244). The block is
-#' the agent's blue and the words dim; the draft is ink. One collapse rule: whole terms go from the
-#' right, the hint's, then the queue and a waiting question, then the queued message is cut keeping
-#' its head, down to the block and the elapsed time; the draft keeps its tail, so an ellipsis always
+#' shown as 0s, 59s, 1m 05s), `queued` (the kinds of the person's messages waiting, counted `1 steer
+#' queued`, `1 follow-up queued`, `2 queued`; their receipts show the text, D-301), `question` (a
+#' question waits), `newest` (the newest of them Up takes back, console_newest(), or NULL),
+#' `candidates` (completions, shown in place of the status words), `draft` (the composer's text;
+#' NULL where no composer reads keys), `enter` (the kind Enter queues, the `type_ahead` setting),
+#' `key` (the console's interrupt key), `pause` (TRUE where the key pauses, else it stops), `steer`
+#' (TRUE where only the pause menu steers: Positron's, RStudio's and Windows' consoles hold what is
+#' typed, console_typed_fate()) and `typed` (TRUE where a line typed during the run is the next
+#' prompt: there, except in Positron, D-304), `frozen` (TRUE while R code runs in this process: no
+#' clock, and the keys wait, `<sep>keys show when r returns` with an empty draft, else `keys wait`
+#' among the status words before the queue; not while a question waits, which reads keys), `band`
+#' (TRUE on the input band, its words in the band's grey) and `status_w` (the widest status a row
+#' with a draft had this run: the status is padded to it, so the draft never moves left; attr
+#' "status_w" of the result is this row's lasting width, without `keys wait` and `question waiting`,
+#' 0 for a row of completions, which shows until the next key). In the style table's glyphs: without
+#' a composer the status ends with the key and its verb, as the composer's keys read, `<sep>esc
+#' stop`, with `steer` `<sep>ctrl-c, then s, to steer`, and with `typed` `<sep>typed lines run after
+#' this answer`; with an empty draft `<up> edit` where Up takes a message back, or the keys, `enter
+#' steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person> <draft>`, after the hint `runs after
+#' this answer` where the draft starts with / or ! (a follow-up, whatever the key) and the hint fits
+#' beside the status at its widest, and a leading ! takes the person's glyph's place, bold red
+#' (Codex's shell mode, D-244). The block is the agent's blue and the words dim; the draft is ink.
+#' One collapse rule: whole terms go from the right, the hint's, then the queue and a waiting
+#' question, down to the block and the elapsed time; the draft keeps its tail, so an ellipsis always
 #' marks cut text. Widths are counted as the console draws them (live_fit()), so the row never
 #' wraps; where not even the block and the time fit, it is empty.
 #' @noRd
@@ -467,27 +480,26 @@ console_live_row = function(state, width) {
   if (frozen) clock = what
   # a sub-agent's short form, `sub-agent #1`, takes its label's place first where the row is narrow
   short = if (frozen) state$short %||% what else paste(state$short %||% what, clock)
+  n = length(state$queued)
   words = c(if (frozen) what else paste(what, clock),
             if (frozen && nzchar(state$draft %||% "")) "keys wait",
-            if (isTRUE(state$queued > 0)) paste0(state$queued, " queued"),
+            if (n) paste(n, if (n == 1L) paste(kind(state$queued), "queued") else "queued"),
             if (isTRUE(state$question)) "question waiting")
   key = tolower(state$key %||% "Ctrl-C")
   enter = state$enter %||% "steer"
   draft = state$draft
-  # the hint's terms; a queued message (`said`) is the one text cut, the others are dropped whole
-  said = NULL
+  # the hint's terms, dropped whole
   terms = if (is.null(draft)) {
     verb = if (isTRUE(state$steer)) ", then s, to steer" else
       if (isTRUE(state$pause)) " pause" else " stop"
-    c(paste0(key, verb), if (isTRUE(state$typed)) "typed lines run next")
+    c(paste0(key, verb), if (isTRUE(state$typed)) "typed lines run after this answer")
   } else if (!nzchar(draft) && frozen) {
     "keys show when r returns"
   } else if (!nzchar(draft) && is.null(state$newest)) {
     c(paste("enter", kind(enter)), paste("tab", kind(setdiff(c("steer", "follow_up"), enter))),
       paste(key, "pause"))
   } else if (!nzchar(draft)) {
-    said = paste0(sym$queued, " ", kind(state$newest$kind), sym$sep, live_text(state$newest$text))
-    c(said, paste(sym$up, "edit"))
+    paste(sym$up, "edit")
   }
   hint = function(terms) {
     if (!length(terms)) return("")
@@ -513,25 +525,16 @@ console_live_row = function(state, width) {
     status = live_candidates(state$candidates, fit)
   } else {
     # a sub-agent's short form first; then dropped whole, from the right: the hint's terms, then
-    # the queue and a waiting question; then the queued message is cut, keeping its head; at least
-    # the block and the time
+    # the queue and a waiting question; at least the block and the time
     repeat {
       status = paste0(paste(words, collapse = sym$sep), hint(terms))
       if (live_fit(status) <= fit) break
       if (!identical(words[[1L]], short)) {
         words[[1L]] = short
-      } else if (length(terms) > !is.null(said)) {
+      } else if (length(terms)) {
         terms = terms[-length(terms)]
       } else if (length(words) > 1L) {
         words = words[-length(words)]
-      } else if (!is.null(said)) {
-        cut = live_fit(said, fit - live_fit(words) - 3L, sym$ellipsis)
-        if (startsWith(cut, paste0(sym$queued, " ", kind(state$newest$kind), sym$sep))) {
-          status = paste0(words, hint(cut))
-          break
-        }
-        said = NULL
-        terms = character()
       } else {
         status = clock
         break
@@ -644,16 +647,28 @@ console_live = function() {
 }
 
 #' The live row's state for the record `rec` of a foreground run (console_live_row()): the state
-#' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds, the
-#' person's messages waiting for its session, whether a question waits (`rec$question`,
+#' word (`rec$what`; while sub-agents it shows run, a scheduled group's counts and each active
+#' child's phase, console_group_state(), else `sub-agent <label>`), the run's seconds (a
+#' direct group's since the group started, as the row passes between its children), the person's
+#' messages waiting for its session, whether a question waits (`rec$question`,
 #' console_ask_wait()), whether an r call evaluates in this process (`rec$frozen`, its call id;
 #' during a sub-agent, which runs in the parent's r call and reads keys, one of the sub-agents'),
 #' and the console's interrupt key and what it does (in RStudio, also that a typed line is the next
 #' prompt); where a T console's composer reads keys (tty_call()), its draft, the newest message
 #' waiting (console_newest()), the completion candidates its last key listed and the kind Enter
-#' sends
+#' sends. A prompt's record before its run starts (`rec$sent`, console_send()): its word, its
+#' seconds and the keys, a T console's composer's, which it reads once the run starts, so they steer
+#' and pause it then, with the draft a question before the run kept (D-306); elsewhere the interrupt
+#' key stops the call
 #' @noRd
 console_live_state = function(rec) {
+  if (isTRUE(rec$sent)) {
+    rd = if (isTRUE(the$tty$keys)) console_repl_prompt()$reader
+    return(list(what = rec$what, secs = as.numeric(Sys.time()) - rec$t0,
+                key = console_interrupt_key(), pause = !is.null(rd),
+                draft = if (!is.null(rd)) rd$compose$draft %||% "",
+                enter = setting_get("type_ahead")))
+  }
   kids = console_kids()
   frozen = if (length(kids)) {
     any(vapply(kids, function(r) !is.null(r$frozen), NA))
@@ -674,17 +689,18 @@ console_live_state = function(rec) {
   }
   short = if (!is.null(group)) group$short else
     if (length(kids)) paste("sub-agent", sub("^.* (#[0-9]+)$", "\\1", label))
+  fate = console_typed_fate()
   list(what = what, short = short,
-       secs = as.numeric(Sys.time()) - rec$t0, queued = if (direct) 0L else console_queued(s),
+       secs = as.numeric(Sys.time()) - ((if (direct) group_run$group$t0) %||% rec$t0),
+       queued = if (direct) character() else console_queued(s),
        question = isTRUE(rec$question), frozen = isTRUE(frozen),
        key = console_interrupt_key(), pause = console_menu_available(),
-       steer = !direct && console_menu_available() && front_end() == "positron",
-       typed = front_end() == "rstudio",
+       steer = !direct && !is.null(fate), typed = !is.null(fate) && front_end() != "positron",
        draft = if (!is.null(rd)) rd$compose$draft %||% "", candidates = rd$compose$candidates,
        newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))
 }
 
-#' The records of the sub-agents the console shows (console_child_shown()), by label
+#' The records of the sub-agents the console shows (console_child_shown()), by depth, then label
 #' @noRd
 console_kids = function() {
   kids = Filter(function(r) !is.null(r$child), as.list(console_state()$active))
@@ -692,21 +708,27 @@ console_kids = function() {
              vapply(kids, function(r) r$child$label, ""))]
 }
 
-#' The person's messages waiting for session `s`: its queued items from user sources, the items
-#' the console holds for it (policy_flush()) and the lines the REPL holds for its next prompt
+#' The kinds (`steer`, `follow_up`) of the person's messages waiting for session `s`: its queued
+#' items from user sources, the items the console holds for it (policy_flush()) and the lines the
+#' REPL holds for its next prompt
 #' @noRd
 console_queued = function(s) {
   q = session_data(s)$queue
-  user = vapply(c(q$steer, q$follow_up), function(it) it$source %in% queue_user_sources, NA)
-  held = vapply(console_state()$pending, function(it) identical(it$s, s), NA)
-  sum(user) + sum(held) + length(console_repl_prompt()$reader$typed)
+  user = function(items) sum(vapply(items, function(it) it$source %in% queue_user_sources, NA))
+  held = Filter(function(it) identical(it$s, s), console_state()$pending)
+  c(rep("steer", user(q$steer)), rep("follow_up", user(q$follow_up)),
+    vapply(held, function(it) it$as, ""),
+    rep("follow_up", length(console_repl_prompt()$reader$typed)))
 }
 
-#' Show the live row for the record `rec` of a foreground run while it waits for its model
-#' (`what` thinking): drawn now and once a second by a reactor task while the record renders
-#' (console_render_on()) or a sub-agent it shows runs, whose run pumps the reactor inside the
-#' parent's r call, on a dynamic console of an interactive R (not class P), but not in
-#' R.app, whose console gives everything after a carriage return the input's colour
+#' Show the live row for the record `rec` of a foreground run while it waits for its model (a root
+#' run's `what` thinking; a child's phase is set by the hooks): drawn now and once a second by a
+#' reactor task while the record renders (console_render_on()), is a prompt's before its run starts
+#' (`rec$sent`, console_send()) or a sub-agent it shows runs, whose
+#' run pumps the reactor inside the parent's r call, on a dynamic console of an interactive R (not
+#' class P), but not in R.app, whose console gives everything after a carriage return the input's
+#' colour. It is drawn over the row it takes over (a prompt's, at its run's start), never cleared
+#' first, so no blank row shows between them (#108)
 #' @noRd
 console_live_start = function(rec) {
   if (is.null(rec$child)) {
@@ -718,13 +740,15 @@ console_live_start = function(rec) {
     if (!cli::is_dynamic_tty() || console_class() == "P" || platform_gui() == "AQUA") {
       return(invisible(NULL))
     }
-    console_live_stop()
+    if (!is.null(row)) reactor_cancel(row$task)
     row = console_live()
     row$rec = rec
     the$live_row = row
     row$task = reactor_task(function() {
       if (!identical(the$live_row, row)) return(FALSE)
-      if (row$on && (console_render_on(rec) || length(console_kids()))) row$draw()
+      if (row$on && (isTRUE(rec$sent) || console_render_on(rec) || length(console_kids()))) {
+        row$draw()
+      }
       1
     })
   }

@@ -1178,9 +1178,9 @@ egress_can_ask = function(safety = egress_safety()) {
 }
 
 #' The question shown before the first automatic context or System 1 input goes to a provider
-#' (gptr_confirm() appends the ` [y/N] ` hint itself); it names the effective endpoint when there
-#' is one, and the model `asker` of a sub-agent that model code starts. `context = "listing"`, a
-#' model listing, says that no prompt is sent and that the answer also covers prompts.
+#' (gptr_confirm() adds how to answer); it names the effective endpoint when there is one, and the
+#' model `asker` of a sub-agent that model code starts. `context = "listing"`, a model listing, says
+#' that no prompt is sent and that the answer also covers prompts.
 #' @noRd
 egress_question = function(id, origin = NULL, asker = NULL, context = NULL) {
   to = if (is.null(origin)) id else paste0(id, " (", origin, ")")
@@ -1226,8 +1226,9 @@ egress_record = function(id) {
 #' `invisible(TRUE)` when automatic context may go to `provider_id` (acknowledged, offline or a
 #' local endpoint), judged on `provider`, the record the request uses (IC-29, IC-74; D-099,
 #' D-114); else asks once when `safety` allows (IC-53) and records the answer, or
-#' gptr_error_egress (13 C-34). Inside a run the question names `asker`, the model of the session
-#' that model code starts.
+#' gptr_error_egress (13 C-34): after a no, `declined` and a short `Not sent:` message saying how to
+#' go on (D-307), else how to acknowledge it in code. Inside a run the question names `asker`, the
+#' model of the session that model code starts.
 #' @noRd
 egress_check = function(provider_id, provider = provider_get(provider_id),
                         safety = egress_safety(), asker = NULL, context = NULL) {
@@ -1246,14 +1247,19 @@ egress_check = function(provider_id, provider = provider_get(provider_id),
   how = paste0("gptr_config(egress = utils::modifyList(gptr_config()$egress, list(`", pid,
                "` = \"ack\")), .scope = \"user\")")
   if (is.null(run_current())) asker = NULL
-  if (egress_can_ask(safety) &&
-      isTRUE(gptr_confirm(egress_question(pid, st$origin, asker, context)))) {
+  asked = egress_can_ask(safety)
+  if (asked && isTRUE(gptr_confirm(egress_question(pid, st$origin, asker, context)))) {
     path = egress_record(pid)
     gptr_inform(paste0("Recorded that automatic context may go to ", pid, " (", path, ")."),
                 "egress_ack")
     return(invisible(TRUE))
   }
   where = if (is.null(st$origin)) "" else paste0(" at ", st$origin)
+  if (asked) {
+    gptr_abort(c(paste0("Not sent: sending session context to ", pid, where, " was declined."),
+                 "Answer y when asked again to allow it, or choose another model."),
+               "egress", provider = pid, how_to_ack = how, declined = TRUE)
+  }
   gptr_abort(c(paste0("gptr has not been told that it may send session context to ", pid, where,
                       "."),
                st$why,
@@ -1570,7 +1576,6 @@ init_rbuildignore = function(dir) {
   lines = if (file.exists(rb)) readLines(rb, warn = FALSE, encoding = "UTF-8") else character()
   line = "^\\.gptr$"
   if (line %in% trimws(lines)) return(invisible(FALSE))
-  # gptr_confirm() appends the " [y/N] " hint
   ask = paste0("Add ", line, " to .Rbuildignore?")
   if (gptr_can_prompt() && isTRUE(gptr_confirm(ask))) {
     write_atomic(rb, c(lines, line))
@@ -1586,7 +1591,7 @@ init_rbuildignore = function(dir) {
 #' Creates `.gptr/` with `settings.json`, `skills/`, `agents/`, `prompts/`, and (by default) the
 #' project-instructions file `vignette.Rmd` and `.gitignore`. Existing files are never
 #' overwritten, so calling it again is safe. There is no default path: without `path` gptr asks
-#' `Create .gptr/ in <project>? [y/N]` when you can answer, and signals an error otherwise.
+#' whether to create `.gptr/` in the project when you can answer, and signals an error otherwise.
 #' Creating the workspace is consent to write there; it is not trust: gptr then asks separately
 #' whether to trust the project, unless it is trusted already (see [gptr_trust()]). In a package
 #' source it offers the `^\.gptr$` line for `.Rbuildignore` and never writes it silently.

@@ -952,7 +952,7 @@ gateway_prompt_secrets = function(prompt) {
                    paste0("Load keys with gptr_env() and refer to them by name; model code ",
                           "reads them with Sys.getenv(\"NAME\").")),
                  "invalid_argument", arg = "prompt",
-                 expected = "a prompt without secret values")
+                 expected = "a prompt without secret values", declined = TRUE)
     }
     return(red)
   }
@@ -1297,7 +1297,9 @@ gateway_signal = function(s, run = NULL) {
 # ------------------------------------------------------------------ built-in routes (IC-24, IC-39)
 
 #' The `continue` route: a running (or waiting) session is steered with the redacted pipe text
-#' (IC-55; from model code only its own session unless approved, IC-53); otherwise a new turn
+#' (IC-55; from model code only its own session unless approved, IC-53), source `repl` for a console
+#' turn (its call's attribute `gptr_console`), whose receipt the console wrote (D-301); otherwise a
+#' new turn
 #' @noRd
 route_continue = function(call) {
   route_needs_subagents(call)
@@ -1305,7 +1307,8 @@ route_continue = function(call) {
   s = call$session
   if (session_data(s)$status %in% c("running", "waiting")) {
     session_control_check("gptr_steer", s)
-    session_enqueue(s, gateway_prompt_secrets(call$prompt), as = "steer", source = "pipe")
+    src = if (isTRUE(attr(call$sys_call, "gptr_console"))) "repl" else "pipe"
+    session_enqueue(s, gateway_prompt_secrets(call$prompt), as = "steer", source = src)
     return(invisible(s))
   }
   # a replayed script pipes a steer its replayed block recorded: it is not a new turn

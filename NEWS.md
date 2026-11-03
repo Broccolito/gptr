@@ -13,7 +13,7 @@ gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version insta
   unless the call or the agent names another; API providers, Claude Code and Codex share one
   selection path. An agent can run typed System 1 decisions in bounded parallel batches from its
   R code; each answer is charged to the session that asked and to its budget.
-* The terminal console shows sub-agents while they work: completed, active and queued counts,
+* The terminal console shows sub-agents while they work: completed, active and pending counts,
   each child's model, and its tool and retry progress. Direct team and fan-out calls return
   visibly, so their reports print.
 * `peter$search()` and `peter$help()` find the installed package's exported functions and help
@@ -37,6 +37,30 @@ gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version insta
   rewind fully. Folder discovery remains available on demand through `ls`, `find` and `read`.
 * Interrupting an MCP request while its initial message is being sent now sends cancellation,
   including when progress arrives before the send completes.
+* What you send while Peter works stays in the console's transcript. A steer (Enter, or the
+  pause menu's `s`) is written at once as `steer> <text>` and a follow-up (Tab, or `f`) as
+  `next> <text>`, at the left edge like the `peter> ` prompt. It used to show only on the bottom
+  row, which disappears while R code runs and when the terminal scrolls, and reached the
+  transcript only when the agent took it, marked like an answer. Keys typed while R code runs in
+  this R process are read when it returns, each Enter, Up and Tab in turn; keys typed before the
+  run starts become the draft, never an answer. The bottom row shows from the prompt's Enter,
+  says `responding` while the answer streams and counts what is queued (`1 steer queued`).
+  Answers to a question are read two columns in, under it, so an answer no longer looks like a
+  message to the agent.
+* Typing does not steer in RStudio, R.app or Windows' Rterm, so their banner and `/help` now say
+  how to: `esc, then s, to steer` (Rterm: `ctrl-c, then s, to steer`); in RStudio and Rterm the
+  bottom row says it too and adds `typed lines run after this answer`.
+* A question asked while the bottom row is shown, such as a provider consent, no longer leaves
+  copies of that row in RStudio's console or draws it between the question and its answer.
+* In the console, gptr's yes/no questions, such as consent to send session context to a
+  provider, are asked as console questions (`? <question>`, its keys, the answer read under it),
+  and a declined send prints a dim `Not sent:` notice instead of an error.
+* Token totals count a request whose provider reported no usage apart (`13.9k tokens + 1 request
+  of unknown tokens`) instead of reading `unknown tokens` for the whole session.
+* A tool call's header shows a path inside the project relative to it and shortens a long path or
+  command in the middle, keeping the file name.
+* A Ctrl-C pressed just as an answer ends no longer leaves `peter()` or turns the terminal's echo
+  off (seen with `TERM=dumb`); the console stays and keeps its session.
 * MCP clients no longer stall while gptr waits for a child process, and a served tool cannot run
   inside another served tool's wait.
 * Plugin setup rejects a marketplace root, and a bundle without usable resources, with a

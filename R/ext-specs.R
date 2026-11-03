@@ -732,8 +732,8 @@ kinds_install = function(k) {
     export = f("chr"), returns = f("list"), file = f("chr1")
   ), kind_check_agent)
   def("ui", list(
-    has_ui = req_fn(), select = req_fn(), input = fn(), questions = fn(), notify = fn(),
-    permission = fn("request"), has_secret_input = fn()
+    has_ui = req_fn(), select = req_fn(), input = fn(), confirm = fn("question"),
+    questions = fn(), notify = fn(), permission = fn("request"), has_secret_input = fn()
   ), kind_check_ui)
   def("frontend", list(run = req_fn("session")), experimental = TRUE)
   def("setting", list(

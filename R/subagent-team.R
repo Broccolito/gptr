@@ -12,7 +12,8 @@
 #' once per child, in settlement order. At top level the pump runs under the console interrupt
 #' policy when P14 provides it, with no child run to steer or background (architecture 6.2); any
 #' exit other than a normal finish cancels the running children. Each child run gets `group`, the
-#' labels, model references and aligned runs (NULL while queued), so the console shows progress.
+#' labels, model references, aligned runs (NULL while queued) and start time, so the console shows
+#' progress.
 #' @return The handles in item order.
 #' @noRd
 subagent_schedule = function(items, max_total, on_settle = NULL) {
@@ -26,6 +27,7 @@ subagent_schedule = function(items, max_total, on_settle = NULL) {
   done = FALSE
   group = new.env(parent = emptyenv())
   group$n = length(items)
+  group$t0 = as.numeric(Sys.time())
   group$labels = vapply(seq_along(items), function(i) items[[i]]$label %||% paste0("#", i), "")
   group$models = vapply(items, function(it) it$model %||% "", "")
   group$runs = vector("list", length(items))

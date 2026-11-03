@@ -94,14 +94,14 @@ ui_no_rule = function(request) {
   "no rule covers these calls"
 }
 
-#' The escaped lines a request shows: its code, else its path (an absolute one normalised, relative
-#' inside the project), else P06's summary
+#' The escaped lines a request shows (console_lines(): split on CRLF, CR and LF): its code, else its
+#' path (an absolute one normalised, relative inside the project), else P06's summary
 #' @noRd
 ui_request_lines = function(request) {
   input = request$input
   path = input[["path"]]
   if (rlang::is_string(path) && is_abs_path(path)) path = path_rel(path)
-  ui_escape(text_lines(input[["code"]] %||% path %||% request$summary))
+  console_lines(input[["code"]] %||% path %||% request$summary)
 }
 
 #' The change a request with a path and no code makes, as escaped diff rows from its input alone
@@ -179,6 +179,12 @@ ui_who = function(request) {
 #' @noRd
 ui_width = function() max(20L, cli::console_width() - nchar(console_pad()))
 
+#' The prompt of an answer to a console question (D-301): two blanks, the person's chevron and a
+#' blank (ASCII `  >> `), under the question's `? `, so column 0 holds only the person's messages to
+#' the agent (`peter> `, `steer> `, `next> `)
+#' @noRd
+ui_answer_prompt = function() paste0("  ", console_style()$person, " ")
+
 #' The rows that open a console question (D-243): `?` (blue) and the title in bold, its lines
 #' word-wrapped to `width` columns with the later rows under its text; escaped
 #' @noRd
@@ -255,6 +261,8 @@ ui_permission_lines = function(request) {
   arg = c(lines, "")[1L]
   width = ui_width()
   code = is.character(request$input[["code"]])
+  # a path or command too wide is cut in its middle, as the console's call row cuts it
+  if (!code) arg = console_cut_middle(arg, max(20L, width - nchar(more)) - nchar(tool) - 6L)
   first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ",
                  if (startsWith(request$tool %||% "", "mcp__") && !code) sym$dim(arg) else
                    console_code(arg, console_lang(request$tool)))
@@ -455,9 +463,9 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 }
 
 #' Console select() (D-243): `? <title>`, then under its text its details dim, the numbered
-#' choices and a dim hint, then the person's chevron at column 0, each word-wrapped under its own
-#' text; NA = cancelled, also by a fifth invalid answer, which a dim row says; attr "other" = free
-#' text, unless a console command (ui_console_command())
+#' choices and a dim hint, each word-wrapped under its own text, then the answer's prompt
+#' (ui_answer_prompt()); NA = cancelled, also by a fifth invalid answer, which a dim row says;
+#' attr "other" = free text, unless a console command (ui_console_command())
 #' Title line feeds are intentional (also for ask questions); labels and details stay escaped.
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
@@ -490,7 +498,7 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
     grepl("^[0-9][0-9,[:space:]]*$", trimws(x)) && !anyNA(ui_parse_choice(x, labels, multiple))
   }
   for (attempt in seq_len(5L)) {
-    ans = read(paste0(sym$person, " "), accept = numbers)
+    ans = read(ui_answer_prompt(), accept = numbers)
     if (is.na(ans)) return(NA_integer_)
     if (!nzchar(trimws(ans)) && length(default)) return(as.integer(default))
     idx = ui_parse_choice(ans, labels, multiple)
@@ -510,9 +518,10 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
 }
 
 #' Console input() (D-243): `? <prompt>`, a dim `Enter = <default>` under its text and the
-#' person's chevron; NA = cancelled; a secret is asked through RStudio's masked dialog there, else
-#' requires a no-echo terminal (ui_console_read()); a console command typed there
-#' waits for the next prompt (ui_console_command())
+#' answer's prompt (ui_answer_prompt()), a secret's showing nothing typed; NA = cancelled; a secret
+#' is asked through RStudio's masked dialog there, else requires a no-echo terminal
+#' (ui_console_read()); a console command typed there waits for the next prompt
+#' (ui_console_command())
 #' @noRd
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -537,17 +546,45 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
   }
   console_write(paste0(pad, c(ui_question(prompt, width), hint)))
   repeat {
-    ans = read(paste0(sym$person, " "), secret = isTRUE(secret))
+    ans = read(ui_answer_prompt(), secret = isTRUE(secret))
     if (is.na(ans) || isTRUE(secret) || !ui_console_command(ans)) break
     console_typed_ahead(ans)
   }
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
 
-#' Console permission(): the approval of NS-1 under the call it gates, read after the person's
-#' chevron (D-243), `?` for the detail view; every console prompt first ends partial answer lines
-#' and clears the live row (D-186), in a T console once typing pauses, and draws it again when it
-#' returns (D-243); a remembered answer adds a dim line naming the rule; an
+#' Console confirm() (gptr_confirm() through the UI, D-306): `? <question>`, its keys row (`y yes`,
+#' `n no`, `enter no`, joined by U+00B7; Enter's the `default`) and the answer's prompt
+#' (ui_answer_prompt()), read as every console question (ui_console_read(): what was typed before it
+#' is routed or kept as the draft, never its answer; the live row is off until the answer); TRUE for
+#' y or yes, `default` for an empty answer, FALSE for any other and when cancelled; a console
+#' command typed there waits for the next prompt (ui_console_command())
+#' @noRd
+ui_console_confirm = function(question, default = FALSE, read = ui_console_read) {
+  rlang::local_options(cli.num_colors = console_colors())
+  # outside a run in the console margin it opens its own block, as a select does
+  run = console_before_message(kind = "prompt", tools = TRUE)
+  on.exit(console_asked(), add = TRUE)
+  pad = console_pad()
+  width = ui_width() - nchar(pad)
+  console_write(c(if (!run || !nzchar(pad)) "", paste0(pad, c(
+    ui_question(question, width),
+    ui_keys(c("y", "n", "enter"), c("yes", "no", if (default) "yes" else "no"), width)
+  ))))
+  answers = function(x) tolower(trimws(x)) %in% c("y", "yes", "n", "no")
+  repeat {
+    ans = read(ui_answer_prompt(), accept = answers)
+    if (is.na(ans) || !ui_console_command(ans)) break
+    console_typed_ahead(ans)
+  }
+  ans = tolower(trimws(ans))
+  if (is.na(ans)) FALSE else if (nzchar(ans)) ans %in% c("y", "yes") else default
+}
+
+#' Console permission(): the approval of NS-1 under the call it gates, read at the answer's prompt
+#' (ui_answer_prompt(), D-243, D-301), `?` for the detail view; every console prompt first ends
+#' partial answer lines and clears the live row (D-186), in a T console once typing pauses, and
+#' draws it again when it returns (D-243); a remembered answer adds a dim line naming the rule; an
 #' invalid answer gets one dim row at column 4 in the console's terms (ui_reask()), `not an
 #' answer`, `kept in history` where an interactive session's history kept it, and the keys, and in
 #' an IDE console an answer of several words a row noting that a draft typed during the run joins
@@ -570,7 +607,7 @@ ui_console_permission = function(request, read = ui_console_read) {
   answers = function(x) tolower(trimws(x)) %in% keys || grepl(deny, tolower(trimws(x)))
   bad = 0L
   while (bad < 5L) {
-    a = trimws(read(paste0(sym$person, " "), accept = answers))
+    a = trimws(read(ui_answer_prompt(), accept = answers))
     if (is.na(a)) return(ui_answer("abort"))
     low = tolower(a)
     if (low %in% c("y", "yes")) return(ui_answer("allow"))
@@ -669,6 +706,9 @@ ui_console_spec = function(read = ui_console_read, name = "console") {
             has_secret_input = function() ui_rstudio() || !is.null(tty_secret()),
             select = select,
             input = input,
+            confirm = function(question, default = FALSE) {
+              ui_console_confirm(question, default, read)
+            },
             questions = function(qs) ui_questions_via(select, input, qs),
             notify = function(text, level = "info") {
               console_notice("[", level, "] ", ui_escape(text), .error = identical(level, "error"))
