@@ -194,6 +194,11 @@ test_that("an IDE console's row says what its key does and where typed lines go"
   utils::capture.output(console_live_stop())
   expect_identical(sub(" +$", "", utils::capture.output(invisible(wait_request(w)))),
                    "\r# thinking 0s - ctrl-c, then s, to steer")
+  # Windows' Rterm, which has no composer, holds a typed line for the next prompt as RStudio does
+  testthat::local_mocked_bindings(front_end = function() "terminal", is_windows = function() TRUE)
+  utils::capture.output(console_live_stop())
+  expect_identical(sub(" +$", "", utils::capture.output(invisible(wait_request(w)))),
+                   "\r# thinking 0s - ctrl-c, then s, to steer - typed lines run after this answer")
 })
 
 test_that("continue and queued pause messages restore a pending request's live row", {

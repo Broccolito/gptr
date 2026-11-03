@@ -1020,13 +1020,15 @@ repl_banner = function(rs) {
 }
 
 #' What becomes of text typed while peter works where the console holds it and only the pause menu
-#' steers (D-301), in the banner's and /help's words: Positron's console keeps it as R code;
-#' RStudio's and R.app's run each line as the next prompt. NULL elsewhere: a terminal's composer
-#' reads the keys, and where the pause menu is not offered nobody can answer it
+#' steers (D-304), in the banner's and /help's words: Positron's console keeps it as R code;
+#' RStudio's, R.app's and Windows' Rterm run each line as the next prompt. NULL elsewhere: a
+#' terminal's composer reads the keys, and where the pause menu is not offered nobody can answer it
 #' @noRd
 console_typed_fate = function() {
   fe = front_end()
-  if (!console_menu_available() || !fe %in% c("positron", "rstudio", "rgui")) return(NULL)
+  if (!console_menu_available() || !(fe %in% c("positron", "rstudio", "rgui") || is_windows())) {
+    return(NULL)
+  }
   if (fe == "positron") "text typed while peter works waits as R code" else
     "lines typed while peter works run after its answer"
 }

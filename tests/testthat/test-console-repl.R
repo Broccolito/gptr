@@ -385,7 +385,7 @@ test_that("the banner names the console's key and promises nothing it lacks (rev
                                          "  ctrl-c twice leaves"))
 })
 
-test_that("in Positron and RStudio the banner says how to steer (steering review, D-304)", {
+test_that("in Positron, RStudio and Windows the banner says how to steer (D-304)", {
   skip_on_cran()
   local_gptr_options(interactive = TRUE)
   expect_identical(utils::tail(banner_rows("positron", complete = FALSE), 3L), c(
@@ -394,6 +394,10 @@ test_that("in Positron and RStudio the banner says how to steer (steering review
   expect_identical(utils::tail(banner_rows("rstudio"), 2L), c(
     "lines typed while peter works run after its answer - esc, then s, to steer", ""))
   expect_false(any(grepl("then s, to steer", banner_rows("terminal"))))
+  # Windows' Rterm has no composer: a typed line is the next prompt there too
+  local_mocked_bindings(is_windows = function() TRUE)
+  expect_identical(utils::tail(banner_rows("terminal"), 2L), c(
+    "lines typed while peter works run after its answer - ctrl-c, then s, to steer", ""))
   # no menu, no line: nobody can answer it
   local_gptr_options(interactive = FALSE)
   expect_false(any(grepl("waits as R code", banner_rows("positron"))))
