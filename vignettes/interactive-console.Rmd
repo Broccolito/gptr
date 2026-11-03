@@ -157,15 +157,17 @@ input limit; use an `@file` or a multiline prompt instead.
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 and `... ` waits for Enter, where text you type is added. A pasted fence or `"""` block is read up
 to its closer at once, a block pasted at an approval or a choice is kept in the console history
-and the question asked again, and one pasted at the pause menu's `? Steer` or `? Follow-up` is
-the whole text. A last pasted line without a newline waits for Enter at the next prompt, so a
+and the question asked again, and one pasted at the pause menu's `steer> ` or `next> ` is the
+whole text. A last pasted line without a newline waits for Enter at the next prompt, so a
 two-line paste without a final newline answers a question with its first line. Homebrew or
 conda R, Linux terminals, RStudio, R.app, Positron and Windows deliver pasted lines one at a
 time, as typed lines (at a question the first one answers it), so wrap a multi-line paste in
 `"""` there. Lines typed, pasted or run from a
 script before a question appears (an approval, a choice) never answer it: while an answer runs
 they are queued for the agent as `type_ahead` says (a `/command` or `!code` line waits for the
-next prompt), otherwise they go to the console history. Answer after the prompt.
+next prompt), otherwise they go to the console history. Answer after the prompt, which is
+indented two columns under the question: only what you send to the agent starts at the left
+edge, as `peter> `, `steer> ` or `next> `.
 
 ```text
 peter> """
@@ -260,9 +262,10 @@ that pauses Peter, depend on the console:
 In terminal R and an IDE's Terminal tab what you type is a draft on the bottom row, under the
 transcript, so it never mixes into the answer; a block pasted there is one message where the
 terminal supports bracketed paste. The row also
-shows what Peter is doing and how many messages are queued. Enter sends the draft as a steer,
-and it shows as your own line where the agent reads it. Tab sends it as a follow-up, which
-appears at the next `peter>` prompt. With `gptr_config(type_ahead = "follow_up", .scope =
+shows what Peter is doing and how many messages are queued (`1 steer queued`). Enter sends the
+draft as a steer and writes it into the transcript at once, as your own line, `steer> <text>`,
+where it stays while the agent works and after the terminal scrolls. Tab sends it as a
+follow-up, written as `next> <text>`, which runs at the next `peter>` prompt. With `gptr_config(type_ahead = "follow_up", .scope =
 "user")` the two keys swap. A draft that starts with `/` or `!` is always a follow-up:
 `/commands` and `!code` run at the next prompt, in the order typed. Up on an empty draft takes
 back the newest message not yet delivered, to edit and send again; Ctrl-U clears the draft. A
@@ -284,11 +287,11 @@ cannot read it while Peter works:
 - In RStudio, R.app and Windows consoles a line typed during an answer is the next prompt, one
   prompt per line, unless a question comes first: the question reads the line, queues it as
   `type_ahead` says and asks again. RStudio hides such a line at its next output, and its bottom
-  row says `typed lines run next`.
+  row says `typed lines run after this answer`.
 - Positron's console keeps typed text as R code, which runs after `peter()` returns, and clears
   it at Ctrl-C.
-- To steer in these consoles, pause and press `s` (Windows' Rgui cannot pause). In RStudio an
-  Esc first closes RStudio's own completion list, if open, then clears a line being typed, so the
+- To steer in these consoles, pause and press `s` (Windows' Rgui cannot pause), as their banner
+  and bottom row say (`esc, then s, to steer`). In RStudio an Esc first closes RStudio's own completion list, if open, then clears a line being typed, so the
   menu comes at the next Esc.
 
 During `peter("...")` at R's prompt, outside the chat, typed lines stay R's next input in every
@@ -298,9 +301,9 @@ console.
 
 The pause key opens a pause menu while an answer or tool runs:
 
-- `s` **steer** asks for a new instruction and delivers it at the next step boundary.
-- `f` **follow-up** queues a prompt: in the chat it is the next prompt, sent once the answer
-  ends; in a `peter("...")` call it is sent when the agent would otherwise stop.
+- `s` **steer** reads a new instruction at `steer> ` and delivers it at the next step boundary.
+- `f` **follow-up** reads a prompt at `next> `: in the chat it is the next prompt, sent once the
+  answer ends; in a `peter("...")` call it is sent when the agent would otherwise stop.
 - `c` **continue** resumes the work as if it had not paused.
 - `a` **abort** stops it and retains the partial session; what you queued and the draft go to
   the history, unsent.

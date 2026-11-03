@@ -393,7 +393,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   ))
 })
 
-test_that("a question clears the live row first; none is drawn before its answer (P30, D-301)", {
+test_that("a question clears the live row first; none is drawn before its answer (P30, D-305)", {
   local_live_console("L")
   withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 60L)
   # a row that erases cleanly (RStudio's, a terminal's), shown, at the sink written() reads

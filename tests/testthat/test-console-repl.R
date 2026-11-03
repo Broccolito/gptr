@@ -385,7 +385,7 @@ test_that("the banner names the console's key and promises nothing it lacks (rev
                                          "  ctrl-c twice leaves"))
 })
 
-test_that("in Positron and RStudio the banner says how to steer (steering review, D-301)", {
+test_that("in Positron and RStudio the banner says how to steer (steering review, D-304)", {
   skip_on_cran()
   local_gptr_options(interactive = TRUE)
   expect_identical(utils::tail(banner_rows("positron", complete = FALSE), 3L), c(

@@ -2996,7 +2996,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), a hook on `turn_end`, emitted just before the loop polls steers, that runs `console_typed()` (a terminal REPL reads what was typed and queues it), so a line sent before a step boundary reaches it (D-242), a hook on `queue_update` that prints a user's message the run takes as the person's line `› <text>` at that boundary (D-242), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
+| `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), a hook on `turn_end`, emitted just before the loop polls steers, that runs `console_typed()` (a terminal REPL reads what was typed and queues it), so a line sent before a step boundary reaches it (D-242), a hook on `queue_update` that prints a `pipe` or `api_user` message the run takes as its receipt's rows `steer> <text>` (`next> ` for a follow-up) at that boundary, the console's own sources having shown theirs when sent (D-242, D-301), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
 | `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
 | `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu, a console question (`? Paused` and the keys `s steer`, `f follow-up`, `c continue`, `a abort`, `b background` for foreground calls when P21 is loaded, read at `› `; IC-76 in §15.10), writes to stdout through the console writer and resumes through the `resume` restart; a second Ctrl-C aborts, but not one in the menu's first 50 ms (one Esc in RStudio sets R's interrupt flag twice; review R30); `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Windows' Rgui, Jupyter; `console_menu_available()` offers the menu in terminal R, the consoles of Positron and RStudio and R.app, D-243) | P06, P08 |
 | `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)` and `finish(cut = FALSE)`; chunk-invariant; `write()` runs under `suspendInterrupts()`, so an interrupt (a D console's Ctrl-C) comes after the delta, none of which is lost (P28 Task 59: ` be.` vanished from `would be. Eight-cylinder` after [a]); writes whole rows only, each at its line end or its wrap (prose wraps at 100 columns at most [D-245]; `finish()` ends the held partial row, `finish(cut = TRUE)` (an aborted, failed or truncated answer, the pause menu's [b], an unusual end) writes all it received and ends the held row with a dim `…` [D-245]; other output goes between whole rows and the held row continues after it; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
@@ -5625,7 +5625,9 @@ and pastes are kept in the console history.
 **IC-76 Typed lines steer a running console call** (P26 Task 3, D-185).
 P28 amends this item in §15.10 (D-242, D-243): a steer reaches the first step boundary and a follow-up
 is the next prompt, as D-242 states now; the notices and the follow-up delivery below are replaced.
-FIX-28 (D-263) adds bracketed paste to the composer there.
+FIX-28 (D-263) adds bracketed paste to the composer there. P30 (D-301) replaces §15.10's queue lines and
+deliveries with receipts written when a message is sent, `steer> <text>` and `next> <text>`, and reads every
+answer at `  › ` under its question.
 - Scope: `repl_terminal(rs)`: not `.stdin`, not Windows (processx cannot poll a console handle),
   `gptr_is_interactive()` and `stdin_tty()`, so an IDE's Terminal tab qualifies while IDE consoles, R.app, RGui
   and Jupyter (no tty) do not; and not Positron's console (`front_end() != "positron"`, P28 visual review): ark's
@@ -5878,7 +5880,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     (`ui_console_read()`, the terminal branch of `console_ask()`) pass `console_typed_ahead()`: while a run of the
     call has a session (`policy_targets()`), the line is routed as `console_typed()` routes typed lines
     (`console_typed_route()`: a `/command` or `!code` line, or one continuing held code, waits in the REPL's reader
-    for the next prompt, shown as a follow-up, `↳ follow-up · <line>`; other text is
+    for the next prompt, shown by a follow-up's receipt, `next> <line>` (D-301); other text is
     `policy_enqueue(session, text, <type_ahead>, source = "repl")`, also without a REPL reader), else
     `console_history_add()`. The question is then read again. `gptr_confirm()` keeps the line in the history and a
     secret input keeps nothing. Every add here obeys `gptr.history` (`console_history_add()` returns FALSE when it
@@ -5899,13 +5901,13 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
 - IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21).
   - A question drains before it reads (Task 2). On a terminal REPL, while a run of the call has a session,
     `ui_console_read()` reads fd 0 with `console_typed(drain = TRUE)` just before its `readline_answer()`, so the
-    queue and kept lines sit under the question's rows, right above `› ` (visual review: drained before the rows,
+    receipts and kept lines sit under the question's rows, right above `  › ` (visual review: drained before the rows,
     they split a call's code from the flagged rows of its ask):
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
     the saved modes (on exit). Complete lines are routed as before, but the first that is one of the
     question's answers (`ui_console_read(prompt, accept = )`: an approval's `y`, `yes`, `a`, `p`, `?`, `n`,
     `n <text>`; a choice's numbers), which `console_typed(drain = TRUE, accept)` returns (`typed_answer()`): typed
-    once the rows showed, it answers, echoed after `› ` on the band, and once the drain read fd 0
+    once the rows showed, it answers, echoed after `  › ` on the band, and once the drain read fd 0
     `readline_answer()` takes one however soon readline reads it (P28 Task 54, visual round 2: `y` typed 20 ms after `Allow r?`, 250 ms in TERM=dumb,
     became `↳ steer · not an answer` and the question was asked again). Where a partial line was read, its row is
     first erased as the D live row is (`\r`, spaces to width - 1, `\r`): the question's rows turn the echo back on
@@ -5919,32 +5921,38 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     invalid answer or an ask-tool answer, nor a partial line a denial (`no ...`). `gptr_confirm()` (L0, also asked during a
     run, e.g. by `egress_check()` for a nested call's provider) is not drained, so this holds for the
     console questions only; its stale lines go to the history (IC-75).
-  - Queued and delivered messages (Task 13). Queueing (`policy_enqueue()`: typed lines, a line a question reads
-    past, the pause menu's [s] and [f]) prints one dim line at column 0, `↳ steer · <text>` or
-    `↳ follow-up · <text>` (ASCII `-> steer - <text>`); on a CLI route (model type `"cli"`) a steer adds
-    ` · after the CLI's answer`, and prints its line in a T console while the live row is up too (review of
-    Tasks 16-21). Up's take-back writes `↳ taken back · <text>` (ASCII `-> taken back - <text>`) where the
-    message's queue line shows, by the same rule (P28 Task 37: a CLI route's withdrawn steer kept a line that
-    read as if it would be sent). The text is escaped, its lines joined by a blank, and cut to one row of the
-    console width (width - 1) ending in `…`, as the live row's queue view (P28 Task 74, visual round 3: three
-    rows, a multi-line message's later lines at column 2 under the glyph, not under its text); inside an
-    evaluation the line has the console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
-    A line a question read past (IC-75, `console_typed_ahead()`) is on screen already, after the question's
-    chevron, so its queue line says `↳ steer · not an answer` (`follow-up` for its kind) in place of the text:
-    RStudio and R.app showed such a line three times (visual review).
+  - Queued and delivered messages (Task 13; P30 amends it, D-301). Queueing (`policy_enqueue()`: the composer's
+    Enter and Tab, a D console's lines, a line a question reads past, the pause menu's [s] and [f]) writes the
+    message's receipt at once (`console_receipt()`), in every class and whether or not the live row is up: the
+    person's rows at column 0 on the band (`console_style()$band`, row, `\033[K\033[0m`, where the band is known),
+    `steer> <text>` (the agent reads it at its next step boundary) or `next> <text>` (after this answer: a
+    follow-up, and any text starting with `/` or `!`), the same words in ASCII, the word mirroring the prompt
+    `peter> `; the text escaped, whole, wrapped inside the console width with its later rows under the text (a
+    message of several lines keeps them). On a CLI route (model type `"cli"`) a steer's receipt ends with a dim
+    ` (after the CLI's answer)`, on a row of its own under the text where the last row is full. A receipt is a
+    block of the person's lines, written between whole rows, also while an answer streams (see Whole rows,
+    IC-82). The pause menu's [s] and [f] read their text at `steer> ` and `next> ` themselves, so the line read
+    is the receipt and none is written again (`policy_enqueue(shown = )`), unless its fate differs (`!code` read
+    at `steer> ` in a chat is a follow-up: `next> !code` follows) or a macOS paste added lines (written whole).
+    A line a question read past (IC-75, `console_typed_ahead()`), echoed after the question's prompt, gets its
+    full receipt, which says where it went (it was `↳ steer · not an answer`). Up's take-back writes a dim
+    `↳ steer taken back` (`↳ follow-up taken back`; ASCII `->`) under the receipt, the text back in the draft.
+    Inside an evaluation the receipt has the console's colours. It replaces the dim queue line
+    `↳ steer · <text>` (P28 Task 13, held while an answer streamed, cut to one row) and the notices
+    `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
     `builtin_console` hooks `queue_update` (§7.14): an item from a user source (IC-55) that a foreground run
-    takes (`op = "take"`, verbosity 2) is the person's line `› <text>` at column 0 (ASCII `>>`), escaped and
-    wrapped the same way but whole, printed at the step boundary, before the next request's output, as its own
-    block (a blank line before and after where lines keep the margin). Each row is on the band
-    (`console_style()$band`, row, `\033[K\033[0m`) where the band is known (IC-82). In T class the live
-    row shows the queue: while it is up no queue line is printed (Task 18).
+    takes (`op = "take"`, verbosity 2) and that showed no receipt when it was sent, source `pipe` (a pipe or a
+    chat prompt into the running session) or `api_user` (`gptr_steer()`), is written then as the receipt's rows
+    (`steer> <text>`, `next> ` for a follow-up), at the step boundary, before the next request's output, as its
+    own block (a blank line before and after where lines keep the margin); the console's own sources (`repl`,
+    `pause_menu`) print nothing then (it was `› <text>`, the glyph, column and band of an answer's echo).
   - A follow-up is the next prompt (Task 14). While a prompt of a REPL that is not piped runs (`rs$sending`,
     not `.stdin` or `jsonl`), `policy_enqueue()` holds a follow-up, and any text starting with `/` or `!` (the
-    pause menu's [s] too), in the reader's `typed` lines after its queue line (`↳ follow-up · <text>`), not in
+    pause menu's [s] too), in the reader's `typed` lines after its receipt (`next> <text>`), not in
     the session's FIFO; `console_typed_route()` puts a batch's message after the held lines typed before its
     first line, and drops a cursor key's escape sequence (CSI `ESC [ ... <final>`, SS3 `ESC O <c>`) from the
     lines it routes, as the composer does, and a line that was only that (P28 Task 68, visual round 2: in
-    TERM=dumb Up then ` again` steered `<U+001B>[A again`). Held `/command` and `!code` lines show the same line, `↳ follow-up · <line>`, in the order typed,
+    TERM=dumb Up then ` again` steered `<U+001B>[A again`). Held `/command` and `!code` lines show the same receipt, `next> <line>`, in the order typed,
     a `!code` line with the lines that continue it as one entry; it replaces `[gptr] after this answer: ...`, so
     everything waiting for the next prompt reads alike. After the run's status line the REPL reads them first,
     in order: each is echoed at its prompt
@@ -5977,7 +5985,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     and the draft itself (`console_background_settle()`, steering review): one such list after its `running in
     the background` row and before the blank row, and an empty composer; queued steers stay for the run. A
     prompt to the REPL's session while it runs or waits in the background steers it (`route_continue()`), and
-    once sent its queue line says so, `↳ steer · <text>` (`repl_turn()`).
+    once sent its receipt says so, `steer> <text>` (`repl_turn()`); as a `pipe` item it is shown again when the
+    loop takes it in the foreground (`!!gptr::gptr_wait()`).
   - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys
     typed while the agent works).
     `console_compose(state, chars, now, enter_kind, complete, paste = FALSE)` applies one read batch
@@ -6086,8 +6095,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     when the call's runs belonged to more than one session, a raw id seen nowhere else) and under its text the keys row of an approval (`ui_keys()`, shared with
     IC-77's question: keys bold, words dim, the separator ending a row, so it wraps only between options),
     `    s steer · f follow-up · c continue · a abort · b background` (ASCII separator ` - `; [s] and [f] only
-    with a session, [b] for a foreground call when P21 is loaded). It reads at the person's chevron at column 0
-    (`console_ask()`: `› `, ASCII `>> `), with the saved modes in T from before its rows (`tty_question()`); a
+    with a session, [b] for a foreground call when P21 is loaded). It reads at the answer's prompt under its
+    keys (`console_ask()`: `  › `, ASCII `  >> `, D-301), with the saved modes in T from before its rows (`tty_question()`); a
     key, or for [s] and [f] any text, read too soon (typed just after Ctrl-C, before readline started) answers
     all the same, and other text read too soon is kept in the history, never sent (review of Tasks 16-21). So
     are the keys a T console's composer read in the same read as its Ctrl-C (`console_keys()` holds them in the
@@ -6109,13 +6118,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     an answer the menu asked for (`rd$waiting()`, macOS, IC-75), the answer and those lines go to the history as
     one block and the key is asked again under `    a pasted block is not an answer · kept in history ↑ · s, f, c,
     a or b`, so nothing of it is a key, a steer or a follow-up (D-269). [s] and [f] read
-    their text at the chevron of their own question, `  ? Steer` or `  ? Follow-up` (review of Tasks 16-21: a
-    bare chevron read as the menu asking again), the lines a paste left waiting joining it as its later lines, so a
+    their text at their receipt's word, `steer> ` or `next> ` at column 0 on the band (P30, D-301; it was the
+    chevron of their own question, `  ? Steer` or `  ? Follow-up`), the lines a paste left waiting joining it as its later lines, so a
     pasted block is one message (D-269), and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
     `sent`, so Up then takes back the menu's message as the composer's; blank text queues nothing and the run
-    continues. While the menu is up its records' last block is a question's (`prompt`), so the queue line sits
-    right under its chevron as under an approval, without the text, which is on the row above (`↳ steer`,
-    `↳ follow-up`; `the$echoed`); when it resumes it is `notice`, so the next block opens with
+    continues. While the menu is up its records' last block is a question's (`prompt`), so a receipt it writes
+    (a fate other than the word read, D-301) sits right under the read line; when it resumes it is `notice`, so the next block opens with
     a blank row. Continuing writes no notice (`[gptr] continuing` and `[gptr] nothing queued; continuing` are
     gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
     list (Task 18). [b] closes the answer with its cut row, then, after a blank row, writes the terms `in the
@@ -6194,7 +6202,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     starting with the next key (`console_terms()`; review of Tasks 22-27: a row ended in a dangling ` ·`). Who
     asks: `  ? sub-agent <agent>: allow r?`.
   - Every console question (`ui_console_permission()`, `ui_console_select()`, `ui_console_input()`) reads its
-    answer after the person's chevron, `console_style()$person` and a space (`› `, ASCII `>> `), at column 0, with
+    answer at the answer's prompt (`ui_answer_prompt()`, P30, D-301): two blanks, `console_style()$person` and a
+    space (`  › `, ASCII `  >> `), under the question's `? `, so column 0 holds only the person's messages to
+    the agent (`peter> `, `steer> `, `next> `; it was `› ` at column 0, as a delivered steer read), with
     R's readline (echo on, Enter required; a secret input that no rstudioapi dialog asks reads with the echo
     off where R reads its own terminal, T or D: `gptr_readline()` sets `-echo` as the last mode before readline
     and restores the modes saved before it (a console call's, else `stty -g`) first on exit, an interrupt too,
@@ -6372,7 +6382,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     key (IC-82; they do not widen the padded status, so the draft moves only while they show), or, at the idle
     editor, are listed on a dim row at column 2 above the prompt's row; none does nothing, and Tab on a trigger
     word never queues.
-- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 24, 25).
+- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 24, 25; P30, D-301 to D-305).
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
     every console glyph comes from it. The glyphs come from the logo's cursor shapes: the person's chevron, a tool
     call's thin strip, the agent's block. ASCII applies where `cli::is_utf8_output()` is FALSE, and in Windows
@@ -6447,7 +6457,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     an end of input, `\033[0m\033[K` resets the attributes and erases the band the line's end gave the row below.
     The live row, the idle editor's row, delivered steers and the lines the reader echoes after the prompt (a
     follow-up, the editor's line, each row) are on the same band (`console_band()`: band, row, `\033[K\033[0m`),
-    and a console question's answer is read at the person's chevron on it as the prompt is (`band_read()`: an
+    and a console question's answer is read at its prompt on it (`  › `) as the prompt is (`band_read()`: an
     approval's, the pause menu's, an ask's; not a secret; P28 Task 52: `› y` was plain under a banded steer),
     so everything the person wrote has one look. A wrapped input's second row is shaded only under its text.
   - R code (Task 9): R in answer fences and in tool calls is highlighted by `console_code()` above 1 colour only,
@@ -6461,16 +6471,13 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
   - Whole rows (Task 10; review of Tasks 8-15): nothing of a streamed answer's held row is on screen, so other
     output goes between whole rows and the held row continues after it. `render_markdown_stream()` has no
     `reset_line()`. Other output only clears the live row and redraws it after (Task 17); nothing pauses or resumes
-    the rendering for it. A queue line is a block of the person's lines
+    the rendering for it. A receipt (D-301) is a block of the person's lines
     (`console_gap()` kind `"person"`, so a blank row separates it from the next block, and none from the question
-    whose read routed it); while the answer's text block is open it waits in the run's record (`rec$queued`) and
-    is written when any other block starts, so it never splits a sentence: between whole rows it still had,
-    wherever the person happened to press Enter, and TERM=dumb and the IDE consoles keep the line after Task 18
-    (visual review). A steer's line still held when the steer is delivered is not written, as its delivery says
-    the same (steering review: five steers typed while an answer streamed took ten rows in TERM=dumb), nor one still
-    held when the run ends, as the kept list (abort, error), the next prompt's echo (idle, max_turns) or the next
-    run's delivery names it (P28 Task 67, visual round 2: after [a] TERM=dumb showed `↳ steer · <text>` above `↳
-    kept in history ↑ · <text>`); held follow-up lines and a CLI route's steer are written. This replaces "ends partial lines" in IC-76 (the
+    whose read routed it), written at once, between whole rows, also inside a streaming paragraph, which continues
+    after it as a block of its own (P30: the maintainer's report, "the steering text does not stay": the P28 hold of
+    a queue line until the answer's block ended, `rec$queued`, kept a sent steer off the transcript for the whole
+    paragraph, and the live row that showed it is gone while an in-process `r` call runs and when the terminal
+    scrolls). This replaces "ends partial lines" in IC-76 (the
     notices and their `console_render_pause()`) and IC-77 item 1. An abort still ends the stream (`console_render_pause()`, also when
     the pause menu's [b] sends the run to the background). The pause menu itself clears only the live row: the
     held row continues after it (visual review: the menu cut a sentence, `so part of this` / menu / `gap is ...`,
@@ -6514,13 +6521,14 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     `console_spinner()`): while a foreground run works, one row at the bottom, at column 0 under the transcript's
     last row. It is no block (`console_gap()` has no waiting kind), so it takes no blank line before it, and the
     next block writes the blank it owes on the cleared row.
-    - Text: `▌ <state> <elapsed>[ · <n> queued][ · question waiting]`, then, where a composer reads keys (T,
+    - Text: `▌ <state> <elapsed>[ · <queue>][ · question waiting]`, the queue counted, its kind named where one
+      waits, `1 steer queued`, `1 follow-up queued`, else `<n> queued` (P30, D-301: its text is in the receipts), then, where a composer reads keys (T,
       Task 18), `   › <draft tail>` (Task 24, D-244: a draft starting with optional spaces then `/` or `!`, a
       follow-up whatever the key, after the hint `   runs after this answer` where that fits beside the status
       at its widest this run, so it does not come and go with the status words; a leading `!` in the
       chevron's place, bold red, `   ! <draft tail after the !>`, as Codex's shell mode; other text is never
       restyled),
-      or with an empty draft `   ↳ <kind> · <newest text> · ↑ edit` (a queue) or
+      or with an empty draft `   ↑ edit` where Up takes a message back (D-301; it was `   ↳ <kind> · <newest text> · ↑ edit`) or
       `   enter steer · tab follow-up · ctrl-c pause` (swapped under `type_ahead = "follow_up"`); without a
       composer ` · <key> pause` where the pause menu is offered (`console_menu_available()`: terminals,
       Positron, RStudio; R.app draws no row) or ` · <key> stop` (Windows' Rgui; the key from
@@ -6529,7 +6537,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       ` · ctrl-c, then s, to steer`, as its console holds what is typed while R is busy as R code, cleared at
       Ctrl-C or run after `peter()` returns, so the pause menu is the way to steer there (steering review: it
       read ` · ctrl-c steer`, and the person took their typed text for sent; the console's banner adds
-      `Text typed while peter works waits as R code; Ctrl-C, then s, steers.`); in RStudio ` · esc pause · typed lines run next` (steering review:
+      `Text typed while peter works waits as R code; Ctrl-C, then s, steers.`); in RStudio ` · esc, then s, to steer · typed lines run after this answer` (P30, D-301: it read ` · esc pause · typed lines run next`, and a person typed and pressed Enter to steer; the banner and `/help` say it too, as in R.app; steering review:
       its console keeps a line entered during the run for the next prompt, unless a question reads it, and
       hides the entered line at its next output, so the row says where it goes).
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
@@ -6551,7 +6559,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       for the whole call and showed none of what was typed), with a draft `keys wait` as a status word
       after `r` and before the queue, `▌ r · keys wait · 1 queued   › <draft>` (steering review: the row with a
       draft gave no sign that further keys would not show), dropped whole as the queue is; `<elapsed>` the
-      run's time, `0s`, `59s`, `1m 05s`; `<n> queued` the
+      run's time, `0s`, `59s`, `1m 05s`; the queue's term counts the
       person's messages waiting for the session (its user-source queue items, those the console holds, the
       REPL's held lines); `question waiting` while a question waits for typing to pause (IC-76, Task 19).
       Completion candidates (Task 22) replace the status words. The block is the blue accent, the words and
@@ -6562,11 +6570,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       22-27: the label crowded out the person's text and the `keys show when r returns` cue, and a draft stood
       beside a bare clock padded to the run's widest status, which a bare clock no longer is); the `/` and `!`
       hint goes next; then whole terms go from the right, the hint's
-      (`typed lines run next`, `ctrl-c pause`, `tab follow-up`, `enter steer`; the queue view's `↑ edit`), then
+      (`typed lines run after this answer`, `ctrl-c pause`, `tab follow-up`, `enter steer`; the queue view's `↑ edit`), then
       `question waiting`, then
-      `<n> queued`; then the queued message
-      is cut with `…`, keeping its head; at least `▌ <elapsed>`; the draft keeps its tail (review of Tasks 16-21:
-      a character cut ended a whole message in `…` and cut `ctrl-c…`). With a draft the status is padded to the
+      the queue's term; at least `▌ <elapsed>`; the draft keeps its tail (review of Tasks 16-21:
+      a character cut ended a whole message in `…` and cut `ctrl-c…`; P30 drops the step that cut the queued
+      message, which the row no longer shows). With a draft the status is padded to the
       widest it was this run (`console_live()` keeps `status_w`), so the draft never moves left: it jumped 7
       columns when `thinking 17s` became `r 15s`. Completion candidates, the `/` and `!` hint, and the words that
       go when `r` returns or the question is asked (`keys wait`, `question waiting`) do not count towards that
@@ -6591,7 +6599,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       cleared until the run next waits, so no padding trails a transcript row. A question or a launched process
       (`console_before_message()` kinds `"prompt"` and NULL) clears it and its task draws it again (a T
       console's question draws it when it returns, `console_asked()`, IC-76); notices,
-      queue lines and sub-agent lines are written with the row cleared and redrawn. The row is written as every
+      receipts and sub-agent lines are written with the row cleared and redrawn. Every read of the console
+      (`gptr_readline()`: a console question, `gptr_confirm()`'s egress or trust question, the REPL's prompt) first
+      clears a row that shows, and a question's rows clear it also when no foreground record is found (a nested
+      call's), so no row is drawn between a question and its answer, nor left in a console that cannot erase a
+      row after a line ends (P30, D-301: RStudio kept two stale rows around one consent question). The row is written as every
       console control is, so from inside an evaluation it reaches the console, never the tool's output; text
       written into another sink (a capture in the agent's code) leaves it alone. The run's end, an abort and the
       pause menu's [b] take it down (`console_live_stop()`); the pause menu clears it.

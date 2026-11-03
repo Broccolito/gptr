@@ -10,6 +10,18 @@
   on demand through `ls`, `find` and `read`.
 * Interrupting an MCP request while its initial message is being sent now sends cancellation,
   including when progress arrives before the send completes.
+* What you send while Peter works stays in the console's transcript. A steer (Enter, or the
+  pause menu's `s`) is written at once as `steer> <text>` and a follow-up (Tab, or `f`) as
+  `next> <text>`, at the left edge like the `peter> ` prompt. It used to show only on the bottom
+  row, which disappears while R code runs and when the terminal scrolls, and reached the
+  transcript only when the agent took it, marked like an answer. The bottom row counts what is
+  queued (`1 steer queued`). Answers to a question are read two columns in, under it, so an
+  answer no longer looks like a message to the agent.
+* Typing does not steer in RStudio and R.app, so their banner and `/help`, and RStudio's bottom
+  row, now say how to: `esc, then s, to steer`; RStudio's row adds `typed lines run after this
+  answer`.
+* A question asked while the bottom row is shown, such as a provider consent, no longer leaves
+  copies of that row in RStudio's console or draws it between the question and its answer.
 
 # gptr 1.0.0
 

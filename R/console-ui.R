@@ -179,9 +179,9 @@ ui_who = function(request) {
 #' @noRd
 ui_width = function() max(20L, cli::console_width() - nchar(console_pad()))
 
-#' The prompt of an answer to a console question (D-301): the person's chevron two columns in,
-#' under the question's `? `, `  › ` (ASCII `  >> `), so column 0 holds only the person's messages
-#' to the agent (`peter> `, `steer> `, `next> `)
+#' The prompt of an answer to a console question (D-301): two blanks, the person's chevron and a
+#' blank (ASCII `  >> `), under the question's `? `, so column 0 holds only the person's messages to
+#' the agent (`peter> `, `steer> `, `next> `)
 #' @noRd
 ui_answer_prompt = function() paste0("  ", console_style()$person, " ")
 
