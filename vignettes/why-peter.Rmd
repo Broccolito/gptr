@@ -1,6 +1,6 @@
 ---
 title: "Why Peter?"
-description: "Where the name comes from, and what System 1 and System 2 mean in gptr."
+description: "The name gptr, for Peter Naur and Peter Wason, and what System 1 and System 2 mean."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Why Peter?}
