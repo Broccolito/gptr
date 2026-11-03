@@ -832,7 +832,7 @@ test_that("a scan slower than gptr.checkpoint_scan_budget switches to per-turn s
     ckpt_files_after(ck, call, tok)
   })
   expect_length(notices, 1L)
-  expect_match(notices, paste0("Checkpoint scans of the project folder ", basename(proj), " "),
+  expect_match(notices, paste0("Checkpoint scans of the project folder \"", basename(proj), "\" "),
                fixed = TRUE)
   expect_false(grepl(proj, notices, fixed = TRUE))
   expect_true(ck$files$per_turn)
@@ -848,15 +848,17 @@ notice_scan = function(complete) {
 }
 
 test_that("the coverage notice is a console line for the person, once per root", {
-  root = local_project()
+  root = file.path(local_project(), "my project")
+  expect_true(dir.create(root))
   local_gptr_options(quiet = FALSE)
   expect_silent(ckpt_files_observe(notice_tracker(root), notice_scan(TRUE)))
   expect_no_message(out <- capture.output(ckpt_files_observe(notice_tracker(root),
                                                              notice_scan(FALSE))))
   text = paste(out, collapse = " ")
-  # the folder's name, not its absolute path, which a narrow console would break mid-word
-  expect_match(text, paste0("File undo covers only part of the project folder ", basename(root),
-                            ": the automatic scan stopped early because it ran out of time ",
+  # the folder's name in quotes, not its absolute path, which a narrow console would break
+  # mid-word
+  expect_match(text, paste0("File undo covers only part of the project folder \"my project\": ",
+                            "the automatic scan stopped early because it ran out of time ",
                             "(gptr.checkpoint_scan_timeout), so"), fixed = TRUE)
   expect_false(grepl(root, text, fixed = TRUE))
   expect_false(grepl("ls/find/read|native CLI", text))

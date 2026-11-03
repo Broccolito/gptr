@@ -10351,20 +10351,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   scanned projects" (now on API and CLI routes, and the next request has no `<rewind>`), "a CLI
   turn with a step outside R keeps the coverage item of a partial scan"; cli-codex "a Codex
   turn's files are scanned only after a step that can write files (D-353)" (the fake Codex CLI's
-  text and codex_shell cases in manual and auto); the IC-65 native-edit tests of ckpt-rewind announce their edit with
-  `local_native_step()` (helper-fake.R). Evidence: progress/fixes-1.0.1/round2-Y.md.
+  text and codex_shell cases in manual and auto); the IC-65 native-edit tests of ckpt-rewind
+  announce their edit with `local_native_step()` (helper-fake.R). Evidence:
+  progress/fixes-1.0.1/round2-Y.md.
 
 ## D-354 - Fixes 1.0.1 round 2 lane Y Checkpoint messages name what changes, in plain words (2026-11-03)
 - Rule (`/undo`): when the preview finds items it cannot restore, the "Undo anyway?" question
   lists the items of the plan, those it cannot restore first, then those it leaves as is or asks
   about (restore `NA`: the RNG state, the locale, a file outside the project), then what it would
   restore or remove; at most 10, then "(+ <n> more)". A file the undo deletes previews as "would
-  be removed" (was "would be restored", as objects already read). Was only the items it could not restore, so after Peter's approved edit
-  and new file on claude-cli in a large project the question showed the "file coverage" row alone.
+  be removed" (was "would be restored", as objects already read). Was only the items it could
+  not restore, so after Peter's approved edit and new file on claude-cli in a large project the
+  question showed the "file coverage" row alone.
 - Rule (coverage notice, amends D-314's wording): "File undo covers only part of the project
-  folder <name>: the automatic scan stopped early because <reason>, so changes to files it did
+  folder "<name>": the automatic scan stopped early because <reason>, so changes to files it did
   not reach cannot be undone. Files Peter's tools name are backed up before they change." The
-  per-turn scan notice names the folder the same way. The scan's `reason` is plain words: "the
+  per-turn scan notice names the folder the same way; the name is quoted (`encodeString()`), so
+  a name with spaces reads as one. The scan's `reason` is plain words: "the
   folder has more than 2,000 entries", "it ran out of time (gptr.checkpoint_scan_timeout)", "it
   was interrupted", "a folder could not be read", "a path could not be read", "a file name is not
   valid UTF-8", "an error stopped it" (was "entry limit", "time limit", "interrupted",
