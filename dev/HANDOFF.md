@@ -18,7 +18,7 @@ and is the only branch once this checkpoint lands.
   animated line drawings for the four home points and the articles' mechanisms, the fourth lead
   point (improving Peter on your task), the coaching article framed as recursive self-improvement,
   a described articles index, a silent 36 s launch video on the home page, and the name read as
-  "a grammar of Peter", for Peter Naur and Peter Wason together.
+  "a grammar for Peter", for Peter Naur and Peter Wason together.
 
 CRAN: `R CMD check --as-cran` of the tarball has one NOTE, "Days since last update", which CRAN's
 incoming check raises until the published 1.0.0 is seven days old (2026-11-08). Next: submit 1.0.1

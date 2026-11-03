@@ -24,7 +24,7 @@ Description: Runs language model agents in an existing 'R' session, where
     Top-level agent calls and their executed code can be recorded in 'R'
     scripts, 'R Markdown' and 'Quarto' documents, or 'Jupyter' notebooks.
     Recorded 'R' scripts can be replayed without model calls when the required
-    inputs and packages are available. The name 'gptr' reads as a grammar of
+    inputs and packages are available. The name 'gptr' reads as a grammar for
     Peter, honoring Peter Naur and Peter Wason.
 License: Apache License (== 2.0)
 URL: https://broccolito.github.io/gptr/,

@@ -234,8 +234,8 @@ workspace is preserved. Settings and policies are described in
 Peter can also ask you up to four questions of its own when a decision changes the result. A
 choice also takes your own words; at a text question `/skip` skips it and `/cancel` dismisses
 the questions. Answers reach the model, so type no secret there: a credential goes through
-`gptr_login(..., scope = "session")`, which needs your approval (except in yolo mode) and reads the
-value with hidden input ([Language models](language-models.html)).
+`gptr_login(..., scope = "session")`, which needs your approval (except in `yolo` mode) and reads
+the value with hidden input ([Language models](language-models.html)).
 
 ## Type while Peter works
 
