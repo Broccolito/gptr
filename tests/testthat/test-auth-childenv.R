@@ -138,6 +138,12 @@ test_that("a session login reaches workers as its provider's key, bound to the e
   env = child_env("worker", provider = "session-child")
   expect_identical(env[["SESSION_CHILD_KEY"]], key)
   expect_false("SESSION_CHILD_ALT" %in% names(env))
+  # the parent's order: the session login before an environment variable
+  withr::with_envvar(c(SESSION_CHILD_KEY = paste0("ambient-child-key-", strrep("e", 16))), {
+    h = provider_credential(registry_get("provider", "session-child"))
+    expect_identical(secret_value(h, "https://session.test"), key)
+    expect_identical(child_env("worker", provider = "session-child")[["SESSION_CHILD_KEY"]], key)
+  })
   local_mocked_bindings(provider_base_url = function(provider) "https://moved.test/v1")
   expect_false("SESSION_CHILD_KEY" %in% names(child_env("worker", provider = "session-child")))
 })

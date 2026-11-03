@@ -155,9 +155,10 @@ child_env_put = function(out, values) {
 }
 
 #' The key a provider's worker needs, as a named character vector (empty when none is found);
-#' a `bedrock-converse` key pair travels with its key id and session token (IC-80). A session
-#' login, which lives only in this process, travels under the provider's first key variable; a
-#' remembered one the worker reads from auth.json itself
+#' a `bedrock-converse` key pair travels with its key id and session token (IC-80). The order is
+#' provider_credential()'s: the vault, a session login (it lives only in this process, so it
+#' travels under the provider's first key variable; the worker reads a remembered one from
+#' auth.json itself), then the environment
 #' @noRd
 child_env_provider_key = function(provider) {
   spec = tryCatch(registry_get("provider", provider), error = function(e) NULL)
@@ -186,14 +187,16 @@ child_env_provider_key = function(provider) {
     c("AWS_ACCESS_KEY_ID", "AWS_SESSION_TOKEN")
   }
   vars = as.character(spec[["auth"]])
-  for (nm in vars) {
-    key = one(nm)
-    if (length(key)) return(c(key, unlist(lapply(pair, one))))
+  key = character()
+  for (nm in vars) if (!length(key) && !is.null(secret_lookup(nm))) key = one(nm)
+  if (!length(key) && identical(auth_store_scope(provider), "session")) {
+    h = tryCatch(provider_credential(spec), gptr_error_no_key = function(e) NULL)
+    if (inherits(h, "gptr_secret")) {
+      key = stats::setNames(secret_value(h, provider_base_url(spec)), vars[[1L]])
+    }
   }
-  if (!identical(auth_store_scope(provider), "session")) return(character())
-  h = tryCatch(provider_credential(spec), gptr_error_no_key = function(e) NULL)
-  if (!inherits(h, "gptr_secret")) return(character())
-  key = stats::setNames(secret_value(h, provider_base_url(spec)), vars[[1L]])
+  for (nm in vars) if (!length(key)) key = one(nm)
+  if (!length(key)) return(character())
   c(key, unlist(lapply(pair, one)))
 }
 

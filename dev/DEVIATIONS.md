@@ -9571,9 +9571,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (review #104 and combined interactions; amends 03 section 6.13): a `scope = "session"`
   credential lives only in the parent's vault state, so a worker sub-agent (chat and System 1
   providers) or a coaching child could not resolve it and failed with `gptr_error_no_key`.
-  `child_env_provider_key()` now forwards it, after the vault and environment lookups, under the
-  provider's first `auth` variable, through `provider_credential()`, so the endpoint binding and
-  the vault origin still apply; an edited endpoint forwards nothing. A remembered (`"user"` or
+  `child_env_provider_key()` now forwards it under the provider's first `auth` variable, through
+  `provider_credential()`, so the endpoint binding and the vault origin still apply; an edited
+  endpoint forwards nothing. The worker keeps the parent's order: a vault handle, then the session
+  login, then an environment variable (a set variable no longer wins over the session login). A remembered (`"user"` or
   `"keyring"`) login is not forwarded: the child reads `auth.json` or the keyring itself, as before,
   and no further secret enters its environment.
 - Contract-visible: 03 section 6.13 (worker credential forwarding).

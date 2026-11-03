@@ -2041,8 +2041,9 @@ Workers snapshot the parent's effective System 1 role and its `s1_max_active`, `
 `s1_state_max` and `s1_max_elements` options. Only credentials of the designated chat and
 System 1 providers are forwarded, through the worker environment; unrelated providers' keys
 are omitted. A `scope = "session"` login, which exists only in the parent process, is forwarded
-under the provider's first key variable while it matches the configured endpoint; a remembered one
-the worker reads from `auth.json` itself, so no further secret enters its environment [D-315].
+under the provider's first key variable while it matches the configured endpoint, ahead of an
+environment variable as in the parent; a remembered one the worker reads from `auth.json` itself,
+so no further secret enters its environment [D-315].
 Local credential forwarding requires no separate egress acknowledgment. Each
 actual System 1 dispatch retains its ordinary consent and replay guards before network I/O.
 
