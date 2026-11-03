@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 0 252 160" width="453.6" height="288" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="260" height="160"/>
+<rect class="s2" x="8" y="4" width="22" height="32"/>
+<text class="n" x="36" y="23">model</text>
+<path class="ln" d="M19 40V154"/>
+<text x="136" y="27">analysis-review/SKILL.md</text>
+<rect class="ln" x="136.5" y="32.5" width="120" height="58" rx="2"/>
+<text x="143" y="45">name</text>
+<text x="143" y="56">description</text>
+<path class="ln" d="M136.5 62.5H256.5"/>
+<text class="n" x="143" y="80">instructions</text>
+<path class="ln a1" pathLength="1" d="M132 51H23" marker-end="url(#h)"/>
+<text class="n a1" x="78" y="46" text-anchor="middle">catalog line, in every request</text>
+<path class="ln a2" pathLength="1" d="M132 77H23" marker-end="url(#h)"/>
+<text class="n a2" x="78" y="72" text-anchor="middle">read when a task matches</text>
+<text x="136" y="111">references/checklist.md</text>
+<rect class="ln" x="136.5" y="116.5" width="120" height="20" rx="2"/>
+<text class="n" x="143" y="129">detailed checks</text>
+<path class="ln a3" pathLength="1" d="M132 127H23" marker-end="url(#h)"/>
+<text class="n a3" x="78" y="122" text-anchor="middle">read when the body says to</text>
+<text class="n a4" x="26" y="152">a file that is not read is not sent</text>
+</svg>

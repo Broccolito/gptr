@@ -1,4 +1,30 @@
-## Current checkpoint — 1.0 pre-release, P29 and the comprehensive fix pass (#93), 2026-10-30
+## Current checkpoint — gptr 1.0.1, 2026-11-03
+
+gptr 1.0.0 is on CRAN (published 2026-11-01). `main` holds 1.0.1, a patch release ready to submit,
+and is the only branch once this checkpoint lands.
+
+- PR #107 (`claude/v1.0.1`) merges #98..#106 in order, then the fixes from their review and live
+  tests: lanes A..I ([records](progress/fixes-1.0.1/), D-310..D-348) and round 2 lanes X and Y
+  (D-350..D-355). It labels `install.packages("gptr")` as the install and
+  `pak::pak("Broccolito/gptr")` as the development version in the README, the site, the cheat
+  sheet and `cran-comments.md`, and sets the version to 1.0.1.
+- PR #108 (`claude/steer-visible`) is P30, visible steering ([P30](plan/P30-visible-steering.md),
+  [log](progress/P30.md), D-301..D-309): a steer is written at once as `steer> <text>` and a
+  follow-up as `next> <text>`, answers are read under their question, consoles without a composer
+  say how to steer, and a Ctrl-C as an answer ends keeps the console. Live tested in Terminal,
+  VS Code, RStudio, Jupyter, Quarto and R Markdown on the Claude Code, Codex, Azure OpenAI, Bedrock
+  and Ollama routes, with Jev and Ollama System 1 models.
+- PR #109 (`claude/site-redesign`) is P31, the site figures ([P31](plan/P31-site-figures.md)):
+  animated line drawings for the four home points and the articles' mechanisms, the fourth lead
+  point (improving Peter on your task), the coaching article framed as recursive self-improvement,
+  a described articles index, a silent 36 s launch video on the home page, and the name read as
+  "a grammar of Peter", for Peter Naur and Peter Wason together.
+
+CRAN: `R CMD check --as-cran` of the tarball has one NOTE, "Days since last update", which CRAN's
+incoming check raises until the published 1.0.0 is seven days old (2026-11-08). Next: submit 1.0.1
+to CRAN on or after that date.
+
+## Historical checkpoint — 1.0 pre-release, P29 and the comprehensive fix pass (#93), 2026-10-30
 
 PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3`, which also
 holds PR #84 (CI-98: the writer prototype reports an early writer exit), and adds CI-103 and the

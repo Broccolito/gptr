@@ -1,5 +1,6 @@
 ---
 title: "Typed decisions"
+description: "Logical answers, labels and scores, one per input, with probabilities."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Typed decisions}
@@ -103,6 +104,9 @@ confidence is also uncertain when the minimum is positive. For yes/no decisions,
 confidence is each engine's own measure of concentration: the probabilities 0.90, 0.05 and
 0.05 give 0.85 on Jev and 0.64 on Clef (see `?gptr_prob`), so re-tune `min_confidence` when
 you switch engine.
+
+![A yes/no decision, read as P(yes). The default threshold of 0.5 makes each probability TRUE or
+FALSE; min_confidence = 0.8 makes any answer between 0.1 and 0.9 NA.](figures/decision-threshold.svg){alt="Diagram: answer probabilities and the min_confidence band"}
 
 ```{r}
 screened = peter("Is this a randomized trial?", abstracts, model = judge,
@@ -215,6 +219,12 @@ session$turns
 The piped classifier receives a bounded description of the session's status, designated
 value and last answer. It adds no agent turn. Judging the answer text is not verification of
 the calculations or saved artifacts; validate those in R.
+
+The direction also reverses: an agent can call a decision model from its own R code, for example
+to screen thousands of abstracts and analyze only those kept. One call is one batch. It keeps the
+order of its inputs, sends each distinct input once and runs at most eight requests at a time by
+default (`gptr.s1_max_active`); the answers are charged to the session that asked and to its
+budgets. See [Teams and background](teams-and-background.html#system-1-decision-leaves).
 
 ## Native Jev, local Ollama and explicit emulation
 

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 130" width="468" height="234" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="260" height="130"/>
+<text x="0" y="10">peter(prompt, cohorts, parallel = 2)</text>
+<text x="0" y="39">A</text>
+<text x="0" y="63">B</text>
+<text x="0" y="87">C</text>
+<path class="ln" d="M12 104H252" marker-end="url(#h)"/>
+<text class="n" x="252" y="114" text-anchor="end">time</text>
+<rect class="s2 a1" x="12" y="28" width="11" height="16"/>
+<text class="n a1" x="12" y="23">child agent</text>
+<rect class="s2 a1" x="12" y="52" width="11" height="16"/>
+<path class="dash a1" d="M12 84H104"/>
+<text class="n a1" x="30" y="80">queued</text>
+<path class="ln a2" pathLength="1" d="M26 36H108"/>
+<path class="ln a2" pathLength="1" d="M26 60H108"/>
+<g class="a3"><circle class="dot" cx="108" cy="36" r="2"/><text class="n" x="114" y="39">done (1/3)</text></g>
+<rect class="s2 a3" x="108" y="76" width="11" height="16"/>
+<path class="ln a4" pathLength="1" d="M108 60H170"/>
+<path class="ln a4" pathLength="1" d="M122 84H170"/>
+<g class="a5"><circle class="dot" cx="170" cy="84" r="2"/><text class="n" x="176" y="87">done (2/3)</text></g>
+<path class="ln a5" pathLength="1" d="M170 60H206"/>
+<g class="a6"><circle class="dot" cx="206" cy="60" r="2"/><text class="n" x="212" y="63">done (3/3)</text></g>
+<g class="a7"><text x="0" y="125">session$text</text><text x="68" y="125">c(A = "...", B = "...", C = "...")</text></g>
+</svg>

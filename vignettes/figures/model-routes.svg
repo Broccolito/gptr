@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 132" width="468" height="237.6" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="260" height="132"/>
+<rect class="ln" x="0.5" y="16.5" width="62" height="100" rx="3"/>
+<text class="t" x="8" y="30">R session</text>
+<text x="8" y="50">mtcars</text>
+<rect class="dot" x="68" y="24" width="2" height="86"/>
+<text class="n" x="69" y="126" text-anchor="middle">permission gate</text>
+<path class="ln" d="M196 16V112"/>
+<text class="n" x="192" y="10" text-anchor="end">your computer</text>
+<text class="n" x="200" y="10">provider</text>
+<rect class="s2" x="214" y="26" width="11" height="16"/>
+<rect class="s2" x="214" y="58" width="11" height="16"/>
+<rect class="s2" x="178" y="94" width="11" height="16"/>
+<rect class="ln" x="146.5" y="58.5" width="38" height="15" rx="2"/>
+<text x="165.5" y="69" text-anchor="middle">claude</text>
+<text class="n" x="165.5" y="84" text-anchor="middle">child process</text>
+<text class="a1" x="78" y="29">"openai/gpt-6-sol"</text>
+<path class="ln a1" pathLength="1" d="M75 34H209" marker-start="url(#h)" marker-end="url(#h)"/>
+<text class="a2" x="78" y="61">"claude-cli"</text>
+<path class="ln a2" pathLength="1" d="M75 66H141" marker-start="url(#h)" marker-end="url(#h)"/>
+<path class="ln a2" pathLength="1" d="M190 66H209" marker-start="url(#h)" marker-end="url(#h)"/>
+<text class="a3" x="78" y="97">"ollama/qwen3:1.7b"</text>
+<path class="ln a3" pathLength="1" d="M75 102H173" marker-start="url(#h)" marker-end="url(#h)"/>
+<text class="a4" x="8" y="66">fit</text>
+<text class="n a5" x="196" y="126" text-anchor="middle">consent once per provider</text>
+</svg>

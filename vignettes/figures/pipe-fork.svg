@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 128" width="432" height="230.4" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="240" height="128"/>
+<text class="t" x="0" y="27">session</text>
+<path class="ln" d="M48 24H236"/>
+<g class="a1"><circle class="dot" cx="72" cy="24" r="2.5"/><text x="72" y="14" text-anchor="middle">peter()</text></g>
+<g class="a2"><circle class="dot" cx="124" cy="24" r="2.5"/><text x="124" y="14" text-anchor="middle">|&gt; peter()</text></g>
+<text class="t" x="0" y="57">branch</text>
+<path class="ln a3" pathLength="1" d="M124 24C124 44 134 54 154 54H236"/>
+<text class="a3" x="154" y="67">gptr_fork()</text>
+<rect class="ln" x="48.5" y="82.5" width="76" height="30" rx="3"/>
+<text class="t" x="56" y="95">workspace</text>
+<text x="56" y="107">fit</text>
+<text class="a1" x="76" y="107">cyl_mpg</text>
+<rect class="ln a3" pathLength="1" x="160.5" y="82.5" width="76" height="30" rx="3"/>
+<text class="t a3" x="168" y="95">overlay</text>
+<path class="ln a4" pathLength="1" d="M157 97H128" marker-end="url(#h)"/>
+<text class="n a4" x="142.5" y="92" text-anchor="middle">reads</text>
+<g class="a5"><circle class="dot" cx="204" cy="54" r="2.5"/><text x="204" y="45" text-anchor="middle">|&gt; peter()</text></g>
+<g class="a6"><text x="168" y="107">x</text><text class="n" x="236" y="124" text-anchor="end">assignments stay here</text></g>
+</svg>

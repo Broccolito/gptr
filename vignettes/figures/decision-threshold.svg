@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 106" width="468" height="190.8" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="260" height="106"/>
+<text x="0" y="31">abstracts</text>
+<rect class="s1" x="55.5" y="20" width="5" height="16"/>
+<path class="ln" d="M80 28H248M80 25V31M248 25V31M164 28V31"/>
+<text class="n" x="80" y="44" text-anchor="middle">0</text>
+<text class="n" x="164" y="44" text-anchor="middle">0.5</text>
+<text class="n" x="248" y="44" text-anchor="middle">1</text>
+<text class="n" x="74" y="44" text-anchor="end">P(yes)</text>
+<path class="ln a1" pathLength="1" d="M47 28H51.5" marker-end="url(#h)"/>
+<path class="ln a2" pathLength="1" d="M64 28H73" marker-end="url(#h)"/>
+<g class="a2"><circle class="dot" cx="91.8" cy="28" r="2.2"/><text x="91.8" y="18" text-anchor="middle">cohort</text></g>
+<g class="a2"><circle class="dot" cx="172.4" cy="28" r="2.2"/><text x="172.4" y="18" text-anchor="middle">pilot</text></g>
+<g class="a2"><circle class="dot" cx="237.9" cy="28" r="2.2"/><text x="237.9" y="18" text-anchor="middle">trial</text></g>
+<g class="a3"><text x="0" y="60">is_rct</text><text x="91.8" y="60" text-anchor="middle">FALSE</text><text x="172.4" y="60" text-anchor="middle">TRUE</text><text x="237.9" y="60" text-anchor="middle">TRUE</text></g>
+<path class="ln a4" pathLength="1" d="M96.8 79V87M96.8 83H231.2M231.2 79V87"/>
+<text class="a4" x="164" y="77" text-anchor="middle">min_confidence = 0.8</text>
+<text class="n a4" x="93" y="86" text-anchor="end">0.1</text>
+<text class="n a4" x="235" y="86">0.9</text>
+<g class="a5"><text x="0" y="101">screened</text><text x="91.8" y="101" text-anchor="middle">FALSE</text><text x="172.4" y="101" text-anchor="middle">NA</text><text x="237.9" y="101" text-anchor="middle">TRUE</text></g>
+</svg>

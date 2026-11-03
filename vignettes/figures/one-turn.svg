@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 0 248 158" width="446.4" height="284.4" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="260" height="158"/>
+<text class="t" x="36" y="16" text-anchor="middle">R session</text>
+<text class="n" x="36" y="28" text-anchor="middle">your objects</text>
+<path class="ln" d="M36 34V154"/>
+<rect class="s2" x="195" y="4" width="22" height="32"/>
+<text class="n" x="222" y="22">model</text>
+<path class="ln" d="M206 40V154"/>
+<path class="ln a1" pathLength="1" d="M38 52H202" marker-end="url(#h)"/>
+<text class="n a1" x="121" y="47" text-anchor="middle">description, within a token budget</text>
+<path class="ln a2" pathLength="1" d="M204 80H133" marker-end="url(#h)"/>
+<text class="n a2" x="168" y="75" text-anchor="middle">tool request</text>
+<rect class="dot" x="128" y="72" width="2" height="16"/>
+<text class="n" x="129" y="98" text-anchor="middle">permission gate</text>
+<path class="ln a3" pathLength="1" d="M125 80H42" marker-end="url(#h)"/>
+<text class="n a3" x="84" y="75" text-anchor="middle">R code</text>
+<g class="a3"><rect class="ln" x="32.5" y="84.5" width="7" height="14"/><text x="27" y="95" text-anchor="end">fit</text></g>
+<path class="ln a4" pathLength="1" d="M42 118H202" marker-end="url(#h)"/>
+<text class="n a4" x="121" y="113" text-anchor="middle">result</text>
+<path class="ln a5" pathLength="1" d="M208 118H220V84H211" marker-end="url(#h)"/>
+<text class="n a5" x="224" y="104">repeats</text>
+<path class="ln a6" pathLength="1" d="M204 142H40" marker-end="url(#h)"/>
+<text class="n a6" x="121" y="137" text-anchor="middle">answer</text>
+<text class="a7" x="121" y="153" text-anchor="middle">session$text, $value</text>
+</svg>

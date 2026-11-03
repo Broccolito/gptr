@@ -1,5 +1,6 @@
 ---
 title: "Configuration"
+description: "Settings, scopes and precedence; R options and credentials."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Configuration}
@@ -16,7 +17,8 @@ old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1
 Use `gptr_config()` for named settings, `options(gptr.*)` for process-level controls, and
 arguments to `peter()` for the call you are making. Inspect the effective settings before
 changing them; each value has a source layer. This guide executes only temporary process
-changes and fake-provider calls. Examples that write configuration files are not executed.
+changes, temporary files and fake-provider calls. Examples that write configuration files are
+not executed.
 
 ## Scope and precedence
 
@@ -32,13 +34,19 @@ settings, project settings, user-level project permission rules, R options, then
 this R process. Explicit call arguments choose the values for that call. Safety and trust
 restrictions still apply; an explicit call cannot disable the inherited permission guards.
 
+![The budget resolves from the bottom up, and each layer replaces only the entries it sets. With
+`cost = 2` in the user file, `cost = 1` and `turns = 10` for this R process (as below) and
+`budget = list(turns = 5)` in the call, the call takes its token limit from the package
+defaults, its cost limit from this R process and its turn limit from the call.](figures/settings-layers.svg){alt="Diagram: settings layers, from the call argument down to package defaults"}
+
 | Scope | Lifetime and location | Use it for |
 |---|---|---|
 | `"session"` | This R process; no settings file | Temporary defaults for scripts or exploration. It is not limited to one `gptr_session` conversation. |
 | `"project"` | `.gptr/settings.json` in an initialized project | Shared project defaults and stricter context/permission policy. |
-| `"user"` | `tools::R_user_dir("gptr", "config")/settings.json` | Personal defaults across projects and provider egress acknowledgments. |
+| `"user"` | `settings.json` in the user configuration directory | Personal defaults across projects and provider egress acknowledgments. |
 | `NULL` | Project when a `.gptr/` workspace exists; otherwise this R process | Convenient interactive changes; use an explicit scope in scripts. |
 
+The user configuration directory is `tools::R_user_dir("gptr", "config")`.
 `gptr_config()` with no settings reads the effective values; it does not read only the scope
 named in `.scope`. A setter returns the previous values **in the chosen scope** invisibly.
 Setting a key to `NULL` removes that override and exposes the lower layers. Unknown setting
@@ -225,6 +233,51 @@ option. Provider keys include `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API
 Load a private file explicitly with `gptr_env(path)`, or use interactive `gptr_login()` for
 supported API/MCP credentials. Sign in to subscription CLIs using their own tools.
 
+`gptr_login()` takes a key through hidden input, or signs in through the browser where the
+provider offers it. Its `scope` keeps the credential in gptr's `auth.json` in the user
+configuration directory (the default), in this R process only, or in the operating system's
+credential store; see [Language models](language-models.html) and `?gptr_login`. Hidden input
+is not encryption.
+
+### Find a key that reached a file
+
+gptr replaces registered secrets with markers such as `[secret:OPENAI_API_KEY]` when they
+enter a transcript, a cache or a history document. A value that reached a file before it was
+registered, such as a key pasted into a prompt and loaded with `gptr_env()` only later, stays
+there. `gptr_scrub()` finds it. Without paths it scans this workspace's sessions, caches,
+plans, transcripts and bound documents; a dry run reports the file, the secret's name and a
+count, never the value. This example registers a made-up token without exporting it:
+
+```{r}
+key_file = tempfile(fileext = ".env")
+writeLines("DEMO_SERVICE_TOKEN=demo-not-a-real-token-4821", key_file)
+gptr_env(key_file, set_env = FALSE, quiet = TRUE)
+
+notes = tempfile("notes")
+dir.create(notes)
+writeLines("Connected with demo-not-a-real-token-4821.", file.path(notes, "log.txt"))
+found = gptr_scrub(notes)
+found$secret
+found$count
+```
+
+`dry_run = FALSE` rewrites those files, replacing each value with its marker:
+
+```{r}
+gptr_scrub(notes, dry_run = FALSE)
+readLines(file.path(notes, "log.txt"))
+```
+
+`error = TRUE` signals `gptr_error_secret_found` when a file still holds a registered secret,
+for a pre-commit hook or a CI step. A key that reached a model or a commit must still be
+rotated. `gptr_redact()` applies the same redaction to your own text or logs; besides
+registered values, it recognizes common credential shapes such as bearer tokens:
+
+```{r}
+gptr_redact("Authorization: Bearer abcdef0123456789abcdef")
+```
+
 ```{r cleanup, include = FALSE}
+unlink(c(key_file, notes), recursive = TRUE)
 options(old_options)
 ```

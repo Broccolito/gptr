@@ -1,5 +1,6 @@
 ---
 title: "Harnesses and coaching"
+description: "Build your own peter and let it improve itself on your task, round after round."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Harnesses and coaching}
@@ -9,13 +10,16 @@ vignette: >
 
 <!-- gptr-vignette-brand:start -->
 <style>
-html:not([data-bs-theme]) body { background: #fff; color: #1c1e22; }
+html:not([data-bs-theme]) body { background: #fff; color: #1c1e22; color-scheme: light; }
 .gptr-vignette-brand { float: right; width: 120px; margin: 0 0 1rem 1rem; }
 .gptr-vignette-brand img { display: block; max-width: 100%; height: auto; }
 html[data-bs-theme] .gptr-vignette-brand { display: none; }
 @media (max-width: 600px) {
   .gptr-vignette-brand { float: none; width: 72px; margin: 0 0 1rem; }
 }
+figure, .float { width: fit-content; max-width: 100%; margin: 1.5rem auto; }
+figure img, .float img { display: block; width: 100%; height: auto; margin: 0; padding: 0; border: 0; background: none; }
+figcaption, .figcaption { contain: inline-size; margin-top: 0.5rem; font-size: 0.875em; color: var(--bs-secondary-color, #4a4e55); }
 </style>
 <picture class="gptr-vignette-brand">
   <source media="(prefers-color-scheme: dark)" srcset="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MzkgNTA4IiB3aWR0aD0iNDM5IiBoZWlnaHQ9IjUwOCIgeG1sbnM6YzJwYT0iaHR0cDovL2MycGEub3JnL21hbmlmZXN0Ij48bWV0YWRhdGE+PGMycGE6bWFuaWZlc3Q+QUFBV2dtcDFiV0lBQUFBZWFuVnRaR015Y0dFQUVRQVFnQUFBcWdBNG0zRURZekp3WVFBQUFCWmNhblZ0WWdBQUFFZHFkVzFrWXpKdFlRQVJBQkNBQUFDcUFEaWJjUU4xY200Nll6SndZVHBpT0RobU9EQmxNeTAwWWpBMkxUUXdORGt0T0dRek1pMHlNekV5TmpnNVltRmlOVEVBQUFBRGwycDFiV0lBQUFBcGFuVnRaR015WVhNQUVRQVFnQUFBcWdBNG0zRURZekp3WVM1aGMzTmxjblJwYjI1ekFBQUFBTHhxZFcxaUFBQUFSR3AxYldSalltOXlBQkVBRUlBQUFLb0FPSnR4RTJNeWNHRXVhVzVuY21Wa2FXVnVkQzUyTXdBQUFBQVlZekp6YU5PK09LY0xQWG1wZ3UzdUtHenNMaFVBQUFCd1kySnZjcU5wWkdNNlptOXliV0YwYldsdFlXZGxMM04yWnl0NGJXeHFhVzV6ZEdGdVkyVkpSSGdzZUcxd09tbHBaRG8wWVRBME16UmpOaTFpTlRkaUxUUmtOakV0WVdVMU1DMDROVEEyTVRSbE1qUXdORGRzY21Wc1lYUnBiMjV6YUdsd2FIQmhjbVZ1ZEU5bUFBQUI0bXAxYldJQUFBQkJhblZ0WkdOaWIzSUFFUUFRZ0FBQXFnQTRtM0VUWXpKd1lTNWhZM1JwYjI1ekxuWXlBQUFBQUJoak1uTm9VdDBhY0dxS01KVmVUSEh6Y1Nmd1hBQUFBWmxqWW05eW9tZGhZM1JwYjI1emdxSm1ZV04wYVc5dWEyTXljR0V1YjNCbGJtVmthbkJoY21GdFpYUmxjbk9oYTJsdVozSmxaR2xsYm5SemdhSmpkWEpzZUMxelpXeG1JMnAxYldKbVBXTXljR0V1WVhOelpYSjBhVzl1Y3k5ak1uQmhMbWx1WjNKbFpHbGxiblF1ZGpOa2FHRnphRmdnV3VyODMvRjlhUmo3UmZYQ3pueWczbGZobUo0eGdGRkZDdjRtZjM5ZjNNcWtabUZqZEdsdmJuZ2RZMjl0TG1GdWRHaHliM0JwWXk1amJHRjFaR1V1Y0hKdmRtbGtaV1JxY0dGeVlXMWxkR1Z5YzZGNEgyTnZiUzVoYm5Sb2NtOXdhV011YjNKcFoybHVMV052Ym1acFpHVnVZMlZuZFc1cmJtOTNibXRrWlhOamNtbHdkR2x2Ym5obVEyeGhkV1JsSUhCeWIzWnBaR1ZrSUhSb2FYTWdabWxzWlNCaGRDQjBhR1VnY21WeGRXVnpkQ0J2WmlCaElIVnpaWElnWVc1a0lHMWhlU0JvWVhabElHTnlaV0YwWldRZ2IzSWdiVzlrYVdacFpXUWdkR2hsSUdacGJHVWdZMjl1ZEdWdWRITXViWE52Wm5SM1lYSmxRV2RsYm5TaFpHNWhiV1ZtUTJ4aGRXUmxjbUZzYkVGamRHbHZibk5KYm1Oc2RXUmxaUFVBQUFESWFuVnRZZ0FBQUVCcWRXMWtZMkp2Y2dBUkFCQ0FBQUNxQURpYmNSTmpNbkJoTG1oaGMyZ3VaR0YwWVFBQUFBQVlZekp6YU1LYk8wemxEa3UvRWpKQkVTVDREeFlBQUFDQVkySnZjcVZqWVd4blpuTm9ZVEkxTm1Od1lXUk5BQUFBQUFBQUFBQUFBQUFBQUdSb1lYTm9XQ0FYak5zOUduYmNoOVUydFlCNG9QbXhPWktZVUIyQnhyWEdwaFRnMHFFSDdXUnVZVzFsYm1wMWJXSm1JRzFoYm1sbVpYTjBhbVY0WTJ4MWMybHZibk9Cb21WemRHRnlkQmlXWm14bGJtZDBhQmtlQkFBQUFqNXFkVzFpQUFBQUoycDFiV1JqTW1Oc0FCRUFFSUFBQUtvQU9KdHhBMk15Y0dFdVkyeGhhVzB1ZGpJQUFBQUNEMk5pYjNLbFkyRnNaMlp6YUdFeU5UWnBjMmxuYm1GMGRYSmxlRTF6Wld4bUkycDFiV0ptUFM5ak1uQmhMM1Z5Ympwak1uQmhPbUk0T0dZNE1HVXpMVFJpTURZdE5EQTBPUzA0WkRNeUxUSXpNVEkyT0RsaVlXSTFNUzlqTW5CaExuTnBaMjVoZEhWeVpXcHBibk4wWVc1alpVbEVlQ3g0YlhBNmFXbGtPbU5tWm1VeU4yUTJMVGhoWXpVdE5HRmhNUzFoWkdFekxXUTRNMkkzWldGbU5tVmpaSEpqY21WaGRHVmtYMkZ6YzJWeWRHbHZibk9Eb21OMWNteDRMWE5sYkdZamFuVnRZbVk5WXpKd1lTNWhjM05sY25ScGIyNXpMMk15Y0dFdWFXNW5jbVZrYVdWdWRDNTJNMlJvWVhOb1dDQmE2dnpmOFgxcEdQdEY5Y0xPZktEZVYrR1luakdBVVVVSy9pWi9mMS9jeXFKamRYSnNlQ3B6Wld4bUkycDFiV0ptUFdNeWNHRXVZWE56WlhKMGFXOXVjeTlqTW5CaExtRmpkR2x2Ym5NdWRqSmthR0Z6YUZnZ2VxQWZkdXc2Z2kvcjdlWldncDhIbkNIM2tWSGZxb21vOXl5Ym0yVWM3dzJpWTNWeWJIZ3BjMlZzWmlOcWRXMWlaajFqTW5CaExtRnpjMlZ5ZEdsdmJuTXZZekp3WVM1b1lYTm9MbVJoZEdGa2FHRnphRmdnUWlYTTk3ekZ6V2JaZ0xNU0drL0VUNXkrNzFuU01pUWIrR3liTUF4Qk50SjBZMnhoYVcxZloyVnVaWEpoZEc5eVgybHVabStqWkc1aGJXVnZRVzUwYUhKdmNHbGpJRVpwYkdWelozWmxjbk5wYjI1bE1TNHdMakJyYzNCbFkxWmxjbk5wYjI1bE1pNDBMakFBQUJBNGFuVnRZZ0FBQUNocWRXMWtZekpqY3dBUkFCQ0FBQUNxQURpYmNRTmpNbkJoTG5OcFoyNWhkSFZ5WlFBQUFCQUlZMkp2Y3RLRVdRSVNvZ0VtR0NGWkFnb3dnZ0lHTUlJQmphQURBZ0VDQWhSQTVhQUs3c0k1MEw2NGcvb0dRZ1U5WjFVVEFEQUtCZ2dxaGtqT1BRUURBekJKTVJjd0ZRWURWUVFLRXc1QmJuUm9jbTl3YVdNc0lGQkNRekV1TUN3R0ExVUVBeE1sUVc1MGFISnZjR2xqSUVOdmJuUmxiblFnUTNKbFpHVnVkR2xoYkhNZ1VtOXZkQ0JEUVRBZUZ3MHlOakE0TURjeE9EUXpOVFphRncweU9EQTRNRFl4T1RRek5UWmFNRVF4RnpBVkJnTlZCQW9URGtGdWRHaHliM0JwWXl3Z1VFSkRNU2t3SndZRFZRUURFeUJCYm5Sb2NtOXdhV01nUTJ4aGRXUmxJRU52Ym5SbGJuUWdVMmxuYm1sdVp6QlpNQk1HQnlxR1NNNDlBZ0VHQ0NxR1NNNDlBd0VIQTBJQUJKaDZDbXZMVUJnRkZOVTB2VUtsT1Z0RTZkamQxN0w1U3V3WDBMZW1GaXNCTTNka2QvM2N5anhGQTNRbzVTNDZmWDAvaWhZMFZaN21mYjlLRjcwM3Q1T2pXREJXTUE0R0ExVWREd0VCL3dRRUF3SUhnREFWQmdOVkhTVUVEakFNQmdvckJnRUVBWVBvWGdJQk1Bd0dBMVVkRXdFQi93UUNNQUF3SHdZRFZSMGpCQmd3Rm9BVXpsSGlCSUZPWkZzaitPUEV6NW8rbk1IWFhNSXdDZ1lJS29aSXpqMEVBd01EWndBd1pBSXdNWE1kRko0QmV0TExWWTdPUnVFOW5vcWJiQVpPWm4vYUFyWHlUd0ZBWmZLclB6eEYydlBvSk5mMStVQ2RnMVhHQWpCd1gxemQ5V0dxWWtxbUw1U0ZxdzFReVNqcjF6SmZwSk05KzFyZER3U1BMTU9QT2pLdWlYam9VL3BVVWVHOVJ3bWhZM0JoWkZrTm5nQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBUFpZUUNTb1lScll1OTRWZHdNbHM5Ri9sZzhrcE83aHRIWm5pU2cvb1NuemU5ZUVFWTZzK2N6ZlQ4R09aRGs2SnpIUW5pV1FOalRock9iN2FvaEY2dUc3VmVBPTwvYzJwYTptYW5pZmVzdD48L21ldGFkYXRhPjxkZWZzPjwvZGVmcz4KICA8cGF0aCBkPSJNMjE5LjUgOSBMNDMwIDEzMC41IEw0MzAgMzc3LjUgTDIxOS41IDQ5OSBMOSAzNzcuNSBMOSAxMzAuNSBaIiBmaWxsPSIjMWMxZTIyIiBzdHJva2U9IiMxYzFlMjIiIHN0eWxlPSJzdHJva2Utd2lkdGg6MTZweDtzdHJva2UtbGluZWpvaW46cm91bmQ7Ij48L3BhdGg+CiAgPHBvbHlsaW5lIHBvaW50cz0iMTI0LDE3NCAxODAsMjI0IDEyNCwyNzQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2VmZWRlNyIgc3R5bGU9InN0cm9rZS13aWR0aDoyNHB4O3N0cm9rZS1saW5lY2FwOnNxdWFyZTtzdHJva2UtbGluZWpvaW46bWl0ZXI7Ij48L3BvbHlsaW5lPgogIDxyZWN0IHg9IjIwOCIgeT0iMjI0IiB3aWR0aD0iMTYiIGhlaWdodD0iNTAiIHJ4PSIwIiBmaWxsPSIjYjg1NDUwIj48L3JlY3Q+CiAgPHJlY3QgeD0iMjQwIiB5PSIxNzQiIHdpZHRoPSI3MiIgaGVpZ2h0PSIxMDAiIHJ4PSIwIiBmaWxsPSIjN2Q5ZGNiIj48L3JlY3Q+CiAgPHRleHQgeD0iMjE5LjUiIHk9IjM4NSIgZmlsbD0iI2VmZWRlNyIgc3R5bGU9ImZvbnQtZmFtaWx5OidJQk0gUGxleCBNb25vJyxtb25vc3BhY2U7Zm9udC1zaXplOjY2cHg7Zm9udC13ZWlnaHQ6NjAwO3RleHQtYW5jaG9yOm1pZGRsZTsiPmdwdHI8L3RleHQ+CiAgPC9zdmc+">
@@ -32,8 +36,12 @@ know about your data, ask it to check its work before it stops, and set hard rul
 Two functions make one. Both return a harness: a function you call exactly like `peter()`.
 
 - `gptr_tailor()` builds a harness from parts you write. It calls no model and returns at once.
-- `gptr_coach()` improves a harness by running your task several times and keeping the changes
-  that helped. It calls models, runs several sessions and takes minutes.
+- `gptr_coach()` lets Peter improve itself on your task: models revise the coaching from runs of
+  your task, and code keeps a revision only when a new run passes gptr's checks and any of yours. It
+  calls models, runs several sessions and takes minutes.
+
+![A harness, from peter outwards. gptr_tailor() sets the fixed arguments, your rules and the
+coaching; gptr_coach() changes only the coaching.](figures/harness-layers.svg){alt="Diagram: the layers of a harness"}
 
 The tailoring examples run without a model or a key. The coaching examples need a configured
 model and are shown without running them.
@@ -66,7 +74,7 @@ survey_peter = gptr_tailor(
   )
 )
 survey_peter
-#> <gptr_harness 8c1606a9bcff> built on peter (gptr 1.0.1)
+#> <gptr_harness 1ad12f4da6a5> built on peter (gptr 1.0.1)
 #> fixed: mode = "auto"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review 1 round(s), rules none
@@ -119,16 +127,22 @@ co = survey_peter$coaching
 co$review = NULL
 quick_peter = gptr_tailor(survey_peter, mode = "edits", coaching = co)
 quick_peter
-#> <gptr_harness 2cd01ccba00d> built on peter (gptr 1.0.1)
+#> <gptr_harness 947ad872bd86> built on peter (gptr 1.0.1)
 #> fixed: mode = "edits"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review none, rules none
 #> record: none
 ```
 
-## Coach a harness
+## Self-improvement: coach Peter on your task
 
-With the default settings, `gptr_coach()` works in five steps:
+With `gptr_coach()`, Peter's harness improves from its own runs. Coaches, which are language
+models, read runs of your task and rewrite the coaching, and code, not a model, decides whether
+to keep the new coaching. The result is a harness, so it can be coached again, on the same task
+or the next one. This is recursive self-improvement in a narrow sense: only the coaching
+changes, and only when a new run passes gptr's checks and any of yours.
+
+With the default settings, one call works in five steps:
 
 1. **Try.** The starting harness does your task once.
 2. **Propose.** Two coaches read that run. One looks at how Peter works: its steps, tools,
@@ -142,6 +156,10 @@ With the default settings, `gptr_coach()` works in five steps:
 Code, not a model, then decides. The new coaching is kept only when the final run ended
 normally, delivered at least what the starting run delivered (a value, objects, files, or else
 text), took no riskier kind of action, met every `require` rule and passed your `check`.
+
+![One coaching call. Two coaches read the first run and propose coaching, each proposal does the
+task once, the composer keeps what visibly helped, and code decides whether the final run's
+coaching is kept. The result is a harness, so it can be coached again.](figures/coach-loop.svg){alt="Flow diagram: one gptr_coach() call"}
 
 
 ``` r
@@ -174,15 +192,12 @@ but it is the only place where you say what a good result is.
 | `check` | your test of a final run | none |
 | `coach` | the model of the coaches, the composer and the judge | the runs' model |
 | `k` | how much coaching, 1 to 5 | `1` |
-| `strategy` | `"parallel"` or `"sequential"` | `"parallel"` |
+| `strategy` | `"parallel"` or `"sequential"` (below) | `"parallel"` |
 | `focus` | one proposing coach each: `"procedure"`, `"domain"` or your own words | both |
 | `surface` | the parts of the coaching that may change | all four |
 
-With `"parallel"`, `k` gives `k` starting runs, `k` coaches of each focus and `k` composers that
-each see every probe; when more than one final passes, a blind judge that sees only the task and
-what each final delivered picks one. With `"sequential"`, `k` rounds follow the starting runs,
-each building on the round before. Only the procedure coach writes rules. Coaching with the
-runs' own model at `k = 1` is untested, so `k = 2` or a stronger `coach` model may help.
+Only the procedure coach writes rules. Coaching with the runs' own model at `k = 1` is
+untested, so `k = 2` or a stronger `coach` model may help.
 
 **Cost.** A call makes `k * (2 + length(focus))` runs of your task and `k * (1 + length(focus))`
 coach sessions, plus up to one judge session when `k > 1`: 4 runs and 3 coach sessions with the
@@ -202,6 +217,68 @@ approval ends that run as `blocked`, so most tasks need `mode = "auto"`.
 from your runs. `$report` holds every answer, transcript and coach reply, in this R session
 only. Kept is not proof that the harness does better on new data. Read the coaching before you
 rely on it or share it: it can mention facts from your data.
+
+### Coach the result again
+
+A coached harness starts the next call like any other. Coach it on your next task, or on the
+same task with new data, and give that call its own `check`:
+
+
+``` r
+want_2026 = mean(survey_2026$age[survey_2026$age != -9])
+mean_peter_2 = gptr_coach(
+  "Ages of -9 are missing. Recode them, then return the mean age with gptr_return().",
+  survey_2026,
+  harness = mean_peter,
+  check = function(r) isTRUE(all.equal(r$value, want_2026))
+)
+```
+
+Each call first tries its starting harness on the task and coaches from those runs, so what
+carries over from one call to the next is the coaching itself. Coaches read the current coaching
+and revise it: a part they leave out stays as it is, a skill they name replaces the skill of
+that name or is added, and a skill with empty text is deleted. The note keeps its
+8,000-character limit, and coaches are told to cut text to pay for any they add and to leave
+facts about your data out.
+
+The result is a new harness with its own id and a `$record` of this call. The harness you
+started from is unchanged, so you can compare their `$coaching` and keep either. In a recorded
+script each call of the chain is its own `coach` block (below), and replay rebuilds every
+harness without a model. Whether coaching on one dataset helps on the next has not been
+measured, so give each call a `check` for its own data.
+
+### Parallel or sequential
+
+`k` sets how much coaching one call does, and `strategy` how it is spent. Both strategies start
+with `k` runs of the starting harness and make the same number of runs and coach sessions: at
+`k = 3`, 12 runs and 9 coach sessions, plus up to one judge session.
+
+- With `"parallel"`, `k` coaches of each focus work at once, each proposal does the task once,
+  and `k` composers each compare every proposal and its run.
+- With `"sequential"`, `k` rounds run one after another. Each round has one coach of each focus,
+  their probes, a composer and a final run. It starts from the composition of the round before,
+  whether or not that one would pass, and sees the starting runs and every earlier round, final
+  runs included.
+
+Code then checks every final run as above. When more than one passes, a blind judge, which sees
+only the task and what each final delivered, picks one; with `"sequential"` it need not be the
+last round's.
+
+![Parallel and sequential coaching at k = 3. In parallel every composer sees every proposal; in
+sequence each round starts from the composition before it. Code checks every final run, and a judge
+picks one when several pass.](figures/coach-rounds.svg){alt="Diagram: parallel and sequential coaching rounds"}
+
+
+``` r
+deep_peter = gptr_coach(
+  "Ages of -9 are missing. Recode them, then return the mean age with gptr_return().",
+  survey,
+  harness = auto_peter,
+  check = function(r) is.numeric(r$value) && isTRUE(all.equal(r$value, want)),
+  k = 3,
+  strategy = "sequential"
+)
+```
 
 ## Coach on a Claude Code or Codex plan
 
@@ -243,7 +320,7 @@ path = tempfile(fileext = ".rds")
 saveRDS(survey_peter, path)
 their_peter = gptr_tailor(readRDS(path))
 their_peter
-#> <gptr_harness 1d9ae92b9f70> built on peter (gptr 1.0.1)
+#> <gptr_harness bb70dedc990a> built on peter (gptr 1.0.1)
 #> fixed: mode = "auto"
 #> your rules: 1 never, 1 require
 #> coaching: note 63 characters, 1 skill(s), review 1 round(s), rules none

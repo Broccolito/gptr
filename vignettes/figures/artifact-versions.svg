@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 118" width="468" height="212.4" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="260" height="118"/>
+<rect class="ln" x="0.5" y="4.5" width="44" height="18" rx="2"/>
+<text x="10" y="16.5">app.R</text>
+<text class="n" x="50" y="16.5">working copy</text>
+<rect class="ln" x="192.5" y="4.5" width="64" height="28" rx="2"/>
+<text class="t" x="199" y="16">R session</text>
+<text x="199" y="28">survey</text>
+<path class="ln a1" pathLength="1" d="M6 23V60.5H12" marker-end="url(#h)"/>
+<path class="ln a1" pathLength="1" d="M224 33V38.5H6"/>
+<text class="n a1" x="115" y="35" text-anchor="middle">copy</text>
+<g class="a2"><rect class="ln" x="14.5" y="50.5" width="144" height="20" rx="2"/><text class="t" x="20" y="63">v001/</text><text x="54" y="63">app.R</text><text x="90" y="63">data/001.rds</text></g>
+<path class="ln a3" pathLength="1" d="M161 60.5H189" marker-end="url(#h)"/>
+<text class="n a3" x="175" y="55" text-anchor="middle">launch</text>
+<g class="a3"><rect class="ln" x="192.5" y="45.5" width="64" height="30" rx="2"/><text class="t" x="199" y="57">R process</text><text x="199" y="69">127.0.0.1</text></g>
+<path class="ln a4" pathLength="1" d="M6 60.5V104.5H12" marker-end="url(#h)"/>
+<text class="n a4" x="14" y="86">edit app.R, call peter$app() again</text>
+<g class="a5"><rect class="ln" x="14.5" y="94.5" width="144" height="20" rx="2"/><text class="t" x="20" y="107">v002/</text><text x="54" y="107">app.R</text><text x="90" y="107">data/001.rds</text></g>
+<text class="n a6" x="164" y="107">each version is kept</text>
+</svg>

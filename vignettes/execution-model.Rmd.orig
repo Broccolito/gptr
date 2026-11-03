@@ -1,5 +1,6 @@
 ---
 title: "Execution model"
+description: "What one model turn does, and where objects live."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Execution model}
@@ -26,6 +27,10 @@ receives, and where memory or file transfers still occur.
 4. R code runs in the selected environment; file and external tools use their own documented paths.
 5. Tool results return to the model until it finishes, is interrupted, or reaches a limit.
 6. The session retains the conversation, status, usage and a designated result, if there is one.
+
+![One turn, read from the top. The model receives a description of your objects and requests
+tools; each request passes the permission gate, its R code runs on the objects in your session,
+and the result returns to the model until it answers.](figures/one-turn.svg){alt="Sequence diagram: one model turn between the R session and the model"}
 
 For an ordinary interactive call, start with a prompt and the data:
 
@@ -141,7 +146,7 @@ unknown.
 
 ```{r history-display}
 session$history
-as.data.frame(session$history)
+as.data.frame(session$history)[, c("turn", "role", "tools", "tokens")]
 ```
 
 Without an initialized project workspace, session files use a temporary directory.
@@ -151,7 +156,10 @@ see [Record, replay and export](script-as-history.html).
 A history document records executed code, decisions and bounded output. It does not
 automatically archive the full input dataset. Replay runs the recorded R procedure again;
 provide its input objects, packages and required files in a fresh session. Answer caches,
-checkpoints and artifact data snapshots are separate storage mechanisms.
+checkpoints and artifact data snapshots are separate storage mechanisms. File checkpoints back
+up the files Peter's tools name before they run, plus what a bounded scan of the working
+directory finds; other changed files have no automatic backup. See
+[Teams and background work](teams-and-background.html) for the limits and for rewinding.
 
 ## Permissions and concurrency
 

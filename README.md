@@ -15,6 +15,9 @@ inspect, reuse or modify.
 - **Keep a record you can rerun.** Record agent calls and their executed
   R code alongside your analysis, then replay the code with the required
   inputs and packages.
+- **Improve the agent on your own task.** Models revise the agent's
+  instructions from runs of your task; gptr keeps only revisions that
+  pass its checks and any of yours, round after round.
 
 ## Installation
 
@@ -103,7 +106,7 @@ session:
 
 ``` r
 session = peter("Fit mpg on wt in mtcars and store the model as fit.", mtcars)
-session |> peter("Which cars have the largest residuals in fit?")
+session |> peter("Store the residuals of fit as res. Which cars have the largest?")
 session$text
 coef(fit)
 ```
@@ -213,12 +216,22 @@ times (4 runs and 3 coach sessions by default) and takes minutes.
 
 ``` r
 auto_peter = gptr_tailor(peter, mode = "auto")
-slope_peter = gptr_coach("Regress mpg on wt in mtcars; store the slope as b.", mtcars,
-                         harness = auto_peter, check = function(r) is.numeric(r$objects$b))
+slope_peter = gptr_coach(
+  "Regress mpg on wt in mtcars; store the slope as b.", mtcars,
+  harness = auto_peter,
+  check = function(r) is.numeric(r$objects$b)
+)
 slope_peter("Regress mpg on hp in mtcars; store the slope as b.", mtcars)
 saveRDS(slope_peter, "slope_peter.rds")
-slope_peter = gptr_tailor(readRDS("slope_peter.rds"))  # load and check it in a later session
+# load and check it in a later session
+slope_peter = gptr_tailor(readRDS("slope_peter.rds"))
 ```
+
+The result is a harness too, so `gptr_coach(..., harness = slope_peter)`
+coaches it again on your next task: recursive self-improvement, limited
+to the coaching. See [Harnesses and
+coaching](https://broccolito.github.io/gptr/articles/tailor-and-coach.html)
+for what coaching may change and how gptr decides what to keep.
 
 ## Learn more
 
@@ -242,11 +255,14 @@ CRAN install, open it in R with
 
 ## Why Peter?
 
-The name honors Peter Naur's work on readable language definitions and
-Peter Cathcart Wason's research with Jonathan Evans on reasoning. In
-Naur's spirit, gptr records sessions as runnable documents. System 1 and
-System 2 name software roles in gptr; they imply nothing about human
-cognition. See [Why
+gptr reads as a grammar of Peter: g for grammar, as in ggplot2's grammar
+of graphics, and ptr for Peter, your agent in R. The name honors two
+Peters. Peter Naur edited the ALGOL 60 report, which defined the
+language's syntax in a readable grammar notation now called Backus-Naur
+Form; in that spirit, gptr records sessions as runnable documents. Peter
+Cathcart Wason studied human reasoning, and his dual-process account
+with Jonathan Evans inspires gptr's System 1 and System 2, names for
+software roles that imply nothing about human cognition. See [Why
 Peter?](https://broccolito.github.io/gptr/articles/why-peter.html) for
 the history and sources.
 

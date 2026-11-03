@@ -1,5 +1,6 @@
 ---
 title: "Token efficiency"
+description: "Budgets, caches and descriptions that keep context small."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Token efficiency}
@@ -95,7 +96,9 @@ aggregate(tokens ~ component, data = ledger, FUN = sum)
 
 The usage summary contains provider-reported input, output, cache reads/writes and cost.
 `by = "session"`, `"agent"`, `"model"` or `"route"` groups it; child requests are included
-once. `gptr_usage()` without a session also includes the process-level System 1 log.
+once. A typed System 1 decision made by an agent's R code is charged to that agent's session,
+its budget and its ancestors once. `gptr_usage()` without a session also includes the
+process-level System 1 log of decisions that no session owns.
 
 The detailed ledger estimates components such as tools, workspace, attached objects,
 transcript and tool results. Its sum can differ from reported usage because tokenizers,
@@ -161,11 +164,21 @@ reuse.
 | System 1 answer cache | Matching input, question and model | Metadata and `gptr_cache()` |
 | Replay / System 2 cache | Recorded code and saved answer | `gptr_blocks(path)`, `gptr_cache()` |
 
-A stable prefix makes provider cache reuse possible. Providers decide whether a cache hit
-occurs, subject to their support, minimum size, expiry and pricing; gptr does not guarantee a
-hit after the first request. Compaction, image elision, changed resources or rewind can break
-the prefix. Document replay makes no model request for a usable recorded call but still runs
-its R code. Clearing an answer cache changes what can be reused.
+Each request to the same model repeats the previous request and adds to its end: the session
+freezes its prompt and tool list, and messages are only appended. The provider can then read
+the repeated prefix from its cache. Compaction, image elision, rewind and changed resources can
+start a new prefix. gptr compares each request with the previous one to the same model; a
+difference it did not plan is recorded in the session as a cache break, and
+`options(gptr.check_prefix = "warn")` also warns.
+
+![Prompt caching, one request per row. Each request repeats the one before and appends the
+model's reply and the tool result; after compaction a summary replaces the older messages, so
+only the prompt and tools are repeated.](figures/prompt-prefix.svg){alt="Diagram: requests that repeat a cached prompt prefix"}
+
+Providers decide whether a cache hit occurs, subject to their support, minimum size, expiry
+and pricing; gptr does not guarantee a hit after the first request. Document replay makes no
+model request for a usable recorded call but still runs its R code. Clearing an answer cache
+changes what can be reused.
 
 ## Explicit ways to reduce context
 

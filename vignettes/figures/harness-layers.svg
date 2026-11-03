@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 0 232 140" width="417.6" height="252" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="240" height="140"/>
+<rect class="ln" x="8.5" y="112.5" width="200" height="22" rx="3"/>
+<text class="t" x="16" y="126.5">peter</text>
+<text class="n" x="96" y="126.5">tools, checks, budgets, undo</text>
+<g class="a1"><rect class="ln" x="8.5" y="86.5" width="200" height="22" rx="3"/><text class="t" x="16" y="100.5">fixed arguments</text><text x="96" y="100.5">mode = "auto"</text></g>
+<g class="a2"><rect class="ln" x="8.5" y="60.5" width="200" height="22" rx="3"/><text class="t" x="16" y="74.5">your rules</text><text class="n" x="96" y="74.5">never, require</text></g>
+<g class="a3"><rect class="ln" x="8.5" y="34.5" width="200" height="22" rx="3"/><text class="t" x="16" y="48.5">coaching</text><text class="n" x="96" y="48.5">note, skills, review, rules</text></g>
+<path class="ln a4" pathLength="1" d="M220 22V108H213M220 35H213"/>
+<text class="a4" x="236" y="16" text-anchor="end">gptr_tailor()</text>
+<g class="a5"><rect class="s2" x="14" y="4" width="11" height="16"/><text x="31" y="16">gptr_coach()</text><text class="n" x="97" y="16">coaches</text></g>
+<path class="ln a5" pathLength="1" d="M19.5 22V32" marker-end="url(#h)"/>
+</svg>

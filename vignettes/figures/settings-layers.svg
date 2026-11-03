@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 148" width="432" height="266.4" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="240" height="148"/>
+<text class="t" x="0" y="12">budget</text>
+<text x="140" y="12" text-anchor="middle">tokens</text>
+<text x="180" y="12" text-anchor="middle">cost</text>
+<text x="218" y="12" text-anchor="middle">turns</text>
+<text class="n" x="0" y="62">call argument</text>
+<text class="n" x="0" y="78">this R process</text>
+<text class="n" x="0" y="94">R options</text>
+<text class="n" x="0" y="110">project file</text>
+<text class="n" x="0" y="126">user file</text>
+<text class="n" x="0" y="142">package defaults</text>
+<g class="a1"><text x="140" y="142" text-anchor="middle">2e6</text><text x="180" y="142" text-anchor="middle">5</text></g>
+<text class="a2" x="180" y="126" text-anchor="middle">2</text>
+<g class="a3"><text x="180" y="78" text-anchor="middle">1</text><text x="218" y="78" text-anchor="middle">10</text></g>
+<text class="a4" x="218" y="62" text-anchor="middle">5</text>
+<path class="ln a5" pathLength="1" d="M177.6 139.5H182.4"/>
+<path class="ln a5" pathLength="1" d="M177.6 123.5H182.4"/>
+<path class="ln a5" pathLength="1" d="M213.4 75.5H222.6"/>
+<path class="ln a6" pathLength="1" d="M140 134V39" marker-end="url(#h)"/>
+<path class="ln a6" pathLength="1" d="M180 70V39" marker-end="url(#h)"/>
+<path class="ln a6" pathLength="1" d="M218 54V39" marker-end="url(#h)"/>
+<g class="a7"><rect class="ln" x="118.5" y="19.5" width="121" height="16" rx="3"/><text class="t" x="0" y="30.5">this call uses</text><text x="140" y="30.5" text-anchor="middle">2e6</text><text x="180" y="30.5" text-anchor="middle">1</text><text x="218" y="30.5" text-anchor="middle">5</text></g>
+</svg>

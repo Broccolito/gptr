@@ -1,5 +1,6 @@
 ---
 title: "Why Peter?"
+description: "The name gptr, for Peter Naur and Peter Wason, and what System 1 and System 2 mean."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Why Peter?}
@@ -9,8 +10,9 @@ vignette: >
 
 **gptr is the R package; Peter is your agent inside R.** Ask Peter with `peter()` to work
 with your live objects. A conversational model returns a session; a typed decision model
-returns a vector that ordinary R code can use. The name connects readable programs with
-the study of reasoning.
+returns a vector that ordinary R code can use. Read gptr as g for grammar, as in ggplot2's
+grammar of graphics, and ptr for Peter: a grammar of Peter. The name honors two Peters, Peter
+Naur for readable programs and Peter Cathcart Wason for the study of reasoning.
 
 ## Peter Naur: make the program readable
 
@@ -47,5 +49,7 @@ cognition or that Wason introduced those labels.
 
 Use [typed decisions](system-one.html) to screen or route inputs, keeping uncertainty visible.
 Use [agent sessions](language-models.html) to inspect objects and carry out requested R work.
+[Coach the agent](tailor-and-coach.html) on your own task: code, not a model, keeps a revision
+only when a new run passes its checks and any of yours.
 Keep useful work in a [readable history document](script-as-history.html), and verify the
 calculations and outputs before relying on a model-generated explanation.

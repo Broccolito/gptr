@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 108" width="432" height="194.4" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="240" height="108"/>
+<rect class="ln" x="0.5" y="6.5" width="62" height="80" rx="3"/>
+<text class="t" x="8" y="20">harness</text>
+<text x="15" y="36">note</text>
+<text x="15" y="49">skills</text>
+<text x="15" y="62">review</text>
+<text x="15" y="75">rules</text>
+<path class="ln a1" pathLength="1" d="M66 22H147" marker-end="url(#h)"/>
+<text class="n a1" x="106" y="17" text-anchor="middle">runs of your task</text>
+<rect class="s2" x="152" y="14" width="11" height="16"/>
+<rect class="s2" x="167" y="14" width="11" height="16"/>
+<text class="n" x="183" y="25">coaches</text>
+<path class="ln a2" pathLength="1" d="M165 35V68H136" marker-end="url(#h)"/>
+<text class="n a2" x="171" y="55">new coaching</text>
+<rect class="dot a3" x="128" y="59" width="2" height="18"/>
+<text class="n a3" x="129" y="91" text-anchor="middle">final run,</text>
+<text class="n a3" x="129" y="101" text-anchor="middle">checked by code</text>
+<path class="ln a4" pathLength="1" d="M124 68H67" marker-end="url(#h)"/>
+<text class="n a4" x="70" y="53">kept if passed:</text>
+<text class="n a4" x="70" y="63">next round</text>
+</svg>

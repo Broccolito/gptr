@@ -1,5 +1,6 @@
 ---
 title: "MCP"
+description: "Call MCP tools as R functions, or serve your R session over MCP."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{MCP}
@@ -15,6 +16,10 @@ MCP connects tools across applications. gptr can call an existing MCP server's t
 functions, or serve its live R session to another agent. A model provider is configured
 separately; see [Language models](language-models.html). All examples here require an existing
 server or change configuration, so they are shown without being run.
+
+![MCP in both directions. As a client, R sends JSON arguments to a server and receives an R
+value; as a server, R runs another agent's code on the objects already in your session and
+returns text and images.](figures/mcp-two-ways.svg){alt="Diagram: gptr as an MCP client and as an MCP server"}
 
 ## List first, connect when needed
 
@@ -102,6 +107,10 @@ gptr_mcp_remove("catalog", scope = "user")
 
 Removal closes the connection and deletes that gptr entry. An entry in another scope or another
 application's configuration can still exist; edit its owning configuration to remove it there.
+
+Peter can find these functions while it works: `peter$search("mcp server")` lists them, and
+`peter$help("gptr::gptr_mcp_add")` reads this help page. A call from model code that changes
+gptr's configuration still needs your approval, except in `yolo` mode.
 
 ## Call tools as R functions
 

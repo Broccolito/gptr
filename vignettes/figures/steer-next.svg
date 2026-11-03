@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 152" width="468" height="273.6" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="260" height="152"/>
+<text class="t" x="0" y="20">your console</text>
+<rect class="s2" x="199" y="2" width="22" height="32"/>
+<text class="n" x="226" y="21">Peter</text>
+<path class="ln" d="M210 38V148"/>
+<text class="a1" x="0" y="50">peter&gt; fit mpg ~ wt</text>
+<path class="ln a1" pathLength="1" d="M104 47H206" marker-end="url(#h)"/>
+<text class="a2" x="0" y="68">steer&gt; use log(mpg)</text>
+<rect class="dot a3" x="203" y="83" width="14" height="2"/>
+<path class="ln a3" pathLength="1" d="M104 65L202 83" marker-end="url(#h)"/>
+<text class="n a3" x="150" y="64" text-anchor="middle">at its next step</text>
+<text class="a4" x="0" y="98">next&gt; plot it</text>
+<path class="ln a5" pathLength="1" d="M208 116H104" marker-end="url(#h)"/>
+<text class="n a5" x="156" y="111" text-anchor="middle">answer</text>
+<path class="ln a6" pathLength="1" d="M12 103V131" marker-end="url(#h)"/>
+<text class="a6" x="0" y="140">peter&gt; plot it</text>
+<path class="ln a6" pathLength="1" d="M78 137H206" marker-end="url(#h)"/>
+<text class="n a6" x="142" y="132" text-anchor="middle">after the answer</text>
+</svg>

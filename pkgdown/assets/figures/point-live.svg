@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 108" width="432" height="194.4" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="240" height="108"/>
+<rect class="ln" x="0.5" y="30.5" width="239" height="77" rx="3"/>
+<text class="n" x="232" y="101" text-anchor="end">your R session</text>
+<text x="10" y="51">mtcars</text>
+<circle class="dot" cx="50" cy="48" r="2"/>
+<path class="ln" d="M50 48H230"/>
+<g class="a1"><rect class="s2" x="40" y="5" width="5" height="8"/><text x="49" y="12">peter("fit")</text></g>
+<path class="ln a1" pathLength="1" d="M78 17V28" marker-end="url(#h)"/>
+<path class="ln a2" pathLength="1" d="M78 51V64.5" marker-end="url(#h)"/>
+<g class="a3"><text x="10" y="71">fit</text><circle class="dot" cx="78" cy="68" r="2"/></g>
+<path class="ln a3" pathLength="1" d="M78 68H230"/>
+<g class="a4"><rect class="s2" x="113" y="5" width="5" height="8"/><text x="122" y="12">|&gt; peter("residuals")</text></g>
+<path class="ln a4" pathLength="1" d="M172 17V28" marker-end="url(#h)"/>
+<path class="ln a5" pathLength="1" d="M172 71V84.5" marker-end="url(#h)"/>
+<g class="a6"><text x="10" y="91">res</text><circle class="dot" cx="172" cy="88" r="2"/></g>
+<path class="ln a6" pathLength="1" d="M172 88H230"/>
+</svg>

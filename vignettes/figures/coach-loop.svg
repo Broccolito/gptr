@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="11 0 229 252" width="412.2" height="453.6" id="dark">
+<style>
+svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
+.bg{fill:var(--bg)}
+.ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
+.dash{stroke-dasharray:3 2.5}
+.dot{fill:var(--ink)}
+.s1{fill:var(--s1)}
+.s2{fill:var(--s2)}
+text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+[pathLength]{stroke-dasharray:1}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
+<rect class="bg" width="240" height="252"/>
+<rect class="ln" x="60.5" y="4.5" width="119" height="30" rx="3"/>
+<text class="t" x="120" y="17" text-anchor="middle">harness</text>
+<text class="n" x="120" y="28" text-anchor="middle">note, skills, review, rules</text>
+<path class="ln a1" pathLength="1" d="M120 37V47" marker-end="url(#h)"/>
+<circle class="ln a1" pathLength="1" cx="120" cy="54" r="4.5"/>
+<text class="n a1" x="129" y="57">try</text>
+<rect class="s2" x="60.5" y="70" width="11" height="16"/>
+<rect class="s2" x="168.5" y="70" width="11" height="16"/>
+<text class="n" x="55" y="81" text-anchor="end">procedure</text>
+<text class="n" x="185" y="81">domain</text>
+<path class="ln a2" pathLength="1" d="M115 57L76 71" marker-end="url(#h)"/>
+<path class="ln a2" pathLength="1" d="M125 57L164 71" marker-end="url(#h)"/>
+<path class="ln a3" pathLength="1" d="M66 90V100" marker-end="url(#h)"/>
+<path class="ln a3" pathLength="1" d="M174 90V100" marker-end="url(#h)"/>
+<circle class="ln a3" pathLength="1" cx="66" cy="107" r="4.5"/>
+<circle class="ln a3" pathLength="1" cx="174" cy="107" r="4.5"/>
+<text class="n a3" x="75" y="110">probe</text>
+<text class="n a3" x="183" y="110">probe</text>
+<rect class="s2" x="114.5" y="124" width="11" height="16"/>
+<text class="n" x="131" y="135">composer</text>
+<path class="ln a4" pathLength="1" d="M70 111L110 128" marker-end="url(#h)"/>
+<path class="ln a4" pathLength="1" d="M170 111L130 128" marker-end="url(#h)"/>
+<path class="ln a5" pathLength="1" d="M120 144V154" marker-end="url(#h)"/>
+<circle class="ln a5" pathLength="1" cx="120" cy="161" r="4.5"/>
+<text class="n a5" x="129" y="164">final</text>
+<path class="ln a6" pathLength="1" d="M120 166V175" marker-end="url(#h)"/>
+<rect class="dot a6" x="94" y="178" width="52" height="2"/>
+<text class="t a6" x="152" y="182">code decides</text>
+<text class="n a6" x="152" y="192">your check,</text>
+<text class="n a6" x="152" y="201">no riskier action</text>
+<path class="ln a7" pathLength="1" d="M108 183L84 215" marker-end="url(#h)"/>
+<path class="ln a7" pathLength="1" d="M132 183L156 215" marker-end="url(#h)"/>
+<g class="a7"><rect class="ln" x="24.5" y="218.5" width="96" height="30" rx="3"/><text class="t" x="72" y="231" text-anchor="middle">new harness</text><text class="n" x="72" y="242" text-anchor="middle">kept if checks pass</text></g>
+<g class="a7"><rect class="ln" x="130.5" y="218.5" width="96" height="30" rx="3"/><text class="t" x="178" y="231" text-anchor="middle">starting harness</text><text class="n" x="178" y="242" text-anchor="middle">returned otherwise</text></g>
+<path class="ln a7" pathLength="1" d="M24 233.5H12V19H56" marker-end="url(#h)"/>
+<text class="n a7" x="16" y="50">coach</text>
+<text class="n a7" x="16" y="60">again</text>
+</svg>

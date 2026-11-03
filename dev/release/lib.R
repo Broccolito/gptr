@@ -478,7 +478,8 @@ stale_problems = function(source_lines, knitted_lines, where) {
   sprintf("%s: code differs from its source; re-run dev/release/precompute.R", where)
 }
 
-# The exact canonical light/dark vectors, embedded so source and installed guides need no assets.
+# The exact canonical light/dark vectors and the figure styles, embedded so source and installed
+# guides need no assets. Figures are SVG images in their light colours on this white page.
 vig_brand_block = function(root) {
   encode = function(name) {
     path = file.path(root, "man", "figures", name)
@@ -493,13 +494,19 @@ vig_brand_block = function(root) {
   light = encode("logo.svg")
   dark = encode("logo-dark.svg")
   c("<!-- gptr-vignette-brand:start -->", "<style>",
-    "html:not([data-bs-theme]) body { background: #fff; color: #1c1e22; }",
+    "html:not([data-bs-theme]) body { background: #fff; color: #1c1e22; color-scheme: light; }",
     ".gptr-vignette-brand { float: right; width: 120px; margin: 0 0 1rem 1rem; }",
     ".gptr-vignette-brand img { display: block; max-width: 100%; height: auto; }",
     "html[data-bs-theme] .gptr-vignette-brand { display: none; }",
     "@media (max-width: 600px) {",
     "  .gptr-vignette-brand { float: none; width: 72px; margin: 0 0 1rem; }",
-    "}", "</style>", '<picture class="gptr-vignette-brand">',
+    "}",
+    "figure, .float { width: fit-content; max-width: 100%; margin: 1.5rem auto; }",
+    paste("figure img, .float img { display: block; width: 100%; height: auto; margin: 0;",
+          "padding: 0; border: 0; background: none; }"),
+    paste("figcaption, .figcaption { contain: inline-size; margin-top: 0.5rem; font-size: 0.875em;",
+          "color: var(--bs-secondary-color, #4a4e55); }"),
+    "</style>", '<picture class="gptr-vignette-brand">',
     paste0('  <source media="(prefers-color-scheme: dark)" srcset="', dark, '">'),
     paste0('  <img src="', light, '" width="120" height="139" alt="gptr logo">'),
     "</picture>", "<!-- gptr-vignette-brand:end -->")
