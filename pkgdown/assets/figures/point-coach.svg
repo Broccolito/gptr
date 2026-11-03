@@ -42,6 +42,5 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <text class="n a3" x="129" y="101" text-anchor="middle">checked by code</text>
 <path class="ln a4" pathLength="1" d="M124 68H67" marker-end="url(#h)"/>
 <text class="n a4" x="70" y="78">kept if passed</text>
-<path class="ln a5" pathLength="1" d="M76 68C96 64 96 30 77 26.5" marker-end="url(#h)"/>
-<text class="n a5" x="96" y="48">coach again</text>
+<text class="n a5" x="96" y="47" text-anchor="middle">next round</text>
 </svg>

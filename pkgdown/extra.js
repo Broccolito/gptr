@@ -62,7 +62,8 @@ document.addEventListener("DOMContentLoaded", () => {
       "that code in an R session with no model call."],
     "Improve the agent on your own task.": ["coach", "A harness of note, skills, review and " +
       "rules runs your task; coaches write new coaching; code checks a final run with it, the " +
-      "revised harness is kept only if that run passes, and a kept harness can be coached again."]
+      "revised harness is kept only if that run passes, and the next round starts from the " +
+      "harness."]
   };
   document.querySelectorAll(".template-home #main > .section > ul > li > strong:first-child")
     .forEach((lead) => {
