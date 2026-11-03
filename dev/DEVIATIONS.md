@@ -9589,3 +9589,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   reads symbols by name ...", "large values are described instead of sent ..."; gptr-capture
   "gateway_context_items() builds the context items ...". Evidence:
   progress/fixes-1.0.1/lane-C.md.
+
+## D-322 - Fixes 1.0.1 lane C Gateway refusals of System 1 and agent arguments (2026-11-02)
+- Rule (unknown model): `route_refuse_s1_args()` first resolves a character `model =` that
+  `gateway_model_type()` cannot type (`run_model_resolve()`, with the continued session's own
+  providers), so a reference that resolves to nothing is `gptr_error_unknown_model` with its
+  suggestions. Was "model jev-1.14.0 is conversational, so peter() would start a conversation",
+  for the physical id a decision's `meta$model` reports, on the `new`, `nested` and `continue`
+  routes (an unresolved model counted as conversational).
+- Contract-visible: 04 section 6.1.1 (the System 1 argument refusal).
+- Tests: gptr-gateway "System 1 arguments with an unknown model name the unknown model (D-322)".
+  Evidence: progress/fixes-1.0.1/lane-C.md.

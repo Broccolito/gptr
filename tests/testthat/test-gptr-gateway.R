@@ -1197,6 +1197,19 @@ test_that("System 1 arguments are refused on a conversational route (D-250)", {
   expect_length(fake_requests(fake), 2L)
 })
 
+test_that("System 1 arguments with an unknown model name the unknown model (D-322)", {
+  local_gw()
+  fake = local_fake_provider(list("ok"))
+  # the id a decision's meta reports, which the catalog may not list yet
+  cnd = expect_error(peter("Is it fine?", c("ok", "bad"), model = "jev-1.14.0",
+                           choices = c("yes", "no")), class = "gptr_error_unknown_model")
+  expect_false(grepl("conversational", conditionMessage(cnd), fixed = TRUE))
+  s = peter("Start.", model = fake, envir = new.env())
+  expect_error(s |> peter("Which?", model = "nosuch/nosuch-1", levels = c("lo", "hi")),
+               class = "gptr_error_unknown_model")
+  expect_length(fake_requests(fake), 1L)
+})
+
 test_that("gateway_model_ref() and router_model() keep colon ids and thinking levels (IC-74)", {
   local_gw()
   local_fake_provider(list("x"), name = "fake2")

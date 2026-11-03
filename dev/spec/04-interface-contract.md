@@ -1116,9 +1116,10 @@ context and signals the warning `partial_name` naming each such formal (D-251).
    `GPTR_REPLAY=replay` still proves that a script makes no model calls. The `team`, `fanout`, `nested`,
    `continue` and `new` routes refuse the System 1 arguments before anything starts: `.opts$system1_images`,
    then the first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain`, as
-   `gptr_error_invalid_argument` naming it, since a conversation would ignore them; a decision model serves
-   them, and `model = jev` runs through a chat model after `gptr_config(system1 = "emulate:<ref>")`, which
-   alone moves no call to emulation (IC-74, D-250). P19's call of P08's `route_refuse_s1_args()` is a
+   `gptr_error_invalid_argument` naming it, since a conversation would ignore them, but a model reference that
+   resolves to nothing (`"jev-1.14.0"`) is `gptr_error_unknown_model` with its suggestions (D-322); a decision
+   model serves them, and `model = "jev"` runs through a chat model after
+   `gptr_config(system1 = "emulate:<ref>")`, which alone moves no call to emulation (IC-74, D-250). P19's call of P08's `route_refuse_s1_args()` is a
    contract edge of the layering test (12.2). The `classifier` route, which matches first, refuses `agents`,
    then `parallel`, as `gptr_error_invalid_argument` naming it: a decision model answers in one call.
 

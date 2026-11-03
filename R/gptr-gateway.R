@@ -1340,6 +1340,11 @@ route_refuse_s1_args = function(call) {
             threshold = !is.null(a$threshold) && !identical(a$threshold, 0.5),
             min_confidence = !is.null(a$min_confidence), uncertain = !is.null(a$uncertain))
   if (!any(given)) return(invisible(TRUE))
+  # a model reference nothing resolves is named as unknown, with its suggestions (D-322)
+  m = call$ids$model
+  if (is.character(m) && is.na(gateway_model_type(m))) {
+    run_model_resolve(m, if (!is.null(call$session)) session_data(call$session)$id)
+  }
   arg = names(given)[given][1L]
   label = gateway_model_label(call$ids$model)
   who = if (is.na(label)) "this call" else paste("model", label)
