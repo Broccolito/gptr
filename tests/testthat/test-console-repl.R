@@ -1656,7 +1656,7 @@ test_that("a terminal answering the probe has its prompt on the band, reset afte
     "fake = gptr_fake_provider(function(req) paste0('GOT ', req$last_user, ' END'))",
     "invisible(peter(model = fake, envir = new.env()))"
   ))
-  expect_true(pty$wait("\033]11;?\033\\\033[c", timeout = 120))
+  expect_true(pty$wait("\033]11;?\033\\\033[6n\033[c", timeout = 120))
   pty$send("\033]11;rgb:ffff/ffff/ffff\033\\\033[?62;22c")
   expect_true(pty$wait("\033[48;5;255mpeter> \033[K"))
   pty$send("hi\r")
@@ -1678,7 +1678,7 @@ test_that("a terminal answering the probe late still has the answer read by it (
     "fake = gptr_fake_provider(function(req) paste0('GOT [', req$last_user, '] END'))",
     "invisible(peter(model = fake, envir = new.env()))"
   ))
-  expect_true(pty$wait("\033]11;?\033\\\033[c", timeout = 120))
+  expect_true(pty$wait("\033]11;?\033\\\033[6n\033[c", timeout = 120))
   # over ssh or on a loaded machine: after the probe's first cap, 250 ms
   Sys.sleep(0.4)
   pty$send("\033]11;rgb:ffff/ffff/ffff\033\\\033[?62;22c")
