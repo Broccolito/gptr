@@ -1491,7 +1491,7 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' line, unless a question comes first: it reads the line, queues it as `type_ahead` says and asks
 #' again. Positron's console keeps typed text as R code, which runs after `peter()` returns, and
 #' clears it at Ctrl-C. To steer in these consoles, pause and press `s` (Windows' Rgui cannot
-#' pause), as their banner and bottom row say: `esc, then s, to steer` in RStudio and R.app,
+#' pause), as their banner says: `esc, then s, to steer` in RStudio and R.app,
 #' `ctrl-c, then s, to steer` in Positron and Windows' Rterm. In RStudio an Esc first closes
 #' RStudio's own completion list, if open, then clears a line being typed, so the menu comes at the
 #' next Esc. During `peter("...")` at R's prompt, outside the chat, typed lines stay R's next input.
