@@ -303,7 +303,15 @@ test_that("HTTP MCP path and authentication configuration edits invalidate login
     conn$project = project_root()
     mcp_http_setup(conn)
   }
-  expect_s3_class(mcp_http_auth(connect(spec))[[2]], "gptr_secret")
+  conn = connect(spec)
+  get = auth_store_get
+  reads = 0L
+  local_mocked_bindings(auth_store_get = function(key) {
+    reads <<- reads + 1L
+    get(key)
+  })
+  expect_s3_class(mcp_http_auth(conn)[[2]], "gptr_secret")
+  expect_identical(reads, 1L)                  # one record read (and keyring access) per request
   moved = utils::modifyList(spec, list(url = "https://mcp.example/other-account"))
   expect_null(mcp_http_auth(connect(moved)))
   edited = utils::modifyList(spec, list(headers = list(`X-Account` = "another")))

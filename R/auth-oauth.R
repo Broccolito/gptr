@@ -385,9 +385,9 @@ oauth_remember = function(key, access, origin) {
 #' in-memory access token, else an OAuth refresh under a lock (`force` = refresh now, after a 401).
 #' A record that names its `resource` is handed only to that resource's origin: a server whose
 #' URL changed (another config reusing the name) gets no credential and asks for a sign-in.
+#' A caller that already read the record passes it as `rec`.
 #' @noRd
-oauth_access = function(key, origin, force = FALSE) {
-  rec = auth_store_get(key)
+oauth_access = function(key, origin, force = FALSE, rec = auth_store_get(key)) {
   if (is.null(rec)) return(NULL)
   if (is.character(rec$resource) && !is.null(origin) &&
         !identical(url_origin(rec$resource), url_origin(origin))) {

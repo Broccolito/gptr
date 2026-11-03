@@ -1207,7 +1207,7 @@ mcp_http_auth = function(conn, force = FALSE) {
     }
     if (rlang::is_string(rec$resource) &&
           !identical(url_for_log(rec$resource), url_for_log(conn$url))) return(NULL)
-    oauth_access(conn$auth_key, conn$origin, force = force)
+    oauth_access(conn$auth_key, conn$origin, force = force, rec = rec)
   },
            gptr_error = function(e) {
              registry_diagnostic("builtin:mcp", "mcp_auth", class(e)[1L], conditionMessage(e))
