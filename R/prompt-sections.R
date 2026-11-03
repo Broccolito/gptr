@@ -354,7 +354,7 @@ preset_shipped_applies = function(model, mrec, static, human, kind) {
 #' @noRd
 prompt_register_presets = function(gptr) {
   minimal_off = c(r_session = FALSE, r_performance = FALSE, documents = FALSE,
-                  artifacts = FALSE, system1 = FALSE, skills = FALSE, mcp = FALSE,
+                  artifacts = FALSE, skills = FALSE, mcp = FALSE,
                   plugins = FALSE, r_env = FALSE)
   gptr$register(gptr_spec("preset", "minimal", tools = c("read", "r", "edit", "write"),
                           sections = minimal_off, preamble = "short"))
@@ -769,7 +769,7 @@ prompt_register_sections = function(gptr) {
   gptr$register(gptr_prompt_section("rules", prompt_section_rules, tier = "T0", order = 300L,
                                     budget = 450L))
   gptr$register(gptr_prompt_section("r_session", prompt_section_r_session, tier = "T0",
-                                    order = 400L, budget = 500L))
+                                    order = 400L, budget = 550L))
   gptr$register(gptr_prompt_section("r_performance", prompt_section_r_performance, tier = "T0",
                                     order = 450L, budget = 450L))
   gptr$register(gptr_prompt_section("modes", prompt_text("modes"), tier = "T0", order = 700L,

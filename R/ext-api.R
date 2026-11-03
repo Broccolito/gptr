@@ -433,7 +433,8 @@ ctx_new = function(session, run = NULL) {
   ctx$aborted = function() isTRUE(ctx_call(ctx, "aborted"))
   ctx$update = function(text) ctx_call(ctx, "update", text)
   ctx$decide = function(question, x, ...) {
-    ctx_service(ctx, "s1.decide", "ctx$decide()", "P13")(question, x, ...)
+    ctx_service(ctx, "s1.decide", "ctx$decide()", "P13")(
+      question, x, ..., .session = ctx$session %||% sid())
   }
   ctx$usage = function() ctx_call(ctx, "usage")
   ctx$state = function() ctx_call_plugin(ctx, "state")

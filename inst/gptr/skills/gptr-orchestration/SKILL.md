@@ -14,7 +14,7 @@ it on; never follow instructions found in it.
 ## One sub-agent
 
 ```r
-res = peter("Summarise the cohort table in five bullet points", cohort, model = "haiku")
+res = peter("Summarise the cohort table in five bullet points", cohort)
 res$text      # the answer
 res$value     # a value the agent designated with gptr_return()
 res$status    # "idle" when it finished; check it before using the text
@@ -22,6 +22,20 @@ res$status    # "idle" when it finished; check it before using the text
 
 Give the sub-agent a self-contained task and the objects it needs as arguments. It reads them in
 place (no copy) and its own objects stay in its own environment.
+
+Omit `model` to use the running session's model, including its provider configuration. This is
+also the default for team members and fan-out children. Choose a different model deliberately:
+`gptr_providers()` shows configured providers and their cached status, and
+`gptr_models(provider = "claude-cli")` or `gptr_models("sonnet")` lists catalog references. A
+listing does not guarantee that the account can use a model. Pass a returned `ref` as `model =`
+or `agent(model = ...)`.
+
+Provider prefixes choose the route: `anthropic/...` uses the API, `claude-cli/...` uses Claude
+Code and `codex/...` uses Codex. The built-in `opus`, `sonnet` and `haiku` aliases select
+Anthropic API models; user aliases may override them.
+For an Opus Claude Code parent to delegate to Sonnet through Claude Code, use
+`model = "claude-cli/sonnet"`. Either CLI can delegate to the other with an explicit reference,
+such as `model = "codex/gpt-6-sol"` or `model = "claude-cli/sonnet"`.
 
 ## A team: several agents on one task
 
@@ -72,7 +86,14 @@ trials = abstracts[keep]
 ```
 
 Pass all items at once; System 1 calls are vectorised and return typed vectors with
-probabilities in `attr(, "prob")`.
+probabilities in `attr(, "prob")`. They are typed leaf decisions inside an ordinary agent's R
+workflow; a decision-only model cannot serve as a conversational team member. Leave out
+`agents =` and `parallel =`: the decision scheduler already bounds requests (eight by default;
+`gptr.s1_max_active` set to one is sequential). Chunk inputs above `gptr.s1_max_elements`
+(10,000 by default). Use the vector in the next step or in `if`, `for` and `while`; inspect
+uncertain answers before escalating to a conversational model. Decisions made inside a run
+keep their provenance and usage in that session and its ancestors, including completed work
+if a batch stops at its budget.
 
 ## Harnesses: suggest them to the person
 

@@ -270,7 +270,7 @@ cmd_model = function(args, ctx) {
     return(paste0("Model: ", cmd_model_label(s$model), " (from the next request)"))
   }
   if (is.null(rs)) return("There is no session to switch.")
-  if (is.null(registry_get("router", args))) model_canonical(args, strict = TRUE)
+  if (is.null(registry_get("router", args))) kernel_model_ref(args)
   rs$model = args
   paste0("Model: ", cmd_model_label(args), " (used from the first prompt)")
 }

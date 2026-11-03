@@ -664,7 +664,8 @@ s1_cost = function(usage, model) {
 #' Unknown token counts stay NA (IC-74). A NULL, NA or "" `request_id` gets a fresh id; any other
 #' value that is not one string is refused by usage_row() (D-015).
 #' @noRd
-s1_usage_log = function(model, route, input, output, request_id, session_id, started, seconds) {
+s1_usage_log = function(model, route, input, output, request_id, session_id, started, seconds,
+                         parent_id = NA_character_) {
   u = usage_cost(usage_new(input = input, output = output), model)
   api = model[["api"]]
   if (!rlang::is_string(api)) api = "unknown"
@@ -674,8 +675,10 @@ s1_usage_log = function(model, route, input, output, request_id, session_id, sta
   }
   msg = msg_assistant(list(), api = api, provider = model[["provider"]], model = model[["id"]],
                       usage = u, route = route, request_id = rid)
-  usage_log_append(usage_row(msg, session = session_id, agent = "s1", parent_id = NA_character_,
-                             started = started, seconds = seconds, multiplier = 1))
+  row = usage_row(msg, session = session_id, agent = "s1", parent_id = parent_id,
+                  started = started, seconds = seconds, multiplier = 1)
+  usage_log_append(row)
+  invisible(row)
 }
 
 #' One System 2 request on the reactor (emulation; contract 8.4); returns the transfer or task id

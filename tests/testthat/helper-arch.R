@@ -166,15 +166,20 @@ arch_kernel_sdk = function() {
 # session_new(); a served MCP call runs P06's tool_call_hook(), its tool and the checkpointers as
 # the loop does (tool_run(), tool_execute_frame(), checkpoint_before(), checkpoint_after()),
 # words a denial and why it did not run as the loop does (perm_denial_text(), perm_refused()) and
-# binds P10's r-call marker for a served `r` call (r_call_new()), the
-# console's /model checks a reference with P06's model_canonical() (IC-79), /model and /status name
+# binds P10's r-call marker for a served `r` call (r_call_new()); P19 chooses a backend with
+# P06's model_canonical() before starting a child (section 7.19), and its worker freezes P05's
+# model_default("system1") role (section 11.11). The console's /model checks a reference with
+# the same canonical helper (IC-79), /model and /status name
 # the full id behind a CLI's `default` with P20's pcli_default_model() (section 11.10, D-226), the
 # console takes back the person's queued steers with session_unqueue() (section 7.6, D-242), and its
 # run status and /context measure the context left against P07's compact_threshold() of
 # prompt_model()'s record (IC-77, D-245); P19's team and fan-out routes refuse the System 1
-# arguments with P08's route_refuse_s1_args() (section 6.1.1 step 5, D-250); P29's coaching
-# children (gptr-child.R) are scheduled, registered and revived with P19's worker helpers and
-# carry the person's rules from P11 (section 3.2, IC-86), and a harness's rules (gptr-tailor.R)
+# arguments with P08's route_refuse_s1_args() (section 6.1.1 step 5, D-250); P13 commits nested
+# decisions through P06's usage_add_durable(), usage_row_store(), budget_check() and
+# session_by_id() (section 7.13); the console validates conversational choices through P06's
+# kernel_model_ref(); P29's coaching children (gptr-child.R) are scheduled, registered and revived
+# with P19's worker helpers and carry the person's rules from P11 (section 3.2, IC-86), and a
+# harness's rules (gptr-tailor.R)
 # match calls with P11's rule_hit() and rule_glob_re(), are checked against P11's risk tables and
 # find a made file with P10's bounded walk_tree(), and its coaching skills may not take a name
 # P17's skill_discover() lists (08 section 3.2); P18's own write of a project's trust-gated
@@ -187,11 +192,14 @@ arch_contract_edges = function() {
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp",
                     "mcp", "console", "console", "console", "console", "console", "subagent",
+                    "subagent", "s1", "s1", "s1", "console", "s1", "subagent",
                     rep("gptr", length(gptr_child)), "mcp", "mcp"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
                "tool_execute_frame", "checkpoint_before", "checkpoint_after", "perm_denial_text",
                "perm_refused", "r_call_new", "model_canonical", "pcli_default_model",
                "session_unqueue", "compact_threshold", "prompt_model", "route_refuse_s1_args",
+               "model_canonical", "usage_add_durable", "budget_check", "usage_row_store",
+               "kernel_model_ref", "session_by_id", "model_default",
                gptr_child, "trust_holds", "trust_carry")
   )
 }

@@ -657,6 +657,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 | `gptr.doc_block` | P15 | `{doc, format, block, action: "insert"\|"replace"\|"stale-regenerate"\|"undone", prompt, sha, lines: [from, to], backend: "file"\|"deferred"\|"rstudio"\|"positron"\|"vscode"\|"transcript", model, mode}`; `model` and `mode`: a console turn's model reference (`provider/id[:thinking]`, `router:<name>`) and mode at the end of the turn, which the next statement of its session in that transcript is compared with (D-265); read with `[[` |
 | `gptr.replay` | P15 | `{doc, block, mode, turn, value}` (appended by `session_replay_apply()`/`session_replay_new()`, IC-46) |
 | `gptr.decision` | P13 | `{question, type, model, alias, n, summary, answers: [...] (at most 50), probs: [...], cached: int}` |
+| `gptr.s1_usage` | P13 | `{row}`: one completed decision attempt's canonical usage row, restored with the owning-session identity checks used for compaction usage; ancestor rows use `gptr.usage` |
 | `gptr.checkpoint` | P16 | G7 §3.1 shape (object names, addresses, sizes, classes, capture mode; file paths, hashes, modes; state names; artifact `current` before/after); never values |
 | `gptr.rewind` | P16 | `{from, to, keep, restore, report: [chr]}`; parented at the target, becomes the leaf |
 | `gptr.subagent` | P19 | `{child, backend, model, agent, status, file, usage: {...}}` |
@@ -2633,6 +2634,7 @@ row = usage_row(msg, session = s$id, agent = "main", parent_id = NA_character_, 
 | Function | Contract | Consumers |
 |---|---|---|
 | `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())` | a new idle `<session>`: id, `.d` defaults, weak live registration, `secret_discover_env()`, egress not yet checked; `home` is kept only when it is not a function frame (`globalenv()`, an explicit `envir`, an overlay) [R2]; the prompt is frozen lazily at the first run (the `prompt.freeze` service, P07) so that `session_start` handlers can contribute | P08, P13 (as_state), P19 |
+| `model_canonical(model, strict = FALSE, session = NULL)` | pure canonical `list(ref, thinking, type)`; lenient unknowns remain unresolved unless `strict = TRUE`. Strict resolution uses the ordinary catalog/alias precedence, then a provider registered only for `session` (named alone means its first declared model, or an explicit `provider/id[:thinking]`). No provider probing or model preparation; ambiguous catalog matches may check credential presence as the ordinary resolver does. P19's backend selection uses this helper as a narrow contract edge, preserving L4's prohibition on directly calling P05's resolver | P06, P08, P19, P21 |
 | `session_data(s)` | the `.d` environment | P06-P23 (read); writes only through the functions below |
 | `session_live(s)` | the live record or `NULL` (detached copy) | P06, P14, P19, P20, P21 |
 | `session_home(s)` | the kept home or `NULL` | P09, P16, P19 |
@@ -2925,12 +2927,34 @@ check_adapter(adapter_get("anthropic-messages"))
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `builtin_system1(gptr)` | `s1-client.R` | registers the provider `typesafe` (base URL `https://api.typesafe.ai/v1/`, key `TYPESAFE_API_KEY`, model alias `jev` -> `jev-latest`, `type = "classifier"`, `rate = list(requests_per_s = 40, tokens_per_s = 1e5)`, IC-64), gateway records of 04 §4, the adapter `typesafe-system-one` (`transport = "http_json"`, `classify`), the adapter `s1-emulate`, the route `classifier` (order 10), the `system1` prompt section (IC-68) and the service `s1.decide`; P13 also owns the example router `inst/gptr/examples/jev-router.R` (IC-69) | P02 load |
-| `s1_call(call)` | `s1-route.R` | the `classifier` route's `run()`: states by the batch rule, question type (`choices` -> choice, `levels` -> score, else `noul`), cache lookup, requests for misses, thresholds, abstention, result vector; appends `gptr.decision` to a piped session; emits `decision`; a top-level call writes its one-line block through the `doc.s1_block` service when P15 is loaded | P08 (route) |
+| `s1_call(call)` | `s1-route.R` | the `classifier` route's `run()`: states by the batch rule, question type (`choices` -> choice, `levels` -> score, else `noul`), cache lookup, requests for misses, thresholds, abstention, result vector; appends `gptr.decision` to an explicit session or the session evaluating the call; emits `decision`; a top-level call writes its one-line block through the `doc.s1_block` service when P15 is loaded | P08 (route) |
 | `as_state(x, label)` | `s1-route.R` | internal S3 generic: `default` (atomic -> its value as text for small character/numeric values, else the `describe_binding()` text), `gptr_session` (the last answer, at most `gptr.s1_state_max` characters, plus value facts), `data.frame` (a row record) | P13 |
 | `s1_states(values, label, labels = NULL)` | `s1-route.R` | the batch rule of §4.1.5 of `03` -> list of named states | P13 |
 | `s1_request(model, states, questions, opts)` | `s1-client.R` | deduplicates states, sends at most `gptr.s1_max_active` concurrent reactor requests, `gptr.s1_rounds` bounded rounds resubmitting only failures (408, 429, 5xx, network; `retry-after` capped at 60 s), parses answers by name (probabilities re-keyed by option name); returns `list(answers = list per state, usage, model_version, request_ids, errors = df)` | P13 |
 | `s1_cache_get(key)`, `s1_cache_put(key, record)` | `s1-cache.R` | memory (`the$s1_cache`) before a workspace exists, then `<root>/cache/s1/<2hex>/<sha256>.json` (§11.9) | P13 |
 | `s1_emulate(model, states, questions)` | `s1-emulate.R` | answers through a System 2 model's structured output (one request per state), `meta$calibrated = FALSE`; used only with `gptr_config(system1 = "emulate:<ref>")` | P13 |
+
+System 1 models are typed decision leaves in a System 2 workflow. Pass a vector or table to one
+`peter(question, inputs, model = ...)` call; native batching supplies bounded parallelism (default
+eight active requests, one for sequential execution) without conversational child sessions. The
+10,000-element limit and input ordering remain unchanged. Classifiers cannot open the chat console
+or become its model before the first prompt; one-shot typed calls remain available from console R.
+The configured System 1 guidance is also available to the minimal child preset.
+
+An explicit session, the current R-tool session, or `ctx$decide()`'s context owns the call's
+provenance and usage. Before each unique request/retry, P13 checks the owning run and ancestor
+budgets with `budget_check()`. Each completed attempt records its real usage, including failed
+attempts, through `usage_add_durable()` and a `gptr.s1_usage` owner record using `usage_row_store()`;
+these three named P06 edges are permitted for P13, with `session_by_id()` for ID-backed contexts.
+The console's named `kernel_model_ref(..., strict = TRUE)` edge rejects native classifiers and
+explicit `emulate:` references before opening a conversation or switching its model. Startup
+uses `strict = FALSE` so an unresolved conversational choice keeps the usual setup behavior.
+Completed answers enter the cache immediately,
+so interruption or budget exhaustion retains them. Unknown counts stay NA. Process and session
+usage deduplicate shared request ids; standalone calls keep one aggregate process row per batch.
+The driver sums retry usage before duplicate inputs are expanded. A cache miss announces the
+target and unique request count; completion announces the summary, respecting quiet/verbosity and
+escaping display controls without altering typed answers or stored provenance.
 
 Example calls:
 
@@ -3068,8 +3092,17 @@ mcp_close(conn)
 |---|---|---|---|
 | `builtin_subagents(gptr)` | `subagent-backends.R` | registers `backend` specs `inline`, `worker`, `cli` (the `cli` backend's tests are P20's, IC-36), the routes `team` (order 15) and `fanout` (order 16) (IC-39), and the `r_session` fragment for sub-agents (IC-68) | P02 load |
 | `subagent_backend(agent, model)` | `subagent-backends.R` | `chr(1)`: the `auto` rule (inline, except `cli` for CLI-only models; the agent's `backend` when given) | P19 |
+| `subagent_model_info(model, sid = NULL)` | `subagent-backends.R` | pure canonical selection through P06's `model_canonical(..., strict = TRUE, session = sid)`, a declared `subagent` contract edge (§12.2). Returns `ref` (including any thinking suffix), `provider`, `type` and the parent session's own provider/router `spec` for the canonical reference. Resolves aliases and CLI family references before backend/pool selection, worker egress/credential lookup or child events/reports; no model preparation or process I/O | P19 |
 | `subagent_start(spec, parent_run)` | `subagent-backends.R` | starts a child through the backend: `spec` = `list(agent = <spec:agent>, prompt, context (list of call items), model, mode, depth, export, objects, preset, rng_state, registry)`; returns a handle `list(session = <session>, fds = function() int, poll = function() NULL, cancel = function() NULL)`; enforces the limits of §6.13 of `03` (`max_tasks` only at depth >= 1, IC-39; pools capped at 2 under check, IC-60); budget charged to the root (IC-66) | P19 |
 | `worker_main(spec_path, result_path)` | `subagent-worker.R` | runs inside a fixed `Rscript --vanilla` child (started with `supervise_default()`, UTF8 pipes and the complete `child_env("worker")` vector): reads the spec (`readRDS`), re-registers `spec$registry` (IC-69), runs `peter()` with the `jsonl` frontend on stdout and answers on stdin (§11.11), exits on stdin EOF, EPIPE or a dead parent pid (checked every 5 s, IC-60), saves exports with `save_rds()`, its home written as a reference that the parent reads back as the proxy's overlay, so exports carry none of the worker's other objects (D-189) | P19 (Rscript/processx) |
+
+A child's model is its explicit spec or agent model, else its parent's model, then the settings
+default. Omitting `model` in a running session therefore preserves that model and its scoped
+provider/router spec, including when the global default differs. Selecting another conversational
+provider is supported in either direction between Claude Code and Codex; `claude-cli/sonnet` selects
+a Sonnet child of a Claude Code Opus parent. Provider-qualified references fix the route;
+the built-in `sonnet`/`opus` aliases select Anthropic API models unless overridden by the user.
+The normal provider consent, replay, permission and depth guards still apply before execution.
 
 Example calls:
 
@@ -3430,7 +3463,7 @@ blank line. T0 = sections with `tier =
 | `preamble` | T0 | 100 | 120 | always (minimal preset: the short variant) | P07 |
 | `tools` | T0 | 200 | 250 | always (lines of the active direct tools; the `ask` line only when `ask` is active) | P07 |
 | `rules` | T0 | 300 | 450 | always: the `guidelines` of the active direct tools in array order, then P07's three closing lines (minimal preset: two extra lines); `readonly` drops the edit/write lines (IC-68) | P07 (closing lines); P10 (tool guidelines) |
-| `r_session` | T0 | 400 | 500 | `r` active and the preset record includes it (not `minimal`): P07's core with `{{fragments}}` from `builtin:tools`, `builtin:bridges`, `builtin:lang`, `builtin:subagents` (IC-68) | P07 (core); P10, P22, P19 (fragments) |
+| `r_session` | T0 | 400 | 550 | `r` active and the preset record includes it (not `minimal`): P07's core with `{{fragments}}` from `builtin:tools`, `builtin:bridges`, `builtin:lang`, `builtin:subagents` (IC-68); the shipped composition estimates 494 tokens without a document and 515 with one, retaining the closing terminal-safety instruction | P07 (core); P10, P22, P19 (fragments) |
 | `r_performance` | T0 | 450 | 150 / 450 | `r` active and preset is not `minimal` (extended: the full text below) | P07 |
 | `documents` | T0 | 500 | 250 | a history document is bound (`ctx$input$document` non-NULL, from the `doc.site` service) | P15 (IC-68) |
 | `artifacts` | T0 | 600 | 150 | shiny installed and `builtin:artifacts` enabled | P23 (IC-68) |
@@ -4136,6 +4169,16 @@ invocation (CLI invocations always receive full ids). Merge order: snapshot < ca
 Spec file (written with `save_rds()`): `list(prompt, model, mode, depth, agent = <spec:agent>, objects = named
 list (values shipped by name), export = chr, preset, rng_state, settings = list, env_profile = "worker", registry =
 list(specs, plugins, filters))` (IC-69; the worker re-registers `registry` before running). The
+`settings` snapshot includes the canonical effective `system1` reference (retaining an explicit
+`emulate:` prefix) and `s1 = list(s1_max_active, s1_rounds, s1_state_max, s1_max_elements)`.
+P19 calls P05's pure `model_default("system1")` as a named contract edge, then P06's existing
+canonical-reference helper. `key_provider` names only the registered remote chat and configured
+System 1 providers, deduplicated; `child_env(..., provider = chr)` accepts these IDs, retaining
+scalar compatibility. Equal keys with the same case-insensitive environment name are deduplicated;
+different values for that name from distinct providers are refused without echoing either value.
+Their credentials travel only in the process environment, never in the
+spec or arguments. This local transfer does not request egress consent for an unused role;
+the actual System 1 dispatch keeps its ordinary consent and replay checks before network I/O. The
 child runs `worker_main(spec_path, result_path)`; stdout carries one JSON object per line (the `jsonl` frontend:
 events with Pi names plus `{"type":"ask","id","questions"}`, `{"type":"permission_request","id","request"}`,
 `{"type":"result","status","text","usage","turns"}`); stdin carries `{"type":"answer","id","answers"}`,
@@ -4300,7 +4343,7 @@ fake$log$requests[[2]]$last_results
 |---|---|---|
 | `fixtures/tokens/` | P01 | 12 content-class samples of G2's corpus, `counts.json` (o200k counts) |
 | `fixtures/oracles/report02/` | P06 | report 02's 24 loop, 42 store and 26 recovery checks as JSON |
-| `fixtures/bench/prefix-baseline.json` | P07 | `{"preset": {"minimal": 1262, "standard_core": 2335, "standard_all": 2813, "standard_interactive": 2956}, "sections": {...}, "estimator": "..."}` (IC-68) |
+| `fixtures/bench/prefix-baseline.json` | P07 | `{"preset": {"minimal": 1262, "standard_core": 2447, "standard_all": 2924, "standard_interactive": 3067}, "sections": {...}, "estimator": "..."}` (IC-68) |
 | `fixtures/sse/<api>/<case>.sse`, `.events.json`, `.message.json` | P12 | raw stream bytes; golden events; final message (thinking, redacted thinking, encrypted reasoning, parallel tools, overload, truncation) |
 | `fixtures/jev/<case>.json` | P13 | `{"request": {...}, "status": 200, "response": {...}}` in the 04a shapes |
 | `fixtures/docs/<case>.{R,Rmd,qmd,ipynb}` + `<case>.expected.*` | P15 | documents before and after block writes (CRLF, BOM, missing final newline, Python-written floats) |
@@ -5337,7 +5380,9 @@ calls and suggests `GPTR_REPLAY=replay`.
   makes an explicit `backend = "worker"` fail with `gptr_error_invalid_argument` naming it, and
   `auto` stays inline. The spec also carries, as `secrets`, the registered redacting secrets whose
   values occur in the shipped objects (`secrets_held()`), which `worker_main()` registers inactive
-  before its session starts, so the worker redacts them and no other key travels (D-295). P19
+  before its session starts, so the worker redacts them. No additional key travels in the spec
+  (D-295); only the designated chat and configured System 1 providers' credentials are forwarded
+  separately in the child environment (§11.11), never arbitrary registered provider keys. P19
   acceptance: a plugin `r` member and a `gptr_fake_provider()` spec work inside a worker.
 - **Token extension points**: `gptr_check(x, error = FALSE, tokens = FALSE)`; `tokens = TRUE` reports a plugin's
   declaration cost and the printed-result cost of each member on its examples. Truncation policies and catalog
@@ -5680,11 +5725,11 @@ totals line names the model and the context left.
   whose `tool_call` is `FALSE` gets no tools (IC-74 unchanged), and when that drops a non-empty array gptr gives one
   `gptr_message_notice` per model naming `tool_call = TRUE` and the `gptr_config(providers = ...)` declaration.
 - Model references: `model_match()` applies IC-19's provider-alone rule; `/model` before the first prompt checks
-  the reference with `model_canonical()` (a registered router name passes, as at the first prompt) and keeps the
+  the reference with `kernel_model_ref()` (a registered router name passes, as at the first prompt) and keeps the
   text as typed; `codex-cli` is an alias of `codex`. `/model` and `/status` show a built-in CLI's (claude,
   codex) `default` with the full id it runs (`claude-cli/default (claude-sonnet-5-5)`, 11.10); an unknown
   reference that starts with a known `provider/` gets suggestions from that provider's references only (D-226). The
-  console and MCP edges (`cmd_model()` -> `model_canonical()`, `cmd_model_label()` -> `pcli_default_model()`,
+  console and MCP edges (`cmd_model()` -> `kernel_model_ref()`, `cmd_model_label()` -> `pcli_default_model()`,
   `mcp_serve_exec()` -> `tool_call_hook`, `tool_run`, `tool_execute_frame`, `checkpoint_before`,
   `checkpoint_after`, `perm_denial_text` and `perm_refused`, which word a denial and why the call did not run as
   the loop does, IC-77; `mcp_serve_r()` -> `r_call_new`) are contract edges of the

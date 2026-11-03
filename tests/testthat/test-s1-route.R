@@ -673,7 +673,8 @@ test_that("a piped session gets a gptr.decision entry and the decision event its
   turns = session_data(s)$turns
   s1_call(s1_test_call("Is the work done?", model = judge, session = s))
   entries = session_data(s)$entries
-  expect_length(entries, n0 + 1L)
+  expect_length(entries, n0 + 2L)
+  expect_identical(entries[[n0 + 1L]]$custom_type, "gptr.s1_usage")
   e = entries[[length(entries)]]
   expect_identical(e$custom_type, "gptr.decision")
   expect_identical(e$data[c("question", "type", "model", "alias", "n", "cached")],

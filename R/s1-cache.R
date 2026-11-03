@@ -165,6 +165,7 @@ s1_cache_num = function(x) {
 #' JSON null (IC-74), and a score's legend (level descriptions, i.e. question text) is not stored.
 #' @noRd
 s1_cache_record = function(key, answer, model_version, alias, question, state, salt, usage) {
+  if (!is.list(usage)) usage = list()
   type = answer[["type"]]
   probs = answer[["probabilities"]]
   choice = answer[["choice"]]

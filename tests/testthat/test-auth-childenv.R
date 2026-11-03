@@ -95,6 +95,66 @@ test_that("the worker keeps R_ARCH for architecture-specific executable lookup (
   expect_identical(child_env("worker")[["R_ARCH"]], "/x64")
 })
 
+test_that("workers receive only their designated chat and System 1 provider keys", {
+  local_vault()
+  local_fake_env()
+  providers = list(
+    gptr_provider("worker-chat-key", api = "openai-completions",
+                  base_url = "https://chat.test/v1", auth = "OPENAI_API_KEY"),
+    gptr_provider("worker-s1-key", api = "typesafe-system-one", type = "classifier",
+                  base_url = "https://judge.test/v1", auth = "TYPESAFE_API_KEY"))
+  off = lapply(providers, gptr_register)
+  withr::defer(for (f in off) f())
+  ids = vapply(providers, `[[`, "", "id")
+  env = child_env("worker", provider = c(ids, ids[[1L]]))
+  expect_identical(sort(intersect(secret_vars, names(env))),
+                    c("OPENAI_API_KEY", "TYPESAFE_API_KEY"))
+  expect_identical(env[["TYPESAFE_API_KEY"]], fake_env()[["TYPESAFE_API_KEY"]])
+  expect_identical(env[["OPENAI_API_KEY"]], fake_env()[["OPENAI_API_KEY"]])
+  expect_false(anyDuplicated(names(env)) > 0L)
+  withr::local_envvar(TYPESAFE_API_KEY = NA)
+  secret_register(fake_env()[["TYPESAFE_API_KEY"]], "TYPESAFE_API_KEY", source = "test")
+  expect_identical(child_env("worker", provider = ids)[["TYPESAFE_API_KEY"]],
+                    fake_env()[["TYPESAFE_API_KEY"]])
+  expect_error(child_env("worker", provider = c(ids, NA_character_)),
+               class = "gptr_error_invalid_argument")
+  expect_error(child_env("worker", provider = c(ids, "")),
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("designated provider keys reject case-insensitive ambiguity without exposing values", {
+  local_vault()
+  same = paste0("FAKE-shared-", "worker-key-12345")
+  different = paste0("FAKE-different-", "worker-key-12345")
+  first = secret_register(same, "WORKER_SHARED_KEY", source = "test")
+  second = secret_register(same, "worker_shared_key", source = "test")
+  third = secret_register(different, "Worker_Shared_Key", source = "test")
+  calls = 0L
+  providers = list(
+    gptr_provider("worker-key-first", api = "openai-completions",
+      base_url = "https://shared.test/v1", auth = function() {
+        calls <<- calls + 1L
+        first
+      }),
+    gptr_provider("worker-key-same", api = "openai-completions",
+      base_url = "https://shared.test/v1", auth = function() second),
+    gptr_provider("worker-key-conflict", api = "openai-completions",
+      base_url = "https://shared.test/v1", auth = function() third))
+  off = lapply(providers, gptr_register)
+  withr::defer(for (f in off) f())
+  ids = vapply(providers, `[[`, "", "id")
+  env = child_env("worker", provider = c(ids[[1L]], ids[[2L]], ids[[1L]]),
+                   set = c(WORKER_SHARED_KEY = "FAKE-explicit-set-key-12345"))
+  expect_identical(calls, 1L)
+  selected = env[toupper(names(env)) == "WORKER_SHARED_KEY"]
+  expect_length(selected, 1L)
+  expect_identical(unname(selected), same)
+  err = expect_error(child_env("worker", provider = ids[c(1L, 3L)]),
+                       class = "gptr_error_invalid_argument")
+  expect_false(grepl(same, conditionMessage(err), fixed = TRUE))
+  expect_false(grepl(different, conditionMessage(err), fixed = TRUE))
+})
+
 test_that("cli-claude follows G6 3.7: enclosing-agent and billing variables go, with a warning", {
   local_vault()
   local_fake_env()

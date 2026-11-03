@@ -739,6 +739,20 @@ s1_doc_block = function(call, summary) {
   invisible(NULL)
 }
 
+#' The session owning a typed decision: its explicit session, else the run evaluating R
+#' @noRd
+s1_session = function(session = NULL) {
+  if (inherits(session, "gptr_session")) return(session)
+  if (rlang::is_string(session)) {
+    owner = session_by_id(session)
+    if (!is.null(owner)) return(owner)
+    gptr_abort("System 1 decisions need a live owning session.", "invalid_argument",
+                 arg = ".session", expected = "a live session or NULL")
+  }
+  run = run_current()
+  if (inherits(run$shell, "gptr_session")) run$shell else NULL
+}
+
 #' The session a System 1 call is charged to: the piped session, else the running session
 #' @noRd
 s1_session_id = function(session) {
@@ -760,7 +774,36 @@ s1_log_usage = function(target, res, session, started) {
   invisible(NULL)
 }
 
-#' The gptr.decision entry (piped sessions), the decision event and the document summary
+#' Charge one completed attempt before the next request is admitted, including failed replies
+#' @noRd
+s1_charge = function(target, outcome, session, started) {
+  result = if (isTRUE(outcome$ok)) outcome$value else outcome
+  u = result[["usage"]]
+  if (!is.list(u)) u = list()
+  rid = if (isTRUE(outcome$ok)) s1_request_id(result) else outcome$error[["request_id"]]
+  d = session_data(session)
+  route = if (identical(target$engine, "emulated:structured")) "emulated" else "system-one"
+  row = s1_usage_log(target$model, route, s1_count(u[["input"]]), s1_count(u[["output"]]),
+                     rid, d$id, started,
+                     max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))),
+                     d$parent_id %||% NA_character_)
+  row = usage_add_durable(session, row)
+  session_append(session, list(type = "custom", custom_type = "gptr.s1_usage",
+                               data = list(row = usage_row_store(row))))
+  invisible(NULL)
+}
+
+#' Refuse another native request once an owning run or ancestor has spent its budget
+#' @noRd
+s1_budget_check = function(session, estimate = 0) {
+  if (is.null(session)) return(invisible(NULL))
+  hit = budget_check(session, estimate)
+  if (is.null(hit)) return(invisible(NULL))
+  gptr_abort(paste0("The System 1 batch stopped at its ", hit$kind, " budget."),
+             c(paste0("budget_", hit$kind), "budget"), .data = c(hit, list(session = session)))
+}
+
+#' The gptr.decision entry (owned sessions), the decision event and the document summary
 #'
 #' The event names the question type `question_type`: a payload `type` would overwrite the event
 #' name (contract 4.5).
@@ -778,6 +821,7 @@ s1_record = function(out, prompt, q, meta, session, call) {
                                  question_type = q$type, n = length(out), summary = summary,
                                  cached = n_cached),
               session = session)
+  if (verbosity() >= 1L) gptr_inform(ui_escape(summary), "progress")
   s1_doc_block(call, structure(summary, meta = list(model = meta$model, date = meta$date)))
   invisible(summary)
 }
@@ -862,12 +906,45 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
   miss = which(!cached)
   res = NULL
   if (length(miss)) {
+    s1_budget_check(session)
     s1_guards(target, replay)
+    requests = length(unique(vapply(states[miss], canonical_json, "")))
+    if (verbosity() >= 1L) {
+      gptr_inform(ui_escape(paste0("System 1 ", target$ref, ": ", length(miss),
+                                   " uncached inputs (", requests,
+                                   if (requests == 1L) " request)." else " requests).")),
+                   "progress")
+    }
+    attempts = new.env(parent = emptyenv())
+    attempts$started = vector("list", length(miss))
+    before = function(k) {
+      estimate = est_tokens(canonical_json(list(state = states[[miss[k]]],
+                                                 questions = questions)), "json")
+      s1_budget_check(session, estimate)
+      attempts$started[[k]] = Sys.time()
+    }
+    after = function(k, outcome) {
+      if (!is.null(session)) s1_charge(target, outcome, session, attempts$started[[k]])
+      if (!isTRUE(outcome$ok)) return(invisible(NULL))
+      value = outcome$value
+      checked = s1_check_answers(value[["answers"]], questions, target$model[["id"]])
+      if (inherits(checked, "condition")) return(invisible(NULL))
+      i = miss[k]
+      s1_cache_put(keys[i], s1_cache_record(keys[i], checked[["answer"]],
+                                            value[["model_version"]] %||% target$model[["id"]],
+                                            target$alias, q$wire, states[[i]], salt,
+                                            value[["usage"]]))
+      if (native && !is.na(keys[i])) {
+        s1_cache_put(pins[i], s1_ollama_pin(pins[i], keys[i], target$model))
+      }
+      invisible(NULL)
+    }
     res = if (identical(target$engine, "emulated:structured")) {
-      s1_emulate(target$model, states[miss], questions, target[["safety"]])
+      s1_emulate(target$model, states[miss], questions, target[["safety"]], before, after)
     } else {
       s1_request(target$model, states[miss], questions,
-                 list(provider = target$provider, safety = target[["safety"]], images = images))
+                 list(provider = target$provider, safety = target[["safety"]], images = images,
+                       before = before, after = after))
     }
     for (k in seq_along(miss)) {
       i = miss[k]
@@ -877,15 +954,9 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
         next
       }
       answers[i] = list(got[["answer"]])
-      s1_cache_put(keys[i], s1_cache_record(keys[i], got[["answer"]], res$model_version,
-                                            target$alias, q$wire, states[[i]], salt,
-                                            res$usages[[k]]))
-      if (native && !is.na(keys[i])) {
-        s1_cache_put(pins[i], s1_ollama_pin(pins[i], keys[i], target$model))
-      }
     }
     version = res$model_version %||% version
-    s1_log_usage(target, res, session, started)
+    if (is.null(session)) s1_log_usage(target, res, session, started)
   }
   list(answers = answers, conditions = conditions, cached = cached, version = version, res = res,
        identity = identity)
@@ -895,6 +966,7 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
 #' s1_ready()
 #' @noRd
 s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
+  session = s1_session(session)
   started = Sys.time()
   images = s1_images(args[["opts"]][["system1_images"]], target)
   zipped = s1_zip(parts)
@@ -955,7 +1027,7 @@ s1_call = function(call) {
 #' The s1.decide service behind ctx$decide(question, x, ...) (contract 7.0, 10.6): `x` is one
 #' input under the state key `input`; the model is model_default("system1") (IC-74)
 #' @noRd
-s1_decide = function(question, x, ...) {
+s1_decide = function(question, x, ..., .session = NULL) {
   check_string(question, "question")
   args = list(...)
   ok = c("choices", "levels", "threshold", "min_confidence", "uncertain")
@@ -965,6 +1037,7 @@ s1_decide = function(question, x, ...) {
                       "uncertain after the input."), "invalid_argument", arg = "...",
                expected = "named System 1 arguments")
   }
+  .session = s1_session(.session)
   ref = s1_default_ref()
   if (is.null(ref)) {
     gptr_abort(c("No System 1 model is configured.",
@@ -972,6 +1045,7 @@ s1_decide = function(question, x, ...) {
                         "decision model, or choose one with gptr_config(system1 = ...).")),
                "no_key", provider = "typesafe", variables = "TYPESAFE_API_KEY")
   }
-  target = s1_ready(s1_target(ref))
-  s1_run(question, list(s1_part(x, "input", "x")), target, args)
+  safety = if (!is.null(.session)) session_live(.session)$run$opts$safety
+  target = s1_ready(s1_target(ref), safety = safety %||% s1_safety())
+  s1_run(question, list(s1_part(x, "input", "x")), target, args, session = .session)
 }

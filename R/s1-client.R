@@ -153,7 +153,7 @@ s1_http_error = function(status, body, request_id, model_id) {
 #' errors, a known status gives its class, anything else (an abort, a local failure) is a response
 #' error; an abort and P04's final classes are never retried (IC-64)
 #' @noRd
-s1_failure = function(cls, status, text, request_id, model_id, retry_after = NULL) {
+s1_failure = function(cls, status, text, request_id, model_id, retry_after = NULL, usage = NULL) {
   cls = if (rlang::is_string(cls[1L])) sub("^gptr_error_", "", cls[1L]) else ""
   if (!is.numeric(status) || length(status) != 1L) status = NA_integer_
   sub = if (startsWith(cls, "timeout") || identical(cls, "network")) {
@@ -167,7 +167,8 @@ s1_failure = function(cls, status, text, request_id, model_id, retry_after = NUL
                      as.character(request_id %||% NA_character_)[1L], model_id,
                      retry_after = retry_after)
   final = cls %in% c("aborted", "redirect", "spend_cap", "retry_after")
-  list(ok = FALSE, error = err, retry = s1_retry_of(err) && !final, delay = s1_delay(retry_after))
+  list(ok = FALSE, error = err, retry = s1_retry_of(err) && !final,
+       delay = s1_delay(retry_after), usage = usage)
 }
 
 # ---- the typesafe-system-one adapter ------------------------------------------------------------
@@ -227,11 +228,13 @@ s1_typesafe_build = function(model, state, questions, opts) {
 s1_wire_parse = function(model, status, headers, body, questions, ollama = FALSE) {
   rid = s1_header(headers, if (ollama) "x-request-id" else "x-typesafe-request-id")
   model_id = model[["id"]] %||% NA_character_
+  obj = tryCatch(json_decode(body), error = function(e) NULL)
   if (!is.numeric(status) || length(status) != 1L) status = NA_integer_
   if (is.na(status) || status < 200L || status > 299L) {
-    return(s1_http_error(status, body, rid, model_id))
+    err = s1_http_error(status, body, rid, model_id)
+    err$usage = s1_usage_of(if (is.list(obj)) obj[["usage"]])
+    return(err)
   }
-  obj = tryCatch(json_decode(body), error = function(e) NULL)
   version = if (is.list(obj)) obj[["model"]] %||% model_id
   parsed = if (!is.list(obj) || !is.list(obj[["answers"]])) {
     s1_condition("s1_response", "System 1 returned a response without answers.", model = model_id)
@@ -246,6 +249,7 @@ s1_wire_parse = function(model, status, headers, body, questions, ollama = FALSE
   if (inherits(parsed, "condition")) {
     parsed$status = as.integer(status)
     parsed$request_id = rid
+    parsed$usage = s1_usage_of(if (is.list(obj)) obj[["usage"]])
     return(parsed)
   }
   if (!rlang::is_string(version) || !nzchar(version)) version = model_id
@@ -393,7 +397,7 @@ s1_http = function(spec, provider, on_done, on_fail) {
 #' @noRd
 s1_outcome = function(res, model_id = NA_character_) {
   if (inherits(res, "condition")) {
-    return(list(ok = FALSE, error = res, retry = s1_retry_of(res),
+    return(list(ok = FALSE, error = res, retry = s1_retry_of(res), usage = res[["usage"]],
                 delay = s1_delay(res[["retry_after"]])))
   }
   if (!is.list(res)) {
@@ -486,7 +490,7 @@ s1_gate = function(model, base_url) {
 #' `start(k, done)` returns a reactor id or NULL and calls `done(outcome)` once; a job holds its
 #' `gate` slot until then, and on exit unreported jobs are cancelled and their slots given back.
 #' @noRd
-s1_round = function(idx, start, max_active, gate = NULL) {
+s1_round = function(idx, start, max_active, gate = NULL, before = NULL, after = NULL) {
   st = new.env(parent = emptyenv())
   st$out = vector("list", length(idx))
   st$next_k = 1L
@@ -494,6 +498,7 @@ s1_round = function(idx, start, max_active, gate = NULL) {
   st$done = 0L
   st$ids = character()
   st$held = 0L
+  st$error = NULL
   n = length(idx)
   free = function() is.null(gate) || s1_slot_used(gate$key) < gate$cap
   finish = function(k) {
@@ -506,12 +511,22 @@ s1_round = function(idx, start, max_active, gate = NULL) {
         st$held = st$held - 1L
         s1_slot_shift(gate$key, -1L)
       }
+      if (is.function(after)) {
+        err = tryCatch({
+          after(idx[k], res)
+          NULL
+        }, error = function(e) e)
+        if (inherits(err, "error")) st$error = err
+      }
       invisible(NULL)
     }
   }
   launch = function() {
+    if (!is.null(st$error)) stop(st$error)
     while (st$active < max_active && st$next_k <= n && free()) {
+      if (!is.null(st$error)) stop(st$error)
       k = st$next_k
+      if (is.function(before)) before(idx[k])
       st$next_k = k + 1L
       st$active = st$active + 1L
       if (!is.null(gate)) {
@@ -522,6 +537,7 @@ s1_round = function(idx, start, max_active, gate = NULL) {
       id = do.call(start, list(idx[k], finish(k)))
       if (rlang::is_string(id)) st$ids = c(st$ids, id)
     }
+    if (!is.null(st$error)) stop(st$error)
     st$done >= n
   }
   on.exit({
@@ -537,12 +553,12 @@ s1_round = function(idx, start, max_active, gate = NULL) {
 #' Else `min(0.5 * 2^(r - 1), 5)` s, the TypeSafe SDK schedule without its jitter: gptr never
 #' touches the RNG (IC-61).
 #' @noRd
-s1_drive = function(n, start, max_active, rounds, gate = NULL) {
+s1_drive = function(n, start, max_active, rounds, gate = NULL, before = NULL, after = NULL) {
   results = vector("list", n)
   pending = seq_len(n)
   round = 1L
   while (length(pending)) {
-    got = s1_round(pending, start, max_active, gate)
+    got = s1_round(pending, start, max_active, gate, before, after)
     again = integer()
     wait = 0
     for (k in seq_along(pending)) {
@@ -608,39 +624,38 @@ s1_provenance = function(model, values, engine) {
 #' `answers[[i]]` holds state i's canonical answers, or NULL when `conditions[[i]]` holds its
 #' failure. Unknown usage stays NA (IC-74, D-076).
 #' @noRd
-s1_dispatch = function(model, states, questions, start_for, engine, calibrated, gate = NULL) {
+s1_dispatch = function(model, states, questions, start_for, engine, calibrated, gate = NULL,
+                        before = NULL, after = NULL) {
   max_active = s1_active_cap(model)
   rounds = check_number(gptr_opt("s1_rounds"), "gptr.s1_rounds", min = 1, int = TRUE)
   n = length(states)
   keys = vapply(states, canonical_json, "")
   uniq = which(!duplicated(keys))
   map = match(keys, keys[uniq])
-  results = s1_drive(length(uniq), start_for(states[uniq]), max_active, rounds, gate)
+  totals = new.env(parent = emptyenv())
+  totals$input = 0
+  totals$output = 0
+  results = s1_drive(length(uniq), start_for(states[uniq]), max_active, rounds, gate,
+                      before = if (is.function(before)) function(i) before(uniq[i]),
+                      after = function(i, result) {
+                        u = (if (isTRUE(result$ok)) result$value else result)[["usage"]]
+                        if (!is.list(u)) u = list()
+                        totals$input = totals$input + s1_count(u[["input"]])
+                        totals$output = totals$output + s1_count(u[["output"]])
+                        if (is.function(after)) after(uniq[i], result)
+                      })
   answers = vector("list", n)
   conditions = vector("list", n)
   usages = vector("list", n)
-  input = 0
-  output = 0
   version = NULL
   rids = character()
   values = list()
   for (j in seq_along(results)) {
     r = results[[j]]
-    if (!isTRUE(r$ok)) {
-      # a completed but refused reply was still charged (D-082)
-      fu = r[["usage"]]
-      if (is.list(fu)) {
-        input = input + s1_count(fu[["input"]])
-        output = output + s1_count(fu[["output"]])
-      }
-      next
-    }
+    if (!isTRUE(r$ok)) next
     # result fields are read with [[ ]]: `$` would partially match a longer field name
     v = r$value
     values[[length(values) + 1L]] = v
-    u = if (is.list(v[["usage"]])) v[["usage"]] else list()
-    input = input + s1_count(u[["input"]])
-    output = output + s1_count(u[["output"]])
     version = version %||% v[["model_version"]]
     engine = v[["engine"]] %||% engine
     rid = s1_request_id(v)
@@ -661,7 +676,7 @@ s1_dispatch = function(model, states, questions, start_for, engine, calibrated, 
       usages[i] = list(results[[map[i]]]$value[["usage"]])
     }
   }
-  usage = list(input = input, output = output)
+  usage = list(input = totals$input, output = totals$output)
   usage$cost = s1_cost(usage, model)
   list(answers = answers, conditions = conditions, errors = s1_errors_df(conditions),
        usages = usages, usage = usage, model_version = version %||% model$id,
@@ -755,11 +770,13 @@ s1_request = function(model, states, questions, opts = list()) {
               on_fail = function(cnd) {
                 done(s1_failure(class(cnd), cnd[["status"]],
                                 paste0("System 1 request failed: ", conditionMessage(cnd)),
-                                cnd[["request_id"]], model$id, cnd[["retry_after"]]))
+                                cnd[["request_id"]], model$id, cnd[["retry_after"]],
+                                cnd[["usage"]]))
               })
     }
   }
-  s1_dispatch(model, states, questions, start_for, s1_engine(model), NA, gate)
+  s1_dispatch(model, states, questions, start_for, s1_engine(model), NA, gate,
+                opts[["before"]], opts[["after"]])
 }
 
 # ---- builtin:system1 ----------------------------------------------------------------------------
@@ -768,12 +785,12 @@ s1_request = function(model, states, questions, opts = list()) {
 #' tags and replaces {s1} with the configured alias (contract 9.3)
 #' @noRd
 s1_section_body = paste0(
-  "For fast typed judgements call a System 1 model from R instead of reasoning over each item ",
-  "yourself: peter(\"Is this abstract about a randomised trial?\", abstracts, model = {s1}) ",
-  "returns a logical vector with attr(, \"prob\"); with choices = c(\"a\", \"b\", \"c\") it ",
-  "returns one choice per input. Calls are vectorised, so pass all items at once. Use them ",
-  "inside if, for and while, and check items with probabilities near 0.5 yourself. Keep ",
-  "open-ended reasoning, writing and code for yourself."
+  "Use System 1 for typed decision leaves inside your R workflow: ",
+  "peter(\"Is this an RCT?\", abstracts, model = {s1}) returns a logical vector with ",
+  "attr(, \"prob\"); choices = c(\"a\", \"b\") returns labels. Batch hundreds or thousands; ",
+  "omit agents and parallel. gptr.s1_max_active controls concurrency (default 8; 1 sequential). ",
+  "Chunk inputs above gptr.s1_max_elements (10,000). Use results in if/for/while, ",
+  "check uncertain answers, and keep reasoning and writing for yourself."
 )
 
 #' The system1 section (T0, order 650, budget 150; contract 9.3, IC-68), shown only when

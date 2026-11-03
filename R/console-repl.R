@@ -1298,6 +1298,10 @@ console_route_match = function(call) {
 #' `frontend`, else `console` (IC-69); its value comes back invisibly
 #' @noRd
 console_route_run = function(call) {
+  model = call$ids$model %||% call$session$model %||% setting_get("model")
+  router = inherits(model, "gptr_router") || rlang::is_string(model) &&
+    (startsWith(model, "router:") || model %in% registry_names("router"))
+  if (!is.null(model) && !router) kernel_model_ref(model, strict = FALSE)
   name = call$args$opts$frontend %||% setting_get("frontend") %||% "console"
   fe = registry_get("frontend", name, session = call$session)
   if (is.null(fe)) {

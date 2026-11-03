@@ -73,6 +73,25 @@ This adds a model request. `agents =` starts new children; it cannot be used to 
 piped session. Teams and fan-outs run in the foreground and cannot be combined with
 `background = TRUE`, `.run = FALSE`, or nested as `gptr_parallel()` members.
 
+## Choosing models
+
+Children inherit the running session's model unless you choose another. Use `gptr_providers()`
+to inspect configured providers and `gptr_models(provider = "claude-cli")` or
+`gptr_models("sonnet")` to find references. Catalog entries do not guarantee account access.
+Provider-qualified references choose the transport: `anthropic/...` uses the API,
+`claude-cli/...` uses Claude Code and `codex/...` uses Codex. For example, either kind of main
+agent can delegate with:
+
+
+``` r
+reviews = peter("Review this analysis.", analysis,
+                agents = list(stats = agent(model = "claude-cli/sonnet"),
+                              code = agent(model = "codex/default")))
+```
+
+Model aliases resolve before backend selection. Each child keeps the selected provider's
+configuration and its own permission/egress checks.
+
 ## A fan-out over input elements
 
 
@@ -117,6 +136,25 @@ too. Workers say `working`, since their internal tool stream is not forwarded.
 A direct team or fan-out call displays its reports when R prints the returned session. If you
 assign the result, use `print(result)` to show them, or inspect `result$children`. Calls made
 by the main agent keep their reports out of its terminal output for the main agent to use.
+
+## System 1 decision leaves
+
+A main agent or one of its children can call a decision model from R and use the typed result
+in a later step. For hundreds or thousands of judgements, pass the inputs as one batch:
+
+
+``` r
+keep = peter("Is this abstract about a randomised trial?", abstracts, model = "jev")
+selected = abstracts[keep]
+```
+
+System 1 returns decisions rather than chat sessions, so leave out `agents =` and `parallel =`.
+Its own scheduler preserves order, deduplicates and caches inputs, and bounds active requests
+at eight by default; `gptr.s1_max_active` set to one runs them sequentially. Split batches above
+`gptr.s1_max_elements` (10,000 by default). The configured decision guidance is available to
+lightweight child agents too. Workers inherit the configured decision model and its limits.
+Nested decisions are recorded in the owning session, charge its
+budgets and ancestors once, and retain completed answers in the cache if the batch stops.
 
 ## Independent calls with gptr_parallel()
 
