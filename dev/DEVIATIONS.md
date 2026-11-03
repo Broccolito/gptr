@@ -9599,8 +9599,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `list2env()`, a replacement (an environment changes by reference), `:=` and `set*()` inside
   local(), `local(expr, envir =)`, an assignment inside `eval()`, `evalq()`, `with()` or
   `within()` within local()'s code, and a `local` the code or the session binds still reach the
-  caller's objects. The guard still treats names local()'s code binds as bound (`q = 1` there is
-  not base `q`).
+  caller's objects, in both walkers (`eval_assign_targets()` reads the code alone, so there a
+  `local` only the session binds reads as base R's; it can only miss a same-valued reassignment,
+  as `modified` comes from the environment diff). The guard still treats names local()'s code
+  binds as bound (`q = 1` there is not base `q`).
 - Contract-visible: 04 `gptr_risk()` (the lookup of overwrites); `?gptr_risk` (`envir`).
 - Tests: test-perm-classify.R "a plain assignment in local()'s code binds in local()'s own
   environment (D-346)"; test-eval-guard.R "eval_assign_targets finds assignments, replacements,

@@ -252,6 +252,14 @@ test_that("eval_assign_targets finds assignments, replacements, assign(), := and
   expect_equal(at("local({ x$a = 1; y <<- 2; assign('z', 3); dt[, a := 1] })"),
                c("dt", "x", "y", "z"))
   expect_equal(at("local(x <- 1, envir = e)"), "x")
+  expect_equal(at("local({ local({ x = 1 }) })"), character())
+  # an unknown-effect call inside local()'s code, and a local the code binds, reach the caller
+  for (code in c("local({ eval(quote(x <- 5), globalenv()) })",
+                 "local({ evalq(x <- 5, parent.frame()) })", "local({ with(e, x <- 5) })",
+                 "local({ local({ x = 5 }, envir = parent.frame()) })")) {
+    expect_equal(at(code), "x", info = code)
+  }
+  expect_equal(at("local = function(code) code; local({ x = 5 })"), c("local", "x"))
   expect_equal(guard("local({ q = 1; print(q) })")$blocked, character())
 })
 

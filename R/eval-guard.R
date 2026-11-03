@@ -401,7 +401,10 @@ eval_guard_targets_walk = function(e, acc, in_fun = FALSE, own = FALSE) {
     if (length(e) >= 3L) eval_guard_targets_walk(e[[3L]], acc, in_fun = TRUE, own)
     return(invisible())
   }
-  own = own || identical(fname, "local") && length(e) == 2L
+  # base local()'s code (not once the code has bound local); an unknown-effect call inside it,
+  # local(envir =) included, may bind in the caller's environment again
+  own = identical(fname, "local") && length(e) == 2L && !"local" %in% c(acc$out, acc$own) ||
+    own && !fname %in% risk_unknown_funs
   for (i in seq_along(e)) {
     el = e[[i]]
     if (!missing(el) && is.call(el)) eval_guard_targets_walk(el, acc, in_fun, own)
