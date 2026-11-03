@@ -130,6 +130,10 @@ The overlay separates ordinary bindings, rather than making a full data snapshot
 objects and arbitrary side effects require their usual care; see
 [Execution model](execution-model.html).
 
+![The pipe and a fork. Piping a session into peter() adds a turn to the same session;
+gptr_fork() starts a branch whose overlay reads the original workspace and keeps its own
+assignments.](figures/pipe-fork.svg)
+
 ## Stopping instead of guessing
 
 In `manual` mode a change needs approval unless a permission rule applies (an allow rule never
@@ -171,9 +175,11 @@ session |> peter()
 ## Connecting a real model
 
 Choose one route: an API key, an existing CLI login or a local Ollama model. Put your
-provider's key in a private `.env` file and load it with `gptr_env()`. Sign in to Claude Code
-or Codex outside R; CLI sign-in is separate from API credentials. Start Ollama separately and
-install a chat model that supports tool calls; gptr does not install Ollama or download models.
+provider's key in a private `.env` file and load it with `gptr_env()`, or enter it once at the
+console with `gptr_login("openai")`, which takes it through hidden input and remembers it.
+Sign in to Claude Code or Codex outside R; CLI sign-in is separate from API credentials. Start
+Ollama separately and install a chat model that supports tool calls; gptr does not install
+Ollama or download models.
 [Language models](language-models.html) gives setup examples for each route.
 
 ```{r, eval = FALSE}

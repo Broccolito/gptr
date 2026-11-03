@@ -31,7 +31,8 @@ figcaption, .figcaption { max-width: 42rem; margin-top: 0.5rem; font-size: 0.875
 Use `gptr_config()` for named settings, `options(gptr.*)` for process-level controls, and
 arguments to `peter()` for the call you are making. Inspect the effective settings before
 changing them; each value has a source layer. This guide executes only temporary process
-changes and fake-provider calls. Examples that write configuration files are not executed.
+changes, temporary files and fake-provider calls. Examples that write configuration files are
+not executed.
 
 ## Scope and precedence
 
@@ -70,6 +71,10 @@ Ordinary settings resolve from lower to higher priority as follows: package defa
 settings, project settings, user-level project permission rules, R options, then settings for
 this R process. Explicit call arguments choose the values for that call. Safety and trust
 restrictions still apply; an explicit call cannot disable the inherited permission guards.
+
+![Settings resolve from the bottom up. Each layer replaces only the entries it sets, so this
+call's budget takes its token limit from the package defaults, its cost limit from this R
+process and its turn limit from the call.](figures/settings-layers.svg)
 
 | Scope | Lifetime and location | Use it for |
 |---|---|---|
@@ -282,3 +287,55 @@ option. Provider keys include `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API
 `GOOGLE_API_KEY`, and `TYPESAFE_API_KEY`; other routes name their keys in `gptr_providers()`.
 Load a private file explicitly with `gptr_env(path)`, or use interactive `gptr_login()` for
 supported API/MCP credentials. Sign in to subscription CLIs using their own tools.
+
+`gptr_login()` takes a key through hidden input, or signs in through the browser where the
+provider offers it, and by default remembers the credential in `auth.json` in the user
+configuration directory (mode 0600 on Unix). `scope = "session"` keeps it in this R process
+only, with no file and no environment variable; `scope = "keyring"` stores it in the operating
+system's credential store through the optional keyring package. Hidden input is not
+encryption; see `?gptr_login`.
+
+### Find a key that reached a file
+
+gptr replaces registered secrets with markers such as `[secret:OPENAI_API_KEY]` when they
+enter a transcript, a cache or a history document. A value that reached a file before it was
+registered, such as a key pasted into a prompt and loaded with `gptr_env()` only later, stays
+there. `gptr_scrub()` finds it. Without paths it scans this workspace's sessions, caches,
+plans, transcripts and bound documents; a dry run reports the file, the secret's name and a
+count, never the value. This example registers a made-up token without exporting it:
+
+
+``` r
+key_file = tempfile(fileext = ".env")
+writeLines("DEMO_SERVICE_TOKEN=demo-not-a-real-token-4821", key_file)
+gptr_env(key_file, set_env = FALSE, quiet = TRUE)
+
+notes = tempfile("notes")
+dir.create(notes)
+writeLines("Connected with demo-not-a-real-token-4821.", file.path(notes, "log.txt"))
+found = gptr_scrub(notes)
+found$secret
+#> [1] "DEMO_SERVICE_TOKEN"
+found$count
+#> [1] 1
+```
+
+`dry_run = FALSE` rewrites those files, replacing each value with its marker:
+
+
+``` r
+gptr_scrub(notes, dry_run = FALSE)
+readLines(file.path(notes, "log.txt"))
+#> [1] "Connected with [secret:DEMO_SERVICE_TOKEN]."
+```
+
+`error = TRUE` signals `gptr_error_secret_found` when a file still holds a registered secret,
+for a pre-commit hook or a CI step. A key that reached a model or a commit must still be
+rotated. `gptr_redact()` applies the same redaction to your own text or logs; besides
+registered values, it recognizes common credential shapes such as bearer tokens:
+
+
+``` r
+gptr_redact("Authorization: Bearer abcdef0123456789abcdef")
+#> [1] "Authorization: Bearer [secret:auth-header]"
+```
