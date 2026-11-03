@@ -205,6 +205,24 @@ test_that("the listing footer names failed listings of listed providers once, wi
                "listing failed for anthropic (HTTP 405)", fixed = TRUE)
 })
 
+test_that("a failed listing without an HTTP status names gptr's own reason, never other text", {
+  local_inventory_catalog()
+  local_mocked_bindings(egress_check = function(...) TRUE, replay_guard = function(...) TRUE,
+    provider_credential = function(...) NULL)
+  failed = function() {
+    sub(".*listing failed for openai \\((.*)\\); prior.*", "\\1",
+        attr(gptr_models(provider = "openai", refresh = TRUE), "footer"))
+  }
+  local({
+    local_mocked_bindings(reactor_pump = function(...) FALSE)
+    expect_identical(failed(), "no answer within 1 s")
+  })
+  local_mocked_bindings(catalog_http_request = function(...) inventory_response(list()))
+  expect_identical(failed(), "returned an invalid response")
+  local_mocked_bindings(catalog_http_request = function(...) stop("sensitive callback text"))
+  expect_identical(failed(), "listing unavailable")
+})
+
 test_that("preparation inventories once, explicit refresh bypasses cache, failures keep models", {
   local_inventory_catalog()
   n = 0L

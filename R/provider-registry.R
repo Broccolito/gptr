@@ -129,7 +129,7 @@ provider_models = function(p, credential = provider_credential(p)) {
   fail = function(why, status = NA_integer_) {
     gptr_abort(paste0("Model listing for ", p[["id"]] %||% p[["name"]], " ", why, "."),
                c("network", "provider"), provider = p[["id"]] %||% p[["name"]],
-               status = status, retryable = FALSE)
+               status = status, retryable = FALSE, reason = why)
   }
   headers = list(accept = "application/json")
   auth = "authorization"

@@ -1091,12 +1091,12 @@ catalog_http_request = function(url, method = "GET", headers = list(), body = NU
     gptr_abort(paste0("The answer from ", origin, " exceeded ",
                       format(max_bytes, scientific = FALSE), " bytes and was discarded."),
                c("network", "provider"), provider = "catalog", status = st$status,
-               curl_code = NA_integer_)
+               curl_code = NA_integer_, reason = "answer too large")
   }
   if (!isTRUE(done)) {
     gptr_abort(paste0("No answer from ", origin, " within ", timeout, " s."),
                c("network", "provider"), provider = "catalog", status = NA_integer_,
-               curl_code = NA_integer_)
+               curl_code = NA_integer_, reason = paste0("no answer within ", timeout, " s"))
   }
   if (!is.null(st$cnd)) {
     status = suppressWarnings(as.integer(st$cnd[["status"]] %||% NA_integer_))
@@ -1106,7 +1106,8 @@ catalog_http_request = function(url, method = "GET", headers = list(), body = NU
     code = suppressWarnings(as.integer(st$cnd[["curl_code"]] %||% NA_integer_))
     gptr_abort(paste0("Could not reach ", origin, ": ", conditionMessage(st$cnd)),
                c("network", "provider"), provider = "catalog", status = NA_integer_,
-               curl_code = if (length(code) == 1L) code else NA_integer_)
+               curl_code = if (length(code) == 1L) code else NA_integer_,
+               reason = "could not connect")
   }
   list(status = as.integer(st$status), headers = st$headers,
        body = if (length(st$chunks)) do.call(c, st$chunks) else raw())
@@ -1286,15 +1287,18 @@ catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
     catalog_discover(p, safety, credential)
   }, error = function(e) e)
   if (is.null(found) || inherits(found, "error")) {
+    # Only the short `reason` of gptr's own listing conditions is shown; other condition text
+    # may carry server or callback output.
     status = if (inherits(found, "error")) found[["status"]]
+    reason = if (inherits(found, "gptr_error_network")) found[["reason"]]
     record$error = if (inherits(found, "gptr_error_no_key")) {
       "missing credentials"
+    } else if (is.numeric(status) && length(status) == 1L && !is.na(status)) {
+      paste("HTTP", status)
+    } else if (rlang::is_string(reason)) {
+      reason
     } else {
-      if (is.numeric(status) && length(status) == 1L && !is.na(status)) {
-        paste("HTTP", status)
-      } else {
-        "listing unavailable"
-      }
+      "listing unavailable"
     }
   } else {
     record$ids = found
