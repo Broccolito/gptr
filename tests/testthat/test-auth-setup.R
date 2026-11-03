@@ -34,6 +34,17 @@ test_that("empty and cancelled credential entry have safe distinct results", {
   expect_identical(ui$log$answer, c("[hidden]", "[hidden]"))
 })
 
+test_that("an end of input at a terminal's hidden prompt reads as blank and skips", {
+  local_user_dirs()
+  local_mocked_bindings(tty_secret = function() "SAVED", gptr_readline = function(...) "")
+  withr::local_options(gptr.ui = "console", gptr.interactive = TRUE)
+  result = NULL
+  utils::capture.output({
+    result = gptr_login("openrouter", method = "key", scope = "session")
+  })
+  expect_identical(attr(result, "status"), "skipped")
+})
+
 test_that("login says what it stored, skipped or cancelled, never the value", {
   local_user_dirs()
   withr::local_options(gptr.quiet = FALSE)

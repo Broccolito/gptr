@@ -369,9 +369,11 @@ ui_undo_note = function(request) {
 #' rows, right above the chevron; then readline_answer(). When the REPL's reader finds lines
 #' waiting after the answer (a paste; a last line without a newline is not waiting), the answer and
 #' the lines go to the console history as one entry (a `secret` is dropped) and the question is
-#' asked again (IC-75); Ctrl-C or EOF gives NA, and in a terminal ends the person's row, which
-#' readline() leaves open then. A `secret` requires echo-free input (tty_secret()); unsupported
-#' consoles fail before reading. Secret reads never drain or display a composer's draft.
+#' asked again (IC-75); Ctrl-C gives NA, and in a terminal ends the person's row, which
+#' readline() leaves open then. Interactive readline() returns "" at EOF, so Ctrl-D reads as a
+#' blank line (a `.stdin` reader's EOF is NA). A `secret` requires echo-free input
+#' (tty_secret()); unsupported consoles fail before reading. Secret reads never drain or display
+#' a composer's draft.
 #' A T console's ordinary draft stays in its composer, for the live row after the
 #' answer; a dim row above the chevron says so (ui_draft_kept(), D-243). A whole line that
 #' `accept(line)` takes, one of the question's answers, typed once its rows showed is its answer:

@@ -47,8 +47,8 @@ Hidden entry works in RStudio and Positron (through 'rstudioapi') and in termina
 where the UI has none (Windows Rgui or Rterm, R.app, Jupyter, Emacs ESS), load keys with
 \code{\link[=gptr_env]{gptr_env()}} instead, or log in once elsewhere with a remembering \code{scope}.
 The host prompt shows the destination and storage before entry. For key entry, leave it blank
-or type \verb{/skip} to skip; type \verb{/cancel}, dismiss or interrupt it to cancel. The initial OAuth
-review offers Skip and Cancel.
+(in a terminal, Ctrl-D counts as blank) or type \verb{/skip} to skip; type \verb{/cancel}, dismiss or
+interrupt (Ctrl-C) it to cancel. The initial OAuth review offers Skip and Cancel.
 Secret answers are not returned to the model.
 \code{scope = "session"} keeps credentials in this R process until logout or exit; it does not
 export an environment variable or create a credential file. For assisted setup, use this scope.
