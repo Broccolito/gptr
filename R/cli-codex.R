@@ -502,13 +502,16 @@ pcli_codex_tool_kinds = c("mcp_tool_call", "command_execution", "file_change", "
                          "collab_tool_call")
 
 #' The error text of an `error` or `turn.failed` event: `message`, or `error` as a string or as
-#' an object with `message`; NULL when none is a nonempty string
+#' an object with `message`; NULL when none is a nonempty string. Codex relays a rejected
+#' request's HTTP error body as that text, so a body retry_body_error() reads gives its message.
 #' @noRd
 pcli_codex_why = function(obj) {
   err = obj[["error"]]
   why = pcli_chr(obj[["message"]]) %||% pcli_chr(err) %||%
     (if (is.list(err)) pcli_chr(err[["message"]]))
-  if (is.null(why) || !nzchar(why)) NULL else why
+  if (is.null(why) || !nzchar(why)) return(NULL)
+  body = retry_body_error(why)$message
+  if (nzchar(body)) body else why
 }
 
 #' Usage of turn.completed: input_tokens includes the cached ones (OpenAI semantics, 08 3.9), so

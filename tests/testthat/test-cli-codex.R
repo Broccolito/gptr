@@ -580,6 +580,21 @@ test_that("malformed Codex events are ignored or read as unknown, never an R err
   expect_match(n2$message()$error_message, "Codex reported an error: flaky", fixed = TRUE)
 })
 
+test_that("a provider error body Codex relays shows the service's message", {
+  skip_on_cran()
+  why = paste0("The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT ",
+               "account.")
+  body = json_encode(list(type = "error", status = 400L, error = list(
+    type = "invalid_request_error", message = why, code = "model_not_found")))
+  for (events in list(list(list(type = "turn.failed", error = list(message = body))),
+                      list(list(type = "error", message = body), list(type = "turn.failed")))) {
+    opts = stub_opts()
+    n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+    for (ev in events) push_obj(n, ev)
+    expect_identical(n$message()$error_message, paste("Codex reported an error:", why))
+  }
+})
+
 test_that("the Windows sandbox probe caches answers and timeouts, never a run that did not start", {
   skip_on_cran()
   runs = new.env()
