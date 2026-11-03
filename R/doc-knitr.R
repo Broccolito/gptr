@@ -9,7 +9,9 @@
 #' knit_print method for sessions: the answer as Markdown; for a turn that ran live in this
 #' process also the code it ran, so the first render is complete before the new agent chunk
 #' exists (its chunk runs from the next render on), fenced as the agent chunk is (a backtick line
-#' in the code never ends the fence). Redacted like the agent block (IC-74)
+#' in the code never ends the fence). Redacted like the agent block (IC-74). Blank lines around
+#' it keep it a Markdown block of its own, as knitr joins a chunk's outputs with nothing between
+#' (a plot the turn drew would start its paragraph)
 #' @noRd
 knit_print.gptr_session = function(x, ...) {
   txt = x$text %||% NA_character_
@@ -19,14 +21,15 @@ knit_print.gptr_session = function(x, ...) {
     fence = doc_rmd_fence("```", unlist(strsplit(code, "\n", fixed = TRUE)))
     out = c(out, "", paste0(fence, "r"), code, fence)
   }
-  knitr::asis_output(redact(paste(out, collapse = "\n"), "persist"))
+  knitr::asis_output(paste0("\n\n", redact(paste(out, collapse = "\n"), "persist"), "\n\n"))
 }
 
 #' knit_print method for System 1 vectors: the one-line summary of their document block,
-#' redacted as doc.s1_block redacts that block (free-text choice levels reach it; IC-74)
+#' redacted as doc.s1_block redacts that block (free-text choice levels reach it; IC-74), a
+#' Markdown block of its own as a session's is
 #' @noRd
 knit_print.gptr_s1 = function(x, ...) {
-  knitr::asis_output(paste0("`", redact(doc_s1_summary(x), "persist"), "`\n"))
+  knitr::asis_output(paste0("\n\n`", redact(doc_s1_summary(x), "persist"), "`\n\n"))
 }
 
 #' Notebook text of a System 1 vector: what print() shows (values with p or conf, the footer

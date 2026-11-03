@@ -9,15 +9,39 @@ test_that("sessions knit as their answer, plus the code of a live turn", {
   out = knit_print.gptr_session(s)
   expect_s3_class(out, "knit_asis")
   expect_identical(as.character(out),
-                   "There are 32 rows.\n\n```r\nn = nrow(mtcars)\n```")
+                   "\n\nThere are 32 rows.\n\n```r\nn = nrow(mtcars)\n```\n\n")
   r = doc_test_session(list(doc_test_turn("n = 1")), kind = "replayed")
   dr = session_data(r)
   dr$last_text = "There are 32 rows."
-  expect_identical(as.character(knit_print.gptr_session(r)), "There are 32 rows.")
+  expect_identical(as.character(knit_print.gptr_session(r)), "\n\nThere are 32 rows.\n\n")
   x = structure(c(TRUE, TRUE, FALSE), class = c("gptr_decision", "gptr_s1", "logical"),
                 meta = list(model = "jev-1.13.0", date = "2026-09-29"))
   expect_identical(as.character(knit_print.gptr_s1(x)),
-                   "`gptr_decision: 2 TRUE / 1 FALSE (jev-1.13.0, 2026-09-29)`\n")
+                   "\n\n`gptr_decision: 2 TRUE / 1 FALSE (jev-1.13.0, 2026-09-29)`\n\n")
+})
+
+test_that("an answer after a plot the turn drew is its own Markdown paragraph", {
+  skip_if_not_installed("knitr")
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto")
+  rmd = file.path(getwd(), "plot.Rmd")
+  writeLines(c("```{r ask}", "peter(\"plot it\")", "```"), rmd)
+  e = doc_stand_in(code = "plot(1:3)")
+  e$peter = local({
+    inner = e$peter
+    function(...) {
+      s = inner(...)
+      d = session_data(s)
+      d$last_text = "Plotted."
+      s
+    }
+  })
+  out = file.path(getwd(), "plot.md")
+  knitr::knit(rmd, output = out, envir = e, quiet = TRUE)
+  md = readLines(out)
+  at = match("Plotted.", md)
+  expect_false(is.na(at))
+  expect_identical(md[at - 1L], "")
 })
 
 test_that("the label hook skips a chunk for one knit and is removed afterwards", {
@@ -148,12 +172,13 @@ test_that("knit_print output is redacted like the recorded blocks (IC-74)", {
   d$last_text = paste("The token is", key)
   out = as.character(knit_print.gptr_session(s))
   expect_false(grepl(key, out, fixed = TRUE))
-  expect_identical(out, paste0("The token is [secret:KNIT_TOKEN]\n\n```r\n",
-                               "token = Sys.getenv(\"KNIT_TOKEN\")\n```"))
+  expect_identical(out, paste0("\n\nThe token is [secret:KNIT_TOKEN]\n\n```r\n",
+                               "token = Sys.getenv(\"KNIT_TOKEN\")\n```\n\n"))
   x = structure(c(key, "other", key), class = c("gptr_choice", "gptr_s1", "character"),
                 meta = list(model = "ollama/qwen3:8b", date = "2026-10-05"))
   expect_identical(as.character(knit_print.gptr_s1(x)),
-                   "`gptr_choice: [secret:KNIT_TOKEN] 2, other 1 (ollama/qwen3:8b, 2026-10-05)`\n")
+                   paste0("\n\n`gptr_choice: [secret:KNIT_TOKEN] 2, other 1 (ollama/qwen3:8b, ",
+                          "2026-10-05)`\n\n"))
 })
 
 test_that("a knit that fails still removes the label hook, so the next knit runs the chunk", {
@@ -264,7 +289,7 @@ test_that("the code of a live turn gets a fence longer than any backtick line it
   d = session_data(s)
   d$last_text = "Done."
   expect_identical(as.character(knit_print.gptr_session(s)),
-                   paste0("Done.\n\n````r\n", code, "\n````"))
+                   paste0("\n\nDone.\n\n````r\n", code, "\n````\n\n"))
 })
 
 test_that("a live turn's gptr_return(<expression>) knits with its block id, or as written", {
@@ -274,12 +299,12 @@ test_that("a live turn's gptr_return(<expression>) knits with its block id, or a
   d = session_data(s)
   d$last_text = "Fitted."
   expect_identical(as.character(knit_print.gptr_session(s)),
-                   paste0("Fitted.\n\n```r\n", code, "\n```"))
+                   paste0("\n\nFitted.\n\n```r\n", code, "\n```\n\n"))
   session_append(s, list(type = "custom", custom_type = "gptr.doc_block",
                          data = list(doc = "report.Rmd", block = "c5b47c", action = "insert")))
   expect_identical(as.character(knit_print.gptr_session(s)),
-                   paste0("Fitted.\n\n```r\nfit = lm(mpg ~ wt, mtcars)\n",
-                          ".gptr_value_c5b47c = (coef(fit))\n```"))
+                   paste0("\n\nFitted.\n\n```r\nfit = lm(mpg ~ wt, mtcars)\n",
+                          ".gptr_value_c5b47c = (coef(fit))\n```\n\n"))
 })
 
 test_that("knitr's generic dispatches to the lazily registered methods", {
@@ -287,10 +312,11 @@ test_that("knitr's generic dispatches to the lazily registered methods", {
   s = doc_test_session(list(doc_test_turn("n = 1")))
   d = session_data(s)
   d$last_text = "One."
-  expect_identical(as.character(knitr::knit_print(s)), "One.\n\n```r\nn = 1\n```")
+  expect_identical(as.character(knitr::knit_print(s)), "\n\nOne.\n\n```r\nn = 1\n```\n\n")
   x = structure(c(1, 2), class = c("gptr_score", "gptr_s1", "numeric"),
                 meta = list(model = "m", date = "2026-10-05"))
-  expect_identical(as.character(knitr::knit_print(x)), "`gptr_score: mean 1.5 (m, 2026-10-05)`\n")
+  expect_identical(as.character(knitr::knit_print(x)),
+                   "\n\n`gptr_score: mean 1.5 (m, 2026-10-05)`\n\n")
 })
 
 test_that("System 1 vectors show their probabilities and provenance in a notebook", {
