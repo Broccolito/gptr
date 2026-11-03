@@ -1847,7 +1847,7 @@ never executes a recorded block: in replay a piped session is advanced **in plac
 `identical()` holds along a replayed pipe chain), otherwise it returns a replayed session with zero tokens whose
 history comes from the session file truncated at the recorded turn, or is reconstructed from the document when the
 file is absent (a fresh clone; `history_source = "reconstructed"`) [IC-46]; the document's own code runs next. Live regeneration without double execution works under `gptr_source()`, knitr
-(scoped label hook) and line-by-line IDE runs; under base `source()`/Rscript, `live` and stale regeneration
+(scoped label hook: the old agent chunk neither runs nor shows) and line-by-line IDE runs; under base `source()`/Rscript, `live` and stale regeneration
 downgrade to replay with a warning. Replay is forced when `_R_CHECK_PACKAGE_NAME_` is set outside testthat (the
 examples of R CMD check; tests use offline fake and mock providers and may pass `replay =`) [13, 14 §4.4.2; IC-45].
 Calls nested in loops and functions have no block: they run live on re-source, or fail with "not recorded" under

@@ -55,7 +55,8 @@ doc_knit_code = function(s) {
 }
 
 #' Skip the chunk with this label for the rest of the knit: a label hook (chaining any existing
-#' one) sets eval = FALSE for skipped labels; the document hook of the knit restores the hooks it
+#' one) sets eval = FALSE and include = FALSE for skipped labels, so the old code of a regenerated
+#' block neither runs nor shows in the output; the document hook of the knit restores the hooks it
 #' replaced, and so does an after.knit hook, which knitr runs on exit also when the knit fails
 #' (the document hook is then never reached, and knit() may have reset the document hook to its
 #' default already). Both hooks run in every knit() of the session, so they end the skip only in
@@ -74,7 +75,9 @@ doc_knitr_skip = function(label) {
   ours = function() doc_knit_depth() <= depth
   mine$label = function(options) {
     if (is.function(old$label)) options = old$label(options)
-    if (isTRUE(options$label %in% doc_state()$knitr_skip)) options$eval = FALSE
+    if (isTRUE(options$label %in% doc_state()$knitr_skip)) {
+      options[c("eval", "include")] = list(FALSE, FALSE)
+    }
     options
   }
   mine$document = function(x) {

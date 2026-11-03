@@ -76,6 +76,9 @@ test_that("a stale agent chunk is regenerated during the knit without running th
   expect_identical(b$id, "abc123")
   expect_identical(doc_block_body(readLines(rmd), b[1, ]), "n = 7")
   expect_null(knitr::opts_hooks$get("label"))
+  # the skipped chunk is left out of the output: its old code never ran
+  md = readLines(file.path(getwd(), "report.md"))
+  expect_false(any(grepl("old_ran|gptr:abc123", md)))
 })
 
 # ---- additions (D-130): redaction, the hook scope on failed knits and child knits, and the
