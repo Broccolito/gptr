@@ -156,6 +156,7 @@ checked against the code first; a failing test first, then the fix, one commit e
 
 `isolated-check.R test '^console'` and `'^(doc-|agent-run|agent-loop)'` with no failure; lint
 clean on the changed files; `document` leaves no diff; a tmux check (100x34, the fake provider of
-the steering repro) shows the receipt at Enter, during the `r` call and none at delivery, and a
+the steering repro) shows the receipt as the `r` call returns, when the keys typed during it are
+read, and none at delivery, and a
 manual-mode approval reads at `  › `; captures under the session's
 `live/captures/steer-impl/`.
