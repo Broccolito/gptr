@@ -677,10 +677,14 @@ oauth_login_prompt = function(what, destination, key, scope, entry = TRUE) {
             "\nContinuing authorizes this destination and storage.")
 }
 
-#' A safe, distinguishable result for an unfinished login
+#' A safe, distinguishable result for an unfinished login, said to the person and the model
 #' @noRd
-oauth_login_incomplete = function(value) {
-  invisible(structure(FALSE, status = if (is.na(value)) "cancelled" else "skipped"))
+oauth_login_incomplete = function(value, key) {
+  status = if (is.na(value)) "cancelled" else "skipped"
+  gptr_inform(paste0(if (is.na(value)) "Cancelled" else "Skipped",
+                     ": no credential was stored for ", key, "."), "login", key = key,
+              status = status)
+  invisible(structure(FALSE, status = status))
 }
 
 #' A browser flow has no key prompt in which to review destination and persistence
@@ -690,13 +694,14 @@ oauth_login_review = function(destination, key, scope) {
                                                 entry = FALSE),
                              c("Continue to sign in", "Skip", "Cancel"))
   if (identical(answer, 1L)) return(TRUE)
-  oauth_login_incomplete(if (identical(answer, 2L)) "" else NA_character_)
+  oauth_login_incomplete(if (identical(answer, 2L)) "" else NA_character_, key)
 }
 
 #' Reuse the credential store's keyring reference format, without returning secret values; a
 #' remembered login keeps an existing keyring item for the record's own secret field
 #' @noRd
 oauth_login_store = function(key, rec, scope) {
+  where = oauth_login_storage(key, scope)
   ref = if (identical(scope, "keyring")) {
     auth_need_os_keyring()
     list(service = "gptr", username = key)
@@ -708,6 +713,9 @@ oauth_login_store = function(key, rec, scope) {
                        field = if (identical(rec$type, "oauth")) "refresh" else "key")
   }
   auth_store_set(key, rec, scope = if (identical(scope, "session")) "session" else "user")
+  gptr_inform(paste0("Stored the credential for ", key, " in ", where, "."), "login", key = key,
+              status = "stored")
+  invisible(TRUE)
 }
 
 # ---- gptr_login() and gptr_logout() ------------------------------------------------------------
@@ -744,7 +752,8 @@ oauth_login_store = function(key, rec, scope) {
 #'   bound to its reviewed configuration and resolved executable. Leave `NULL` for providers
 #'   and HTTP MCP servers.
 #' @return `gptr_login()` returns `TRUE` invisibly on success, or `FALSE` invisibly with a
-#'   `status` attribute of `"skipped"` or `"cancelled"`; no credential value is returned.
+#'   `status` attribute of `"skipped"` or `"cancelled"`, and says which in a message that names
+#'   the store used; no credential value is returned or shown.
 #'   `gptr_logout()` removes the stored
 #'   credential and forgets the access token held in memory, and returns `TRUE` invisibly when
 #'   it removed something, else `FALSE`.
@@ -794,13 +803,12 @@ gptr_login = function(provider, method = c("auto", "oauth", "key"),
     value = oauth_ask(oauth_login_prompt(paste("API key for", provider),
                                           url_for_log(destination), provider, scope),
                       optional = TRUE)
-    if (is.na(value) || !nzchar(value)) return(oauth_login_incomplete(value))
+    if (is.na(value) || !nzchar(value)) return(oauth_login_incomplete(value, provider))
     list(type = "api_key", key = value)
   }
   rec$resource = url_for_log(destination)
   rec$endpoint_hash = hash_sha256(destination)
   oauth_login_store(provider, rec, scope)
-  invisible(TRUE)
 }
 
 #' The MCP branch of gptr_login(): RFC 9728 discovery and OAuth, or a bearer token entered by
@@ -820,7 +828,7 @@ oauth_login_mcp = function(name, method, scope = "user", slot = NULL) {
     value = oauth_ask(oauth_login_prompt(paste("Credential for MCP server", name,
                                                "environment slot", slot),
                                           target$description, key, scope), optional = TRUE)
-    if (is.na(value) || !nzchar(value)) return(oauth_login_incomplete(value))
+    if (is.na(value) || !nzchar(value)) return(oauth_login_incomplete(value, key))
     oauth_login_store(key,
                     list(type = "env", key = value, slot = slot, binding = target$binding,
                          resource = target$resource), scope)
@@ -835,10 +843,9 @@ oauth_login_mcp = function(name, method, scope = "user", slot = NULL) {
     }
     token = oauth_ask(oauth_login_prompt(paste("Bearer token for MCP server", name),
                                           url_for_log(target$url), key, scope), optional = TRUE)
-    if (is.na(token) || !nzchar(token)) return(oauth_login_incomplete(token))
+    if (is.na(token) || !nzchar(token)) return(oauth_login_incomplete(token, key))
     rec = list(type = "api_key", key = token, resource = target$url, binding = target$binding)
-    oauth_login_store(key, rec, scope)
-    return(invisible(TRUE))
+    return(oauth_login_store(key, rec, scope))
   }
   review = oauth_login_review(url_for_log(target$url), key, scope)
   if (!isTRUE(review)) return(invisible(review))
@@ -848,7 +855,6 @@ oauth_login_mcp = function(name, method, scope = "user", slot = NULL) {
                                  resource = target$url, key = key))
   rec$binding = target$binding
   oauth_login_store(key, rec, scope)
-  invisible(TRUE)
 }
 
 #' @rdname gptr_login

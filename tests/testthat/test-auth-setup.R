@@ -31,6 +31,30 @@ test_that("empty and cancelled credential entry have safe distinct results", {
   expect_identical(ui$log$answer, c("[hidden]", "[hidden]"))
 })
 
+test_that("login says what it stored, skipped or cancelled, never the value", {
+  local_user_dirs()
+  withr::local_options(gptr.quiet = FALSE)
+  key = paste0("report-canary-", strrep("r", 24))
+  local_scripted_ui(list(key, "", NA_character_, 2L, NA_integer_))
+  said = character()
+  login = function(method) {
+    withCallingHandlers(gptr_login("openrouter", method = method, scope = "session"),
+                        gptr_message_login = function(m) {
+                          said <<- c(said, trimws(conditionMessage(m)))
+                          invokeRestart("muffleMessage")
+                        })
+  }
+  expect_true(login("key"))
+  keys = list(login("key"), login("key"))
+  oauth = list(login("oauth"), login("oauth"))
+  expect_identical(vapply(c(keys, oauth), attr, "", "status"),
+                   rep(c("skipped", "cancelled"), 2L))
+  none = "no credential was stored for openrouter."
+  expect_identical(said, c(paste("Stored the credential for openrouter in this R process only",
+                                 "(no credential file)."),
+                           rep(paste(c("Skipped:", "Cancelled:"), none), 2L)))
+})
+
 test_that("/skip and /cancel at the hidden prompt skip and cancel instead of storing a key", {
   local_user_dirs()
   key = paste0("kept-canary-", strrep("k", 24))
@@ -278,9 +302,13 @@ test_that("model-initiated login sends only safe status to requests, messages an
   fake = local_fake_provider(list(
     fake_tool("r", code = "gptr_login('openrouter', method = 'key', scope = 'session')"),
     "Setup complete."))
-  session = peter("Set up this provider.", model = fake, mode = "yolo", envir = new.env())
+  withr::local_options(gptr.quiet = FALSE)
+  session = suppressMessages(peter("Set up this provider.", model = fake, mode = "yolo",
+                                   envir = new.env()))
   observed = serialize(list(fake_requests(fake), session$messages, session$history, ui$log), NULL)
   expect_length(grepRaw(charToRaw(key), observed, fixed = TRUE, all = TRUE), 0L)
+  result = json_encode(fake_requests(fake)[[2L]]$messages)
+  expect_match(result, "Stored the credential for openrouter in this R process only", fixed = TRUE)
   expect_false(file.exists(auth_store_path()))
   expect_identical(ui$log$method, "input")
   expect_s3_class(auth_store_get("openrouter")$key, "gptr_secret")

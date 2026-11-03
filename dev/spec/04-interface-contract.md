@@ -1350,7 +1350,9 @@ and bound to the reviewed configuration and resolved executable. Provider endpoi
 destination/configuration edits invalidate stored authorization. Needs a human
 (`gptr_error_noninteractive`). `gptr_login()` returns `invisible(TRUE)` on success; blank input or
 `/skip` returns `invisible(FALSE)` with `status = "skipped"`, while `/cancel`, dismissal or interrupt
-gives `status = "cancelled"`; neither command is ever stored as a credential.
+gives `status = "cancelled"`; neither command is ever stored as a credential. Each outcome is also a
+`gptr_message_login` notice (`key`, `status` = `"stored"`, `"skipped"` or `"cancelled"`) naming the
+store used, so a person and a model calling it from the `r` tool see what happened.
 No credential value is returned to model/tool results, UI logs, transcript or history.
 `gptr_logout()` removes stored and in-memory credentials and returns `invisible(<lgl: something removed>)`.
 Conditions: `noninteractive`, `not_available` (hidden input or OS keyring unavailable),

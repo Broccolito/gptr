@@ -29,7 +29,8 @@ and HTTP MCP servers.}
 }
 \value{
 \code{gptr_login()} returns \code{TRUE} invisibly on success, or \code{FALSE} invisibly with a
-\code{status} attribute of \code{"skipped"} or \code{"cancelled"}; no credential value is returned.
+\code{status} attribute of \code{"skipped"} or \code{"cancelled"}, and says which in a message that names
+the store used; no credential value is returned or shown.
 \code{gptr_logout()} removes the stored
 credential and forgets the access token held in memory, and returns \code{TRUE} invisibly when
 it removed something, else \code{FALSE}.
