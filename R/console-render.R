@@ -148,8 +148,9 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     st$on[[name]] = !st$on[[name]]
     restyle()
   }
-  # The margin opens every non-empty row; a pending blank line is written only before more text.
-  # A row is held until its line end
+  # The margin opens every non-empty row; a pending blank line is written only before more text,
+  # and not where before_output() wrote one (other output came between, D-245). A row is held
+  # until its line end
   emit = function(x) {
     if (!nzchar(x)) return(invisible())
     if (st$bol && !startsWith(x, "\n")) {
@@ -162,7 +163,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     if (!st$bol) return(invisible())
     x = st$row
     st$row = ""
-    if (is.function(before_output)) before_output(x)
+    if (is.function(before_output) && isTRUE(before_output(x))) x = sub("^\n", "", x)
     console_cat(x)
     invisible()
   }
@@ -699,14 +700,15 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
 #' where lines keep the margin, written on a finished line; blocks of one kind group, so the tool
 #' rows of consecutive requests group as those of one response (D-245), except prompts, and a
 #' question and the tool block it is asked in are one (it asks under the call it gates, D-243).
-#' The live row below them is no block
+#' The live row below them is no block. TRUE (invisibly) when it wrote the blank line
 #' @noRd
 console_gap = function(rec, kind) {
   same = identical(rec$last, kind) && !identical(kind, "prompt")
   join = paste(rec$last, kind) %in% c("tool prompt", "prompt tool")
-  if (!same && !join && nzchar(console_pad())) console_cat("\n")
+  gap = !same && !join && nzchar(console_pad())
+  if (gap) console_cat("\n")
   rec$last = kind
-  invisible(NULL)
+  invisible(gap)
 }
 
 #' Normal progress: ordinary stdout display. Callers keep
@@ -746,14 +748,11 @@ console_render_resume = function(runs) {
   invisible(NULL)
 }
 
-#' A record-only callback: a rendered row opens a text block
+#' A record-only callback: a rendered row opens a text block; TRUE when its blank row was written
 #' @noRd
 console_stream_output = function(rec) {
   force(rec)
-  function(text) {
-    console_gap(rec, "text")
-    invisible(NULL)
-  }
+  function(text) console_gap(rec, "text")
 }
 
 #' End the partial lines of a record (before a tool line; `cut` when the answer is cut off)

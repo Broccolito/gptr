@@ -228,6 +228,25 @@ test_that("a receipt is a block of its own: a blank row before the text after it
   expect_identical(rows[q + 1:2], c("", "  first"))
 })
 
+test_that("a receipt between two paragraphs has one blank row on each side (P30 follow-up)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.width = 40L, cli.num_colors = 1L)
+  words = paste(sprintf("word%02d", 1:12), collapse = " ")
+  # sent once the first paragraph's row is written, the blank row before the second still pending
+  fake = gptr_fake_provider(list(list(text = paste0("first.\n\n", words), chunk = 8L, gap = 0.05),
+                                 "second"))
+  local_typed(typed_once("use base R", function() {
+    any(vapply(as.list(console_state()$active), function(r) identical(r$last, "text"), NA))
+  }))
+  rows = sub(".*\r", "", typing_console(fake, c("go", "/exit"))$out)
+  q = which(rows == receipt_line("steer", "use base R"))
+  expect_length(q, 1L)
+  expect_identical(rows[q + c(-2L, -1L, 1L)], c("  first.", "", ""))
+  expect_match(rows[q + 2L], "^  word01 ")
+})
+
 test_that("on a CLI route the receipt says the steer is sent after the CLI's answer", {
   skip_on_cran()
   local_console_test()
