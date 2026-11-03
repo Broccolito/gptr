@@ -309,8 +309,9 @@ ckpt_files_scan = function(tr) {
   captured = both %in% intersect(names(s$hash), names(tr$hash))
   changed[captured] = changed[captured] |
     s$hash[both[captured]] != tr$hash[both[captured]]
-  unsafe = both %in% names(s$uncaptured)[s$uncaptured %in%
-    c("not a regular file", "symbolic link")]
+  # a captured file that became a link or another non-regular entry; others changed only by stat
+  unsafe = both %in% intersect(names(tr$hash), names(s$uncaptured)[s$uncaptured %in%
+    c("not a regular file", "symbolic link")])
   fresh = setdiff(w$path, old$path)
   s$created = if (isTRUE(tr$complete)) fresh else intersect(fresh, tr$absent)
   s$modified = unique(c(both[changed | unsafe], intersect(old$path, s$not_files)))

@@ -1024,6 +1024,21 @@ test_that("checkpoint changed FIFOs and links stay listed without capture or res
   expect_identical(readLines(file.path(proj, "source.R")), "answer = 42")
 })
 
+test_that("unchanged links and FIFOs are not reported by later scans", {
+  skip_on_os("windows")
+  proj = local_project(files = list("a.R" = "a = 1", "notes.md" = "notes"))
+  expect_true(file.symlink(file.path(proj, "notes.md"), file.path(proj, "link.md")))
+  fifo = processx::conn_create_fifo(file.path(proj, "pipe"), read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  ck = ckpt_ck_new("s0000000093")
+  call = list(id = "c1", name = "r", input = list(code = "writeLines('a = 2', 'a.R')"))
+  tok = ckpt_files_before(ck, call, 1L)
+  writeLines("a = 2", file.path(proj, "a.R"))
+  expect_identical(paths_status(ckpt_files_after(ck, call, tok)), c(a.R = "modified"))
+  tok = ckpt_files_before(ck, call, 1L)
+  expect_null(ckpt_files_after(ck, call, tok))
+})
+
 test_that("checkpoint racy scans reject a tracked regular file replaced by a FIFO", {
   skip_on_os("windows")
   proj = local_project(files = list("empty.txt" = character()))
