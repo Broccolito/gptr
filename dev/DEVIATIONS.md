@@ -10322,3 +10322,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   give a classed character ..."; s1-composition "decision launch notices identify real cache
   misses ..."; doc-replay "without .gptr/, gptr_cache() counts and clears the System 1 answers in
   memory". Evidence: progress/fixes-1.0.1/lane-C.md.
+
+## D-350 - Fixes 1.0.1 round 2 lane X /skip and /cancel match in any case (2026-11-03)
+- Rule (amends 04 `gptr_login()` and the assisted-setup questions): the answers `/skip` and
+  `/cancel` are commands in any case and between blanks, at the hidden credential prompt
+  (`oauth_ask()`) and at a text question (`ui_questions_via()`); any other answer, `/cancel now`
+  included, is an answer. Formerly only the lowercase literal was a command at the hidden prompt
+  (`/SKIP`, `/Skip` and `/CANCEL` were stored as the API key and reported stored), and a text
+  question took a padded `" /skip "` as its answer.
+- Contract-visible: `?gptr_login` (the commands are unchanged; only the matching is wider).
+- Tests: test-auth-setup.R "/skip and /cancel at the hidden prompt skip and cancel instead of
+  storing a key" and "ordinary text questions can be submitted, skipped and cancelled". Evidence:
+  progress/fixes-1.0.1/round2-X.md.
