@@ -188,7 +188,7 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
     p$write_input(x)
   }
   pty$interrupt = function() p$interrupt()
-  pty$ctrl_c = function() system2("kill", c("-INT", "--", paste0("-", p$get_pid())))
+  pty$ctrl_c = function() system2("kill", c("-s", "INT", "--", paste0("-", p$get_pid())))
   pty$wait = function(x, timeout = 30) {
     deadline = Sys.time() + timeout
     repeat {
