@@ -2491,7 +2491,7 @@ and 12,000 tokens, with line numbers off (cat -n costs +19-26%) [G2 (g)]; direct
 Frozen at session start by `prompt-sections.R`; each section is a registered `prompt_section` spec with a
 tier, order and budget, replaceable by plugins and by `.gptr/SYSTEM.md` or `.opts$system` (which replace
 `preamble`, `tools` and `rules`, Pi's rule) [G4 §3.1-3.2]. T0 ends after `<context>`; T1 starts at `<skills>`.
-Strings in R sources are ASCII. `{s1}` is the configured System 1 alias (`jev`). Each capability's text is
+Strings in R sources are ASCII. `{s1}` is the configured System 1 alias written as an R string (`"jev"`). Each capability's text is
 contributed by the built-in that owns it [IC-68]: `<rules>` is the `guidelines` of the active direct tools in
 array order (read: line 1; r: five lines 2-6; edit: lines 7-10; write: line 11) followed by P07's three closing lines,
 so the `readonly` preset has no edit or write lines; `<r_session>` is P07's core with fragments (`parent =

@@ -3503,7 +3503,8 @@ blank line. T0 = sections with `tier =
 "T0"`, T1 = `tier = "T1"`; the frozen blocks never change during a session, but for IC-85's refreeze
 (D-291) (mid-session changes are appended operator section patches:
 `Updated system prompt section "<name>":\n\n<section>` or `Removed system prompt section
-"<name>".`). `{s1}` is replaced by the configured System 1 alias (`jev`).
+"<name>".`). `{s1}` is replaced by the configured System 1 alias written as an R string (`"jev"`), so an agent never
+looks for an object of that name (D-320).
 
 | Section | Tier | Order | Budget | Included when | Registered by |
 |---|---|---|---|---|---|

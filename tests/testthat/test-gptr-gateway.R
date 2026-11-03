@@ -1171,7 +1171,8 @@ test_that("System 1 arguments are refused on a conversational route (D-250)", {
     expect_identical(cnd$arg, arg)
     expect_match(conditionMessage(cnd), paste0("`", arg, "` shapes a System 1 decision"),
                  fixed = TRUE)
-    expect_match(conditionMessage(cnd), "model = jev runs it through a chat model", fixed = TRUE)
+    expect_match(conditionMessage(cnd), "model = \"jev\" runs it through a chat model",
+                 fixed = TRUE)
   }
   expect_length(fake_requests(fake), 0L)
   # the default threshold, and an explicit 0.5, are no System 1 request

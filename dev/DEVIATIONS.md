@@ -9564,3 +9564,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   08 sections 3.3 and 3.5 (limit 8) and Part 4; `cran-comments.md`; dev/HANDOFF.md's Remaining.
 - Tests: none (no code change). Evidence: progress/fixes.md FIX-40, FIX-43, FIX-44, FIX-45 and
   FIX-48; progress/open-findings.md.
+
+## D-320 - Fixes 1.0.1 lane C System 1 guidance and inputs (2026-11-02)
+- Rule (alias): `{s1}` is written as an R string in every branch (`model = "jev"`, `"clef"`,
+  `"ollama/clef-flash"`), and every agent-read hint and help example quotes it. Was the bare `jev`
+  (quoted only with `/` or `:`), which agents read as an R object and looked for (`get("jev")`,
+  `exists("jev")`) before asking which model to use. A bare `model = jev` still resolves (IC-41).
+  The o200k counts are unchanged (`model = jev)` and `model = "jev")` are both 12 tokens in the
+  measured phrase; `run.R --check` OK, no `--update`).
+- Contract-visible: 03 section 7.3 (`{s1}`), 04 section 9.3; `?peter` `choices`, `?gptr_prob`,
+  vignette system-one.
+- Tests: prompt-sections "{s1} is replaced by the configured System 1 alias, quoted as an R
+  string"; northstar's frozen prompt; gptr-gateway "System 1 arguments are refused on a
+  conversational route (D-250)". Evidence: progress/fixes-1.0.1/lane-C.md.

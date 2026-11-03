@@ -222,7 +222,7 @@ The following examples can contact real providers and are not executed here. Jev
 
 ```{r, eval = FALSE}
 gptr_env("~/keys/jev.env")
-peter("Is this a randomized trial?", abstracts, model = jev)
+peter("Is this a randomized trial?", abstracts, model = "jev")
 
 # Prepare an installed native decision model on your local Ollama server first.
 peter("Is this a randomized trial?", abstracts, model = "ollama/clef-flash")

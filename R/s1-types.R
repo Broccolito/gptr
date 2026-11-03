@@ -434,7 +434,7 @@ Summary.gptr_s1 = function(...) {
 
 #' Probabilities and confidence of System 1 answers
 #'
-#' System 1 calls (`peter(question, x, model = jev)`) return typed vectors: a `gptr_decision`
+#' System 1 calls (`peter(question, x, model = "jev")`) return typed vectors: a `gptr_decision`
 #' (logical), a `gptr_choice` (character) or a `gptr_score` (double, the expected 0-based level).
 #' They work in `if()`, `while()`, `ifelse()`, `table()`, `sum()` and comparisons like the bare
 #' vectors, and carry the model's probabilities as attributes. `gptr_prob()` reads them.
