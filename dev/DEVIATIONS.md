@@ -9732,8 +9732,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Not changed (deferred): a line typed within about 0.1 s of sending a prompt, somewhat later on
   a loaded machine, is still echoed raw once by the terminal, between readline's return (which
   restores the echo) and the call's no-echo modes (two `stty` runs). In tmux runs a line sent 0.1 s
-  after the prompt was echoed in 4 of 7 (idle and under load), one sent 0.15 to 0.3 s after it in
-  none of 19 (follow-up review: the first record said some 60 ms, too narrow). Since D-301 it is
+  after the prompt was echoed in 6 of 11 (idle and under load), one sent 0.15 to 0.3 s after it in
+  none of 20 (follow-up review: the first record said some 60 ms, too narrow). Since D-301 it is
   two rows (the raw echo and its receipt), no longer three; narrowing the window means caching the
   prompt's modes across calls, which a `!system("stty ...")` could make stale.
 - Contract-visible: section 10.2 row 22 (`confirm`), the `gptr_confirm()` row, `gptr_init(path)`,
