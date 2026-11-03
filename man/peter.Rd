@@ -205,39 +205,36 @@ Windows Rgui, Jupyter \tab the next input \tab none: Esc or interrupt stops \cr
 Rscript, pipes, knitr \tab nothing; \code{.stdin = TRUE} reads the pipe \tab none
 }
 
-In terminal R and an IDE's Terminal tab what you type while peter works is a draft on the
-bottom row, under the transcript, so it never mixes into the answer; a block pasted there is
-one message where the terminal supports bracketed paste. Enter sends it as a steer and writes it
-into the transcript at once, as \verb{steer> <text>}: the agent reads it at its next step boundary,
-when the response in flight ends after the results of all its tool calls (an answer about to
-end gets one more request). Tab sends it as a follow-up, written as \verb{next> <text>}: the next
-prompt, sent as its own run once the answer ends. \code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}})
-swaps the two keys. A draft that starts with \code{/} or \code{!} is always a follow-up, so \verb{/command}
-and \code{!code} lines run at the next prompt, in the order typed. The bottom row counts what is
-queued (\verb{1 steer queued}); Up on an empty draft takes back the newest message not yet
-delivered, to edit and send again, and Ctrl-U clears the draft. A question (an approval, a
-choice) waits until typing pauses for a second, or three while the draft has text, and the
-draft stays: through
-questions, Ctrl-C and the pause menu, and to the next prompt, where Enter sends it. Keys typed
-while R code runs in this process (the \code{r} tool) show when it returns. Such code that reads
-the terminal through \code{readline()} or \code{menu()} inside another function shows only that read's
-prompt (the text printed before it shows when the code returns, the typed answer never), and
-Ctrl-C at that read aborts the answer instead of pausing it. A steer the answer did not take
-(it ended first) is the next prompt; after an abort or an error nothing queued is sent: the
-queued text and the draft go to the console history, and Up recalls them. Under
-TERM=dumb or in ESS a line typed with Enter is queued as \code{type_ahead} says. On the CLI routes
-(\code{claude-cli}, \code{codex}) the agent reads a steer after the CLI's answer, which is often the
-whole run.
+In terminal R and an IDE's Terminal tab what you type while peter works is a draft on the bottom
+row, under the transcript, so it never mixes into the answer; a block pasted there is one message
+where the terminal supports bracketed paste. Enter sends it as a steer and writes it into the
+transcript at once, as \verb{steer> <text>}: the agent reads it at its next step boundary, when the
+response in flight ends after the results of all its tool calls (an answer about to end gets one
+more request). Tab sends it as a follow-up, written as \verb{next> <text>}: the next prompt, sent as
+its own run once the answer ends. \code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}}) swaps the two
+keys. A draft that starts with \code{/} or \code{!} is always a follow-up, so \verb{/command} and \code{!code} lines
+run at the next prompt, in the order typed. The bottom row counts what is queued (\verb{1 steer queued}); Up on an empty draft takes back the newest message not yet delivered, to edit and send
+again, and Ctrl-U clears the draft. A question (an approval, a choice) waits until typing pauses
+for a second, or three while the draft has text, and the draft stays: through questions, Ctrl-C
+and the pause menu, and to the next prompt, where Enter sends it. Keys typed while R code runs in
+this process (the \code{r} tool) show when it returns. Such code that reads the terminal through
+\code{readline()} or \code{menu()} inside another function shows only that read's prompt (the text printed
+before it shows when the code returns, the typed answer never), and Ctrl-C at that read aborts
+the answer instead of pausing it. A steer the answer did not take (it ended first) is the next
+prompt; after an abort or an error nothing queued is sent: the queued text and the draft go to
+the console history, and Up recalls them. Under TERM=dumb or in ESS a line typed with Enter is
+queued as \code{type_ahead} says. On the CLI routes (\code{claude-cli}, \code{codex}) the agent reads a steer
+after the CLI's answer, which is often the whole run.
 
-RStudio, R.app, Positron and Windows consoles hold what is typed until R reads again. In
-RStudio, R.app and Windows consoles a line typed while peter works is the next prompt, one
-prompt per line, unless a question comes first: it reads the line, queues it as \code{type_ahead}
-says and asks again. Positron's console keeps typed text as R code, which runs after \code{peter()}
-returns, and clears it at Ctrl-C. To steer in these consoles, pause and press \code{s} (Windows'
-Rgui cannot pause), as their banner and bottom row say (\verb{esc, then s, to steer}). In RStudio an
-Esc first closes RStudio's own completion list, if open, then
-clears a line being typed, so the menu comes at the next Esc. During \code{peter("...")} at R's
-prompt, outside the chat, typed lines stay R's next input.
+RStudio, R.app, Positron and Windows consoles hold what is typed until R reads again. In RStudio,
+R.app and Windows consoles a line typed while peter works is the next prompt, one prompt per
+line, unless a question comes first: it reads the line, queues it as \code{type_ahead} says and asks
+again. Positron's console keeps typed text as R code, which runs after \code{peter()} returns, and
+clears it at Ctrl-C. To steer in these consoles, pause and press \code{s} (Windows' Rgui cannot
+pause), as their banner and bottom row say: \verb{esc, then s, to steer} in RStudio and R.app,
+\verb{ctrl-c, then s, to steer} in Positron and Windows' Rterm. In RStudio an Esc first closes
+RStudio's own completion list, if open, then clears a line being typed, so the menu comes at the
+next Esc. During \code{peter("...")} at R's prompt, outside the chat, typed lines stay R's next input.
 
 Tab completes only after \code{@} (objects, then files), \verb{@obj$} (its members), \verb{peter$}, a leading
 \code{/} (commands) and on a \code{!} or \verb{!!} line (R code), never in plain text: in terminal R, R in an
@@ -251,13 +248,12 @@ adds closing brackets and quotes unless \code{insert_matching} is off, and opens
 
 The pause key opens a pause menu while an answer runs, with the keys \code{s} steer, \code{f} follow-up,
 \code{c} continue, \code{a} abort and, for a foreground call (a chat turn included) when available, \code{b}
-background. \code{s} and \code{f} read the text at \verb{steer> } and \verb{next> } and queue it as Enter and Tab
-do; in a \code{peter("...")}
-call a follow-up is sent when the agent would otherwise stop. A key typed right after the pause
-key answers the menu. Continuing leaves the work as if it had not paused, and pressing the
-pause key again aborts. Abort keeps the partial session; what you queued and the draft go to
-the history, unsent. Background returns to the chat prompt and keeps the run: what was
-queued for after the answer and the draft go to the history, unsent, as after an abort, and
+background. \code{s} and \code{f} read the text at \verb{steer> } and \verb{next> } and queue it as Enter and Tab do;
+in a \code{peter("...")} call a follow-up is sent when the agent would otherwise stop. A key typed
+right after the pause key answers the menu. Continuing leaves the work as if it had not paused,
+and pressing the pause key again aborts. Abort keeps the partial session; what you queued and the
+draft go to the history, unsent. Background returns to the chat prompt and keeps the run: what
+was queued for after the answer and the draft go to the history, unsent, as after an abort, and
 another prompt steers the running session. Nothing runs it while the chat waits for input: use
 \code{!!gptr::gptr_wait(gptr::gptr_last())} there to continue it, its answer then shown as a prompt's
 and Enter steering it. Under Rscript, background runs advance only inside blocking gptr calls.

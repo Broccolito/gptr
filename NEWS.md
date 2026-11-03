@@ -17,9 +17,9 @@
   transcript only when the agent took it, marked like an answer. The bottom row counts what is
   queued (`1 steer queued`). Answers to a question are read two columns in, under it, so an
   answer no longer looks like a message to the agent.
-* Typing does not steer in RStudio and R.app, so their banner and `/help`, and RStudio's bottom
-  row, now say how to: `esc, then s, to steer`; RStudio's row adds `typed lines run after this
-  answer`.
+* Typing does not steer in RStudio, R.app or Windows' Rterm, so their banner and `/help` now say
+  how to: `esc, then s, to steer` (Rterm: `ctrl-c, then s, to steer`); the bottom row says it
+  too and adds `typed lines run after this answer`.
 * A question asked while the bottom row is shown, such as a provider consent, no longer leaves
   copies of that row in RStudio's console or draws it between the question and its answer.
 

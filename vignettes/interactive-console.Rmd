@@ -261,16 +261,15 @@ that pauses Peter, depend on the console:
 
 In terminal R and an IDE's Terminal tab what you type is a draft on the bottom row, under the
 transcript, so it never mixes into the answer; a block pasted there is one message where the
-terminal supports bracketed paste. The row also
-shows what Peter is doing and how many messages are queued (`1 steer queued`). Enter sends the
-draft as a steer and writes it into the transcript at once, as your own line, `steer> <text>`,
-where it stays while the agent works and after the terminal scrolls. Tab sends it as a
-follow-up, written as `next> <text>`, which runs at the next `peter>` prompt. With `gptr_config(type_ahead = "follow_up", .scope =
-"user")` the two keys swap. A draft that starts with `/` or `!` is always a follow-up:
-`/commands` and `!code` run at the next prompt, in the order typed. Up on an empty draft takes
-back the newest message not yet delivered, to edit and send again; Ctrl-U clears the draft. A
-recording document keeps what you sent, steers included
-([Record, replay and export](script-as-history.html)).
+terminal supports bracketed paste. The row also shows what Peter is doing and how many messages
+are queued (`1 steer queued`). Enter sends the draft as a steer and writes it into the
+transcript at once, as your own line, `steer> <text>`, where it stays while the agent works and
+after the terminal scrolls. Tab sends it as a follow-up, written as `next> <text>`, which runs
+at the next `peter>` prompt. With `gptr_config(type_ahead = "follow_up", .scope = "user")` the
+two keys swap. A draft that starts with `/` or `!` is always a follow-up: `/commands` and
+`!code` run at the next prompt, in the order typed. Up on an empty draft takes back the newest
+message not yet delivered, to edit and send again; Ctrl-U clears the draft. A recording document
+keeps what you sent, steers included ([Record, replay and export](script-as-history.html)).
 
 A question (an approval, a choice) waits until you stop typing for a second, or three seconds
 while the draft has text, so a key meant for the draft never answers it. The draft stays through
@@ -286,13 +285,14 @@ cannot read it while Peter works:
 
 - In RStudio, R.app and Windows consoles a line typed during an answer is the next prompt, one
   prompt per line, unless a question comes first: the question reads the line, queues it as
-  `type_ahead` says and asks again. RStudio hides such a line at its next output, and its bottom
-  row says `typed lines run after this answer`.
+  `type_ahead` says and asks again. RStudio hides such a line at its next output. The bottom row
+  there and in Windows' Rterm says `typed lines run after this answer`.
 - Positron's console keeps typed text as R code, which runs after `peter()` returns, and clears
   it at Ctrl-C.
 - To steer in these consoles, pause and press `s` (Windows' Rgui cannot pause), as their banner
-  and bottom row say (`esc, then s, to steer`). In RStudio an Esc first closes RStudio's own completion list, if open, then clears a line being typed, so the
-  menu comes at the next Esc.
+  and bottom row say: `esc, then s, to steer` in RStudio and R.app, `ctrl-c, then s, to steer`
+  in Positron and Windows' Rterm. In RStudio an Esc first closes RStudio's own completion list,
+  if open, then clears a line being typed, so the menu comes at the next Esc.
 
 During `peter("...")` at R's prompt, outside the chat, typed lines stay R's next input in every
 console.

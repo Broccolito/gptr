@@ -2362,7 +2362,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
 | `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `paste` and `-paste` among `modes` are gptr's own (D-263): bracketed paste's `ESC [ ? 2004 h` after stty, `ESC [ ? 2004 l` before it, through `gptr_message_write()`, never into a tool's output, and alone they run no stty; `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`; bracketed paste off first, D-263), then sets the call's again (IC-76) | P11, P14, P26 |
-| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0 paste` (bracketed paste on, D-263) for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` (a Ctrl-C byte in a batch holding a bracketed-paste marker, read while a paste is open up to 2 s after its last read, or read on the polling beat right after such a batch with no empty read between, is pasted text, FIX-28 review rounds 1, 3, 4 and 6) and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; every switch to the saved modes (`tty_restore()`, `tty_question(TRUE)`, `gptr_readline()`) adds `-paste` where the call's set has `paste`, so readline never reads with the mode on, and `tty_isig_on()` and `tty_isig_off()` leave it on, while `eval_restore()` turns it on again after the code of an evaluation that turned isig on, once its capture is lifted, as GNU readline 8.1+ turns it off when a read of the code ends (FIX-28); `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment, so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
+| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0 paste` (bracketed paste on, D-263) for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` (a Ctrl-C byte in a batch holding a bracketed-paste marker, read while a paste is open up to 2 s after its last read, or read on the polling beat right after such a batch with no empty read between, is pasted text, FIX-28 review rounds 1, 3, 4 and 6) and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; every switch to the saved modes (`tty_restore()`, `tty_question(TRUE)`, `gptr_readline()`) adds `-paste` where the call's set has `paste`, so readline never reads with the mode on, and `tty_isig_on()` and `tty_isig_off()` leave it on, while `eval_restore()` turns it on again after the code of an evaluation that turned isig on, once its capture is lifted, as GNU readline 8.1+ turns it off when a read of the code ends (FIX-28); `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment (after the prompt's leading blanks, which `\033[<n>C` then steps over: macOS libedit in TERM=dumb drew the answer over `  › ` when the hidden part came first, P30 review), so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
 | `tty_query(query, ms = 1500)` | `chr(1)`: the terminal's answer to `query` (IC-82, P28 Task 25): `stty -icanon -echo min 0 time 0` on fd 0 (the saved modes restored on exit), `query` written to stdout, then fd 0 read until a DA1 reply (`ESC [ ? ... c`) arrives or `ms` milliseconds pass; `""` when stty fails (mockable); the T REPL's background probe (`repl_background()`) | P28 |
 | `tty_unreply(x)` | `chr`: `x` without OSC replies (`ESC ] ... BEL` or `ST`) and DA1's `ESC [ ? ... c`, so a terminal's late answer to the background probe is never typed text (IC-82; `repl_background()`, `console_compose()`) | P28 |
@@ -5070,7 +5070,8 @@ P24's `test-injection-e2e.R` adds an injected model trying each path above; ever
 - P11 acceptance adds 18 §2.5's blind-spot cases with the new levels and the control-category calls in `manual`
   and `plan`.
 
-**IC-55 Steering relays by source.** (safe-7) Queue items carry `source` in `pipe`, `pause_menu`, `repl`,
+**IC-55 Steering relays by source.** (safe-7) Queue items carry `source` in `pipe`, `pause_menu`, `repl` (the
+console REPL: a line typed while a run goes, a chat prompt into a running session, D-301),
 `api_user` (`gptr_steer()` called outside any run), `extension` (`ctx$send()` from a plugin or hook) and `agent`
 (a sibling or child). Only the user sources get the operator relay `The user sent this message while you were
 working: <text>`. `extension` items are user-role data `Extension <name> sent this note (not from the user):
@@ -5928,21 +5929,25 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     `steer> <text>` (the agent reads it at its next step boundary) or `next> <text>` (after this answer: a
     follow-up, and any text starting with `/` or `!`), the same words in ASCII, the word mirroring the prompt
     `peter> `; the text escaped, whole, wrapped inside the console width with its later rows under the text (a
-    message of several lines keeps them). On a CLI route (model type `"cli"`) a steer's receipt ends with a dim
-    ` (after the CLI's answer)`, on a row of its own under the text where the last row is full. A receipt is a
-    block of the person's lines, written between whole rows, also while an answer streams (see Whole rows,
-    IC-82). The pause menu's [s] and [f] read their text at `steer> ` and `next> ` themselves, so the line read
-    is the receipt and none is written again (`policy_enqueue(shown = )`), unless its fate differs (`!code` read
-    at `steer> ` in a chat is a follow-up: `next> !code` follows) or a macOS paste added lines (written whole).
-    A line a question read past (IC-75, `console_typed_ahead()`), echoed after the question's prompt, gets its
-    full receipt, which says where it went (it was `↳ steer · not an answer`). Up's take-back writes a dim
-    `↳ steer taken back` (`↳ follow-up taken back`; ASCII `->`) under the receipt, the text back in the draft.
+    message of several lines keeps them; a word wider than a row, as unspaced CJK text is, breaks at the row's
+    width). On a CLI route (model type `"cli"`) a steer's receipt ends with a dim ` (after the CLI's answer)`,
+    on a row of its own under the text where the last row is full. A receipt is a block of the person's lines,
+    written between whole rows, also while an answer streams (see Whole rows, IC-82). The pause menu's [s] and
+    [f] read their text at `steer> ` and `next> ` themselves, so the line read is the receipt and only a note
+    follows it, dim on a row of its own (`console_receipt(shown = )`): a CLI steer's, or `(runs after this
+    answer)` where the text went as the other kind (`/` or `!` text read at `steer> ` in a chat is the next
+    prompt). A macOS paste that added lines gets the receipt written whole. An empty line there sends nothing
+    and leaves its bare `steer>` row, as an empty prompt leaves `peter>`. A line a question read past (IC-75,
+    `console_typed_ahead()`), echoed after the question's prompt, gets its full receipt, which says where it
+    went (it was `↳ steer · not an answer`). Up's take-back (`console_taken_back()`) writes a dim
+    `↳ steer taken back · <text>` (`follow-up`; ASCII `->` and ` - `), cut to one row, as a block of the
+    person's lines (a blank row around it where the answer's text came between), the text back in the draft.
     Inside an evaluation the receipt has the console's colours. It replaces the dim queue line
     `↳ steer · <text>` (P28 Task 13, held while an answer streamed, cut to one row) and the notices
     `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
     `builtin_console` hooks `queue_update` (§7.14): an item from a user source (IC-55) that a foreground run
-    takes (`op = "take"`, verbosity 2) and that showed no receipt when it was sent, source `pipe` (a pipe or a
-    chat prompt into the running session) or `api_user` (`gptr_steer()`), is written then as the receipt's rows
+    takes (`op = "take"`, verbosity 2) and that showed no receipt when it was sent, source `pipe` (`s |>
+    peter()` in code into the running session) or `api_user` (`gptr_steer()`), is written then as the receipt's rows
     (`steer> <text>`, `next> ` for a follow-up), at the step boundary, before the next request's output, as its
     own block (a blank line before and after where lines keep the margin); the console's own sources (`repl`,
     `pause_menu`) print nothing then (it was `› <text>`, the glyph, column and band of an answer's echo).
@@ -5984,9 +5989,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     layering test (12.2). The pause menu's [b] ends no run in the foreground, so it settles the REPL's held lines
     and the draft itself (`console_background_settle()`, steering review): one such list after its `running in
     the background` row and before the blank row, and an empty composer; queued steers stay for the run. A
-    prompt to the REPL's session while it runs or waits in the background steers it (`route_continue()`), and
-    once sent its receipt says so, `steer> <text>` (`repl_turn()`); as a `pipe` item it is shown again when the
-    loop takes it in the foreground (`!!gptr::gptr_wait()`).
+    prompt to the REPL's session while it runs or waits in the background steers it (`route_continue()`, source
+    `repl` for a console turn, the call's attribute `gptr_console`), and once sent its receipt says so,
+    `steer> <text>` (`repl_turn()`), never again when the loop takes it in the foreground
+    (`!!gptr::gptr_wait()`).
   - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys
     typed while the agent works).
     `console_compose(state, chars, now, enter_kind, complete, paste = FALSE)` applies one read batch
@@ -6068,8 +6074,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     the sentence became its answer), or at once when none came in that time, and keys typed as it comes due
     never reach its answer. Where a question still draws over a draft, `ui_console_read()` writes one dim row
     at column 4 above the chevron, `↳ draft kept, back after your answer · <the draft's head>` (ASCII `->`
-    and ` - `), cut to the width (`ui_draft_kept()`; the pause menu writes it too, above its chevron and its
-    `? Steer` or `? Follow-up` text's: review of Tasks 22-27, the draft's tail sat between two fixed phrases,
+    and ` - `), cut to the width (`ui_draft_kept()`; the pause menu writes it too, above its keys' prompt:
+    review of Tasks 22-27, the draft's tail sat between two fixed phrases,
     cut mid-word at its head, and the menu hid the draft without a word). It reads with the saved modes (`gptr_readline()`), and when it returns
     (`console_asked()`, on exit of `ui_console_permission()`, `ui_console_select()` and `ui_console_input()`)
     the row is drawn again with the draft unchanged, so it shows while the call the question gated runs. A
@@ -6122,8 +6128,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     chevron of their own question, `  ? Steer` or `  ? Follow-up`), the lines a paste left waiting joining it as its later lines, so a
     pasted block is one message (D-269), and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
     `sent`, so Up then takes back the menu's message as the composer's; blank text queues nothing and the run
-    continues. While the menu is up its records' last block is a question's (`prompt`), so a receipt it writes
-    (a fate other than the word read, D-301) sits right under the read line; when it resumes it is `notice`, so the next block opens with
+    continues. While the menu is up its records' last block is a question's (`prompt`), so a note it writes
+    (a CLI steer's, or a fate other than the word read, D-301) sits right under the read line; when it resumes it is `notice`, so the next block opens with
     a blank row. Continuing writes no notice (`[gptr] continuing` and `[gptr] nothing queued; continuing` are
     gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
     list (Task 18). [b] closes the answer with its cut row, then, after a blank row, writes the terms `in the
@@ -6455,7 +6461,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     `\001<band>\002<prompt>\001\033[K\002` (`peter> `, `... ` and `+ `): readline counts only the prompt's
     text, the typed text inherits the band and its row is shaded to its end; after every read, also at Ctrl-C and
     an end of input, `\033[0m\033[K` resets the attributes and erases the band the line's end gave the row below.
-    The live row, the idle editor's row, delivered steers and the lines the reader echoes after the prompt (a
+    The live row, the idle editor's row, receipts and the lines the reader echoes after the prompt (a
     follow-up, the editor's line, each row) are on the same band (`console_band()`: band, row, `\033[K\033[0m`),
     and a console question's answer is read at its prompt on it (`  › `) as the prompt is (`band_read()`: an
     approval's, the pause menu's, an ask's; not a secret; P28 Task 52: `› y` was plain under a banded steer),
@@ -6537,7 +6543,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       ` · ctrl-c, then s, to steer`, as its console holds what is typed while R is busy as R code, cleared at
       Ctrl-C or run after `peter()` returns, so the pause menu is the way to steer there (steering review: it
       read ` · ctrl-c steer`, and the person took their typed text for sent; the console's banner adds
-      `Text typed while peter works waits as R code; Ctrl-C, then s, steers.`); in RStudio ` · esc, then s, to steer · typed lines run after this answer` (P30, D-301: it read ` · esc pause · typed lines run next`, and a person typed and pressed Enter to steer; the banner and `/help` say it too, as in R.app; steering review:
+      `Text typed while peter works waits as R code; Ctrl-C, then s, steers.`); in RStudio ` · esc, then s, to steer · typed lines run after this answer`, in Windows' Rterm, which has no composer either, ` · ctrl-c, then s, to steer · typed lines run after this answer` (P30, D-304: it read ` · esc pause · typed lines run next`, and a person typed and pressed Enter to steer; the banner and `/help` say it too, as in R.app; steering review:
       its console keeps a line entered during the run for the next prompt, unless a question reads it, and
       hides the entered line at its next output, so the row says where it goes).
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`

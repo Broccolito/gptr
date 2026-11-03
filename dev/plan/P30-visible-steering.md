@@ -86,6 +86,36 @@ lint on the changed files; one commit with the message given.
   D-301 onward, `?peter`, the interactive-console vignette (`.Rmd.orig` and its precomputed `.Rmd`),
   `NEWS.md`. Commit `docs(console): describe visible steering`.
 
+## Review round (2026-11-02)
+
+The reviewers' findings on the branch, each verified against the code; a failing test first, then
+the fix, one commit each.
+
+- **R1 TERM=dumb answer prompt** (`R/utils-options.R`): macOS libedit drew `y` over `  › ` where
+  the quiet prompt's hidden `\r\033[K` came first. The hidden part follows the leading blanks and
+  steps over them. Acceptance: a pty in TERM=dumb shows `  › y`. Commit
+  `fix(console): keep a TERM=dumb answer after its indented prompt`.
+- **R2 Take-back notice** (`R/console-input.R`, `R/console-interrupt.R`): `↳ steer taken back ·
+  <text>`, a block of the person's lines (`console_person_write()`, shared with receipts), in the
+  console's colours. Acceptance: Up as text streams leaves the paragraph's rows whole, the notice
+  between blank rows. Commit `fix(console): write a take-back as the person's block, naming the
+  text`.
+- **R3 CLI note on the pause menu's steer** (`console_receipt(shown = )`). Commit
+  `fix(console): say a pause-menu steer on a CLI route waits for its answer`.
+- **R4 `!code` at `steer> `**: the note `(runs after this answer)` in place of a second receipt;
+  an empty line's bare `steer>` row is accepted (D-303). Commit
+  `fix(console): one receipt for !code read at the pause menu's steer>`.
+- **R5 Chat steer into a background session** (`R/gptr-gateway.R`): source `repl` for a console
+  turn, so its take writes nothing again. Commit
+  `fix(console): queue a chat steer into a running session as the console's`.
+- **R6 Unspaced wide text** (`console_person_rows()`): a word wider than a row breaks at its
+  width. Commit `fix(console): break unspaced wide text in a receipt under the text`.
+- **R7 Windows' Rterm** (`console_typed_fate()`): the banner, `/help` and the live row say how to
+  steer there. Commit `fix(console): say how to steer in Windows' Rterm`.
+- **R8 Documents**: 03 and 04 passages still describing queue lines and `› ` at column 0; the
+  pause keys per console in `?peter` and the vignette; re-wrapped prose; D-301, D-303, D-304.
+  Commit `docs(console): record the steering review fixes`.
+
 ## Plan acceptance
 
 `isolated-check.R test '^console'` and `'^(doc-|agent-run|agent-loop)'` with no failure; lint

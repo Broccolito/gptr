@@ -9574,9 +9574,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   written at once by `console_receipt()` as the person's rows at column 0 on the input band:
   `steer> <text>` (the agent reads it at its next step boundary) or `next> <text>` (after this
   answer; also any text starting with `/` or `!`), the word mirroring the prompt `peter> `, the same
-  in ASCII and without colour, the text escaped, whole and wrapped under itself. A steer on a CLI
-  route ends with a dim `(after the CLI's answer)`, on its own row under the text where the last row
-  is full. It goes between whole rows, also inside a streaming paragraph, as a block of its own; the
+  in ASCII and without colour, the text escaped, whole and wrapped under itself (a word wider than a
+  row, as unspaced CJK text is, breaks at its width; review: the terminal wrapped it to column 0, off
+  the band). A steer on a CLI route ends with a dim `(after the CLI's answer)`, on its own row under
+  the text where the last row is full, also under the pause menu's `steer> ` line (D-303; review: it
+  was dropped there). It goes between whole rows, also inside a streaming paragraph, as a block of its own; the
   live row is cleared and drawn again under it. Supersedes D-242's dim queue line
   (`↳ steer · <text>`, cut to one row, not printed while a T console's live row showed the queue) and
   delivery row (`› <text>` at the step boundary, the glyph, column and band of an answer's echo), and
@@ -9585,24 +9587,34 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   gets its full receipt instead of `↳ steer · not an answer`).
 - Rule (delivery): `console_on_queue_update()` writes nothing for the console's own sources (`repl`,
   `pause_menu`), which always showed a receipt; a `pipe` or `api_user` item (a pipe into the running
-  session, `gptr_steer()`) is written when the loop takes it, in the receipt's words. A chat prompt
-  into a background session therefore shows its receipt when sent and, as a `pipe` item, again if
-  the session is later waited on in the foreground. A follow-up held for the next prompt is echoed as
-  that prompt, `peter> <text>`, as before. Up's take-back writes a dim `↳ steer taken back`
-  (`follow-up`) under the receipt; the text is in the draft again.
+  session from code, `gptr_steer()`) is written when the loop takes it, in the receipt's words. A
+  chat prompt into a session running in the background is queued with source `repl`
+  (`route_continue()` reads the console turn's attribute `gptr_console`), so it shows its receipt
+  when sent and nothing when the loop takes it (review: as a `pipe` item it was written again once
+  the session was waited on in the foreground); `s |> peter()` in code stays a `pipe`. The relay to
+  the model is the same for every user source (IC-55). A follow-up held for the next prompt is echoed
+  as that prompt, `peter> <text>`, as before. Up's take-back (`console_taken_back()`) writes a dim
+  `↳ steer taken back · <text>` (`follow-up`), cut to one row, as a block of the person's lines
+  (`console_person_write()`, which receipts use too); the text is in the draft again (review: it was
+  written straight into the stream, so it sat glued between two rows of a streaming paragraph, and it
+  named no text).
 - Precedent: Codex 0.157.1 keeps a queued message's preview in its bottom pane and turns it into a
   user cell at delivery (P28 evidence). gptr has one live row, gone while an in-process `r` call runs
   and lost when the terminal scrolls, so the receipt goes to the scrollback when sent.
 - Not changed: the steer relay and the queue items (IC-55); documents record what was delivered.
 - Contract-visible: 04 section 15.10 (Queued and delivered messages, A follow-up is the next prompt,
-  Whole rows), the `builtin_console` row of section 7.14, IC-76's note; `?peter`; the
-  interactive-console vignette; NEWS 1.0.1.
+  Whole rows), the `builtin_console` row of section 7.14, IC-55 (`repl`), IC-76's note; 03 sections
+  on the interrupt policy and typing during a call; `?peter`; the interactive-console vignette; NEWS
+  1.0.1.
 - Tests: test-console-render.R "a message with a receipt is not shown again when the loop takes it
   (P30, D-301)", "a receipt is the person's rows: wrapped under the text, a CLI steer says so
   (D-301)"; test-console-typing.R "a sent steer's receipt shows at once, before the next text, never
   again (P30, D-301)", "a line sent while an answer streams shows at once, between whole rows
-  (D-301)", "a steer taken back says so under its receipt (Task 37, D-301)", "a terminal: the draft
-  shows on the live row as text streams; Enter steers (D-243)".
+  (D-301)", "a steer taken back says so, naming it, a block of its own (Task 37, D-301)", "a steer
+  taken back as text streams is a block of its own, naming it (P30 review)", "a terminal: the draft
+  shows on the live row as text streams; Enter steers (D-243)"; test-console-repl.R "a chat prompt
+  that steers a running session is the console's own item (P30 review)"; the CJK case of "a receipt is
+  the person's rows".
 
 ## D-302 - P30 The live row counts what is queued (2026-11-02)
 - Rule (P30 T2): the live row's queue term is a count, its kind named where one message waits:
@@ -9625,6 +9637,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (`policy_enqueue(shown = )`); their `? Steer` and `? Follow-up` titles and the second
   `draft kept` row go. A secret's read shows nothing typed and writes no row about it. The rule that
   a typed draft is never an answer, and its `draft kept, back after your answer` row, stay.
+- Rule (review): the pause menu's `[s]` line read at `steer> ` is the receipt; what it does not say
+  follows on a dim row of its own (`console_receipt(shown = )`): `(after the CLI's answer)` on a CLI
+  route, `(runs after this answer)` for `/` and `!` text, the next prompt in a chat (it was a second
+  receipt, `next> !ls`, under `steer> !ls`). An empty line there sends nothing and leaves its bare
+  `steer>` row, as an empty prompt leaves `peter>`; erasing a written row is not possible in RStudio,
+  R.app or Positron, so that row stays (accepted).
+- Rule (review, TERM=dumb): macOS libedit in a D console drew the typed answer over `  › ` (the row
+  read `y ›`) when the quiet prompt's hidden `\r\033[K` came first and a blank and a wide glyph
+  followed; `gptr_readline()` now writes the prompt's leading blanks first, then the hidden
+  `\r\033[K\033[<n>C`, which erases a key echoed in that moment and steps back over them, so every
+  readline counts the same width. T consoles, whose band prompt starts hidden, are unchanged.
 - Rule (the lost Enter of the steering repro, manual mode: an Enter pressed 2 s after answering `y`,
   while the approved `r` call ran, left the draft unsent): not reproduced on these sources, in tmux at
   80 and 100 columns with the Enter 0.2, 0.6, 2 and 4 s after the answer, nor with the installed
@@ -9633,21 +9656,27 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: 04 section 15.10 (the pause menu, every console question, the band); `?peter`.
 - Tests: test-console-interrupt.R "the pause menu is a console question: its keys under it, read at
   the chevron (D-243)", "a block pasted at the pause menu's steer question is one steer (review round
-  1)"; test-console-ui.R, test-console-repl.R prompt expectations; the pty helper `pty_asked()`.
+  1)", "on a CLI route the pause menu's steer says it waits for the CLI's answer (P30 review)", "!code
+  read at the pause menu's `steer> ` says it runs after the answer (P30 review)"; test-console-typing.R
+  "TERM=dumb: the answer shows after its prompt under the question (P30 review)"; test-console-ui.R,
+  test-console-repl.R prompt expectations; the pty helpers `pty_asked()` and `term_rows()` (`\b`,
+  `\033[<n>C`).
 
 ## D-304 - P30 Consoles without a composer say how to steer (2026-11-02)
 - Rule (P30 T4): where the console holds what is typed while peter works and the pause menu is
-  offered (`console_typed_fate()`: Positron, RStudio, R.app), the banner and `/help` say what becomes
-  of typed text (Positron: `text typed while peter works waits as R code`; RStudio and R.app: `lines
-  typed while peter works run after its answer`) and that the key, then `s`, steers; the live row
-  says `<key>, then s, to steer` there too, RStudio's adding `typed lines run after this answer`
-  (it read `esc pause · typed lines run next`, and the person's typed line vanished until it ran as
-  the next prompt). R.app draws no live row (P28).
+  offered (`console_typed_fate()`: Positron, RStudio, R.app and, review, Windows' Rterm, which has no
+  composer either), the banner and `/help` say what becomes of typed text (Positron: `text typed
+  while peter works waits as R code`; the others: `lines typed while peter works run after its
+  answer`) and that the key, then `s`, steers; the live row says `<key>, then s, to steer` there too,
+  adding `typed lines run after this answer` outside Positron (RStudio's read `esc pause · typed
+  lines run next`, and the person's typed line vanished until it ran as the next prompt). R.app draws
+  no live row (P28). Windows was not run; its classes and keys come from the code (console_class()
+  "L", Ctrl-C).
 - Contract-visible: IC-82 live row text; `?peter`; the vignette.
 - Tests: test-console-input.R "Positron's and RStudio's rows say the key, then s, steers there
   (steering review)"; test-console-wait.R "an IDE console's row says what its key does and where
-  typed lines go"; test-console-repl.R "in Positron and RStudio the banner says how to steer
-  (steering review, D-304)"; test-console-commands.R `/help` per console.
+  typed lines go" (Windows' Rterm too); test-console-repl.R "in Positron, RStudio and Windows the
+  banner says how to steer (D-304)"; test-console-commands.R `/help` per console.
 
 ## D-305 - P30 No live row around a question (2026-11-02)
 - Rule (P30 T5; seen live in RStudio with claude-cli: the row `▌ r · esc pause · typed lines run

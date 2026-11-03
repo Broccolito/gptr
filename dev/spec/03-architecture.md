@@ -1288,9 +1288,9 @@ each item added, taken or withdrawn emits one `queue_update` that names it. Ther
 `resume` restart. It is a console question in every console that offers it [D-243]: `? Paused` (with the
 session's id only when more than one session is paused) and under its text a keys row as an approval's,
 `s steer · f follow-up · c continue · a abort · b background` ([b] for foreground calls only, experimental),
-read at the person's chevron `› ` at column 0. A key or its word answers, Enter alone continues, and anything
-else gets a dim hint naming the keys; [s] and [f] read their text at the same chevron and queue it as a typed
-message is queued [D-242]. Continuing writes no notice, and a terminal console's draft survives the menu; a
+read at the answer's prompt `  › `, under its text [D-303]. A key or its word answers, Enter alone continues, and
+anything else gets a dim hint naming the keys; [s] and [f] read their text at their receipt's word, `steer> ` or
+`next> ` at column 0, so the line read is the receipt, and queue it as a typed message is queued [D-242, D-301]. Continuing writes no notice, and a terminal console's draft survives the menu; a
 second Ctrl-C aborts. Menu output goes to stdout through the console writer, which keeps
 it out of a tool's captured output (the handler may run inside it), and tools record interruption with `on.exit()`,
 never with an exiting `tryCatch(interrupt =)` that would pre-empt the menu (G3 menu fixes). The menu is offered
@@ -2211,9 +2211,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   bracketed-paste markers, else one batch read on the polling beat) is one message [D-263];
   `/command` and `!code` lines wait for the next prompt, shown as follow-ups, in the order typed with them; after
   an interrupt they go to the console history, unsent [D-242]. The terminal does not echo during the call (modes
-  restored after it, at `q()` too), so typed text shows on the live row (T) or on its dim queue line
-  (`↳ steer · <text>`, D) and, when the run takes it, as the person's line `› <text>` at that step boundary
-  [D-242]; console questions read with the saved modes, which echo (D-221). In T a console question is drawn once
+  restored after it, at `q()` too), so typed text shows on the live row (T) and, once sent, as its receipt
+  `steer> <text>` or `next> <text>` at column 0 on the band, written at once and not again when the run takes it
+  [D-301]; console questions read with the saved modes, which echo (D-221). In T a console question is drawn once
   no key has come for a second (the live row says `question waiting`, and Enter and Tab still queue), what was
   typed going to the composer, whose draft stays and is on the live row again when the question has its answer
   [D-243]. A console question also drains fd 0 just before it reads, under its rows: in T into the composer; in D
@@ -2264,7 +2264,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   that parses is highlighted by `cli::code_highlight()` in the user's `cli.code_theme`, else in the style table's
   R theme (reserved words red; strings, numbers and constants blue; calls bold; comments dim) [IC-82, D-245];
   other R and other languages are shown as written. The console UI itself clears the live row,
-  keeping its task, before it prompts (D-186); a question, a notice or a queue line goes between
+  keeping its task, before it prompts (D-186); a question, a notice or a receipt goes between
   an answer's whole rows and its held row continues after it, unsplit [D-245].
   Fenced code stays Markdown in every mode: fence lines as written (dim when styled), the body
   verbatim, unwrapped and de-indented by the opener's indentation (CommonMark: a fence indented

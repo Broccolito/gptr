@@ -1391,39 +1391,37 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'   Rscript, pipes, knitr \tab nothing; \code{.stdin = TRUE} reads the pipe \tab none
 #' }
 #'
-#' In terminal R and an IDE's Terminal tab what you type while peter works is a draft on the
-#' bottom row, under the transcript, so it never mixes into the answer; a block pasted there is
-#' one message where the terminal supports bracketed paste. Enter sends it as a steer and writes it
-#' into the transcript at once, as `steer> <text>`: the agent reads it at its next step boundary,
-#' when the response in flight ends after the results of all its tool calls (an answer about to
-#' end gets one more request). Tab sends it as a follow-up, written as `next> <text>`: the next
-#' prompt, sent as its own run once the answer ends. `type_ahead = "follow_up"` ([gptr_config()])
-#' swaps the two keys. A draft that starts with `/` or `!` is always a follow-up, so `/command`
-#' and `!code` lines run at the next prompt, in the order typed. The bottom row counts what is
-#' queued (`1 steer queued`); Up on an empty draft takes back the newest message not yet
-#' delivered, to edit and send again, and Ctrl-U clears the draft. A question (an approval, a
-#' choice) waits until typing pauses for a second, or three while the draft has text, and the
-#' draft stays: through
-#' questions, Ctrl-C and the pause menu, and to the next prompt, where Enter sends it. Keys typed
-#' while R code runs in this process (the `r` tool) show when it returns. Such code that reads
-#' the terminal through `readline()` or `menu()` inside another function shows only that read's
-#' prompt (the text printed before it shows when the code returns, the typed answer never), and
-#' Ctrl-C at that read aborts the answer instead of pausing it. A steer the answer did not take
-#' (it ended first) is the next prompt; after an abort or an error nothing queued is sent: the
-#' queued text and the draft go to the console history, and Up recalls them. Under
-#' TERM=dumb or in ESS a line typed with Enter is queued as `type_ahead` says. On the CLI routes
-#' (`claude-cli`, `codex`) the agent reads a steer after the CLI's answer, which is often the
-#' whole run.
+#' In terminal R and an IDE's Terminal tab what you type while peter works is a draft on the bottom
+#' row, under the transcript, so it never mixes into the answer; a block pasted there is one message
+#' where the terminal supports bracketed paste. Enter sends it as a steer and writes it into the
+#' transcript at once, as `steer> <text>`: the agent reads it at its next step boundary, when the
+#' response in flight ends after the results of all its tool calls (an answer about to end gets one
+#' more request). Tab sends it as a follow-up, written as `next> <text>`: the next prompt, sent as
+#' its own run once the answer ends. `type_ahead = "follow_up"` ([gptr_config()]) swaps the two
+#' keys. A draft that starts with `/` or `!` is always a follow-up, so `/command` and `!code` lines
+#' run at the next prompt, in the order typed. The bottom row counts what is queued (`1 steer
+#' queued`); Up on an empty draft takes back the newest message not yet delivered, to edit and send
+#' again, and Ctrl-U clears the draft. A question (an approval, a choice) waits until typing pauses
+#' for a second, or three while the draft has text, and the draft stays: through questions, Ctrl-C
+#' and the pause menu, and to the next prompt, where Enter sends it. Keys typed while R code runs in
+#' this process (the `r` tool) show when it returns. Such code that reads the terminal through
+#' `readline()` or `menu()` inside another function shows only that read's prompt (the text printed
+#' before it shows when the code returns, the typed answer never), and Ctrl-C at that read aborts
+#' the answer instead of pausing it. A steer the answer did not take (it ended first) is the next
+#' prompt; after an abort or an error nothing queued is sent: the queued text and the draft go to
+#' the console history, and Up recalls them. Under TERM=dumb or in ESS a line typed with Enter is
+#' queued as `type_ahead` says. On the CLI routes (`claude-cli`, `codex`) the agent reads a steer
+#' after the CLI's answer, which is often the whole run.
 #'
-#' RStudio, R.app, Positron and Windows consoles hold what is typed until R reads again. In
-#' RStudio, R.app and Windows consoles a line typed while peter works is the next prompt, one
-#' prompt per line, unless a question comes first: it reads the line, queues it as `type_ahead`
-#' says and asks again. Positron's console keeps typed text as R code, which runs after `peter()`
-#' returns, and clears it at Ctrl-C. To steer in these consoles, pause and press `s` (Windows'
-#' Rgui cannot pause), as their banner and bottom row say (`esc, then s, to steer`). In RStudio an
-#' Esc first closes RStudio's own completion list, if open, then
-#' clears a line being typed, so the menu comes at the next Esc. During `peter("...")` at R's
-#' prompt, outside the chat, typed lines stay R's next input.
+#' RStudio, R.app, Positron and Windows consoles hold what is typed until R reads again. In RStudio,
+#' R.app and Windows consoles a line typed while peter works is the next prompt, one prompt per
+#' line, unless a question comes first: it reads the line, queues it as `type_ahead` says and asks
+#' again. Positron's console keeps typed text as R code, which runs after `peter()` returns, and
+#' clears it at Ctrl-C. To steer in these consoles, pause and press `s` (Windows' Rgui cannot
+#' pause), as their banner and bottom row say: `esc, then s, to steer` in RStudio and R.app,
+#' `ctrl-c, then s, to steer` in Positron and Windows' Rterm. In RStudio an Esc first closes
+#' RStudio's own completion list, if open, then clears a line being typed, so the menu comes at the
+#' next Esc. During `peter("...")` at R's prompt, outside the chat, typed lines stay R's next input.
 #'
 #' Tab completes only after `@` (objects, then files), `@obj$` (its members), `peter$`, a leading
 #' `/` (commands) and on a `!` or `!!` line (R code), never in plain text: in terminal R, R in an
@@ -1437,13 +1435,12 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'
 #' The pause key opens a pause menu while an answer runs, with the keys `s` steer, `f` follow-up,
 #' `c` continue, `a` abort and, for a foreground call (a chat turn included) when available, `b`
-#' background. `s` and `f` read the text at `steer> ` and `next> ` and queue it as Enter and Tab
-#' do; in a `peter("...")`
-#' call a follow-up is sent when the agent would otherwise stop. A key typed right after the pause
-#' key answers the menu. Continuing leaves the work as if it had not paused, and pressing the
-#' pause key again aborts. Abort keeps the partial session; what you queued and the draft go to
-#' the history, unsent. Background returns to the chat prompt and keeps the run: what was
-#' queued for after the answer and the draft go to the history, unsent, as after an abort, and
+#' background. `s` and `f` read the text at `steer> ` and `next> ` and queue it as Enter and Tab do;
+#' in a `peter("...")` call a follow-up is sent when the agent would otherwise stop. A key typed
+#' right after the pause key answers the menu. Continuing leaves the work as if it had not paused,
+#' and pressing the pause key again aborts. Abort keeps the partial session; what you queued and the
+#' draft go to the history, unsent. Background returns to the chat prompt and keeps the run: what
+#' was queued for after the answer and the draft go to the history, unsent, as after an abort, and
 #' another prompt steers the running session. Nothing runs it while the chat waits for input: use
 #' `!!gptr::gptr_wait(gptr::gptr_last())` there to continue it, its answer then shown as a prompt's
 #' and Enter steering it. Under Rscript, background runs advance only inside blocking gptr calls.
