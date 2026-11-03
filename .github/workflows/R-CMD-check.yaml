@@ -110,12 +110,12 @@ jobs:
 
   macos:
     runs-on: macos-latest
-    name: macos-latest (release, shard ${{ matrix.shard }}/5)
+    name: macos-latest (release, shard ${{ matrix.shard }}/10)
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
@@ -123,8 +123,9 @@ jobs:
       _R_CHECK_CRAN_INCOMING_: false
       # The pty console tests time against the runner's load (CI-96)
       TESTTHAT_PARALLEL: false
-      # Five shards: as many macOS runners as an account gets at once, so none waits for another
-      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/5
+      # Ten shards: two waves of the five macOS runners an account gets at once, each shard well
+      # inside the time limits on a slow runner (five took up to 14.8 of the check step's 16 minutes)
+      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/10
       # R's code analysis does not depend on the OS, and the Linux and Windows whole checks run it
       _R_CHECK_USE_CODETOOLS_: false
     steps: *shard-steps

@@ -5090,8 +5090,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (CI-107)".
 - Amended by CI-108 (2026-11-03): shards split the files by each file's measured seconds on the
   shard's OS (slowest first, to the least-loaded shard; shard 1 starts with the seconds of the work
-  only it does), and macOS runs 5 shards, as many as GitHub runs at once; Windows release runs 12
-  and the connection gate 9.
+  only it does), and macOS runs 10 shards, two full waves of the five GitHub runs at once; Windows
+  release runs 12 and the connection gate 9.
 - Contract-visible: none. Amends architecture section 3.5, spec 05 P01, 00-index section 5.1, P25
   Task 15 and P27 A1-A2: both workflows must pass.
 - Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "Windows

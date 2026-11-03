@@ -11395,9 +11395,8 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   table of each file's median seconds per OS from four runs (Linux from the connection gate, macOS,
   Windows); a file not in the table counts 1 s, so files of equal time still take turns in name
   order. The OS comes from `Sys.info()`. Shard 1 starts with a head start for the work only it
-  does: 115 s on macOS (vignettes and examples) and 170 s on Windows (the native fixtures). macOS
-  runs 5 shards again, one wave. Names are matched exactly (a data frame's row names match
-  partially).
+  does: 115 s on macOS (vignettes and examples) and 170 s on Windows (the native fixtures). Names
+  are matched exactly (a data frame's row names match partially).
 - Measured on the PR's first head (no head start yet): every check green; R-CMD-check.yaml took
   16.5 minutes of wall clock (24.4 to 25.3 before) and Windows-check.yaml 14.6. Windows shards 2
   to 12 took 10.3 to 11.7 minutes (up to 16.8 before), connection shards 6.7 to 10.5 (up to 15.7)
@@ -11411,6 +11410,11 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   runs show the same (3.7 and 7.7 minutes). `.github/actions/system-libraries` now keeps apt's
   downloads in GitHub's cache, keyed by the runner image and its package list, so only the first
   job of an image fetches them; dropping recommended packages would save only 8 % (136 to 125 MB).
+- Five macOS shards gave 15 to 16 minutes of wall clock, but runners differ: across 25 macOS jobs a
+  shard's tests ran 0.67 to 1.26 times their prediction, and the slowest check step took 14.8 of
+  its 16 minutes. A simulation with those speeds put 7 % of runs over the step limit with 5 shards
+  and none with 10, at 20 minutes of wall clock (two full waves of the five runners). macOS runs 10
+  shards.
 - Tests: test-zzz.R "CI shards run each test file once, Windows native ones in shard 1 (D-239)"
   adds that a file's time decides its shard, that names match exactly, that shard 1's head start
   leaves its share to the others, and that the table names only existing test files with a column
