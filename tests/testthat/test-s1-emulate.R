@@ -212,7 +212,6 @@ test_that("unreported usage stays unknown and provenance says emulated (IC-74)",
   expect_identical(res$answers[[1]]$answer$prob, 0.6)
   expect_identical(res$usage$input, NA_real_)
   expect_identical(res$usage$output, NA_real_)
-  expect_identical(res$usages[[1]], list(input = NA_real_, output = NA_real_))
   expect_identical(res$model_version, "emunone-1")
   expect_match(res$request_ids, "^q[0-9a-f]{12}$")
   expect_identical(res$provenance[c("provider", "api", "execution")],
@@ -222,7 +221,6 @@ test_that("unreported usage stays unknown and provenance says emulated (IC-74)",
                                 usage = list(input = 12, output = 3))), name = "emucount")
   res2 = s1_emulate(model_resolve("emucount/emucount-1"), list(list(x = "a"), list(x = "b")), q)
   expect_identical(res2$usage[c("input", "output")], list(input = 24, output = 6))
-  expect_identical(res2$usages[[2]], list(input = 12, output = 3))
 })
 
 test_that("a stop other than a complete answer is a response error, never retried (IC-74)", {

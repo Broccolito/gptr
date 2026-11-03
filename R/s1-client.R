@@ -658,7 +658,6 @@ s1_dispatch = function(model, states, questions, start_for, engine, calibrated, 
                       })
   answers = vector("list", n)
   conditions = vector("list", n)
-  usages = vector("list", n)
   version = NULL
   rids = character()
   values = list()
@@ -685,13 +684,12 @@ s1_dispatch = function(model, states, questions, start_for, engine, calibrated, 
       conditions[i] = list(got)
     } else {
       answers[i] = list(got)
-      usages[i] = list(results[[map[i]]]$value[["usage"]])
     }
   }
   usage = list(input = totals$input, output = totals$output)
   usage$cost = s1_cost(usage, model)
   list(answers = answers, conditions = conditions, errors = s1_errors_df(conditions),
-       usages = usages, usage = usage, model_version = version %||% model$id,
+       usage = usage, model_version = version %||% model$id,
        request_ids = rids, engine = engine,
        calibrated = if (length(values)) {
          s1_calib(lapply(values, function(v) v[["calibrated"]] %||% calibrated))
