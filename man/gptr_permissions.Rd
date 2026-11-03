@@ -56,8 +56,9 @@ shared project rules of \code{.gptr/settings.json} (an untrusted project contrib
 and \code{ask} rules) and the \code{deny}/\code{ask} rules of a legacy \code{.gptr/settings.local.json} in a
 trusted project.
 
-Called from model code during a run, adding or removing rules needs the user's approval of
-that call; otherwise it signals \code{gptr_error_permission}.
+Called from model code during a run, adding or removing rules needs an allowing permission
+decision (a person's, in every mode but \code{yolo}; see \link{gptr_security}); otherwise it signals
+\code{gptr_error_permission}.
 }
 \examples{
 gptr_permissions(allow = "r(level<=1)")

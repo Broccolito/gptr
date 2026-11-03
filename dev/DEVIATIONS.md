@@ -9613,6 +9613,27 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-ext-plugins.R "a configured marketplace path is recorded once, with its path, at every
   start".
 
+## D-333 - Lane E The control exports state the permission rule once, in one wording (2026-11-02)
+- Rule (review #102): `gptr_steer()`, `gptr_cancel()`, `gptr_on()`, `gptr_tailor()`, `gptr_resume()`,
+  `gptr_config()` and `gptr_permissions()` said, in three wordings, that a call from model code
+  "requires human approval" (for steer, cancel and on "targeting another session"). That is the
+  second line (`session_control_check()`), which spares the run's own session. The rule a user meets
+  is the first: every statically flagged `control` call asks in every mode but `yolo`, whichever
+  session it targets, and `yolo` runs it without asking (`?gptr_security`). All seven pages now say
+  "From model code during a run, `<fn>()` needs an allowing permission decision (a person's, in every
+  mode but `yolo`; see gptr_security); otherwise it signals `gptr_error_permission`." The other
+  control exports (`gptr_trust()`, `gptr_fork()`, `gptr_init()`, `gptr_doc()`, `gptr_env()`,
+  `gptr_login()`, `gptr_logout()`, `gptr_mcp_add()`, `gptr_mcp_remove()`) stay as they are: the
+  sentence is on the pages that named the rule, and `?gptr_security` states it for all of them.
+- Rule (review #102): `?gptr_mcp_add` says that a server with `"direct"` exposure (also through the
+  setting `mcp.exposure`) is connected when a session starts unless its tool list is cached;
+  `?gptr_backend` says that `gptr_check()` probes `start()` with a minimal specification and calls
+  `cancel(handle)` on its probe handle, while the scheduler uses `handle$cancel()`; `?gptr_adapter`
+  lists `sign` and the header-piece form `list("Bearer ", opts$credential)`; `?gptr_env` again says
+  that it never prints, logs or returns a value.
+- Contract-visible: none (no code change).
+- Tests: none (text only); `isolated-check.R document` shows no further change.
+
 ## D-334 - Lane E The r tool description points gptr's own setup at discovery; token baselines re-measured (2026-11-02)
 - Rule (live finding on the Codex route): asked to "set up an MCP server for this project", a model
   edited `.codex/config.toml`, because nothing it saw said that MCP servers, skills and settings for

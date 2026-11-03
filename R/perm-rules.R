@@ -331,8 +331,9 @@ perm_control_guard = function(what) {
 #' and `ask` rules) and the `deny`/`ask` rules of a legacy `.gptr/settings.local.json` in a
 #' trusted project.
 #'
-#' Called from model code during a run, adding or removing rules needs the user's approval of
-#' that call; otherwise it signals `gptr_error_permission`.
+#' Called from model code during a run, adding or removing rules needs an allowing permission
+#' decision (a person's, in every mode but `yolo`; see [gptr_security]); otherwise it signals
+#' `gptr_error_permission`.
 #'
 #' @param allow,ask,deny Character vectors of rules to add to that list, or `NULL`.
 #' @param remove Character vector of rules to remove from every list of `scope`, or `NULL`.
