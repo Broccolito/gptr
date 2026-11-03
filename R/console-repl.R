@@ -227,13 +227,16 @@ console_reader = function(stdin = FALSE, echo = stdin) {
 #' shows, below 256 colours (`NO_COLOR` too), nor on the Linux console. Keys typed meanwhile are
 #' the reader `rd`'s, each line read as the composer reads it (console_line_text()): each line they
 #' end that is not blank is a next prompt of its own, as readline would have read it, the rest a
-#' draft at the prompt (console_idle()). Asked after the first-use setup, whose menu reads first
+#' draft at the prompt (console_idle()); what the terminal echoed of them before the probe turned
+#' the echo off is erased first (tty_echo_erase(), its cursor report asked with the query). Asked
+#' after the first-use setup, whose menu reads first
 #' @noRd
 repl_background = function(rd) {
   if (cli::num_ansi_colors() < 256L || identical(Sys.getenv("TERM"), "linux")) {
     return(invisible(NULL))
   }
-  got = tty_query("\033]11;?\033\\\033[c")
+  got = tty_query("\033]11;?\033\\\033[6n\033[c")
+  console_cat(tty_echo_erase(got))
   bg = background_reply(got)
   if (!is.na(bg)) the$background = bg
   lines = console_typed_split(tty_unreply(got))
@@ -244,6 +247,28 @@ repl_background = function(rd) {
   draft = if (part) typed[[length(typed)]] else ""
   if (nzchar(draft)) rd$compose = list(draft = draft)
   invisible(NULL)
+}
+
+#' The bytes that erase what the terminal echoed of keys typed before tty_query()'s answer `got`,
+#' the text before its cursor report (`ESC [ row ; col R`): at peter()'s start the echo is on until
+#' the probe turns it off, and the banner was drawn after the echo (P30 follow-up). The rows the
+#' text took from column 1, at `width`, its edit keys applied (console_line_text()), are left and
+#' cleared (`ESC [ <n> A`, `ESC [ J`) where its last row's width fits the reported column, else the
+#' cursor's row alone; "" where nothing was typed or no report came
+#' @noRd
+tty_echo_erase = function(got, width = cli::console_width()) {
+  at = regexpr("\033\\[[0-9]+;[0-9]+R", got)
+  if (at < 0L) return("")
+  echoed = tty_unreply(substr(got, 1L, at - 1L))
+  if (!nzchar(echoed)) return("")
+  col = as.integer(sub(".*;([0-9]+)R$", "\\1", regmatches(got, at)))
+  lines = strsplit(paste0(echoed, " "), "\r\n|\r|\n", perl = TRUE)[[1L]]
+  lines[[length(lines)]] = sub(" $", "", lines[[length(lines)]])
+  w = cli::ansi_nchar(vapply(lines, console_line_text, ""), type = "width")
+  n = length(w)
+  up = sum(pmax(1L, ceiling(w[-n] / width))) + w[[n]] %/% width
+  if (w[[n]] %% width + 1L != col) up = 0L
+  paste0(if (up > 0L) paste0("\033[", up, "A"), "\r\033[J")
 }
 
 #' Does this REPL read a terminal, whose typed lines wait on fd 0 while an answer runs (IC-76)? A

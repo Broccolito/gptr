@@ -256,11 +256,13 @@ tty_query = function(query, ms = 1500) {
   got
 }
 
-#' Text without the terminal's answers to tty_query(), an OSC reply (`ESC ] ... BEL` or `ST`) and
-#' DA1's `ESC [ ? ... c`, so a reply that comes late is never typed text (IC-82)
+#' Text without the terminal's answers to tty_query(), an OSC reply (`ESC ] ... BEL` or `ST`), a
+#' cursor report (`ESC [ row ; col R`) and DA1's `ESC [ ? ... c`, so a reply that comes late is
+#' never typed text (IC-82)
 #' @noRd
 tty_unreply = function(x) {
-  gsub("\033\\][^\a\033]*(\a|\033\\\\)?|\033\\[\\?[0-9;]*c", "", x, perl = TRUE)
+  gsub("\033\\][^\a\033]*(\a|\033\\\\)?|\033\\[[0-9]+;[0-9]+R|\033\\[\\?[0-9;]*c", "", x,
+       perl = TRUE)
 }
 
 #' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its

@@ -1499,7 +1499,7 @@ test_that("a T REPL asks the background once at its start; else COLORFGBG decide
   }
   # the terminal's answer wins over COLORFGBG
   expect_identical(run("T"), "dark")
-  expect_identical(asked, "\033]11;?\033\\\033[c")
+  expect_identical(asked, "\033]11;?\033\\\033[6n\033[c")
   # only a T console is asked: COLORFGBG decides elsewhere
   for (cls in c("D", "L", "P")) expect_identical(run(cls), "light", info = cls)
   expect_length(asked, 1L)
@@ -1517,6 +1517,36 @@ test_that("a T REPL asks the background once at its start; else COLORFGBG decide
                                          repl_background(rd)))
   withr::with_envvar(c(TERM = "linux"), repl_background(rd))
   expect_length(asked, 3L)
+})
+
+test_that("keys the terminal echoed before the probe are erased before the banner (follow-up)", {
+  # on the cursor's row: that row is cleared
+  expect_identical(tty_echo_erase("abc\033[5;4R\033[?62c", 20L), "\r\033[J")
+  # a line ended, then text wrapped over two rows: the rows above it too
+  got = paste0("ls\n", strrep("x", 25L), "\033[9;6R\033[?62c")
+  expect_identical(tty_echo_erase(got, 20L), "\033[2A\r\033[J")
+  # edit keys as the terminal applied them
+  expect_identical(tty_echo_erase("plox\177t\033[9;5R\033[?62c", 20L), "\r\033[J")
+  # a report the text does not fit (keys typed once the echo was off): the cursor's row alone
+  expect_identical(tty_echo_erase(paste0(strrep("x", 25L), "\033[9;2R\033[?62c"), 20L),
+                   "\r\033[J")
+  # nothing typed, or no report: nothing is written
+  expect_identical(tty_echo_erase("\033[9;1R\033[?62c", 20L), "")
+  expect_identical(tty_echo_erase("abc\033[?62c", 20L), "")
+  # the probe asks where the cursor is, writes the erase and keeps the text as the draft
+  local_console_test()
+  withr::local_options(cli.num_colors = 256L, cli.width = 80L)
+  withr::local_envvar(TERM = "xterm-256color")
+  asked = NULL
+  local_mocked_bindings(tty_query = function(query, ...) {
+    asked <<- query
+    "Make these\033[3;11R\033[?62c"
+  })
+  rd = console_reader()
+  out = utils::capture.output(repl_background(rd))
+  expect_identical(asked, "\033]11;?\033\\\033[6n\033[c")
+  expect_identical(out, "\r\033[J")
+  expect_identical(rd$compose$draft, "Make these")
 })
 
 test_that("keys typed before or during the probe are the reader's, never lost (IC-82)", {
