@@ -471,13 +471,14 @@ budget_unpriced = function(run) {
 #' Aggregates the usage rows of sessions (children included, each request counted once) and, for
 #' `x = NULL`, of every live session of this process plus the process System 1 log. Reads only.
 #'
-#' Unknown usage stays unknown: a token count or cost that a provider did not report is `NA`,
-#' never zero, so a group or total that includes it is `NA`. The footer prints such tokens as
-#' `unknown` and adds the known cost to a count of the requests of unknown cost
-#' (`$1.2000 + 1 request of unknown cost`). A known zero, such as the metered charge of a local
-#' model, stays zero. Rows without a session, agent, model or route (process-level System 1
-#' calls) form the `NA` group. On `claude-cli` models, billed to a Claude plan, the dollar figures
-#' are the CLI's API-equivalent estimate, not a charge; cost limits use them.
+#' Unknown usage stays unknown: a token count or cost that a provider did not report is `NA`, never
+#' zero, so a group or total that includes it is `NA`. The footer adds the known tokens and the
+#' known cost to a count of the requests whose tokens or cost are unknown (`1.2k tokens in + 1
+#' request of unknown tokens`, `$1.2000 + 1 request of unknown cost`). A known zero, such as the
+#' metered charge of a local model, stays zero. Rows without a session, agent, model or route
+#' (process-level System 1 calls) form the `NA` group. On `claude-cli` models, billed to a Claude
+#' plan, the dollar figures are the CLI's API-equivalent estimate, not a charge; cost limits use
+#' them.
 #'
 #' The detailed component ledger contains estimates; its sum can differ from provider-reported
 #' usage. A run's token budget checks estimated next-input tokens and recorded usage before

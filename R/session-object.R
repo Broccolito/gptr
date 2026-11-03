@@ -479,15 +479,16 @@ print.gptr_session = function(x, ...) {
   invisible(x)
 }
 
-#' The footer line: status . model . turns . tokens . cost . id (unknown counts print as unknown,
-#' IC-74, D-021); a replayed session reads `replayed` until a request adds usage, and one with no
-#' stored request (reconstructed from its document) has unknown usage
+#' The footer line: status . model . turns . tokens . cost . id (the requests of unknown tokens or
+#' cost counted beside the known sums, IC-74, D-021, D-206, D-308); a replayed session reads
+#' `replayed` until a request adds usage, and one with no stored request (reconstructed from its
+#' document) has unknown usage
 #' @noRd
 session_footer = function(s) {
   d = session_data(s)
   u = session_usage_rows(s)
   replayed = isTRUE(d$replayed) && isTRUE(nrow(u) == d$replay_rows)
-  tokens = sum(u$input + u$output + u$cache_read + u$cache_write_5m + u$cache_write_1h)
+  tokens = u$input + u$output + u$cache_read + u$cache_write_5m + u$cache_write_1h
   cost = u$cost
   if (replayed && !nrow(u)) {
     tokens = NA_real_
@@ -496,7 +497,7 @@ session_footer = function(s) {
   dot = if (cli::is_utf8_output()) " \u00b7 " else " . "
   paste(c(if (replayed) "replayed" else d$status, d$model,
           paste(d$turns, if (identical(d$turns, 1L)) "turn" else "turns"),
-          paste(format_count(tokens), "tokens"), format_cost(cost), d$id),
+          format_tokens(tokens), format_cost(cost), d$id),
         collapse = dot)
 }
 

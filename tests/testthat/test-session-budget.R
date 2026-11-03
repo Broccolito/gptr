@@ -192,6 +192,20 @@ test_that("format_cost() prints dollars and counts the requests of unknown cost 
   expect_identical(format_cost(c(NA_real_, NA_real_)), "unknown cost")
 })
 
+test_that("token totals count the requests of unknown tokens beside the known sum (D-308)", {
+  expect_identical(format_tokens(c(1200, 300)), "1.5k tokens")
+  expect_identical(format_tokens(numeric()), "0 tokens")
+  expect_identical(format_tokens(c(1200, NA)), "1.2k tokens + 1 request of unknown tokens")
+  expect_identical(format_tokens(c(NA, 1200, NA), "tokens in"),
+                   "1.2k tokens in + 2 requests of unknown tokens")
+  expect_identical(format_tokens(NA_real_), "unknown tokens")
+  # the footer and gptr_usage()'s: one aborted request no longer hides the session's known total
+  u = data.frame(input = c(1000, NA), output = c(200, NA), cache_read = c(0, NA),
+                 cache_write_5m = c(0, NA), cache_write_1h = c(0, NA), cost = c(0.01, NA))
+  expect_identical(format_usage(u), paste0("2 requests, 1.0k tokens in + 1 request of unknown ",
+                                           "tokens, $0.0100 + 1 request of unknown cost"))
+})
+
 test_that("the default budget is 2e6 tokens and 5 USD per top-level call; NULL disables (IC-66)", {
   s = test_session()
   lim = run_budget_limits(s, list(), NULL)
@@ -560,8 +574,9 @@ test_that("gptr_usage() keeps unknown usage unknown in groups, totals and the fo
   expect_identical(u$cache_read, NA_real_)
   expect_identical(u$input, 300)
   expect_identical(attr(u, "totals")[["cache_read"]], NA_real_)
-  expect_identical(attr(u, "footer"),
-                   "3 requests, unknown tokens in, $0.2500 + 1 request of unknown cost")
+  # the known tokens beside the request that reported none (D-308)
+  expect_identical(attr(u, "footer"), paste0("3 requests, 200 tokens in + 1 request of unknown ",
+                                             "tokens, $0.2500 + 1 request of unknown cost"))
 })
 
 test_that("gptr_usage() keeps known zeros and prints an empty view as zero requests", {

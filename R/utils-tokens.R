@@ -154,12 +154,24 @@ format_cost = function(x) {
   paste0(out, " + ", k, if (k == 1L) " request" else " requests", " of unknown cost")
 }
 
+#' A token total of requests, `x` one total each, counted as format_cost() counts costs: the known
+#' sum, "1.2k tokens", then "+ 1 request of unknown tokens" for those that reported none, and
+#' "unknown tokens" when none did (D-308); `unit` names the tokens ("tokens in")
+#' @noRd
+format_tokens = function(x, unit = "tokens") {
+  k = sum(is.na(x))
+  if (k > 0L && k == length(x)) return(paste("unknown", unit))
+  out = paste(format_count(sum(x, na.rm = TRUE)), unit)
+  if (k == 0L) return(out)
+  paste0(out, " + ", k, if (k == 1L) " request" else " requests", " of unknown tokens")
+}
+
 #' Requests, input tokens and cost of usage rows: "2 requests, 1.2k tokens in, $0.0042"
 #' The tokens in count cache reads and writes, as usage_prompt_tokens() does.
 #' @noRd
 format_usage = function(u) {
   n = nrow(u)
-  tokens = c(u$input, u$cache_read, u$cache_write_5m, u$cache_write_1h)
-  paste0(n, if (n == 1L) " request, " else " requests, ", format_count(tokens), " tokens in, ",
+  tokens = u$input + u$cache_read + u$cache_write_5m + u$cache_write_1h
+  paste0(n, if (n == 1L) " request, " else " requests, ", format_tokens(tokens, "tokens in"), ", ",
          format_cost(u$cost))
 }

@@ -215,9 +215,10 @@ test_that("unknown usage prints as unknown, never as zero (IC-74)", {
                                         stringsAsFactors = FALSE)))
   expect_identical(s$cost, NA_real_)
   expect_identical(attr(s$usage, "totals")[["cost"]], NA_real_)
+  # the known sums, each beside a count of the requests that reported none (D-206, D-308)
   expect_identical(session_footer(s),
-                   paste0("idle . fake/fake-1 . 1 turn . unknown tokens . $0.0123 + 1 request ",
-                          "of unknown cost . ", id))
+                   paste0("idle . fake/fake-1 . 1 turn . 1.2k tokens + 1 request of unknown ",
+                          "tokens . $0.0123 + 1 request of unknown cost . ", id))
   printed = utils::capture.output(print(s))
   expect_match(printed, "unknown tokens . $0.0123 + 1 request of unknown cost", fixed = TRUE,
                all = FALSE)
