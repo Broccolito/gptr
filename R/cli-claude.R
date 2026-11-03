@@ -11,6 +11,12 @@
 
 # ---- build (Task 5) ----------------------------------------------------------------------------
 
+#' The variables that keep a claude child without auto memory, CLAUDE.md files or prompt history
+#' (the catalog child and coaching children)
+#' @noRd
+pcli_claude_quiet = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1",
+                      CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")
+
 #' Initialize an empty Claude SDK session and retain only its model catalog; no user message
 #' is sent. Keep stdin open until the response, then retire the supervised child. The wait
 #' runs the reactor, as proc_run() does, so other sessions and timers stay live.
@@ -18,8 +24,7 @@
 pcli_claude_catalog = function(args) {
   path = pcli_find("claude")
   p = proc_spawn(path[[1L]], c(as.character(path[-1L]), args), stdin = "|",
-                 env = child_env("cli-claude", set = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1",
-                   CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1", CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")),
+                 env = child_env("cli-claude", set = pcli_claude_quiet),
                  wd = path_norm(tempdir()))
   on.exit({
     tryCatch(kill_all(p, grace = 0), error = function(e) NULL)
@@ -237,11 +242,7 @@ pcli_claude_build = function(model, context, opts) {
     args = pcli_claude_args(model_id, files$mcp, files$system, budget = flags,
                            optout = probe$bare_optout, resume = resume, role = role)
     # set after the profile drops CLAUDE_CODE_*, so they reach the CLI
-    env = character()
-    if (!is.null(role)) {
-      env = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1",
-              CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")
-    }
+    env = if (is.null(role)) character() else pcli_claude_quiet
     start = list(command = path[[1L]], args = c(as.character(path[-1L]), args),
                  env_profile = "cli-claude", env = env, wd = path_norm(getwd()))
     state$cli_api = "cli-claude"
