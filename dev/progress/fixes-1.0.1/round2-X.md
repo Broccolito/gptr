@@ -12,6 +12,17 @@ confirmed, 1 low UX). Decisions: D-350 to D-352.
 | The refusal advice "run it yourself or add a rule with gptr_permissions(allow = ...)" on every denial, false for plan mode and level 4 | 1928fa36 | test-mcp-server.R "a served refusal offers what a person can do ..." (advice and console notice); D-352 |
 | Plan mode called an outside-project read "this change" (low) | 1928fa36 | test-perm-gate.R "plan mode says a read outside the project is no change (D-352)" |
 
+## Verifier follow-up
+
+| Problem | Commit | Outcome |
+|---|---|---|
+| A nested `peter$sh`, `bg` or `script` in a plan-mode served `r` call was refused with the false "plan mode needs a scratch environment for r" (medium): `mcp_nested_gate()` built its literal `r` call without the call's `envir` | 4496ab29 | Fixed: the gate gets the served call and gives the literal its `envir`. test-mcp-server.R "a plan-mode served r call runs a nested read-only sh call; a writing one is refused" (`echo`, `ls`, `cat` run; `touch`, a computed `touch`, `script` are refused; no file is made); D-351 |
+| "plan mode reads inside the project only" was false for a protected file inside the project and for the `r` tool's level-1 reads beyond it (low) | fcc1ae91 | Fixed: the wording claims no boundary, "plan mode does not run this read: describe what you need from it in your plan instead of reading it". test-perm-gate.R "plan mode says it does not run a read, never that the read is a change (D-352)" (the `read` tool beyond the project and on `.env`, an `r` network read; a write keeps the general wording); D-352 |
+
+Not changed: an `r` call that reads a secret (`readLines('.env')`, category `secret`, level 3)
+keeps the general wording. A secret is also a hand-over to a child process, so the category is not
+a pure read, and the branch stays the one exact case (`categories` is `read`) rather than a list.
+
 ## Evidence
 
 Red before green for each fix (the new assertions failed on `3418f942`, see the commit order).

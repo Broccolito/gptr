@@ -10346,10 +10346,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   the policy read `ctx$envir`, which at an idle console is the home itself, so the overlay never
   counted and every served `r` call, `value + 1` included, was refused with "plan mode needs a
   scratch environment for r".
+- Rule (nested calls): `mcp_serve_r()` hands the served call, not only its risk, to
+  `mcp_nested_gate()`, which gives the literal `r` call of a nested `peter$sh`, `bg` or `script`
+  the same `envir`; a read-only nested `peter$sh('ls')` therefore runs in a plan-mode served call
+  as it does in an in-run plan turn, and a writing one is refused by the plan allowlist. Formerly
+  that literal had no environment, so it fell back to the home and the call was refused with the
+  same false "plan mode needs a scratch environment for r".
 - Contract-visible: `?gptr_mcp_serve` says what plan mode serves.
 - Tests: test-mcp-server.R "a fork's served calls evaluate in its overlay; a plan-mode parent
   stays in plan" (`nrow(d)` runs and leaves nothing in the home; `saveRDS()`, `d$x =`, `<<-` and
-  `assign()` into the global environment are refused and change nothing). Evidence:
+  `assign()` into the global environment are refused and change nothing) and "a plan-mode served r
+  call runs a nested read-only sh call; a writing one is refused". Evidence:
   progress/fixes-1.0.1/round2-X.md.
 
 ## D-352 - Fixes 1.0.1 round 2 lane X Refusals say what a person can do (2026-11-03)
@@ -10363,12 +10370,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   text. Formerly `mcp_serve_exec()` appended "To allow it, run it yourself at the R prompt or add
   a rule with gptr_permissions(allow = ...)." to every denial, which no client can do and which
   was false for plan mode and level 4.
-- Rule (plan wording): a call that only reads (`categories` is `read`, such as `read` of a file
-  outside the project) that plan mode denies says "plan mode reads inside the project only:
-  describe what you need from outside it in your plan instead of reading it". Formerly it said
-  "plan mode is read-only: describe this change in your plan instead of performing it", which
-  describes a change that is not one; writes and edits keep the old wording.
+- Rule (plan wording): a call that only reads (`categories` is `read`: the `read` tool beyond the
+  project or on a protected file, an `r` call that reads from a network) that plan mode denies
+  says "plan mode does not run this read: describe what you need from it in your plan instead of
+  reading it". It claims no boundary: the `r` tool's level-1 reads beyond the project run, and a
+  call with another category (a secret, a write, a command) keeps the general wording. Formerly
+  it said "plan mode is read-only: describe this change in your plan instead of performing it",
+  which describes a change that is not one; writes and edits keep that wording.
 - Contract-visible: IC-57; `?gptr_mcp_serve` ("a note on what a person can do").
 - Tests: test-mcp-server.R "a served refusal offers what a person can do, never an allow rule
-  that cannot work"; test-perm-gate.R "plan mode says a read outside the project is no change
-  (D-352)". Evidence: progress/fixes-1.0.1/round2-X.md.
+  that cannot work"; test-perm-gate.R "plan mode says it does not run a read, never that the
+  read is a change (D-352)". Evidence: progress/fixes-1.0.1/round2-X.md.
