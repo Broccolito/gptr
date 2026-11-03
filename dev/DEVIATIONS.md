@@ -9628,7 +9628,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   architecture's command list names `/mcp [serve]`.
 - Contract-visible: 04 section 15.5 IC-57; 03 section 6.17; `?gptr_mcp_serve`; mcp and
   interactive-console vignettes; the cheat sheet and its PDF.
-- Tests: test-mcp-server.R "a server started where R has no idle prompt says when it answers", "an
+- Tests: test-mcp-server.R "a server started where R has no idle prompt says when it answers" (it
+  mocks `gptr_is_interactive()`, which the server reads, so it also holds in an interactive R), "an
   idle refusal's notice starts a row of its own below R's prompt"; test-agent-background.R "a notice
   at an idle tick starts a row of its own below R's prompt" (unchanged, now through the helper).
 

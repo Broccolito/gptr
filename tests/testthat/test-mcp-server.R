@@ -854,9 +854,13 @@ test_that("a server started where R has no idle prompt says when it answers", {
   skip_without_server()
   local_gptr_options(mode = "manual", quiet = FALSE)
   withr::defer(gptr_mcp_serve(stop = TRUE))
-  expect_false(interactive())
+  idle = FALSE
+  local_mocked_bindings(gptr_is_interactive = function() idle)
   expect_message(gptr_mcp_serve(envir = new.env()), "not between them or between Jupyter cells",
                  class = "gptr_message_notice")
+  expect_no_message(gptr_mcp_serve(envir = new.env()))
+  gptr_mcp_serve(stop = TRUE)
+  idle = TRUE
   expect_no_message(gptr_mcp_serve(envir = new.env()))
 })
 

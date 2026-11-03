@@ -721,7 +721,7 @@ mcp_serve_open = function(envir, mode, tools = mcp_default_tools(), port = NULL)
   tok = mcp_serve_token(s, tools)
   st$user = list(key = tok$key, session = s)
   st$handle = mcp_handle_new(st, tok, mcp_serve_stop)
-  if (!interactive()) {
+  if (!gptr_is_interactive()) {
     gptr_inform(paste("R has no idle prompt in a script, document or Jupyter kernel: the MCP",
                       "server answers only during gptr waits such as peter$sh() or gptr_wait(),",
                       "not between them or between Jupyter cells."), "notice")
