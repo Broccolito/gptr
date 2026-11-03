@@ -51,7 +51,6 @@ img.logo {
   display: block;
   width: 100%;
   height: auto;
-  background: #f3f1ec;
 }
 
 .gptr-video figcaption {
@@ -233,8 +232,8 @@ pre code a:any-link:hover {
 }
 
 @media (max-width: 991.98px) {
-  /* Beside the sidebar two columns are too narrow, so points and index sections stack. */
-  .template-home .gptr-points, .template-article-index .section {
+  /* Each index section's name sits above its list. */
+  .template-article-index .section {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -246,5 +245,12 @@ pre code a:any-link:hover {
     margin-left: 0 !important;
     max-height: calc(100dvh - 4.5rem);
     overflow-y: auto;
+  }
+}
+
+@media (max-width: 1199.98px) {
+  /* Beside the sidebar two columns would shrink each figure below 360 px, so the points stack. */
+  .template-home .gptr-points {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -24,12 +24,14 @@ bar, the blue System 2 block and the `>` chevron, with no decoration.
 3. **README.Rmd stays the one source of the home text.** README.md is also the GitHub and CRAN
    page, and `man/figures` is not in the CRAN tarball, so it holds no figures. On the pkgdown home
    page `pkgdown/extra.js` puts each figure above its lead point, keyed by the bold lead-in, and
-   `extra.css` lays the points out as a 2 x 2 grid (one column below 992 px, where the sidebar
-   would leave each figure too small). Without script the home page is the plain README. A
-   release test keeps the lead-ins, the script and the files in step. The silent 36 s launch
-   video (`pkgdown/assets/video/gptr.mp4`, its end card `gptr.jpg` as poster) is added the same
-   way, full width between the opening paragraph and the points. It plays muted in a loop with
-   native controls; with `prefers-reduced-motion: reduce` it waits on its poster.
+   `extra.css` lays the points out as a 2 x 2 grid (one column below 1200 px, where beside the
+   sidebar each figure would be narrower than 360 px). Without script the home page is the plain
+   README. A release test keeps the lead-ins, the script and the files in step. The silent 36 s
+   launch video (`pkgdown/assets/video/gptr.mp4`, its end card `gptr.jpg` as poster) is added the
+   same way, full width between the opening paragraph and the points. It plays muted in a loop
+   with native controls; with `prefers-reduced-motion: reduce`, and below 576 px, where its text
+   is too small to read, it waits on its poster. `gptr-dark.mp4` and `gptr-dark.jpg` are the same
+   frames on ink; `extra.js` swaps them in with the light switch and keeps the playing position.
 4. **Article figures are Markdown images** in the `.Rmd.orig`, copied verbatim into the `.Rmd` by
    precompute. pandoc turns an image alone in its paragraph into a figure with the text as its
    caption; a short `alt` attribute names the drawing, so a screen reader does not read the

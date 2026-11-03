@@ -77,27 +77,47 @@ document.addEventListener("DOMContentLoaded", () => {
       lead.parentElement.prepend(figure);
       lead.parentElement.parentElement.classList.add("gptr-points");
     });
-  // The launch video sits above the lead points; it plays only if the reader allows motion.
+  // The launch video sits above the lead points. It plays only if the reader allows motion,
+  // and on a phone, where its text is too small to read, it waits on its poster.
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const phone = window.matchMedia("(max-width: 575.98px)").matches;
   document.querySelector(".gptr-points")?.insertAdjacentHTML("beforebegin",
-    `<figure class="gptr-video"><video ${still ? "" : "autoplay "}muted loop playsinline ` +
-    'controls preload="metadata" poster="video/gptr.jpg" width="1920" height="1080" ' +
+    `<figure class="gptr-video"><video ${still || phone ? "" : "autoplay "}muted loop ` +
+    `playsinline controls preload="${phone ? "none" : "metadata"}" width="1920" height="1080" ` +
     'aria-label="Objects stay in memory across prompts; System 1 returns typed decisions and ' +
     "System 2 agents use tools; each session becomes a runnable document; gptr runs in " +
     "terminals, RStudio, VS Code, Positron and Jupyter, serves its session over MCP and " +
     "coaches its harness on your task. The end card reads gptr, a grammar of Peter, honoring " +
-    'Peter Naur and Peter Wason."><source src="video/gptr.mp4" type="video/mp4"></video>' +
+    'Peter Naur and Peter Wason."></video>' +
     "<figcaption>gptr in 36 seconds, without sound.</figcaption></figure>");
-  // Figures follow the light switch in every browser: the fragment "#dark" selects dark colours.
+  const video = document.querySelector(".gptr-video video");
+  // Figures and the video follow the light switch in every browser: the fragment "#dark"
+  // selects a figure's dark colours, and the video has a dark render that resumes in place.
+  const dark = () => document.documentElement.dataset.bsTheme === "dark";
   const figures = document.querySelectorAll('#main img[src^="figures/"]');
   const paint = (figure, search) => {
     const url = new URL(figure.src);
     if (search) url.search = search;
-    url.hash = document.documentElement.dataset.bsTheme === "dark" ? "dark" : "";
+    url.hash = dark() ? "dark" : "";
     if (url.href !== figure.src) figure.src = url.href;
   };
-  figures.forEach((figure) => paint(figure));
-  new MutationObserver(() => figures.forEach((figure) => paint(figure)))
+  const film = () => {
+    const name = `video/gptr${dark() ? "-dark" : ""}`;
+    if (!video || video.getAttribute("poster") === `${name}.jpg`) return;
+    const time = video.currentTime;
+    if (video.getAttribute("src")) video.autoplay = !video.paused;
+    video.poster = `${name}.jpg`;
+    video.src = `${name}.mp4`;
+    if (time) {
+      video.addEventListener("loadedmetadata", () => (video.currentTime = time), { once: true });
+    }
+  };
+  const repaint = () => {
+    figures.forEach((figure) => paint(figure));
+    film();
+  };
+  repaint();
+  new MutationObserver(repaint)
     .observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
   // A caption describes its figure to assistive technology.
   figures.forEach((figure, index) => {

@@ -32,9 +32,11 @@ test_that("figures share one self-contained style, and each one is used", {
     name = sub("^point-(.*)\\.svg$", "\\1", basename(path))
     expect_match(script, sprintf(': ["%s", ', name), fixed = TRUE)
   }
-  # the launch video and its poster, which extra.js puts on the home page, ship with the site
-  for (file in c("video/gptr.mp4", "video/gptr.jpg")) {
-    expect_match(script, file, fixed = TRUE)
-    expect_true(file.exists(file.path(root, "pkgdown", "assets", file)))
+  # the launch video and its poster, light and dark, which extra.js puts on the home page, ship
+  # with the site
+  expect_match(script, 'video/gptr${dark() ? "-dark" : ""}', fixed = TRUE)
+  for (ext in c("mp4", "jpg")) expect_match(script, paste0("${name}.", ext), fixed = TRUE)
+  for (file in c("gptr.mp4", "gptr.jpg", "gptr-dark.mp4", "gptr-dark.jpg")) {
+    expect_true(file.exists(file.path(root, "pkgdown", "assets", "video", file)))
   }
 })
