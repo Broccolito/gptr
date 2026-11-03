@@ -589,7 +589,7 @@ test_that("the live row counts its group and shows active phases without hiding 
     r$settled = FALSE
     r
   })
-  group = list2env(list(n = 3L, labels = c("alpha", "beta", "gamma"),
+  group = list2env(list(n = 3L, labels = c("alpha", "beta", "gamma"), models = rep("", 3L),
                         runs = c(runs, list(NULL))))
   recs = lapply(1:2, function(i) {
     runs[[i]]$group = group

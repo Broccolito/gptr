@@ -571,12 +571,12 @@ console_child_shown = function(run) {
 #' messages (IC-82), so the group's word differs from it (D-309)
 #' @noRd
 console_group_state = function(group) {
-  if (!is.environment(group) || is.null(group$labels)) return(NULL)
+  if (is.null(group)) return(NULL)
   pending = vapply(group$runs, is.null, NA)
   done = vapply(group$runs, function(r) isTRUE(r$settled), NA)
   active = which(!pending & !done)
   labels = console_escape(group$labels, FALSE)
-  models = group$models %||% rep("", group$n)
+  models = group$models
   phases = character(length(active))
   for (j in seq_along(active)) {
     i = active[[j]]
@@ -1151,8 +1151,9 @@ console_on_before_request = function(event, ctx) {
       event$model %||% rec$child$model
     rec$what = if (worker) "working" else "thinking"
     console_group_notice(rec)
-    if (verbosity() >= 2L && !isTRUE(getOption("gptr.quiet")) &&
-        is.null(the$live_row) && cli::is_dynamic_tty()) console_live_start(rec)
+    if (verbosity() >= 2L && !isTRUE(getOption("gptr.quiet")) && is.null(the$live_row)) {
+      console_live_start(rec)
+    }
   }
   if (verbosity() < 1L || !console_foreground(rec)) return(NULL)
   if (verbosity() >= 3L) {

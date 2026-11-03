@@ -1930,7 +1930,7 @@ test_that("group rosters escape names, bound large queues and obey quiet and ver
                        cli.width = 40L)
   run = new.env()
   group = list2env(list(n = 12L, labels = c("{active}\033[2J", paste0("queued", 1:11)),
-                        runs = c(list(run), rep(list(NULL), 11L))))
+                        models = rep("", 12L), runs = c(list(run), rep(list(NULL), 11L))))
   rec = list(child = list(run = list(group = group)))
   out = utils::capture.output(console_group_notice(rec))
   text = paste(out, collapse = "\n")
