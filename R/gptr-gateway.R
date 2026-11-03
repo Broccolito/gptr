@@ -54,10 +54,11 @@
 #' login is not proof of online access or subscription billing. See
 #' `vignette("interactive-console", package = "gptr")`.
 #'
-#' The name honors Peter Naur's work on readable language definitions and Peter Cathcart
-#' Wason's research with Jonathan Evans on reasoning. In Naur's spirit, gptr records sessions as
-#' runnable documents. See `vignette("why-peter", package = "gptr")` for the history and
-#' sources. A user object named `peter` hides the gateway; call `gptr::peter()` then.
+#' gptr reads as a grammar of Peter, after Peter Naur and Peter Cathcart Wason. In the spirit of
+#' Naur's readable language definitions, gptr records sessions as runnable documents; Wason's
+#' reasoning research with Jonathan Evans inspires its System 1 and System 2 roles. See
+#' `vignette("why-peter", package = "gptr")` for the history and sources. A user object named
+#' `peter` hides the gateway; call `gptr::peter()` then.
 #'
 #' @section Sessions and results:
 #' A pipe such as `session |> peter("Explain the result.")` adds work to the same session
