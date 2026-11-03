@@ -289,11 +289,10 @@ Load a private file explicitly with `gptr_env(path)`, or use interactive `gptr_l
 supported API/MCP credentials. Sign in to subscription CLIs using their own tools.
 
 `gptr_login()` takes a key through hidden input, or signs in through the browser where the
-provider offers it, and by default remembers the credential in `auth.json` in the user
-configuration directory (mode 0600 on Unix). `scope = "session"` keeps it in this R process
-only, with no file and no environment variable; `scope = "keyring"` stores it in the operating
-system's credential store through the optional keyring package. Hidden input is not
-encryption; see `?gptr_login`.
+provider offers it. Its `scope` keeps the credential in gptr's `auth.json` in the user
+configuration directory (the default), in this R process only, or in the operating system's
+credential store; see [Language models](language-models.html) and `?gptr_login`. Hidden input
+is not encryption.
 
 ### Find a key that reached a file
 
