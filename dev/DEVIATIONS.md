@@ -9610,7 +9610,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   and a received reply without usage stay unknown (NA). Was NA for every such attempt since
   PR #105 charged each attempt: one retried 429 made the batch's `meta$usage` and the owning
   session's totals unknown, and a cost limit then named the model as having no prices.
-- Contract-visible: 04 section 7.13 (owned System 1 usage).
+- Rule (workers): a worker's `result` line sums its chat rows only (`worker_outcome()`), and its
+  System 1 rows travel in the result file (`s1`); the parent charges each to the proxy session with
+  the worker's provider, model, route and cost (`worker_s1_charge()`, `s1_charge_row()`). Was one
+  summed row priced at the chat model's rates (10,000 decisions of about 300 tokens read as $6.06
+  of claude-sonnet-5-5, not about $0.13), and one System 1 row with unknown usage made the whole
+  sum NULL, so the parent charged only its estimate.
+- Contract-visible: 04 sections 7.13 (owned System 1 usage) and 11.11 (the worker's result).
 - Tests: s1-client "an unbilled System 1 failure costs a known zero, as a chat request does
-  (D-251)", "bounded rounds resubmit only failed elements ...". Evidence:
+  (D-251)", "bounded rounds resubmit only failed elements ..."; subagent-worker "a worker's
+  System 1 rows stay out of its chat usage (D-321)"; subagent-backends "a worker composes native
+  typed decisions with provenance and their own charges". Evidence:
   progress/fixes-1.0.1/lane-C.md.

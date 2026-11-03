@@ -795,6 +795,12 @@ s1_charge = function(target, outcome, session, started) {
                      rid, d$id, started,
                      max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))),
                      d$parent_id %||% NA_character_)
+  s1_charge_row(session, row)
+}
+
+#' Record one System 1 usage row on its owning session, its ancestors and its journal
+#' @noRd
+s1_charge_row = function(session, row) {
   row = usage_add_durable(session, row)
   session_append(session, list(type = "custom", custom_type = "gptr.s1_usage",
                                data = list(row = usage_row_store(row))))
