@@ -1187,12 +1187,7 @@ catalog_discovered_set = function(pid, entries, evidence = list(), replace = TRU
 catalog_discover = function(p, safety = NULL, credential = NULL) {
   if (catalog_ollama_provider(p)) return(catalog_ollama_discover(p, safety))
   pid = p[["id"]] %||% p[["name"]]
-  discover = p[["discover"]]
-  rows = if (is.function(discover) && !isTRUE(attr(discover, "gptr_native_models"))) {
-    discover()
-  } else {
-    provider_models(p, credential)
-  }
+  rows = if (is.function(p[["discover"]])) p[["discover"]]() else provider_models(p, credential)
   if (is.null(rows)) return(invisible(NULL))
   if (is.data.frame(rows)) {
     rows = lapply(seq_len(nrow(rows)), function(i) as.list(rows[i, , drop = FALSE]))
@@ -1250,8 +1245,7 @@ catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
     return(invisible(NULL))
   }
   native = catalog_ollama_provider(p)
-  callback = !native && is.function(p[["discover"]]) &&
-    !isTRUE(attr(p[["discover"]], "gptr_native_models"))
+  callback = !native && is.function(p[["discover"]])
   if (callback && !refresh || !native && !callback && !provider_models_supported(p)) {
     return(invisible(NULL))
   }

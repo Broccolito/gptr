@@ -372,7 +372,7 @@ test_that("tenant header edits invalidate reuse and offline freshness without lo
   expect_identical(gptr_models(provider = "openai")$availability, "advertised")
 })
 
-test_that("built-in compatible callbacks retry when their optional credential changes", {
+test_that("built-in compatible servers' listings retry when their optional credential changes", {
   local_inventory_catalog()
   key = NULL
   n = 0L

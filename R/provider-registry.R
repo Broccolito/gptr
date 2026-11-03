@@ -55,12 +55,11 @@ provider_table = function() {
          auth = NULL, local = TRUE, discover = provider_ollama_discoverer("ollama"),
          compat = list(supports_reasoning_effort = TRUE, supports_tool_choice = FALSE)),
     list(id = "lmstudio", api = "openai-completions", base_url = "http://localhost:1234/v1",
-         auth = NULL, local = TRUE, discover = provider_discoverer("lmstudio")),
+         auth = NULL, local = TRUE),
     list(id = "llamacpp", api = "openai-completions", base_url = "http://127.0.0.1:8080/v1",
-         auth = NULL, local = TRUE, discover = provider_discoverer("llamacpp")),
+         auth = NULL, local = TRUE),
     list(id = "vllm", api = "openai-completions", base_url = "http://localhost:8000/v1",
          auth = provider_optional_auth("vllm", "VLLM_API_KEY"), local = TRUE,
-         discover = provider_discoverer("vllm"),
          compat = list(supports_reasoning_effort = TRUE)),
     list(id = "azure", api = "openai-completions", base_url = NULL, auth = "AZURE_OPENAI_API_KEY",
          compat = list(auth_header = "api-key", deployment_model = TRUE,
@@ -93,21 +92,6 @@ provider_optional_auth = function(id, vars) {
     p[["auth"]] = vars
     tryCatch(provider_credential(p), gptr_error_no_key = function(e) NULL)
   }, gptr_optional_auth = vars)
-}
-
-#' A `discover` function for an OpenAI-compatible server; catalog_inventory() owns consent
-#' and caching. Direct callers explicitly request discovery, never load-time work.
-#' @noRd
-provider_discoverer = function(id) {
-  force(id)
-  structure(function() {
-    if (check_running()) return(NULL)
-    p = provider_get(id)
-    if (is.null(p)) return(NULL)
-    rows = provider_models(p)
-    if (is.null(rows)) return(NULL)
-    data.frame(id = vapply(rows, function(m) m[["id"]], ""), stringsAsFactors = FALSE)
-  }, gptr_native_models = TRUE)
 }
 
 #' Whether the provider uses a supported native model-list API (not an inference request); the
