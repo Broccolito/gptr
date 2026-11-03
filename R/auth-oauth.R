@@ -649,8 +649,10 @@ oauth_ask = function(what, optional = FALSE) {
                member = "hidden credential input", provided_by = "UI backend")
   },
                 interrupt = function(e) NA_character_)
-  # the questions' commands; an answer is never stored as a credential
-  if (rlang::is_string(v) && !is.na(v)) v = switch(trimws(v), `/skip` = "", `/cancel` = NA, v)
+  # the questions' commands, in any case and between blanks, are never stored as a credential
+  if (rlang::is_string(v) && !is.na(v)) {
+    v = switch(tolower(trimws(v)), `/skip` = "", `/cancel` = NA, v)
+  }
   if (optional && (!rlang::is_string(v) || !nzchar(trimws(v)))) {
     return(if (rlang::is_string(v) && !is.na(v)) "" else NA_character_)
   }

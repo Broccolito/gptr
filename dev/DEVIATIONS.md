@@ -10322,3 +10322,62 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   give a classed character ..."; s1-composition "decision launch notices identify real cache
   misses ..."; doc-replay "without .gptr/, gptr_cache() counts and clears the System 1 answers in
   memory". Evidence: progress/fixes-1.0.1/lane-C.md.
+
+## D-350 - Fixes 1.0.1 round 2 lane X /skip and /cancel match in any case (2026-11-03)
+- Rule (amends 04 `gptr_login()` and the assisted-setup questions): the answers `/skip` and
+  `/cancel` are commands in any case and between blanks, at the hidden credential prompt
+  (`oauth_ask()`) and at a text question (`ui_questions_via()`); any other answer, `/cancel now`
+  included, is an answer. Formerly only the lowercase literal was a command at the hidden prompt
+  (`/SKIP`, `/Skip` and `/CANCEL` were stored as the API key and reported stored), and a text
+  question took a padded `" /skip "` as its answer.
+- Contract-visible: `?gptr_login` (the commands are unchanged; only the matching is wider).
+- Tests: test-auth-setup.R "/skip and /cancel at the hidden prompt skip and cancel instead of
+  storing a key" and "ordinary text questions can be submitted, skipped and cancelled". Evidence:
+  progress/fixes-1.0.1/round2-X.md.
+
+## D-351 - Fixes 1.0.1 round 2 lane X Plan-mode /mcp serve serves read-only r calls (2026-11-03)
+- Rule (amends IC-15 and IC-57 for an idle console): `mcp_serve_exec()` puts the
+  environment it evaluates in on the call it gates (`call$envir`), and the `plan` policy checks
+  `call$envir` before `ctx$envir` for the scratch overlay. A served `r` call of a plan-mode session
+  with no run therefore runs in the fresh overlay `mcp_serve_envir()` builds above the session's
+  home when every call of its code is known read-only (IC-54) and nothing existing changes; the
+  overlay is dropped with the call, so nothing it creates is kept. A write, an edit, a changed
+  existing object (`<<-`, `d$x =`) and any call off the allowlist are refused as before. Formerly
+  the policy read `ctx$envir`, which at an idle console is the home itself, so the overlay never
+  counted and every served `r` call, `value + 1` included, was refused with "plan mode needs a
+  scratch environment for r".
+- Rule (nested calls): `mcp_serve_r()` hands the served call, not only its risk, to
+  `mcp_nested_gate()`, which gives the literal `r` call of a nested `peter$sh`, `bg` or `script`
+  the same `envir`; a read-only nested `peter$sh('ls')` therefore runs in a plan-mode served call
+  as it does in an in-run plan turn, and a writing one is refused by the plan allowlist. Formerly
+  that literal had no environment, so it fell back to the home and the call was refused with the
+  same false "plan mode needs a scratch environment for r".
+- Contract-visible: `?gptr_mcp_serve` says what plan mode serves.
+- Tests: test-mcp-server.R "a fork's served calls evaluate in its overlay; a plan-mode parent
+  stays in plan" (`nrow(d)` runs and leaves nothing in the home; `saveRDS()`, `d$x =`, `<<-` and
+  `assign()` into the global environment are refused and change nothing) and "a plan-mode served r
+  call runs a nested read-only sh call; a writing one is refused". Evidence:
+  progress/fixes-1.0.1/round2-X.md.
+
+## D-352 - Fixes 1.0.1 round 2 lane X Refusals say what a person can do (2026-11-03)
+- Rule (amends IC-57, the served-denial sentence): `mcp_gate_idle()` alone sets the advice of a
+  served call that needs approval: "Ask the user to run it at the R prompt or to allow it with
+  gptr_permissions(allow = ...)." and, when any policy leaves the call to a person (`ask_human`:
+  level 4, control, the secret guard), "Ask the user to run it at the R prompt."; its console
+  notice offers the rule on the same condition. A refusal by
+  a policy (plan mode, a deny rule, code off the plan allowlist) keeps the default "Explain what
+  you need or choose another approach.", and the answer of a person who declined keeps its own
+  text. Formerly `mcp_serve_exec()` appended "To allow it, run it yourself at the R prompt or add
+  a rule with gptr_permissions(allow = ...)." to every denial, which no client can do and which
+  was false for plan mode and level 4.
+- Rule (plan wording): a call that only reads (`categories` is `read`: the `read` tool beyond the
+  project or on a protected file, an `r` call that reads from a network) that plan mode denies
+  says "plan mode does not run this read: describe what you need from it in your plan instead of
+  reading it". It claims no boundary: the `r` tool's level-1 reads beyond the project run, and a
+  call with another category (a secret, a write, a command) keeps the general wording. Formerly
+  it said "plan mode is read-only: describe this change in your plan instead of performing it",
+  which describes a change that is not one; writes and edits keep that wording.
+- Contract-visible: IC-57; `?gptr_mcp_serve` ("a note on what a person can do").
+- Tests: test-mcp-server.R "a served refusal offers what a person can do, never an allow rule
+  that cannot work"; test-perm-gate.R "plan mode says it does not run a read, never that the
+  read is a change (D-352)". Evidence: progress/fixes-1.0.1/round2-X.md.

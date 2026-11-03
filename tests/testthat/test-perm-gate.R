@@ -79,6 +79,24 @@ test_that("the 11-row mode x risk matrix holds (03 section 6.8.1; 18 section 4.7
   }
 })
 
+test_that("plan mode says it does not run a read, never that the read is a change (D-352)", {
+  root = local_project()
+  local_permission_rules()
+  ctx = gate_ctx("plan")
+  # a read beyond the project (level 1), a protected file inside it (level 2), a network read in r
+  reads = list(gate_tool("read", "/etc/hosts", 1L), gate_tool("read", ".env", 2L),
+               gate_r("readLines('http://example.com/x')"))
+  for (call in reads) {
+    d = perm_policy_mode(call, ctx)
+    expect_identical(d$decision, "deny")
+    expect_match(d$reason, "plan mode does not run this read", fixed = TRUE)
+    expect_false(grepl("describe this change|inside the project", d$reason))
+  }
+  change = perm_policy_mode(gate_tool("write", "results/t.csv", 2L), ctx)
+  expect_match(change$reason, "plan mode is read-only: describe this change in your plan",
+               fixed = TRUE)
+})
+
 test_that("allow rules never loosen plan or pre-approve level 4; deny rules win (6.8.2)", {
   root = local_project()
   local_permission_rules()
