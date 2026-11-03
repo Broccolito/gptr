@@ -317,15 +317,16 @@ live_rows = function(states, width) {
 }
 
 live_states = list(
-  rstudio = list(what = "thinking", secs = 6, queued = 1, key = "Esc", pause = TRUE, typed = TRUE),
-  positron = list(what = "thinking", secs = 6, queued = 1, key = "Ctrl-C", pause = TRUE,
+  rstudio = list(what = "thinking", secs = 6, queued = "steer", key = "Esc", pause = TRUE,
+                 typed = TRUE),
+  positron = list(what = "thinking", secs = 6, queued = "steer", key = "Ctrl-C", pause = TRUE,
                   steer = TRUE),
   menu = list(what = "r", secs = 65, key = "Ctrl-C", pause = TRUE),
   hint = list(what = "thinking", secs = 6, draft = ""),
   follow = list(what = "thinking", secs = 6, draft = "", enter = "follow_up"),
-  queue = list(what = "thinking", secs = 6, queued = 2, draft = "",
+  queue = list(what = "thinking", secs = 6, queued = c("follow_up", "steer"), draft = "",
                newest = list(kind = "steer", text = "use log(mpg)\ninstead")),
-  draft = list(what = "thinking", secs = 6, queued = 1,
+  draft = list(what = "thinking", secs = 6, queued = "steer",
                draft = "and plot the residuals against the fitted values please"),
   question = list(what = "edit", secs = 11, question = TRUE, draft = "and plot the residu"),
   complete = list(what = "thinking", secs = 3, candidates = c("@mtcars", "@mtcars_copy"),
@@ -334,47 +335,46 @@ live_states = list(
 
 test_that("the live row says what the run does, its queue and the person's draft (D-243)", {
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
+  # the queue is counted, its kind named where one waits; the receipts show the text (D-301)
   expect_identical(live_rows(live_states, 80L), list(
-    rstudio = "▌ thinking 6s · 1 queued · esc pause · typed lines run next",
-    positron = "▌ thinking 6s · 1 queued · ctrl-c, then s, to steer",
+    rstudio = "▌ thinking 6s · 1 steer queued · esc pause · typed lines run next",
+    positron = "▌ thinking 6s · 1 steer queued · ctrl-c, then s, to steer",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer · tab follow-up · ctrl-c pause",
     follow = "▌ thinking 6s   enter follow-up · tab steer · ctrl-c pause",
-    queue = paste("▌ thinking 6s · 2 queued   ↳ steer · use log(mpg) instead",
-                  "· ↑ edit"),
+    queue = "▌ thinking 6s · 2 queued   ↑ edit",
     draft = "▌ thinking 6s   › and plot the residuals against the fitted values please",
     question = "▌ edit 11s · question waiting   › and plot the residu",
     complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
   ))
   # one collapse rule: whole terms go from the right (the hint's, then the queue and a waiting
-  # question), then the queued message is cut, keeping its head; the draft keeps its tail
+  # question); the draft keeps its tail
   expect_identical(live_rows(live_states, 40L), list(
-    rstudio = "▌ thinking 6s · 1 queued · esc pause",
-    positron = "▌ thinking 6s · 1 queued",
+    rstudio = "▌ thinking 6s · 1 steer queued",
+    positron = "▌ thinking 6s · 1 steer queued",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer",
     follow = "▌ thinking 6s   enter follow-up",
-    queue = "▌ thinking 6s   ↳ steer · use log(mpg)…",
+    queue = "▌ thinking 6s · 2 queued   ↑ edit",
     draft = "▌ 6s   › …inst the fitted values please",
     question = "▌ edit 11s   › and plot the residu",
     complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
   ))
   expect_identical(live_rows(live_states, 30L), list(
-    rstudio = "▌ thinking 6s · 1 queued",
-    positron = "▌ thinking 6s · 1 queued",
+    rstudio = "▌ thinking 6s",
+    positron = "▌ thinking 6s",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer",
     follow = "▌ thinking 6s",
-    queue = "▌ thinking 6s   ↳ steer · us…",
+    queue = "▌ thinking 6s · 2 queued",
     draft = "▌ 6s   › …itted values please",
     question = "▌ 11s   › and plot the residu",
     complete = "▌ @mtcars  @mtc…   › use @mtc"
   ))
-  # a whole message never ends in an ellipsis; the time is the floor
-  follow_up = list(what = "thinking", secs = 28, queued = 1, draft = "",
+  # no queued text on the row; the time is the floor
+  follow_up = list(what = "thinking", secs = 28, queued = "follow_up", draft = "",
                    newest = list(kind = "follow_up", text = "then save the plot as plot.png"))
-  expect_identical(console_live_row(follow_up, 80L),
-                   "▌ thinking 28s · 1 queued   ↳ follow-up · then save the plot as plot.png")
+  expect_identical(console_live_row(follow_up, 80L), "▌ thinking 28s · 1 follow-up queued   ↑ edit")
   expect_identical(console_live_row(follow_up, 25L), "▌ thinking 28s")
   expect_identical(console_live_row(follow_up, 12L), "▌ 28s")
   # every row fits width - 1 as the terminal draws it: the glyphs are one column, wide
@@ -388,7 +388,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   expect_identical(console_live_row(list(secs = 0), 4L), "")
   withr::local_options(cli.unicode = FALSE)
   expect_identical(live_rows(live_states[c("queue", "draft")], 80L), list(
-    queue = "# thinking 6s - 2 queued   -> steer - use log(mpg) instead - Up edit",
+    queue = "# thinking 6s - 2 queued   Up edit",
     draft = "# thinking 6s   >> and plot the residuals against the fitted values please"
   ))
 })
@@ -408,22 +408,22 @@ test_that("while R code runs in this process the row has no clock and says keys 
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   r = list(what = "r", secs = 5, frozen = TRUE, key = "Ctrl-C", pause = TRUE)
   states = list(keys = c(r, draft = ""), draft = c(r, draft = "and plot"), ide = r,
-                queued = c(r, queued = 1, draft = "p1 third line"),
-                all = c(r, queued = 2, question = TRUE, draft = "and plot"),
+                queued = c(r, queued = "steer", draft = "p1 third line"),
+                all = c(r, list(queued = c("steer", "steer")), question = TRUE, draft = "and plot"),
                 asks = c(r, question = TRUE, draft = ""),
                 widest = c(r, draft = "and plot", status_w = 26L))
   # with a draft the status words say keys wait too, before the queue (steering review); a question
   # waiting reads keys, so its row has the clock and the keys (review of Tasks 22-27)
   expect_identical(live_rows(states, 80L), list(
     keys = "▌ r · keys show when r returns", draft = "▌ r · keys wait   › and plot",
-    ide = "▌ r · ctrl-c pause", queued = "▌ r · keys wait · 1 queued   › p1 third line",
+    ide = "▌ r · ctrl-c pause", queued = "▌ r · keys wait · 1 steer queued   › p1 third line",
     all = "▌ r 5s · 2 queued · question waiting   › and plot",
     asks = "▌ r 5s · question waiting   enter steer · tab follow-up · ctrl-c pause",
     widest = paste0("▌ r · keys wait", strrep(" ", 13L), "   › and plot")
   ))
   # a long draft keeps its tail; the cue and the queue go whole
   long = strrep("abcdefghij", 12L)
-  states = list(long = c(r, queued = 1, draft = long))
+  states = list(long = c(r, queued = "steer", draft = long))
   expect_identical(live_rows(states, 80L)$long, paste0("▌ r   › …", substring(long, 51L)))
   expect_identical(live_rows(states, 40L)$long, paste0("▌ r   › …", substring(long, 91L)))
 })
@@ -451,7 +451,7 @@ test_that("during a sub-agent the row ticks and shows the queue; keys wait in it
   withr::local_options(cli.dynamic = TRUE)
   local_live_console()
   newest = NULL
-  local_mocked_bindings(console_queued = function(s) as.integer(!is.null(newest)),
+  local_mocked_bindings(console_queued = function(s) if (!is.null(newest)) "steer",
                         console_newest = function(s, rd) newest,
                         console_repl_prompt = function() list(reader = list(compose = list())),
                         console_render_on = function(rec) FALSE, front_end = function() "terminal")
@@ -481,21 +481,20 @@ test_that("during a sub-agent the row ticks and shows the queue; keys wait in it
   hint = "▌ sub-agent 'a' #1 7s   enter steer · tab follow-up · ctrl-c pause"
   expect_identical(c(row(80L), row(120L)), c(hint, hint))
   newest = list(kind = "steer", text = "s11 during the sub-agent")
-  expect_identical(row(80L),
-                   "▌ sub-agent 'a' #1 7s · 1 queued   ↳ steer · s11 during the sub-agent · ↑ edit")
+  expect_identical(row(80L), "▌ sub-agent 'a' #1 7s · 1 steer queued   ↑ edit")
   # the sub-agent's own r call evaluates in this process; the hint names the tool, not the label
   kid$frozen = TRUE
-  expect_identical(row(80L), "▌ sub-agent 'a' #1 · 1 queued · keys show when r returns")
+  expect_identical(row(80L), "▌ sub-agent 'a' #1 · 1 steer queued · keys show when r returns")
   # once it returns, the parent's r call is the one that runs
   rm(list = "u_kid", envir = active)
-  expect_identical(row(80L), "▌ r · 1 queued · keys show when r returns")
+  expect_identical(row(80L), "▌ r · 1 steer queued · keys show when r returns")
   # the row's task draws while a sub-agent shows, though a tool is on the stack
   written(function() console_live_start(parent))
   pass = function() written(reactor_get()$tasks[[the$live_row$task]]$fn)
   expect_identical(pass(), "")
   kid$frozen = NULL
   assign("u_kid", kid, envir = active)
-  expect_match(pass(), "sub-agent 'a' #1 [0-9]+s · 1 queued")
+  expect_match(pass(), "sub-agent 'a' #1 [0-9]+s · 1 steer queued")
 })
 
 test_that("a sub-agent's long label gives way to its number before the person's text (review)", {
@@ -505,10 +504,11 @@ test_that("a sub-agent's long label gives way to its number before the person's 
   draft = "s11 during the sub-agent"
   steer = list(kind = "steer", text = "s1 use the median")
   expect_identical(live_rows(list(
-    draft = c(kid, draft = draft), queued = c(kid, queued = 1, draft = "", list(newest = steer)),
+    draft = c(kid, draft = draft),
+    queued = c(kid, queued = "steer", draft = "", list(newest = steer)),
     frozen = c(kid, frozen = TRUE, draft = ""), wide = c(kid, draft = "")), 60L), list(
     draft = "▌ sub-agent #1 4s   › s11 during the sub-agent",
-    queued = "▌ sub-agent #1 4s · 1 queued   ↳ steer · s1 use the median",
+    queued = "▌ sub-agent #1 4s · 1 steer queued   ↑ edit",
     frozen = "▌ sub-agent #1 · keys show when r returns",
     wide = "▌ sub-agent #1 4s   enter steer · tab follow-up"
   ))
@@ -521,7 +521,7 @@ test_that("a sub-agent's long label gives way to its number before the person's 
 
 test_that("the live row counts its group and shows active phases without hiding queued work", {
   withr::local_options(cli.unicode = FALSE, cli.num_colors = 1L)
-  local_mocked_bindings(console_queued = function(s) 0L,
+  local_mocked_bindings(console_queued = function(s) character(),
                         console_repl_prompt = function() list(reader = NULL))
   active = console_state()$active
   runs = lapply(1:2, function(i) {
@@ -608,14 +608,14 @@ test_that("a leading ! takes the chevron's place; / and ! drafts say when they r
   states = list(
     bang = list(what = "thinking", secs = 6, draft = "!summary(fuel$mpg)"),
     twice = list(what = "thinking", secs = 6, draft = "!!x = 1"),
-    slash = list(what = "thinking", secs = 6, queued = 1, draft = "/mode"),
+    slash = list(what = "thinking", secs = 6, queued = "steer", draft = "/mode"),
     spaced = list(what = "thinking", secs = 6, draft = "  /mode"),
     text = list(what = "thinking", secs = 6, draft = "wow! /x")
   )
   expect_identical(live_rows(states, 80L), list(
     bang = "▌ thinking 6s   runs after this answer   ! summary(fuel$mpg)",
     twice = "▌ thinking 6s   runs after this answer   ! !x = 1",
-    slash = "▌ thinking 6s · 1 queued   runs after this answer   › /mode",
+    slash = "▌ thinking 6s · 1 steer queued   runs after this answer   › /mode",
     spaced = "▌ thinking 6s   runs after this answer   ›   /mode",
     text = "▌ thinking 6s   › wow! /x"
   ))

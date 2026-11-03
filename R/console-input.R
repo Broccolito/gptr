@@ -434,8 +434,10 @@ console_newest = function(s, rd, take = FALSE) {
 #' waiting question, then the person's draft or the keys, fitted to `width - 1` columns
 #'
 #' `state`: `what` (thinking, the running tool's name or `sub-agent a`), `secs` (the run's seconds,
-#' shown as 0s, 59s, 1m 05s), `queued` (the person's messages waiting), `question` (a question
-#' waits), `newest` (list(kind, text): the newest of them), `candidates` (completions, shown in
+#' shown as 0s, 59s, 1m 05s), `queued` (the kinds of the person's messages waiting, counted
+#' `1 steer queued`, `1 follow-up queued`, `2 queued`; their receipts show the text, D-301),
+#' `question` (a question waits), `newest` (the newest of them Up takes back, console_newest(), or
+#' NULL), `candidates` (completions, shown in
 #' place of the status words), `draft` (the composer's text; NULL where no composer reads keys),
 #' `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt key),
 #' `pause` (TRUE where the key pauses, else it stops), `steer` (TRUE where only the pause menu
@@ -449,16 +451,16 @@ console_newest = function(s, rd, take = FALSE) {
 #' `question waiting`, 0 for a row of completions, which shows until the next key). In the style
 #' table's glyphs: without a composer the status ends with the key and its verb, as the composer's
 #' keys read, `<sep>esc stop`, with `steer` `<sep>ctrl-c, then s, to steer`, and with `typed`
-#' `<sep>typed lines run next`; with an empty draft the newest message follows, `<queued>
-#' steer<sep><text><sep><up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`;
+#' `<sep>typed lines run next`; with an empty draft `<up> edit` where Up takes a message back, or
+#' the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`;
 #' else `<person> <draft>`, after the hint `runs after this answer` where the draft starts with / or
 #' ! (a follow-up, whatever the key) and the hint fits beside the status at its widest, and a
 #' leading ! takes the person's glyph's place, bold red (Codex's shell mode, D-244). The block is
 #' the agent's blue and the words dim; the draft is ink. One collapse rule: whole terms go from the
-#' right, the hint's, then the queue and a waiting question, then the queued message is cut keeping
-#' its head, down to the block and the elapsed time; the draft keeps its tail, so an ellipsis always
-#' marks cut text. Widths are counted as the console draws them (live_fit()), so the row never
-#' wraps; where not even the block and the time fit, it is empty.
+#' right, the hint's, then the queue and a waiting question, down to the block and the elapsed time;
+#' the draft keeps its tail, so an ellipsis always marks cut text. Widths are counted as the console
+#' draws them (live_fit()), so the row never wraps; where not even the block and the time fit, it is
+#' empty.
 #' @noRd
 console_live_row = function(state, width) {
   sym = console_style()
@@ -472,15 +474,15 @@ console_live_row = function(state, width) {
   if (frozen) clock = what
   # a sub-agent's short form, `sub-agent #1`, takes its label's place first where the row is narrow
   short = if (frozen) state$short %||% what else paste(state$short %||% what, clock)
+  n = length(state$queued)
   words = c(if (frozen) what else paste(what, clock),
             if (frozen && nzchar(state$draft %||% "")) "keys wait",
-            if (isTRUE(state$queued > 0)) paste0(state$queued, " queued"),
+            if (n) paste(n, if (n == 1L) paste(kind(state$queued), "queued") else "queued"),
             if (isTRUE(state$question)) "question waiting")
   key = tolower(state$key %||% "Ctrl-C")
   enter = state$enter %||% "steer"
   draft = state$draft
-  # the hint's terms; a queued message (`said`) is the one text cut, the others are dropped whole
-  said = NULL
+  # the hint's terms, dropped whole
   terms = if (is.null(draft)) {
     verb = if (isTRUE(state$steer)) ", then s, to steer" else
       if (isTRUE(state$pause)) " pause" else " stop"
@@ -491,8 +493,7 @@ console_live_row = function(state, width) {
     c(paste("enter", kind(enter)), paste("tab", kind(setdiff(c("steer", "follow_up"), enter))),
       paste(key, "pause"))
   } else if (!nzchar(draft)) {
-    said = paste0(sym$queued, " ", kind(state$newest$kind), sym$sep, live_text(state$newest$text))
-    c(said, paste(sym$up, "edit"))
+    paste(sym$up, "edit")
   }
   hint = function(terms) {
     if (!length(terms)) return("")
@@ -518,25 +519,16 @@ console_live_row = function(state, width) {
     status = live_candidates(state$candidates, fit)
   } else {
     # a sub-agent's short form first; then dropped whole, from the right: the hint's terms, then
-    # the queue and a waiting question; then the queued message is cut, keeping its head; at least
-    # the block and the time
+    # the queue and a waiting question; at least the block and the time
     repeat {
       status = paste0(paste(words, collapse = sym$sep), hint(terms))
       if (live_fit(status) <= fit) break
       if (!identical(words[[1L]], short)) {
         words[[1L]] = short
-      } else if (length(terms) > !is.null(said)) {
+      } else if (length(terms)) {
         terms = terms[-length(terms)]
       } else if (length(words) > 1L) {
         words = words[-length(words)]
-      } else if (!is.null(said)) {
-        cut = live_fit(said, fit - live_fit(words) - 3L, sym$ellipsis)
-        if (startsWith(cut, paste0(sym$queued, " ", kind(state$newest$kind), sym$sep))) {
-          status = paste0(words, hint(cut))
-          break
-        }
-        said = NULL
-        terms = character()
       } else {
         status = clock
         break
@@ -680,7 +672,8 @@ console_live_state = function(rec) {
   short = if (!is.null(group)) group$short else
     if (length(kids)) paste("sub-agent", sub("^.* (#[0-9]+)$", "\\1", label))
   list(what = what, short = short,
-       secs = as.numeric(Sys.time()) - rec$t0, queued = if (direct) 0L else console_queued(s),
+       secs = as.numeric(Sys.time()) - rec$t0,
+       queued = if (direct) character() else console_queued(s),
        question = isTRUE(rec$question), frozen = isTRUE(frozen),
        key = console_interrupt_key(), pause = console_menu_available(),
        steer = !direct && console_menu_available() && front_end() == "positron",
@@ -697,14 +690,17 @@ console_kids = function() {
              vapply(kids, function(r) r$child$label, ""))]
 }
 
-#' The person's messages waiting for session `s`: its queued items from user sources, the items
-#' the console holds for it (policy_flush()) and the lines the REPL holds for its next prompt
+#' The kinds (`steer`, `follow_up`) of the person's messages waiting for session `s`: its queued
+#' items from user sources, the items the console holds for it (policy_flush()) and the lines the
+#' REPL holds for its next prompt
 #' @noRd
 console_queued = function(s) {
   q = session_data(s)$queue
-  user = vapply(c(q$steer, q$follow_up), function(it) it$source %in% queue_user_sources, NA)
-  held = vapply(console_state()$pending, function(it) identical(it$s, s), NA)
-  sum(user) + sum(held) + length(console_repl_prompt()$reader$typed)
+  user = function(items) sum(vapply(items, function(it) it$source %in% queue_user_sources, NA))
+  held = Filter(function(it) identical(it$s, s), console_state()$pending)
+  c(rep("steer", user(q$steer)), rep("follow_up", user(q$follow_up)),
+    vapply(held, function(it) it$as, ""),
+    rep("follow_up", length(console_repl_prompt()$reader$typed)))
 }
 
 #' Show the live row for the record `rec` of a foreground run while it waits for its model

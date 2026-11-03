@@ -1180,10 +1180,10 @@ test_that("on a CLI route the live row keeps its clock around each thinking line
   t0 = rec$t0
   expect_identical(think(1L, "**Plan"), character())
   # padded, the row ends at the line's block, and comes back under it as the request still waits
-  # (the session's queued prompt counts)
+  # (the session's queued prompt counts, its kind named; the key's term gives way at 40 columns)
   expect_identical(sub(" +$", "", think(1L, "ning**\n\nThe body")),
                    c(paste0("\r", strrep(" ", 39L), "\r"), "  Planning",
-                     "\r# thinking 0s - 1 queued - ctrl-c stop"))
+                     "\r# thinking 0s - 1 follow-up queued"))
   think(1L, " goes on.")
   think(2L, "a first line far longer than forty columns")
   expect_identical(the$live_row$task, task)

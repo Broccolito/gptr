@@ -1276,7 +1276,7 @@ test_that("a macOS terminal: a paste is one turn, a fence echoes once, Ctrl-D ne
   pty$send("x\r")
   Sys.sleep(0.4)
   pty$send("half\004")
-  expect_true(pty$wait("1 queued   >> half"))
+  expect_true(pty$wait("1 steer queued   >> half"))
   expect_true(pty$wait("peter> half"))
   expect_identical(pty$seen("GOT SLOW END"), 2L)
   pty$send("\025")

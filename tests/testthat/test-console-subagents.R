@@ -194,7 +194,7 @@ test_that("a terminal fanout keeps its roster, phases and the parent's composer"
   pty$paste("use-median")
   expect_true(pty$wait(paste0(person, " use-median")))
   pty$send("\r")
-  expect_true(pty$wait("1 queued"))
+  expect_true(pty$wait("1 steer queued"))
   pty$paste("next-draft")
   expect_true(pty$wait(paste0(person, " next-draft"), timeout = 5), info = pty$all)
   expect_true(pty$wait("PARENT STEER [use-median]", timeout = 20), info = pty$all)
