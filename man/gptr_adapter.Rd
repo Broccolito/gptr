@@ -44,11 +44,17 @@ give \code{stream()}, a generator factory; classifier adapters give \code{classi
 \section{Callback results}{
 
 HTTP \code{build()} returns a named list with an absolute HTTP(S) \code{url}, optional \code{method}
-(POST with a body, otherwise GET), named \code{headers} (strings or origin-bound secret handles),
-\code{body} (UTF-8 text or raw bytes) and \code{stream} (\code{"sse"}, \code{"ndjson"}, \code{"json"} or \code{"raw"};
-the transport supplies the default). For \code{process_jsonl}, it returns \code{start}, a process
-specification with \code{command} (or \code{NULL} to reuse the session child), optional \code{send}, an
-unnamed list of objects to write as JSON lines (default empty), and optional \code{close_stdin}.
+(POST with a body, otherwise GET), named \code{headers} (each a string, an origin-bound secret
+handle such as \code{opts$credential}, or an unnamed list of strings and handles joined in order,
+for example \code{list("Bearer ", opts$credential)}), \code{body} (UTF-8 text or raw bytes), \code{stream}
+(\code{"sse"}, \code{"ndjson"}, \code{"json"} or \code{"raw"}; the transport supplies the default) and optional
+\code{sign}, \verb{function(method, url, body, value)}, called once per attempt with the raw body, where
+\code{value(handle)} reads a handle bound to the URL's origin; it returns a named list of extra
+headers, for request signing. Never paste a handle into a string.
+
+For \code{process_jsonl}, \code{build()} returns \code{start}, a process specification with \code{command} (or
+\code{NULL} to reuse the session child), optional \code{send}, an unnamed list of objects to write as
+JSON lines (default empty), and optional \code{close_stdin}.
 
 \code{parse()} returns a list of functions: \code{push(unit)} consumes a decoded unit, \code{finish()}
 ends input and returns the final assistant message, \code{fail(cnd)} handles a transport failure,
