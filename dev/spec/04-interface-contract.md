@@ -5103,8 +5103,11 @@ step list before its first action.
   `allow_runs`; its default is `NULL` only outside all pumps and served tools, else `character()`, so System 1
   and MCP HTTP calls made from inside an `r` evaluation never run a sibling's R tool.
 - `later::run_now(0)` is called only at depth 1, so an HTTP request to `gptr_mcp_serve()` is answered only by the
-  outermost pump or at R's top-level idle prompt. A nested console `readline()` and ordinary blocking R code
-  can suspend serving; `/mcp serve` starts or reuses the server and leaves Peter's reader for R's prompt.
+  outermost pump or at R's top-level idle prompt. Serving pauses while Peter's own prompt waits (in every
+  console), while other R code runs and during a nested tool wait. Rscript, knitr, Quarto and a Jupyter kernel
+  have no idle prompt: there a request waits for the next gptr wait (none between Jupyter cells), and a server
+  started where `interactive()` is `FALSE` says so in a notice (D-337). `/mcp serve` starts or reuses the
+  server and leaves Peter's reader for R's prompt.
   A new server uses the chat's workspace and effective mode, passed to it directly so a session-scope `mode`
   setting cannot loosen it (D-335), and the chat is retained as `gptr_last()` for
   `gptr_last() |> peter()` to resume it. A running server retains its original workspace and mode.

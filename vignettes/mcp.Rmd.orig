@@ -177,9 +177,11 @@ deliberate copying. Treat that text as a credential. The Codex snippet supplies 
 for the client process; it is not a command to paste without its environment.
 
 One server runs per R process, bound to `127.0.0.1` with a bearer token. It serves requests at
-R's top-level idle prompt or during an outermost gptr reactor wait. A nested `readline()` such
-as Peter's prompt in R.app, ordinary blocking R code, and nested tool waits can pause serving.
-Scheduling a timer does not make a blocking reader service callbacks.
+R's top-level idle prompt or during an outermost gptr wait. Serving pauses while Peter's own
+prompt waits, in every console, while other R code runs, and during nested tool waits. Rscript,
+knitr, Quarto and a Jupyter kernel have no idle prompt: there a request waits for the next gptr
+wait, such as `peter$sh()` or `gptr_wait()`, and is not answered between Jupyter cells, so a
+client may time out. Serve from an interactive R console.
 
 In Peter, enter `/mcp serve` to start or reuse the server and return to R's prompt. A new server
 uses the chat's workspace and permission mode. Leave R at its prompt while the client works;

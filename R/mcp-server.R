@@ -656,16 +656,20 @@ mcp_handle_new = function(st, tok, stop) {
 #' belong to a dedicated gptr session whose permission mode is the configured default when the
 #' server starts, independently of a chat's explicit mode; like any new session, it becomes
 #' [gptr_last()]. A running server keeps its original workspace and mode until stopped.
-#' Requests are answered at R's top-level idle prompt or during an outermost reactor wait.
-#' A nested console `readline()` (including Peter's prompt in R.app), ordinary blocking R code,
-#' or a nested tool wait can pause serving. In Peter, `/mcp serve` starts or reuses the server
-#' and returns to R's prompt; a new server uses that chat's workspace and mode. Resume the chat
-#' with `gptr_last() |> peter()`. Calls that need approval are refused with a note on how to allow
-#' them, because gptr never asks from a background callback. The token appears only in the
-#' snippets of `$config` (printed redacted; `as.character()` gives the text to paste;
-#' `$config$codex` holds the `codex` options
-#' in `$args` and the environment to start Codex with in `$env`). One server runs per R process.
-#' Needs 'httpuv', 'later' and 'openssl'; gptr's own codex route does not use this server.
+#' Requests are answered at R's top-level idle prompt or during an outermost gptr wait. Serving
+#' pauses while Peter's own prompt waits (in every console), while other R code runs and during a
+#' nested tool wait. Where R has no idle prompt (Rscript, knitr, Quarto, or a Jupyter kernel
+#' between cells), a request waits for the next gptr wait, such as `peter$sh()` or
+#' [gptr_wait()], and a client may time out (a server started there says so); serve from an
+#' interactive R console instead.
+#' In Peter, `/mcp serve` starts or reuses the server and returns to R's prompt; a new server
+#' uses that chat's workspace and mode. Resume the chat with `gptr_last() |> peter()`. Calls that
+#' need approval are refused with a note on how to allow them, because gptr never asks from a
+#' background callback. The token appears only in the snippets of `$config`, which show it
+#' redacted, in notebooks and documents too (`as.character()` gives the text to paste;
+#' `$config$codex` holds the `codex` options in `$args` and the environment to start Codex with
+#' in `$env`). One server runs per R process. Needs 'httpuv', 'later' and 'openssl'; gptr's own
+#' codex route does not use this server.
 #'
 #' If shutdown cannot be confirmed, access is revoked and the server is retained for retry.
 #' Call `gptr_mcp_serve(stop = TRUE)` again; new requests are refused until shutdown completes.
@@ -718,6 +722,11 @@ mcp_serve_open = function(envir, mode, tools = mcp_default_tools(), port = NULL)
   tok = mcp_serve_token(s, tools)
   st$user = list(key = tok$key, session = s)
   st$handle = mcp_handle_new(st, tok, mcp_serve_stop)
+  if (!interactive()) {
+    gptr_inform(paste("R has no idle prompt in a script, document or Jupyter kernel: the MCP",
+                      "server answers only during gptr waits such as peter$sh() or gptr_wait(),",
+                      "not between them or between Jupyter cells."), "notice")
+  }
   st$handle
 }
 

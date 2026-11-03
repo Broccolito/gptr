@@ -831,6 +831,16 @@ test_that("snippets keep the token out of format(), str(), knitr and Jupyter's r
   }
 })
 
+test_that("a server started where R has no idle prompt says when it answers", {
+  skip_without_server()
+  local_gptr_options(mode = "manual", quiet = FALSE)
+  withr::defer(gptr_mcp_serve(stop = TRUE))
+  expect_false(interactive())
+  expect_message(gptr_mcp_serve(envir = new.env()), "not between them or between Jupyter cells",
+                 class = "gptr_message_notice")
+  expect_no_message(gptr_mcp_serve(envir = new.env()))
+})
+
 test_that("gptr_mcp_serve() validates its arguments and is refused from model code", {
   expect_error(gptr_mcp_serve(tools = "bash"), class = "gptr_error_invalid_argument")
   expect_error(gptr_mcp_serve(envir = 1), class = "gptr_error_invalid_argument")
