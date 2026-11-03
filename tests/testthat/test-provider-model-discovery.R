@@ -189,6 +189,22 @@ test_that("provider refresh merges advertised IDs while retaining catalog capabi
   expect_identical(empty$availability, "unlisted")
 })
 
+test_that("the listing footer names failed listings of listed providers once, with the row count", {
+  local_inventory_catalog()
+  local_mocked_bindings(egress_check = function(...) TRUE, replay_guard = function(...) TRUE,
+    provider_credential = function(...) NULL,
+    catalog_http_request = function(...) inventory_response(list(), status = 405L))
+  gptr_models(provider = "openai", refresh = TRUE)
+  gptr_models(provider = "anthropic", refresh = TRUE)
+  all = gptr_models()
+  footer = attr(all, "footer")
+  expect_match(footer, paste0(", ", nrow(all), " models;"), fixed = TRUE)
+  expect_match(footer, "; listing failed for openai (HTTP 405); prior catalog kept", fixed = TRUE)
+  expect_no_match(footer, "anthropic", fixed = TRUE)
+  expect_match(attr(gptr_models(provider = "anthropic"), "footer"),
+               "listing failed for anthropic (HTTP 405)", fixed = TRUE)
+})
+
 test_that("preparation inventories once, explicit refresh bypasses cache, failures keep models", {
   local_inventory_catalog()
   n = 0L
@@ -214,7 +230,7 @@ test_that("preparation inventories once, explicit refresh bypasses cache, failur
   found = gptr_models(provider = "openai")
   expect_true("openai/new-id" %in% found$ref)
   expect_identical(found$availability[found$ref == "openai/new-id"], "advertised (stale)")
-  expect_match(attr(found, "footer"), "refresh failed", fixed = TRUE)
+  expect_match(attr(found, "footer"), "listing failed for openai", fixed = TRUE)
   expect_no_match(attr(found, "footer"), "sensitive callback text", fixed = TRUE)
   provider_ready(m, provider_get("openai"), prepare = TRUE)
   expect_equal(n, 3L) # failed attempts are cached too

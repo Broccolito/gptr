@@ -1856,6 +1856,7 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   ctg = catalog_get()
   idx = ctg$index
   keep = !idx$provider %in% provider_internal()
+  total = sum(keep)
   if (!is.null(provider)) keep = keep & idx$provider == provider
   first = character()
   if (!is.null(query)) {
@@ -1910,13 +1911,17 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
                   aliases = rows$aliases, status = rows$status, availability = availability,
                   checked_at = checked_at, stringsAsFactors = FALSE)
   rownames(df) = NULL
-  failed = names(Filter(function(x) !is.null(x$error), inventory))
-  if (!is.null(provider)) failed = intersect(failed, provider)
-  failure = if (length(failed)) paste0("; ", paste(vapply(failed, function(pid) {
-    paste0(pid, " refresh failed (", inventory[[pid]]$error, "); retained prior catalog")
-  }, ""), collapse = "; ")) else ""
+  failed = intersect(names(Filter(function(x) !is.null(x$error), inventory)),
+                    provider %||% rows$provider)
+  failure = if (length(failed)) {
+    errors = vapply(failed, function(pid) inventory[[pid]]$error, "")
+    paste0("; listing failed for ", paste0(failed, " (", errors, ")", collapse = ", "),
+           "; prior catalog kept")
+  } else {
+    ""
+  }
   new_listing(df, "gptr_models",
               footer = paste0("catalog ", ctg$generated, " (", ctg$source, "), ",
-                nrow(idx), " models; gptr_models(refresh = TRUE) updates it; ",
+                total, " models; gptr_models(refresh = TRUE) updates it; ",
                 "provider advertisement does not verify inference or billing access", failure))
 }
