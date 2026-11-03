@@ -155,7 +155,7 @@ Existing sessions, explicit or configured models and \code{.stdin = TRUE} skip s
 login is not proof of online access or subscription billing. See
 \code{vignette("interactive-console", package = "gptr")}.
 
-gptr reads as a grammar of Peter, after Peter Naur and Peter Cathcart Wason. In the spirit of
+gptr reads as a grammar for Peter, after Peter Naur and Peter Cathcart Wason. In the spirit of
 Naur's readable language definitions, gptr records sessions as runnable documents; Wason's
 reasoning research with Jonathan Evans inspires its System 1 and System 2 roles. See
 \code{vignette("why-peter", package = "gptr")} for the history and sources. A user object named

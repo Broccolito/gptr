@@ -87,7 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
     'aria-label="Objects stay in memory across prompts; System 1 returns typed decisions and ' +
     "System 2 agents use tools; each session becomes a runnable document; gptr runs in " +
     "terminals, RStudio, VS Code, Positron and Jupyter, serves its session over MCP and " +
-    "coaches its harness on your task. The end card reads gptr, a grammar of Peter, honoring " +
+    "coaches its harness on your task. The end card reads gptr, a grammar for Peter, honoring " +
     'Peter Naur and Peter Wason."></video>' +
     "<figcaption>gptr in 36 seconds, without sound.</figcaption></figure>");
   const video = document.querySelector(".gptr-video video");
