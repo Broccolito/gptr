@@ -173,7 +173,7 @@ difference it did not plan is recorded in the session as a cache break, and
 
 ![Prompt caching, one request per row. Each request repeats the one before and appends the
 model's reply and the tool result; after compaction a summary replaces the older messages, so
-only the prompt and tools are repeated.](figures/prompt-prefix.svg)
+only the prompt and tools are repeated.](figures/prompt-prefix.svg){alt="Diagram: requests that repeat a cached prompt prefix"}
 
 Providers decide whether a cache hit occurs, subject to their support, minimum size, expiry
 and pricing; gptr does not guarantee a hit after the first request. Document replay makes no

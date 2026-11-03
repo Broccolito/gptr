@@ -26,7 +26,7 @@ Two functions make one. Both return a harness: a function you call exactly like 
   that helped. It calls models, runs several sessions and takes minutes.
 
 ![A harness, from peter outwards. gptr_tailor() sets the fixed arguments, your rules and the
-coaching; gptr_coach() changes only the coaching.](figures/harness-layers.svg)
+coaching; gptr_coach() changes only the coaching.](figures/harness-layers.svg){alt="Diagram: the layers of a harness"}
 
 The tailoring examples run without a model or a key. The coaching examples need a configured
 model and are shown without running them.
@@ -131,7 +131,7 @@ text), took no riskier kind of action, met every `require` rule and passed your 
 
 ![One coaching call. Two coaches read the first run and propose coaching, each proposal does the
 task once, the composer keeps what visibly helped, and code decides whether the final run's
-coaching is kept. The result is a harness, so it can be coached again.](figures/coach-loop.svg)
+coaching is kept. The result is a harness, so it can be coached again.](figures/coach-loop.svg){alt="Flow diagram: one gptr_coach() call"}
 
 ```{r, eval = FALSE}
 survey = data.frame(id = 1:8, age = c(34, 51, -9, 28, 45, -9, 62, 39))
@@ -234,9 +234,10 @@ Code then checks every final run as above. When more than one passes, a blind ju
 only the task and what each final delivered, picks one; with `"sequential"` it need not be the
 last round's.
 
-![Parallel and sequential coaching at k = 3: in parallel every composer sees every proposal, in
-sequence each round starts from the composition before it. Code checks every final run, and a
-judge picks one when several pass.](figures/coach-rounds.svg)
+![Parallel and sequential coaching at k = 3, where each coach block is a procedure and domain pair
+with its probe runs: in parallel every composer sees every proposal, in sequence each round starts
+from the composition before it. Code checks every final run, and a judge picks one when several
+pass.](figures/coach-rounds.svg){alt="Diagram: parallel and sequential coaching rounds"}
 
 ```{r, eval = FALSE}
 deep_peter = gptr_coach(

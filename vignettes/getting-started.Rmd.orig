@@ -132,7 +132,7 @@ objects and arbitrary side effects require their usual care; see
 
 ![The pipe and a fork. Piping a session into peter() adds a turn to the same session;
 gptr_fork() starts a branch whose overlay reads the original workspace and keeps its own
-assignments.](figures/pipe-fork.svg)
+assignments.](figures/pipe-fork.svg){alt="Diagram: a piped session and a fork"}
 
 ## Stopping instead of guessing
 

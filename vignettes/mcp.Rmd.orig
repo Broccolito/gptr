@@ -19,7 +19,7 @@ server or change configuration, so they are shown without being run.
 
 ![MCP in both directions. As a client, R sends JSON arguments to a server and receives an R
 value; as a server, R runs another agent's code on the objects already in your session and
-returns text and images.](figures/mcp-two-ways.svg)
+returns text and images.](figures/mcp-two-ways.svg){alt="Diagram: gptr as an MCP client and as an MCP server"}
 
 ## List first, connect when needed
 

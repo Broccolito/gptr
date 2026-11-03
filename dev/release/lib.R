@@ -479,7 +479,7 @@ stale_problems = function(source_lines, knitted_lines, where) {
 }
 
 # The exact canonical light/dark vectors and the figure styles, embedded so source and installed
-# guides need no assets. Figures are SVG images that follow the colour scheme set here.
+# guides need no assets. Figures are SVG images in their light colours on this white page.
 vig_brand_block = function(root) {
   encode = function(name) {
     path = file.path(root, "man", "figures", name)
@@ -501,10 +501,10 @@ vig_brand_block = function(root) {
     "@media (max-width: 600px) {",
     "  .gptr-vignette-brand { float: none; width: 72px; margin: 0 0 1rem; }",
     "}",
-    "figure, .float { margin: 1.5rem 0; }",
-    paste("figure img, .float img { display: block; max-width: 100%; height: auto; margin: 0;",
+    "figure, .float { width: fit-content; max-width: 100%; margin: 1.5rem 0; }",
+    paste("figure img, .float img { display: block; width: 100%; height: auto; margin: 0;",
           "padding: 0; border: 0; background: none; }"),
-    paste("figcaption, .figcaption { max-width: 42rem; margin-top: 0.5rem; font-size: 0.875em;",
+    paste("figcaption, .figcaption { contain: inline-size; margin-top: 0.5rem; font-size: 0.875em;",
           "color: var(--bs-secondary-color, #4a4e55); }"),
     "</style>", '<picture class="gptr-vignette-brand">',
     paste0('  <source media="(prefers-color-scheme: dark)" srcset="', dark, '">'),

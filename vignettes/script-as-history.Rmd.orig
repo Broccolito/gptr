@@ -227,7 +227,7 @@ their text or values; the code block and the cache are different parts of the re
 
 ![Replay, decided block by block. A fresh block and a hand-edited one run their code without a
 model call; a changed prompt makes its block stale, so the model is asked again and the block is
-rewritten.](figures/block-status.svg)
+rewritten.](figures/block-status.svg){alt="Diagram: the replay status of three recorded blocks"}
 
 `gptr_cache()` reports System 1 and System 2 answer caches, temporary spill files and pending
 sidecars. `gptr_cache("prune")` removes entries no longer in use or beyond their retention
@@ -321,7 +321,7 @@ refuses a source that changes during publication.
 
 ![Two exports of one recorded script. The r format comments out the call and keeps the recorded
 R, which runs with no model call; the peter format keeps the call and comments out the old code,
-so running it asks the model again.](figures/export-formats.svg)
+so running it asks the model again.](figures/export-formats.svg){alt="Diagram: one script exported in two formats"}
 
 For example, save the following as `analysis.R`. With a configured model and the usual
 permission checks, its first three prompts steer one session; the fourth starts another.

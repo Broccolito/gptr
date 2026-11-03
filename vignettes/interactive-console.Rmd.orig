@@ -265,7 +265,7 @@ recording document keeps what you sent, steers included
 
 ![Steer and follow-up, read from the top. What you send while Peter works is written into the
 transcript at once, as steer> or next>; Peter reads a steer at its next step, and a follow-up
-runs after the answer as the next prompt.](figures/steer-next.svg)
+runs after the answer as the next prompt.](figures/steer-next.svg){alt="Sequence diagram: steer and next messages in the console"}
 
 A question (an approval, a choice) waits until you stop typing for a second, or three seconds
 while the draft has text, so a key meant for the draft never answers it. The draft stays through

@@ -36,7 +36,7 @@ restrictions still apply; an explicit call cannot disable the inherited permissi
 
 ![Settings resolve from the bottom up. Each layer replaces only the entries it sets, so this
 call's budget takes its token limit from the package defaults, its cost limit from this R
-process and its turn limit from the call.](figures/settings-layers.svg)
+process and its turn limit from the call.](figures/settings-layers.svg){alt="Diagram: settings layers, from the call argument down to package defaults"}
 
 | Scope | Lifetime and location | Use it for |
 |---|---|---|

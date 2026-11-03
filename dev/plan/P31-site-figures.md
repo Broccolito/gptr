@@ -14,26 +14,29 @@ bar, the blue System 2 block and the `>` chevron, with no decoration.
    home page. It needs no script, font file or URL, and it carries its own style. Inline SVG was
    rejected: GitHub strips it from README.md, pandoc may parse it as Markdown, and its style would
    leak into the page.
-2. **Light and dark follow the page.** An SVG image evaluates `prefers-color-scheme` against the
-   colour scheme of the element that embeds it. Bootstrap sets `color-scheme: dark` for the dark
-   theme, `pkgdown/extra.css` sets `light` otherwise, and the vignette block sets `light` on the
-   white standalone page, so the light switch is honoured. The dark rule is written `svg:root` so
-   that it never applies if a renderer inlines the file. Each figure paints the page background,
-   so a browser that ignores the embedder's scheme still shows a readable figure.
+2. **Light and dark follow the light switch.** Each figure's root is `<svg ... id="dark">`, and
+   its kit holds the light colours plus `:target{...}` with the dark ones, so `figure.svg#dark`
+   draws dark. On the site `extra.js` adds or drops `#dark` as the light switch changes. A
+   fragment is plain CSS `:target` (checked in Chrome and in WebKit, Safari's engine), whereas
+   `prefers-color-scheme` inside an SVG image follows the operating system in WebKit, not the
+   page. The standalone CRAN vignette is white and shows the light figure. Each figure paints its
+   own background.
 3. **README.Rmd stays the one source of the home text.** README.md is also the GitHub and CRAN
    page, and `man/figures` is not in the CRAN tarball, so it holds no figures. On the pkgdown home
    page `pkgdown/extra.js` puts each figure above its lead point, keyed by the bold lead-in, and
-   `extra.css` lays the points out as a 2 x 2 grid (one column below 768 px). Without script the
-   home page is the plain README. A release test keeps the lead-ins, the script and the files in
-   step.
+   `extra.css` lays the points out as a 2 x 2 grid (one column below 992 px, where the sidebar
+   would leave each figure too small). Without script the home page is the plain README. A
+   release test keeps the lead-ins, the script and the files in step.
 4. **Article figures are Markdown images** in the `.Rmd.orig`, copied verbatim into the `.Rmd` by
-   precompute. pandoc turns an image alone in its paragraph into a figure whose caption is also
-   its alt text; pkgdown copies the file to `articles/figures/`.
-5. **Animation is CSS only and calm.** Every figure loops in 14 s: up to seven steps draw at 1.1 s
-   intervals from 0.4 s, each in 0.9 s (the sequence ends by 7.9 s), everything holds until
-   13.2 s, then the steps fade and start again. The actors (boxes, blocks, lifelines) never fade.
-   With `prefers-reduced-motion: reduce` there is no animation and the final frame shows. An image
-   cannot start when it scrolls into view without script, hence the loop with a long rest.
+   precompute. pandoc turns an image alone in its paragraph into a figure with the text as its
+   caption; a short `alt` attribute names the drawing, so a screen reader does not read the
+   caption twice. pkgdown copies the file to `articles/figures/`. The figure is as wide as its
+   image and the caption wraps at that width.
+5. **Animation is CSS only, plays once and holds.** Up to seven steps draw 0.8 s apart from 0.2 s,
+   each in 0.7 s, so a figure is complete within 6 s and then stays complete, which is also the
+   frame shown with `prefers-reduced-motion: reduce`. The actors (boxes, blocks, lifelines) are
+   there from the start. On the site, `extra.js` reloads a figure the first time most of it comes
+   into view, so it draws again in front of the reader; without script it has simply drawn.
 
 ## Conventions for figure authors
 
@@ -42,31 +45,41 @@ bar, the blue System 2 block and the `>` chevron, with no decoration.
 - **Kit.** Start from an existing figure and keep its `<style>` and `<defs>` byte for byte; the
   release test requires one shared kit. Then draw below the background rect.
 - **Size.** `viewBox="0 0 W H"` with W at most 260 (240 on the home page), and `width` and
-  `height` at 1.5 times W and H, so labels are 11 to 13 px on a desktop and stay legible at 390 px.
+  `height` at 1.8 times W and H, so labels are 13.5 to 15 px on a desktop, close to code text, and
+  stay legible at 390 px. Keep at least 2 units between ink and the edge in a wide fallback font
+  (Verdana, Courier New); text near the right edge ends there with `text-anchor="end"` or moves in.
 - **Classes.** `ln` a 1-unit ink line or outline, `dash` a dashed one, `dot` an ink fill (dots,
-  gate bars), `s1` the red System 1 fill (5 x 16), `s2` the blue System 2 fill (22 x 32, or
-  11 x 16 for a small model). Text is mono 8 by default (code, object names, values); `t` is a
-  sans semibold label; `n` a muted sans note at 7.5. Budget 5.2 units per mono character.
+  gate bars), `s1` the red System 1 fill (5 x 16), `s2` the blue System 2 fill: 22 x 32 for a
+  model that persists through the figure (an agent, a server's client), 11 x 16 for a model that
+  does one step (a coach, a composer, a judge). Text is mono 8 by default (code, object names,
+  values); `t` is a sans semibold label; `n` a muted sans note at 7.5. Budget 5.2 units per mono
+  character.
 - **Meaning of shapes and colour.** Red is System 1 only; blue is a System 2 model (an agent, a
   coach, a composer); R, code, files and gates are ink. A dashed outline means no model call.
   Arrows end in the chevron marker: `marker-end="url(#h)"`. A shape that carries no meaning is left
   out.
 - **Steps.** Give each element of step k the class `ak` (`a1` to `a7`), and `pathLength="1"` to a
   solid stroke that should draw itself (never to a `dash`). Text and fills fade in. Group an
-  element and its label with `<g class="ak">`. One idea per figure; five to seven steps.
+  element and its label with `<g class="ak">`. An element with `ak x` is there from the start and
+  fades out at step k, so it can give way to its replacement. One idea per figure; five to seven
+  steps. A mark that is not self-evident gets a one-line legend in the figure.
 - **Captions.** One or two plain sentences, present tense, ASCII, saying what the drawing shows
   and what to notice; the first words name the mechanism ("One turn, read from the top."). No
-  "Figure n", no bold. In the article: `![Caption.](figures/<name>.svg)` on its own lines,
-  between paragraphs, after the text it illustrates.
-- **Preview.** Pause a copy at time T by adding
-  `*{animation-delay:-Ts!important;animation-play-state:paused!important}` to its style, and view
-  it on white with `color-scheme: light` and on `#1c1e22` with `color-scheme: dark`.
+  "Figure n", no bold. In the article, on its own lines between paragraphs, after the text it
+  illustrates: `![Caption.](figures/<name>.svg){alt="Diagram: ..."}`.
+- **Preview.** Embed `file.svg` and `file.svg#dark` with `<object>` from a local HTTP server,
+  pause their animations at time T with `contentDocument.getAnimations()` (set each one's
+  `currentTime`), and view them on white and on `#1c1e22`. Headless Chrome's virtual time does
+  not drive an SVG image, so a plain screenshot shows an arbitrary frame; with
+  `--force-prefers-reduced-motion` it shows the final one.
 
 ## Articles index
 
 Each vignette's YAML carries `description:` (one sentence, ASCII), in both `.Rmd.orig` and `.Rmd`;
 pkgdown prints it under the title. `extra.css` sets the index as the section name in small mono
-capitals beside a list of titles and descriptions, with hairline rules between sections.
+capitals beside a list of titles in the link colour and their descriptions, with hairline rules
+between sections. Below 992 px the section name sits above its list; below 768 px each
+description sits under its title.
 
 ## Checks
 

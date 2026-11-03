@@ -49,7 +49,9 @@ function run(tables, pre = [], blockedStorage = false) {
     ResizeObserver: class {
       constructor(update) { this.update = update; }
       observe(region) { observed.push({ region, update: this.update }); this.update(); }
-    }
+    },
+    IntersectionObserver: class { observe() {} },
+    MutationObserver: class { observe() {} }
   });
   vm.runInContext(script, context, { timeout: 1000 });
   assert.equal(typeof callbacks.DOMContentLoaded, "function");

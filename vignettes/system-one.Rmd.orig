@@ -106,7 +106,7 @@ confidence is each engine's own measure of concentration: the probabilities 0.90
 you switch engine.
 
 ![A yes/no decision, read as P(yes). The default threshold of 0.5 makes each probability TRUE or
-FALSE; min_confidence = 0.8 makes any answer between 0.1 and 0.9 NA.](figures/decision-threshold.svg)
+FALSE; min_confidence = 0.8 makes any answer between 0.1 and 0.9 NA.](figures/decision-threshold.svg){alt="Diagram: answer probabilities and the min_confidence band"}
 
 ```{r}
 screened = peter("Is this a randomized trial?", abstracts, model = judge,

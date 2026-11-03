@@ -24,7 +24,7 @@ workers and file-backed objects.
 
 ![Three routes, one workspace. An API model and a command-line tool's provider are beyond your
 computer and need your consent once; a local Ollama model is not, and the R code any of them
-returns passes the same permission gate into your session.](figures/model-routes.svg)
+returns passes the same permission gate into your session.](figures/model-routes.svg){alt="Diagram: three model routes into one R session"}
 
 The same call works in a function, a loop or a script. This guide executes only scripted fake
 providers; examples that connect to real services are shown without running them.

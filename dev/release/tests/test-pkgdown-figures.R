@@ -6,13 +6,14 @@ test_that("figures share one self-contained style, and each one is used", {
   read = function(path) paste(readLines(path, warn = FALSE), collapse = "\n")
   kit = function(text) regmatches(text, regexpr("(?s)<style>.*</defs>", text, perl = TRUE))
   first = kit(read(guides[[1L]]))
-  expect_match(first, "prefers-color-scheme:dark", fixed = TRUE)
+  expect_match(first, ":target{--ink:", fixed = TRUE)
   expect_match(first, "prefers-reduced-motion:reduce", fixed = TRUE)
   for (path in c(guides, points)) {
     text = read(path)
     expect_identical(rel_ascii_problems(path), character())
     expect_lte(file.size(path), 8192)
-    expect_match(text, '^<svg xmlns="http://www.w3.org/2000/svg" viewBox=')
+    expect_match(text, paste0('^<svg xmlns="http://www.w3.org/2000/svg" viewBox="[^"]+" ',
+                              'width="[^"]+" height="[^"]+" id="dark">'))
     expect_identical(kit(text), first, info = path)
     expect_false(grepl("<script|@import|href=\"http|url\\(http", text), info = path)
   }

@@ -30,7 +30,7 @@ receives, and where memory or file transfers still occur.
 
 ![One turn, read from the top. The model receives a description of your objects and requests
 tools; each request passes the permission gate, its R code runs on the objects in your session,
-and the result returns to the model until it answers.](figures/one-turn.svg)
+and the result returns to the model until it answers.](figures/one-turn.svg){alt="Sequence diagram: one model turn between the R session and the model"}
 
 For an ordinary interactive call, start with a prompt and the data:
 

@@ -15,9 +15,10 @@ inspect, reuse or modify.
 - **Keep a record you can rerun.** Record agent calls and their executed
   R code alongside your analysis, then replay the code with the required
   inputs and packages.
-- **Improve Peter on your own task.** Models revise Peter's instructions
-  from runs of your task, and gptr keeps a change only when a new run
-  passes its checks and yours. A coached Peter can be coached again.
+- **Improve the agent on your own task.** Models revise its instructions
+  from runs of your task, and gptr keeps a revision only when a new run
+  does no worse and passes any check you give. A revised agent can be
+  revised again.
 
 ## Installation
 

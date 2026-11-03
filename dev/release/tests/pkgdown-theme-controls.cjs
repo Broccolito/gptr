@@ -73,7 +73,8 @@ function page({ stored = null, dark = false, blocked = "", shared = null, navbar
       addEventListener(event, callback) { windowEvents[event] = callback; } },
     MutationObserver: class { constructor(callback) { this.callback = callback; }
       observe() { observers.push(this.callback); } },
-    ResizeObserver: class { observe() {} }
+    ResizeObserver: class { observe() {} },
+    IntersectionObserver: class { observe() {} }
   });
   Object.defineProperty(context, "localStorage", { configurable: true,
     get() { if (blocked === "access") throw new Error("synthetic storage access denied"); return storage; } });

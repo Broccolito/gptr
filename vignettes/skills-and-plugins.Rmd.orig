@@ -48,7 +48,7 @@ separate files and tell the skill when to read them.
 
 ![Skills load in layers. Every request carries the skill's catalog line; the model reads the
 body when a task matches it, and a reference file only when the body points to
-it.](figures/skill-on-demand.svg)
+it.](figures/skill-on-demand.svg){alt="Diagram: a skill read on demand"}
 
 A skill supplies instructions, not a data snapshot; objects named in its text must still be
 available to the tools that use them. See [Execution model](execution-model.html) for the R

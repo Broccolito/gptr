@@ -249,7 +249,7 @@ snapshot.
 
 ![Artifact versions. Each peter$app() call copies app.R and the objects named in data into a new
 version directory, and a launch serves it from a separate R process on 127.0.0.1; a later call
-makes v002 and keeps v001.](figures/artifact-versions.svg)
+makes v002 and keeps v001.](figures/artifact-versions.svg){alt="Diagram: artifact versions and the app process"}
 
 For HTML, write `page.html` in the same working directory and call
 `peter$app("survey-view", kind = "html", launch = FALSE)`. HTML is served through a Shiny

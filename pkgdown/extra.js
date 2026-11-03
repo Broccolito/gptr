@@ -38,9 +38,11 @@ document.addEventListener("DOMContentLoaded", () => {
     block.setAttribute("aria-label", `Code block ${index + 1}`);
     makeScrollable(block);
   });
-  // Inline code of up to 32 characters fits a phone's line, so outside tables it never breaks.
+  // Inline code of up to 32 characters (12 in a table) fits a phone's line, so it never breaks.
   document.querySelectorAll("#main :not(pre) > code").forEach((code) => {
-    if (code.textContent.length <= 32 && !code.closest("table")) code.classList.add("gptr-nowrap");
+    if (code.textContent.length <= (code.closest("table") ? 12 : 32)) {
+      code.classList.add("gptr-nowrap");
+    }
   });
   // The home page shows a figure above each lead point; README.md itself stays plain text.
   const points = {
@@ -52,9 +54,9 @@ document.addEventListener("DOMContentLoaded", () => {
     "Keep a record you can rerun.": ["record", "A peter() call in analysis.R sends a prompt " +
       "to the model and the R code it returns is recorded under the call; a later replay runs " +
       "that code in an R session with no model call."],
-    "Improve Peter on your own task.": ["coach", "A harness of note, skills, review and rules " +
-      "runs your task; coaches propose changes; a final run must pass your check before the " +
-      "changed harness is kept, and it can be coached again."]
+    "Improve the agent on your own task.": ["coach", "A harness of note, skills, review and " +
+      "rules runs your task; coaches propose new coaching; code checks a final run before the " +
+      "revised harness is kept, and the kept harness can be coached again."]
   };
   document.querySelectorAll(".template-home #main > .section > ul > li > strong:first-child")
     .forEach((lead) => {
@@ -68,4 +70,22 @@ document.addEventListener("DOMContentLoaded", () => {
       lead.parentElement.prepend(figure);
       lead.parentElement.parentElement.classList.add("gptr-points");
     });
+  // Figures follow the light switch in every browser: the fragment "#dark" selects dark colours.
+  const figures = document.querySelectorAll('#main img[src^="figures/"]');
+  const paint = (figure, search) => {
+    const url = new URL(figure.src);
+    if (search) url.search = search;
+    url.hash = document.documentElement.dataset.bsTheme === "dark" ? "dark" : "";
+    if (url.href !== figure.src) figure.src = url.href;
+  };
+  figures.forEach((figure) => paint(figure));
+  new MutationObserver(() => figures.forEach((figure) => paint(figure)))
+    .observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
+  // A figure draws once at load and again from the start when it first comes into view.
+  const replay = new IntersectionObserver((entries) => entries.forEach((entry) => {
+    if (!entry.isIntersecting) return;
+    replay.unobserve(entry.target);
+    paint(entry.target, "?view");
+  }), { threshold: 0.6 });
+  figures.forEach((figure) => replay.observe(figure));
 });

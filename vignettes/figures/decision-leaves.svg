@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 102" width="390" height="153">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 102" width="468" height="183.6" id="dark">
 <style>
 svg{--ink:#1c1e22;--bg:#fff;--mute:#4a4e55;--s1:#b85450;--s2:#6c8ebf}
-@media (prefers-color-scheme:dark){svg:root{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}}
+:target{--ink:#efede7;--bg:#1c1e22;--mute:#a8a59d;--s2:#7d9dcb}
 .bg{fill:var(--bg)}
 .ln,.dash{fill:none;stroke:var(--ink);stroke-width:1;stroke-linecap:round;stroke-linejoin:round}
 .dash{stroke-dasharray:3 2.5}
@@ -12,24 +12,14 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 .t{font:600 8.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
 .n{fill:var(--mute);font:7.5px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
 [pathLength]{stroke-dasharray:1}
-.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:14s linear infinite both}
-.a1{animation-name:a1}.a2{animation-name:a2}.a3{animation-name:a3}.a4{animation-name:a4}
-.a5{animation-name:a5}.a6{animation-name:a6}.a7{animation-name:a7}
-@keyframes a1{0%,2.9%{opacity:0;stroke-dashoffset:1}9.3%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
-@keyframes a2{0%,10.7%{opacity:0;stroke-dashoffset:1}17.1%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
-@keyframes a3{0%,18.6%{opacity:0;stroke-dashoffset:1}25%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
-@keyframes a4{0%,26.4%{opacity:0;stroke-dashoffset:1}32.9%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
-@keyframes a5{0%,34.3%{opacity:0;stroke-dashoffset:1}40.7%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
-@keyframes a6{0%,42.1%{opacity:0;stroke-dashoffset:1}48.6%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
-@keyframes a7{0%,50%{opacity:0;stroke-dashoffset:1}56.4%,94%{opacity:1;stroke-dashoffset:0}98%,to{opacity:0}}
-.a1[marker-end]{animation-name:a1,m1}.a2[marker-end]{animation-name:a2,m2}.a3[marker-end]{animation-name:a3,m3}.a4[marker-end]{animation-name:a4,m4}.a5[marker-end]{animation-name:a5,m5}.a6[marker-end]{animation-name:a6,m6}.a7[marker-end]{animation-name:a7,m7}
-@keyframes m1{0%,9.2%{marker-end:none}9.3%,to{marker-end:url(#h)}}
-@keyframes m2{0%,17%{marker-end:none}17.1%,to{marker-end:url(#h)}}
-@keyframes m3{0%,24.9%{marker-end:none}25%,to{marker-end:url(#h)}}
-@keyframes m4{0%,32.8%{marker-end:none}32.9%,to{marker-end:url(#h)}}
-@keyframes m5{0%,40.6%{marker-end:none}40.7%,to{marker-end:url(#h)}}
-@keyframes m6{0%,48.5%{marker-end:none}48.6%,to{marker-end:url(#h)}}
-@keyframes m7{0%,56.3%{marker-end:none}56.4%,to{marker-end:url(#h)}}
+.a1,.a2,.a3,.a4,.a5,.a6,.a7{animation:d .7s .2s linear both}
+.a2{animation-delay:1s}.a3{animation-delay:1.8s}.a4{animation-delay:2.6s}
+.a5{animation-delay:3.4s}.a6{animation-delay:4.2s}.a7{animation-delay:5s}
+:is(.a1,.a2,.a3,.a4,.a5,.a6,.a7)[marker-end]{animation-name:d,m}
+.x{opacity:0;animation-name:x}
+@keyframes d{from{opacity:0;stroke-dashoffset:1}}
+@keyframes m{from,99%{marker-end:none}}
+@keyframes x{from{opacity:1}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 <defs><marker id="h" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ln" d="M1.5 1 5 3 1.5 5"/></marker></defs>
@@ -43,6 +33,7 @@ text{fill:var(--ink);font:500 8px "IBM Plex Mono",ui-monospace,"SF Mono",Menlo,C
 <text x="158" y="56" text-anchor="middle">"c"</text>
 <text x="194" y="56" text-anchor="middle">"a"</text>
 <text x="0" y="98">keep</text>
+<text class="n a1" x="0" y="75">System 1</text>
 <rect class="s1 a1" x="83.5" y="64" width="5" height="16"/>
 <rect class="s1 a1" x="119.5" y="64" width="5" height="16"/>
 <rect class="s1 a1" x="155.5" y="64" width="5" height="16"/>

@@ -96,7 +96,7 @@ session shows each answer under its child's name.
 
 ![A fan-out with parallel = 2. Every element is queued and at most two children run at once, so C
 starts when A finishes; session$text keeps the order of the elements, not the order in which they
-finished.](figures/fan-out.svg)
+finished.](figures/fan-out.svg){alt="Timeline: a fan-out over three inputs, two at a time"}
 
 For object-producing work, keep each child's results separate and specify exports only when
 needed. Export-name collisions are reported and results are collected in task order; this
@@ -146,7 +146,7 @@ Nested decisions are recorded in the owning session, charge its
 budgets and ancestors once, and retain completed answers in the cache if the batch stops.
 
 ![System 1 decisions from an agent's R code. Each distinct input is asked once, up to eight at a
-time by default, and the typed answers return in input order.](figures/decision-leaves.svg)
+time by default, and the typed answers return in input order.](figures/decision-leaves.svg){alt="Diagram: typed decisions from an agent's R code"}
 
 ## Independent calls with gptr_parallel()
 
