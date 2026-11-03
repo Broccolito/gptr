@@ -110,11 +110,15 @@ provider_discoverer = function(id) {
   }, gptr_native_models = TRUE)
 }
 
-#' Whether the provider uses a supported native model-list API (not an inference request)
+#' Whether the provider uses a supported native model-list API (not an inference request); the
+#' gateways that serve the TypeSafe protocol (`openrouter-jev`, `vercel-jev`) have no TypeSafe
+#' listing, so that API counts for `typesafe` itself only
 #' @noRd
 provider_models_supported = function(p) {
   isTRUE(p[["api"]] %in% c("openai-responses", "openai-completions", "anthropic-messages",
-                             "google-generative-ai", "typesafe-system-one"))
+                             "google-generative-ai")) ||
+    identical(p[["api"]], "typesafe-system-one") &&
+      identical(p[["id"]] %||% p[["name"]], "typesafe")
 }
 
 #' Sparse advertised model records: map only fields the endpoint actually reports. Catalog

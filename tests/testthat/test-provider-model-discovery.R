@@ -394,6 +394,17 @@ test_that("reentrant preparation reuses an advisory inventory attempt already in
   expect_identical(gptr_models(provider = "openai")$availability, "advertised")
 })
 
+test_that("gateways serving the TypeSafe protocol have no TypeSafe model listing", {
+  local_inventory_catalog()
+  local_mocked_bindings(egress_check = function(...) stop("must not begin setup"),
+    catalog_http_request = function(...) stop("must not contact the gateway"))
+  for (id in c("openrouter-jev", "vercel-jev")) {
+    expect_null(provider_models(provider_get(id), credential = NULL))
+    expect_null(catalog_inventory(provider_get(id), refresh = TRUE))
+  }
+  expect_true(provider_models_supported(provider_get("typesafe")))
+})
+
 test_that("hosted decision requests inventory only after their effective replay guard", {
   local_inventory_catalog()
   withr::local_options(gptr.replay = "replay")
