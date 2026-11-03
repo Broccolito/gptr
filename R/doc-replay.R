@@ -540,7 +540,8 @@ doc_touch = function(call, site, where, keep) {
 #' answer and the call could be recorded); never a call made from model code. Recovers a dead
 #' process's deferred writes for that document first (doc_touch()) and keeps the site in
 #' `call$doc` for run(); a console site gets `default_model`, TRUE when the call starts a session
-#' naming no model by name (D-265).
+#' naming no model by name (D-265). Outside a Jupyter kernel, a call in no document while
+#' gptr_doc() binds a notebook, which takes only its own cells' calls (IC-49), says so once.
 #' @noRd
 doc_route_match = function(call) {
   if (!is.null(run_current())) return(FALSE)
@@ -553,6 +554,14 @@ doc_route_match = function(call) {
                             ask = doc_console_may_record(call),
                             harness = doc_console_harness(call), args = args_hash(call$interp))
     if (!is.null(site)) assign("top_level", TRUE, envir = call)
+  }
+  b = the$doc_binding$path
+  if (is.null(site) && identical(doc_format_of(b), "ipynb") &&
+        !isTRUE(getOption("jupyter.in_kernel"))) {
+    gptr_inform(paste0("gptr did not record this call: console calls are not recorded into a ",
+                       "notebook (", doc_rel(b), "). Bind an .R, .Rmd or .qmd file with ",
+                       "gptr_doc() for a transcript."), "notice",
+                .once = paste0("doc_console_notebook:", path_key(b)))
   }
   if (is.null(site) || is.null(site$path)) return(FALSE)
   if (!isTRUE(site$top_level) && is.null(site$in_block)) return(FALSE)

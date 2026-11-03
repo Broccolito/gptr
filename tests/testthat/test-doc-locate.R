@@ -158,6 +158,20 @@ test_that("a kernel without JPY_SESSION_NAME picks the bound notebook, else the 
   expect_identical(doc_locate(call)$path, nb)
 })
 
+test_that("a call in no document says once that a bound notebook takes no console turns", {
+  proj = local_project()
+  local_no_running_document()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  nb = file.path(proj, "console.ipynb")
+  local_doc_binding(nb, "ipynb")
+  call = doc_bare_call(quote(peter("count rows")), "count rows")
+  expect_message(expect_false(doc_route_match(call)),
+                 "not recorded into a notebook [(]console.ipynb[)].*\\.R, \\.Rmd or \\.qmd",
+                 class = "gptr_message_notice")
+  expect_no_message(doc_route_match(call))
+  expect_false(file.exists(nb))
+})
+
 test_that("calls in no document go to the console transcript target, if any", {
   proj = local_project()
   local_no_running_document()

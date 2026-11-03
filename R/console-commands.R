@@ -513,6 +513,10 @@ cmd_doc = function(args, ctx) {
   f = ns_fun("gptr_doc")
   if (is.null(f)) return("Binding a document needs gptr_doc(), which is not available.")
   f(args)
+  if (grepl("[.]ipynb$", args, ignore.case = TRUE)) {
+    return(paste0("Bound ", args, "; console turns are not recorded into it, only the calls in ",
+                  "its cells when it runs in a Jupyter kernel."))
+  }
   paste0("Recording into ", args, ".")
 }
 

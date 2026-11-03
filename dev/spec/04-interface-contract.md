@@ -1554,7 +1554,9 @@ gptr_doc(path = NULL, format = NULL, sync = FALSE)
 
 `path = NULL`: returns the current binding `list(path, format)` or `NULL`, visibly. A path binds that document to
 this R process, which is explicit consent to write it (IC-45): calls located in it record below themselves, and
-calls located in no document (console, `Rscript -e`, stdin) are appended to it unless it is a notebook (IC-49). A
+calls located in no document (console, `Rscript -e`, stdin) are appended to it unless it is a notebook (IC-49; outside a
+Jupyter kernel such a call then says once that console calls are not recorded into a notebook, and `/doc <file>.ipynb`
+says so too). A
 call located in another document needs that document's consent; when it cannot be asked, the call is not recorded
 and a `notice` names both documents, once per document (D-249). `FALSE` unbinds. `sync = TRUE` applies the pending
 blocks recorded for that document (a Jupyter notebook that was open while recording, or unapplied deferred-write
