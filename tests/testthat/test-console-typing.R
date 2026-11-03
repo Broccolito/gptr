@@ -247,7 +247,7 @@ test_that("a receipt between two paragraphs has one blank row on each side (P30 
   expect_match(rows[q + 2L], "^  word01 ")
 })
 
-test_that("the answer to a steer is a block of its own, after the answer before it (P30 follow-up)", {
+test_that("the answer to a steer is a block of its own, after the one before (P30 follow-up)", {
   skip_on_cran()
   local_console_test()
   local_gptr_options(verbose = 2L)
