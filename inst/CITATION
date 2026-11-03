@@ -1,0 +1,9 @@
+bibentry(
+  bibtype = "Manual",
+  title = "{gptr}: Language Model Agents in Live {R} Sessions",
+  author = person("Wanjun", "Gu"),
+  year = substr(c(meta$`Date/Publication`, format(Sys.Date()))[1L], 1L, 4L),
+  note = paste("R package version", meta$Version),
+  doi = "10.32614/CRAN.package.gptr",
+  url = "https://CRAN.R-project.org/package=gptr"
+)
