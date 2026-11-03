@@ -9651,7 +9651,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: 04 sections 7.4 (`proc_run()`'s `merge` and the 20 ms exit wake) and 15.5
   IC-57.
 - Tests: test-proc-spawn.R "a child's exit ends a wait outside a pump within a short slice" (0.204 s
-  after the spawn before the change), "proc_run(merge = TRUE) sends stderr into the stdout file";
+  after the spawn before the change; its `proc_run()` child sleeps 50 ms, since one that exits
+  before the first check passed with the 200 ms slice), "proc_run(merge = TRUE) sends stderr into
+  the stdout file";
   test-mcp-waits.R "a nested peter() inside an idle served tool runs no sibling R tool".
 
 ## D-339 - FIX-1.0.1 lane F: findings left to other lanes or deferred (2026-11-02)

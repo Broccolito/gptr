@@ -182,9 +182,10 @@ test_that("a child's exit ends a wait outside a pump within a short slice", {
     seen$spawn = reactor_now() - t0
     p
   })
-  # a 200 ms slice made each wait after the spawn last 200 ms; the best of three is robust to load
+  # a 200 ms slice made each wait after the spawn last 200 ms; a child that is still running at the
+  # first check shows it; the best of three is robust to load
   waited = function(run) min(vapply(1:3, function(i) run()$elapsed - seen$spawn, 0))
-  expect_lt(waited(function() proc_run("true")), 0.15)
+  expect_lt(waited(function() proc_run("sleep", "0.05")), 0.15)
   expect_lt(waited(function() bridge_sh("true", merge = TRUE)), 0.15)
 })
 
