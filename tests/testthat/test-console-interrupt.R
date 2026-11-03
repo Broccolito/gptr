@@ -366,6 +366,23 @@ test_that("on a CLI route the pause menu's steer says it waits for the CLI's ans
   expect_false(any(grepl("use only mpg", err, fixed = TRUE)))
 })
 
+test_that("!code read at the pause menu's `steer> ` says it runs after the answer (P30 review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  rd = new.env(parent = emptyenv())
+  rd$typed = character()
+  local_mocked_bindings(console_repl_prompt = function() list(reader = rd))
+  local_menu_answers(c("s", "!ls"))
+  err = notices(with_interrupt_policy(function() {
+    fake_interrupt()
+    "done"
+  }, list(run), mode = "call"))
+  # the next prompt, as at the composer; one receipt, the note saying what `steer> ` did not
+  expect_identical(rd$typed, "!ls")
+  expect_identical(sum(err == paste0(strrep(" ", 7L), "(runs after this answer)")), 1L)
+  expect_false(any(grepl("!ls", err, fixed = TRUE)))
+})
+
 test_that("the pause menu leaves the answer's held row to continue after it (visual review)", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)

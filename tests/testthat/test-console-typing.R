@@ -393,9 +393,9 @@ test_that("the pause menu's [f] in the REPL is the next prompt; a /, ! draft nev
   expect_match(json_encode(last_message(reqs[[2L]])), "> zz = 5", fixed = TRUE)
   expect_identical(e$zz, 5)
   # each text is read at its receipt's word (D-301): the `!` line read at `steer> ` runs next, so
-  # its receipt says so; the follow-up read at `next> ` is its own receipt
-  expect_true(receipt_line("follow_up", "!zz = 5") %in% res$out)
-  expect_false(receipt_line("follow_up", "then plot it") %in% res$out)
+  # a note under it says so; the follow-up read at `next> ` is its own receipt
+  expect_true(paste0(strrep(" ", 7L), "(runs after this answer)") %in% res$out)
+  expect_false(any(receipt_line("follow_up", c("!zz = 5", "then plot it")) %in% res$out))
   at = match(paste0("peter[auto]> ", c("!zz = 5", "then plot it")), res$out)
   expect_false(anyNA(at) || is.unsorted(at))
 })

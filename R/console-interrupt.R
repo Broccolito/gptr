@@ -351,19 +351,21 @@ policy_enqueue = function(s, text, as, source = "pause_menu", shown = NULL) {
 #' prompt `peter> ` reads, the text wrapped under itself (console_person_rows()); a steer on a CLI
 #' route ends with a dim `(after the CLI's answer)`, on a row of its own where the last is full.
 #' Where the read that took the text showed the word of kind `shown` (the pause menu's `steer> `
-#' and `next> `), that row is the receipt, and only the note follows it, on a row of its own. A
-#' block of the person's lines (console_person_write()). Inside an evaluation it has the console's
-#' colours.
+#' and `next> `), that row is the receipt, and only a note follows it, on a row of its own: the
+#' CLI's, or `(runs after this answer)` where the text went as the other kind (`/` and `!` text
+#' read at `steer> `). A block of the person's lines (console_person_write()). Inside an
+#' evaluation it has the console's colours.
 #' @noRd
 console_receipt = function(s, text, as, shown = NULL) {
   rlang::local_options(cli.num_colors = console_colors())
   sym = console_style()
   steer = identical(as, "steer")
-  word = if (steer) "steer>" else "next>"
+  word = if (identical(shown %||% as, "steer")) "steer>" else "next>"
   rows = if (is.null(shown)) console_person_rows(word, text)
-  if (steer && identical(session_live(s)$run$model[["type"]], "cli")) {
+  note = if (!is.null(shown) && !identical(shown, as)) "(runs after this answer)" else
+    if (steer && identical(session_live(s)$run$model[["type"]], "cli")) "(after the CLI's answer)"
+  if (!is.null(note)) {
     grey = if (nzchar(sym$band)) sym$band_dim else sym$dim
-    note = "(after the CLI's answer)"
     n = length(rows)
     if (n && live_fit(rows[[n]]) + 1L + nchar(note) < cli::console_width()) {
       rows[[n]] = paste(rows[[n]], grey(note))
