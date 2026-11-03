@@ -755,10 +755,11 @@ ui_rstudio_spec = function() {
                     allow_other = FALSE) {
     if (!ui_rstudio()) return(NA_integer_)
     labels = as.character(unlist(choices))
-    msg = paste(ui_escape(c(details, sprintf("%d: %s", seq_along(labels), labels))),
+    # a dialog caption is one line: gptr's title goes in the message, its line feeds kept
+    msg = paste(c(console_escape(title),
+                  ui_escape(c(details, sprintf("%d: %s", seq_along(labels), labels)))),
                 collapse = "\n")
-    ans = tryCatch(rstudioapi::showPrompt(ui_escape(title), msg, default = ""),
-                   error = function(e) NULL)
+    ans = tryCatch(rstudioapi::showPrompt("gptr", msg, default = ""), error = function(e) NULL)
     if (!rlang::is_string(ans)) return(NA_integer_)
     idx = ui_parse_choice(ans, labels, multiple)
     if (!anyNA(idx)) return(idx)
@@ -768,9 +769,9 @@ ui_rstudio_spec = function() {
   input = function(prompt, default = "", secret = FALSE) {
     if (!ui_rstudio()) return(NA_character_)
     ans = tryCatch(if (isTRUE(secret)) {
-      rstudioapi::askForPassword(ui_escape(prompt))
+      rstudioapi::askForPassword(console_escape(prompt))
     } else {
-      rstudioapi::showPrompt("gptr", ui_escape(prompt), default = default)
+      rstudioapi::showPrompt("gptr", console_escape(prompt), default = default)
     }, error = function(e) {
       if (isTRUE(secret)) {
         gptr_abort("Hidden credential dialog failed.", "not_available",
