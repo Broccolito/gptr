@@ -9662,3 +9662,21 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   CLI-served write outside the project is undone to its state before the call";
   test-ckpt-scan-integration.R "real partial checkpoints preserve targeted writes and report
   native coverage honestly". Evidence: progress/fixes-1.0.1/lane-A.md.
+
+## D-314 - P16 Checkpoint notices are console lines for the person (2026-11-02)
+- Rule (review and live tests of #98): the coverage notice reads "File undo covers part of <root>:
+  the automatic scan stopped early (<reason>), so changes to files it did not reach cannot be
+  undone. Files Peter's tools name are backed up before they change." It and the per-turn scan
+  notice (`ckpt_notice()`) are written once per project root and process through
+  `gptr_message_write()`, without a message condition, so no tool result records them (D-188's
+  out-of-scope path: a sub-agent's hook running inside the parent's `r` evaluation), and not at
+  all while knitting or in a Jupyter kernel; `gptr.quiet` silences them. The per-turn scan notice
+  is not shown after a scan that stopped early, which already told the person.
+- Why: the notice addressed the model ("Use ls/find/read ..."), blamed "native CLI edits" on
+  every route, reached the parent model's tool result from a CLI child's `agent_start` hook, and
+  filled rendered Quarto, R Markdown and notebook output.
+- Contract-visible: 04 sections 1.5 and 7.16.
+- Tests: test-ckpt-files.R "the coverage notice is a console line for the person, once per root",
+  "the coverage notice stays out of tool results, documents and notebooks", "a scan slower than
+  gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
+  progress/fixes-1.0.1/lane-A.md.

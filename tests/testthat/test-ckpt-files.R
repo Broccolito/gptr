@@ -789,15 +789,9 @@ test_that("slow walks switch the session to one scan per turn plus predicted pat
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 2")
 })
 
-# The notices of gptr.checkpoint_scan_budget that `expr` signals (shown nowhere)
+# The console lines of gptr.checkpoint_scan_budget notices that `expr` writes (shown nowhere)
 scan_notices = function(expr) {
-  seen = new.env(parent = emptyenv())
-  seen$text = character()
-  withCallingHandlers(expr, gptr_message_notice = function(m) {
-    seen$text = c(seen$text, conditionMessage(m))
-    invokeRestart("muffleMessage")
-  })
-  grep("gptr.checkpoint_scan_budget", seen$text, fixed = TRUE, value = TRUE)
+  grep("gptr.checkpoint_scan_budget", utils::capture.output(expr), fixed = TRUE, value = TRUE)
 }
 
 test_that("only the scan counts against gptr.checkpoint_scan_budget, not root lookups", {
@@ -839,6 +833,43 @@ test_that("a scan slower than gptr.checkpoint_scan_budget switches to per-turn s
   expect_length(notices, 1L)
   expect_match(notices, paste0("Checkpoint scans of ", proj), fixed = TRUE)
   expect_true(ck$files$per_turn)
+})
+
+# A fresh tracker of `root` and a scan that reached every entry or stopped at the time limit
+notice_tracker = function(root) list2env(list(root = root, stat = ckpt_empty_walk()))
+notice_scan = function(complete) {
+  list(walk = ckpt_empty_walk(), hash = character(), mode = integer(), absent = character(),
+       not_files = character(), uncaptured = character(), complete = complete,
+       reason = if (complete) "" else "time limit", seconds = 0)
+}
+
+test_that("the coverage notice is a console line for the person, once per root", {
+  root = local_project()
+  local_gptr_options(quiet = FALSE)
+  expect_silent(ckpt_files_observe(notice_tracker(root), notice_scan(TRUE)))
+  expect_no_message(out <- capture.output(ckpt_files_observe(notice_tracker(root),
+                                                             notice_scan(FALSE))))
+  text = paste(out, collapse = " ")
+  expect_match(text, paste0("File undo covers part of ", root), fixed = TRUE)
+  expect_match(text, "stopped early (time limit)", fixed = TRUE)
+  expect_false(grepl("ls/find/read|native CLI", text))
+  expect_silent(ckpt_files_observe(notice_tracker(root), notice_scan(FALSE)))
+})
+
+test_that("the coverage notice stays out of tool results, documents and notebooks", {
+  root = local_project()
+  local_gptr_options(quiet = FALSE)
+  for (opt in c("knitr.in.progress", "jupyter.in_kernel")) {
+    withr::with_options(stats::setNames(list(TRUE), opt), {
+      expect_silent(ckpt_files_observe(notice_tracker(root), notice_scan(FALSE)))
+    })
+  }
+  e = new.env()
+  e$observe = function() ckpt_files_observe(notice_tracker(root), notice_scan(FALSE))
+  out = capture.output(res <- eval_r("observe()", e, tee = FALSE))
+  expect_match(paste(out, collapse = " "), "File undo covers part of", fixed = TRUE)
+  texts = vapply(res$events, function(ev) ev$text %||% "", "")
+  expect_false(any(grepl("undo", texts, ignore.case = TRUE)))
 })
 
 test_that("files that cannot be read are listed, never captured and stop nothing else", {

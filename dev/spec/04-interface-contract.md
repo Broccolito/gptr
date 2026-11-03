@@ -165,7 +165,8 @@ session-scoped listeners first (rank 0), then registry hooks by rank. Every even
 
 Nothing below layer L5 prints (`03` §2.2 rule 2). Functions documented here as "prints" do so only through the console
 layer or `print()` methods of their own classes. Progress and notices go through `gptr_inform()` and are silenced
-by `options(gptr.quiet = TRUE)`. Untrusted text reaches the console only through `msg_verbatim()` or a
+by `options(gptr.quiet = TRUE)`; the file checkpointer's notices write the same console line without the message
+condition (§7.16, D-314). Untrusted text reaches the console only through `msg_verbatim()` or a
 `cli::cli_text("{x}")` interpolation (rule C1).
 
 ---
@@ -3053,6 +3054,10 @@ nothing) replaces the tracker's observations, so only what it observed gives a p
 proves an absence (D-311). A partial inventory is never evidence that an unseen file was created
 or deleted. Discovered changes without valid pre-images are not
 restorable, and coverage notices explain that other changes may not be listed or undoable.
+The coverage notice (and the per-turn scan notice) is for the person, once per project root and
+process: a console line through `gptr_message_write()`, never a message condition, so it enters
+no tool result (IC-77, D-188); none is shown while knitting or in a Jupyter kernel, where it
+would fill the rendered output (D-314).
 A fragment's coverage is `"partial"` only when a scan of its interval stopped early (time,
 entries, an interrupt, an unreadable directory or path); a capture limit leaves it complete and
 its uncaptured changes are rows without a pre-image. The files checkpointer skips R code whose

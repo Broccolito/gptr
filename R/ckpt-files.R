@@ -255,6 +255,17 @@ ckpt_capturable = function(full, root = project_root()) {
     !path_class(f, root) %in% c("protected", "control")
 }
 
+#' A checkpoint notice for the person, once per `key`: a console line, never a message condition,
+#' so it enters no tool result (D-188), and none while knitting or in a notebook kernel (D-314)
+#' @noRd
+ckpt_notice = function(text, key) {
+  if (isTRUE(getOption("gptr.quiet")) || is_knitting() || isTRUE(getOption("jupyter.in_kernel")) ||
+        !once_first(key, "message")) {
+    return(invisible())
+  }
+  gptr_message_write(paste0(text, "\n"), gptr_message_stream(), margin = TRUE)
+}
+
 #' Apply one bounded scan's observations without discarding unvisited paths
 #' @noRd
 ckpt_files_observe = function(tr, s) {
@@ -282,11 +293,10 @@ ckpt_files_observe = function(tr, s) {
   tr$walk_time = s$time
   if (!isTRUE(s$complete)) tr$per_turn = TRUE
   if (!isTRUE(s$complete)) {
-    gptr_inform(paste0("Automatic file checkpoint coverage is incomplete (", s$reason,
-                       "). Unvisited native CLI edits have no automatic undo backup; Peter ",
-                       "backs up predicted targets before its own tools. Use ls/find/read ",
-                       "to inspect more files as needed."),
-                "notice", .once = paste0("ckpt-coverage:", tr$root))
+    ckpt_notice(paste0("File undo covers part of ", tr$root, ": the automatic scan stopped early (",
+                       s$reason, "), so changes to files it did not reach cannot be undone. ",
+                       "Files Peter's tools name are backed up before they change."),
+                paste0("ckpt-coverage:", tr$root))
   }
 }
 
@@ -507,11 +517,12 @@ ckpt_files_after = function(ck, call, token) {
   if (!isTRUE(tr$per_turn)) {
     rows = c(rows, ckpt_files_step(tr))
     coverage = coverage && isTRUE(tr$last_coverage)
-    if (tr$walk_secs > gptr_opt("checkpoint_scan_budget")) {
+    # an incomplete scan already switched and told the person
+    if (!isTRUE(tr$per_turn) && tr$walk_secs > gptr_opt("checkpoint_scan_budget")) {
       tr$per_turn = TRUE
-      gptr_inform(paste0("Checkpoint scans of ", tr$root, " take longer than ",
+      ckpt_notice(paste0("Checkpoint scans of ", tr$root, " take longer than ",
                          "gptr.checkpoint_scan_budget; gptr now scans once per turn plus the ",
-                         "paths it can predict."), "notice", .once = paste0("ckpt-scan:", tr$root))
+                         "paths it can predict."), paste0("ckpt-scan:", tr$root))
     }
   }
   if (!scanned && call$name %in% c("write", "edit") && isTRUE(token$exact)) coverage = TRUE
