@@ -142,11 +142,20 @@ select_prompt = function(nms, facts, kinds, have_prompt) {
 }
 
 #' Warns for each named dot of `idx` whose name is a prefix of a peter() argument its value fits,
-#' or that argument plus "s"; reads facts only. One-letter names (`a`, `p`), common context names,
+#' or that argument plus "s", or that is a character agent() option peter() lacks (`backend`,
+#' `objects`, `export`); reads facts only. One-letter names (`a`, `p`), common context names,
 #' are skipped.
 #' @noRd
 warn_partial_names = function(nms, facts, idx) {
   for (j in idx[nchar(nms[idx]) >= 2L]) {
+    if (nms[j] %in% c("backend", "objects", "export") && "character" %in% facts[[j]]$class) {
+      gptr_warn(c(paste0("`", nms[j], " =` is attached as a context object: it is an agent() ",
+                         "option, not a peter() argument."),
+                  paste0("Pass it as agents = list(<name> = agent(", nms[j], " = ...)), or ",
+                         "rename the object if it is context.")),
+                "partial_name")
+      next
+    }
     cl = facts[[j]]$class
     fits = if ("character" %in% cl) {
       c("model", "mode", "skills", "plugins", "extensions", "tools", "prompt", "replay")

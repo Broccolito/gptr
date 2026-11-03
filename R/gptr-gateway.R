@@ -25,8 +25,9 @@
 #' (unnamed ones are labeled by their expression, named ones by name). Conversational context
 #' bindings refer to objects where they live; descriptions are budgeted separately from
 #' in-memory R computation. Every other argument is matched by its exact name only: a named
-#' object whose name abbreviates one and whose value fits it, such as `mo = "plan"`, stays context
-#' and warns (`gptr_warning_partial_name`).
+#' object whose name abbreviates one and whose value fits it, such as `mo = "plan"`, or a string
+#' named as an [gptr_agent()] option, such as `export = "fit"`, stays context and warns
+#' (`gptr_warning_partial_name`).
 #'
 #' A literal prompt gets `{name}` interpolation from `envir` (atomic vectors of 1 to 50 values;
 #' `{{` and `}}` are literal braces); `.opts = list(interpolate = FALSE)` switches it off.

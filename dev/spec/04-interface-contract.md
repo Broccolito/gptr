@@ -292,7 +292,8 @@ names the intermediate class when there is one. Fields are in addition to `messa
 
 Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02),
 `two_prompts` (P08; two unnamed string literals), `partial_name` (P08; a named context dot
-abbreviates a `peter()` argument its value fits, D-251), `replay_downgraded` (P15; live/stale
+abbreviates a `peter()` argument its value fits, D-251, or is a character `backend`, `objects` or
+`export`, `gptr_agent()` options `peter()` lacks, D-322), `replay_downgraded` (P15; live/stale
 regeneration downgraded under `source()`), `doc_conflict` (P15; md5 conflict after three attempts),
 `s1_errors` (P13; failed elements in a vectorised call; field `errors`), `readline_limit` (P14),
 `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only when
@@ -1055,7 +1056,9 @@ peter = function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 exact name. A named context dot whose name (two characters or more) is a prefix of a formal or that formal plus
 `s`, and whose value fits it (character: `model`, `mode`, `skills`, `plugins`, `extensions`, `tools`, `prompt`,
 `replay`; a plain list: `.opts`, `budget`, `agents`; a function or spec: `model`, `extensions`, `tools`), stays
-context and signals the warning `partial_name` naming each such formal (D-251).
+context and signals the warning `partial_name` naming each such formal (D-251); so does a character dot named
+`backend`, `objects` or `export`, which names a `gptr_agent()` option instead, with the `agents = list(<name> =
+agent(...))` form (D-322).
 
 | Argument | Type / default | Meaning and validation |
 |---|---|---|

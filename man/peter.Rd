@@ -121,8 +121,9 @@ unnamed string literal, else the first unnamed length-1 character value), and co
 (unnamed ones are labeled by their expression, named ones by name). Conversational context
 bindings refer to objects where they live; descriptions are budgeted separately from
 in-memory R computation. Every other argument is matched by its exact name only: a named
-object whose name abbreviates one and whose value fits it, such as \code{mo = "plan"}, stays context
-and warns (\code{gptr_warning_partial_name}).
+object whose name abbreviates one and whose value fits it, such as \code{mo = "plan"}, or a string
+named as an \code{\link[=gptr_agent]{gptr_agent()}} option, such as \code{export = "fit"}, stays context and warns
+(\code{gptr_warning_partial_name}).
 
 A literal prompt gets \code{{name}} interpolation from \code{envir} (atomic vectors of 1 to 50 values;
 \verb{\{\{} and \verb{\}\}} are literal braces); \code{.opts = list(interpolate = FALSE)} switches it off.

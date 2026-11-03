@@ -9597,9 +9597,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   suggestions. Was "model jev-1.14.0 is conversational, so peter() would start a conversation",
   for the physical id a decision's `meta$model` reports, on the `new`, `nested` and `continue`
   routes (an unresolved model counted as conversational).
-- Contract-visible: 04 section 6.1.1 (the System 1 argument refusal).
-- Tests: gptr-gateway "System 1 arguments with an unknown model name the unknown model (D-322)".
-  Evidence: progress/fixes-1.0.1/lane-C.md.
+- Rule (agent options): a named context dot `backend`, `objects` or `export` whose value is
+  character warns `gptr_warning_partial_name` ("`export =` is attached as a context object: it is
+  an agent() option, not a peter() argument.", with the `agents = list(<name> = agent(export =
+  ...))` form) and stays context (D-251's sessions-5 rule, which keeps named context a feature).
+  Other `gptr_agent()` options (`name`, `description`, `file`, ...) are common context names and
+  stay quiet. Was silent: an agent's `peter(..., backend = "cli", objects = "d", export = "x")`
+  attached the three strings and exported nothing. The orchestration skill now says
+  `agent(export = ...)`.
+- Contract-visible: 04 sections 2.2 (warnings) and 6.1 (dots), 6.1.1 (the System 1 argument
+  refusal); `?peter` details; skill gptr-orchestration.
+- Tests: gptr-gateway "System 1 arguments with an unknown model name the unknown model (D-322)",
+  "a named dot that names an agent() option warns and stays context (D-322)". Evidence:
+  progress/fixes-1.0.1/lane-C.md.
 
 ## D-321 - Fixes 1.0.1 lane C System 1 accounting (2026-11-02)
 - Rule (unbilled failures): D-251's sessions-6 rule applies to System 1 attempts: a failed attempt
