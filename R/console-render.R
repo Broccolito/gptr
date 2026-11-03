@@ -1159,15 +1159,16 @@ console_on_before_request = function(event, ctx) {
   NULL
 }
 
-#' message_update: stream text deltas through the markdown renderer (after an abort, the text held
-#' when it came under a dim `received before the abort:`); thinking at verbosity 3; on a
-#' CLI route, whose one request runs a whole agent turn, the first line of each thinking block at
-#' verbosity 2, with the live row below it
+#' message_update: a text delta makes the live row's word `responding`, the main agent's as a
+#' sub-agent's, until the next request or tool; stream text deltas through the markdown renderer
+#' (after an abort, the text held when it came under a dim `received before the abort:`); thinking
+#' at verbosity 3; on a CLI route, whose one request runs a whole agent turn, the first line of
+#' each thinking block at verbosity 2, with the live row below it
 #' @noRd
 console_on_message_update = function(event, ctx) {
   rec = console_record(event)
   delta = event$delta
-  if (!is.null(rec$child) && identical(event$kind, "text")) rec$what = "responding"
+  if (!is.null(rec) && identical(event$kind, "text")) rec$what = "responding"
   if (is.null(rec) || !is.character(delta) || !console_render_on(rec)) return(NULL)
   kind = event$kind %||% "text"
   think = identical(kind, "thinking") &&

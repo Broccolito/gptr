@@ -1974,6 +1974,19 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
     session_live(s)$ctx))), "  # sub-agent c failed: aborted")
 })
 
+test_that("the live row says responding while any agent's text streams (P30 follow-up)", {
+  s = render_session()
+  local_gptr_options(verbose = 1L)
+  for (child in list(NULL, list(label = "alpha", run = list2env(list(id = "u_kid"))))) {
+    rec = console_track("u0000test", s)
+    rec$child = child
+    console_on_message_update(hook_event("message_update", s, kind = "text", delta = "Hi"),
+                              session_live(s)$ctx)
+    expect_identical(rec$what, "responding")
+    console_drop("u0000test")
+  }
+})
+
 test_that("a line routed at a question sits under it; a later person's line opens a block", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
