@@ -139,7 +139,8 @@ skip_if_sigint_ignored = function() {
 # child's last toggle (`raw` keeps its output as written) turned the mode on (D-263); `wait(x)`
 # reads until `x` is shown and consumes the output through it, so the next wait() looks after it;
 # `pending()` reads for 0.5 s and returns what followed, its escapes and a CR at a row's start (a
-# question's prompt clears its row, tty_question()) dropped; `all` keeps
+# question's prompt clears its row, tty_question()) dropped, also one after the prompt's leading
+# blanks, which a cursor move right then steps over (gptr_readline()); `all` keeps
 # everything shown and `seen(x)` counts `x` in it; `interrupt()` sends SIGINT, as a terminal's
 # Ctrl-C does where isig is on (the pty is not the child's controlling terminal, so `\003` is not).
 # The child dies with the test.
@@ -201,7 +202,8 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
   pty$pending = function() {
     deadline = Sys.time() + 0.5
     while (Sys.time() < deadline) read(50L)
-    gsub("\n\r", "\n", gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$out), fixed = TRUE)
+    x = gsub("\n( +)\r\033\\[K\033\\[[0-9]+C", "\n\\1", pty$out)
+    gsub("\n\r", "\n", gsub("\033\\[[0-9;?]*[A-Za-z]", "", x), fixed = TRUE)
   }
   pty$seen = function(x) sum(gregexpr(x, pty$all, fixed = TRUE, useBytes = TRUE)[[1L]] > 0L)
   pty$wait("> ")

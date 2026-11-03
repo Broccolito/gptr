@@ -9647,7 +9647,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   read `y ›`) when the quiet prompt's hidden `\r\033[K` came first and a blank and a wide glyph
   followed; `gptr_readline()` now writes the prompt's leading blanks first, then the hidden
   `\r\033[K\033[<n>C`, which erases a key echoed in that moment and steps back over them, so every
-  readline counts the same width. T consoles, whose band prompt starts hidden, are unchanged.
+  readline counts the same width. A T console's banded prompt starts hidden and is unchanged; an
+  unbanded one writes other bytes for the same screen, which the pty helper `pending()` reads.
 - Rule (the lost Enter of the steering repro, manual mode: an Enter pressed 2 s after answering `y`,
   while the approved `r` call ran, left the draft unsent): not reproduced on these sources, in tmux at
   80 and 100 columns with the Enter 0.2, 0.6, 2 and 4 s after the answer, nor with the installed
