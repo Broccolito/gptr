@@ -1940,6 +1940,8 @@ test_that("TERM=dumb: a Ctrl-C right after a run's footer keeps the console and 
   expect_true(pty$wait("1 request"))
   Sys.sleep(0.5)
   pty$ctrl_c()
+  # held while the modes return, it is raised once they have, under the call's guard
+  expect_true(pty$wait("interrupted"))
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("ECHO TRUE"))

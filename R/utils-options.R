@@ -148,7 +148,8 @@ tty_call = function(keys) {
 
 #' Restore the modes a console call saved (tty_call()), once, as one unit a Ctrl-C does not cut:
 #' that Ctrl-C kills the stty child too, in the terminal's foreground group, so the modes are read
-#' back and set again where they did not take
+#' back and set again where they did not take; it is raised as the unit ends (Sys.sleep() checks),
+#' in the caller's scope: R would raise it at a later statement, past the console's guard too
 #' @noRd
 tty_restore = function(tty = the$tty) {
   if (identical(the$tty, tty)) the$tty = NULL
@@ -160,6 +161,7 @@ tty_restore = function(tty = the$tty) {
     tty_modes(back)
     if (!identical(tty_modes(), saved)) tty_modes(back)
   })
+  Sys.sleep(0)
   invisible(NULL)
 }
 

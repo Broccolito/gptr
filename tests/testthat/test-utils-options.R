@@ -356,3 +356,28 @@ test_that("tty_restore() sets the saved modes again where a Ctrl-C killed its st
   expect_identical(current, "SAVED")
   expect_null(the$tty)
 })
+
+test_that("a Ctrl-C held while tty_restore() sets the modes is raised as it returns (P30)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if_sigint_ignored()
+  # held to the unit's end, R raised it at a later statement, past the console's guard too (live
+  # steering test: peter() was left)
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    if (identical(modes, "-g")) return("SAVED")
+    tools::pskill(Sys.getpid(), tools::SIGINT)
+    character()
+  })
+  the$tty = list2env(list(saved = "SAVED", set = c("-echo", "noflsh")))
+  withr::defer(assign("tty", NULL, envir = the))
+  where = tryCatch({
+    inner = tryCatch({
+      tty_restore()
+      "after it"
+    }, interrupt = function(e) "in it")
+    Sys.sleep(0)
+    inner
+  }, interrupt = function(e) "later")
+  expect_identical(where, "in it")
+  expect_null(the$tty)
+})
