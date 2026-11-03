@@ -361,6 +361,12 @@ test_that("an unknown id points to explicit provider discovery without doing I/O
   withr::defer(off())
   err = expect_error(model_resolve("versa/x"), class = "gptr_error_unknown_model")
   expect_match(conditionMessage(err), 'provider = "versa"', fixed = TRUE)
+  # a provider without a listing API or discover() gets no hint that would do nothing
+  off2 = gptr_register(gptr_provider("brx", api = "bedrock-converse",
+                                     base_url = "https://brx.example"))
+  withr::defer(off2())
+  err = expect_error(model_resolve("brx/x"), class = "gptr_error_unknown_model")
+  expect_no_match(conditionMessage(err), "gptr_models(", fixed = TRUE)
 })
 
 test_that("a reference that names a provider gets suggestions from that provider only (#44)", {

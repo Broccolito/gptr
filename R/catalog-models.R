@@ -909,7 +909,7 @@ model_resolve = function(ref, strict = TRUE) {
       paste0("Unknown model reference '", ref, "'.")
     }
     pid = hit$provider %||% ""
-    if (nzchar(pid) && !is.null(provider_get(pid))) {
+    if (nzchar(pid) && catalog_listable(provider_get(pid))) {
       lead = paste0(lead, " Run gptr_models(provider = \"", pid,
                     "\", refresh = TRUE) to ask that provider for its models.")
     } else if (pid %in% names(catalog_modelsdev_ids()) && !(pid %in% ctg$index$provider)) {
@@ -1234,6 +1234,14 @@ catalog_inventory_route = function(p) {
        lifecycle = catalog_lifecycle(p[["id"]] %||% p[["name"]]))
 }
 
+#' Can gptr ask this provider for its models: native Ollama, a `discover()` callback or a native
+#' model-list API, and not an offline provider
+#' @noRd
+catalog_listable = function(p) {
+  is.list(p) && !isTRUE(p[["offline"]]) &&
+    (catalog_ollama_provider(p) || is.function(p[["discover"]]) || provider_models_supported(p))
+}
+
 #' Inventory after consent, once per endpoint/headers/lifecycle/credential per five minutes. Failed
 #' attempts are cached too, and never remove the last successful discovery or offline catalog.
 #' Only credential fingerprints enter the cache; ordinary catalog reads do not look up keys.
@@ -1241,14 +1249,10 @@ catalog_inventory_route = function(p) {
 #' runs only on explicit refresh; before use only the bounded native listings run.
 #' @noRd
 catalog_inventory = function(p, safety = NULL, refresh = FALSE, replay = NULL) {
-  if (is.null(p) || check_running() || isTRUE(p[["offline"]]) || isFALSE(p[["enabled"]])) {
-    return(invisible(NULL))
-  }
+  if (!catalog_listable(p) || check_running() || isFALSE(p[["enabled"]])) return(invisible(NULL))
   native = catalog_ollama_provider(p)
   callback = !native && is.function(p[["discover"]])
-  if (callback && !refresh || !native && !callback && !provider_models_supported(p)) {
-    return(invisible(NULL))
-  }
+  if (callback && !refresh) return(invisible(NULL))
   pid = p[["id"]] %||% p[["name"]]
   if (native) catalog_ollama_endpoint(p, safety)
   egress_check(pid, p, safety = safety %||% egress_safety(), context = "listing")
@@ -1825,7 +1829,8 @@ catalog_grepl = function(pattern, x) {
 #'   (or registered `discover()` callback), using its configured credentials after the normal
 #'   egress and replay checks. API discovery is bounded to four pages, four seconds total and
 #'   one second per request. A failed listing keeps prior models and reports the failed refresh
-#'   in the footer. For Ollama it uses native `/api/version`, `/api/tags` and `/api/show` endpoints
+#'   in the footer. A provider with neither (Bedrock Converse, an offline provider) is not
+#'   contacted. For Ollama it uses native `/api/version`, `/api/tags` and `/api/show` endpoints
 #'   with a one second limit per request. Ollama discovery requires a
 #'   loopback address under the default local-only policy; only an explicit human setting at
 #'   user or session scope can relax it (see [gptr_config()]).

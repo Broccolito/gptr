@@ -18,7 +18,8 @@ revalidation into the user cache. With a provider it asks that provider's model-
 (or registered \code{discover()} callback), using its configured credentials after the normal
 egress and replay checks. API discovery is bounded to four pages, four seconds total and
 one second per request. A failed listing keeps prior models and reports the failed refresh
-in the footer. For Ollama it uses native \verb{/api/version}, \verb{/api/tags} and \verb{/api/show} endpoints
+in the footer. A provider with neither (Bedrock Converse, an offline provider) is not
+contacted. For Ollama it uses native \verb{/api/version}, \verb{/api/tags} and \verb{/api/show} endpoints
 with a one second limit per request. Ollama discovery requires a
 loopback address under the default local-only policy; only an explicit human setting at
 user or session scope can relax it (see \code{\link[=gptr_config]{gptr_config()}}).
@@ -45,8 +46,10 @@ by default: only \code{refresh = TRUE} touches the network.
 A catalog entry describes a route, not current account access. \code{availability} records what
 the last provider listing advertised, with its \code{checked_at} time; it does not verify inference
 or billing access. Failed or expired listings are marked stale and keep the previous models.
-Providers other than Ollama with listing support are inventoried before use after consent,
-at most once per five minutes in this R process; \code{refresh = TRUE} bypasses that cache.
+Providers other than Ollama with a native model-list API are inventoried before use after
+consent, at most once per five minutes in this R process; \code{refresh = TRUE} bypasses that
+cache. A \code{discover()} callback, such as the \code{claude} and \code{codex} command-line catalogs, runs
+only with \code{refresh = TRUE}.
 Copy a \code{ref} into the
 \code{model} argument of \code{\link[=peter]{peter()}} to choose that route. Ollama routes require current installed
 model evidence before inference; discovery does not pull models. See
