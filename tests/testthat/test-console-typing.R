@@ -809,6 +809,29 @@ test_that("a terminal call's modes return after an interrupt, also one while stt
   expect_null(the$tty)
 })
 
+test_that("a Ctrl-C as a call's modes return keeps the session its run answered on (P30)", {
+  skip_on_cran()
+  local_console_test()
+  tty = local_keys(function() "")
+  # raised as tty_restore() ends (right after a run's footer), it ended the call before the REPL
+  # took the run's session: the next prompt started a new one
+  first = TRUE
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    tty$log = c(tty$log, modes)
+    if (identical(modes[[1L]], "SAVED") && first) {
+      first <<- FALSE
+      signalCondition(structure(class = c("interrupt", "condition"),
+                                list(message = "", call = NULL)))
+    }
+    if (identical(modes, "-g")) "SAVED"
+  })
+  fake = gptr_fake_provider(list("first", "second"))
+  res = typing_console(fake, c("go", "again", "/exit"))
+  expect_true("interrupted" %in% res$out)
+  expect_identical(res$s$turns, 2L)
+  expect_length(fake_requests(fake), 2L)
+})
+
 test_that("no character mode under radian, which owns its tty (D-243)", {
   local_console_test()
   tty = local_stty()

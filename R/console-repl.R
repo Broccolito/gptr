@@ -938,11 +938,13 @@ typed_code_open = function(held) {
 #' The frame binds the REPL state (`.gptr_repl`, found by the context blocks) and
 #' `.gptr_interrupt_barrier`, so the policy of this call's run is the outermost one and its
 #' re-signalled interrupt ends here. A failed call keeps its session (the condition's `$session`,
-#' else a new gptr_last()); a stray run left by an early interrupt is aborted. On a terminal the
-#' call's console_typed() task reads what is typed, in the call's modes until it ends (tty_call():
-#' a T console's keys, a D console's lines without echo; IC-76, D-243); the end of its run settles
-#' what it held (console_queue_left()), and keys read with a Ctrl-C that no question took
-#' (console_ahead()) are the composer's draft at the next prompt. `men`: the prompt's @mentions.
+#' else a new gptr_last()); the REPL takes the session before the call's modes return, as a Ctrl-C
+#' held while they do ends the call (tty_restore()); a stray run left by an early interrupt is
+#' aborted. On a terminal the call's console_typed() task reads what is typed, in the call's modes
+#' until it ends (tty_call(): a T console's keys, a D console's lines without echo; IC-76, D-243);
+#' the end of its run settles what it held (console_queue_left()), and keys read with a Ctrl-C that
+#' no question took (console_ahead()) are the composer's draft at the next prompt. `men`: the
+#' prompt's @mentions.
 #' `rs$started`, the time it was sent, is its run's live row's clock (console_on_agent_start()); at
 #' verbosity 2+ the row shows from then, through the checks before the run (a CLI's model listing,
 #' consent questions), on a record of its own (`sent`) that the run's takes over (#98 review).
@@ -963,9 +965,25 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
   before = gptr::gptr_last()
   res = console_reading(rs, function() {
     if (verbosity() >= 2L) console_live_start(sent)
-    tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
-             error = function(e) list(status = "error", error = e),
-             interrupt = function(e) list(status = "interrupt"))
+    res = tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
+                   error = function(e) list(status = "error", error = e),
+                   interrupt = function(e) list(status = "interrupt"))
+    # the REPL's session before the modes return, as a Ctrl-C held there ends this call
+    s = NULL
+    if (inherits(res$value, "gptr_session")) {
+      s = res$value
+    } else if (inherits(res$error$session, "gptr_session")) {
+      s = res$error$session
+    } else {
+      last = gptr::gptr_last()
+      if (inherits(last, "gptr_session") && !identical(last, before)) s = last
+    }
+    if (!is.null(s)) {
+      rs$session = s
+      # the notes this turn took, which /retry sends again (cmd_retry())
+      rs$sent = list(id = s$id, turns = s$turns, notes = if (!length(rs$notes)) notes)
+    }
+    res
   })
   # keys read with a Ctrl-C that no question took (after [a]) are typed at the next prompt
   rd = rs$reader
@@ -974,20 +992,6 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
     rd$after_interrupt = ""
     rd$compose = console_compose(rd$compose, left, reactor_now(), "steer", console_complete,
                                  TRUE)$state
-  }
-  s = NULL
-  if (inherits(res$value, "gptr_session")) {
-    s = res$value
-  } else if (inherits(res$error$session, "gptr_session")) {
-    s = res$error$session
-  } else {
-    last = gptr::gptr_last()
-    if (inherits(last, "gptr_session") && !identical(last, before)) s = last
-  }
-  if (!is.null(s)) {
-    rs$session = s
-    # the notes this turn took, which /retry sends again (cmd_retry())
-    rs$sent = list(id = s$id, turns = s$turns, notes = if (!length(rs$notes)) notes)
   }
   if (identical(res$status, "interrupt") && !is.null(rs$session)) console_abort_stray(rs$session)
   res

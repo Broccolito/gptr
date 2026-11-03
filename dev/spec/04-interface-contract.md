@@ -6072,7 +6072,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     until P28 Task 64) only when no status line said `aborted` (verbosity 0, or no run in the foreground). So do
     the REPL's other notices: `ctrl-c again leaves · /exit` at an idle Ctrl-C (the keys bold; `[gptr] press Ctrl-C
     again to leave gptr, or type /exit`; also one that comes as the prompt does, its background-approval notice
-    included: right after a run's footer it left `peter()`, P30's live test), `interrupted`, `timed out` for `!` code, `<n> background session(s)
+    included: right after a run's footer it left `peter()`, P30's live test; one held while the call's modes return,
+    `tty_restore()`, is the call's `interrupted`, the session its run answered on kept, P30 follow-up), `interrupted`, `timed out` for `!` code, `<n> background session(s)
     wait(s) for approval · !!gptr::gptr_wait(session) asks` (D-261), and in red `the queued message could not be
     delivered: <why>`, none tagged `[gptr]` (P28 Task 64, visual round 2). The composer's draft joins this list (Task 18). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
     layering test (12.2). The pause menu's [b] ends no run in the foreground, so it settles the REPL's held lines
