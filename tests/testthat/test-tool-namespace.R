@@ -112,6 +112,12 @@ test_that("print.gptr_text() prints head and tail within the budget with a notic
   expect_true(any(grepl("^\\[\\.\\.\\. [0-9]+ lines not printed; index the value", out)))
   expect_lte(est_tokens(out, "r_output"), 130)
   expect_identical(utils::capture.output(print(new_gptr_text(c("a", "b")))), c("a", "b"))
+  # a line over the budget prints its first 400 characters, and the value keeps it (D-348)
+  x = new_gptr_text(c(strrep("a", 5e4), "tail-line"))
+  local_gptr_options(helper_output_tokens = 1500L)
+  expect_identical(utils::capture.output(print(x)),
+                   c(paste0(strrep("a", 400), " ...[+49600 chars]"), "tail-line"))
+  expect_identical(nchar(x[[1L]]), 50000L)
 })
 
 # Register a spec for the calling test only (rank 3, source "user", or a plugin source)

@@ -1320,8 +1320,9 @@ project `.env` auto-discovery, provider base-URL overrides, project skills and p
 model fields of project agent files.
 The record includes the trust fingerprint of the trust-gated files (IC-52). Conditions: `invalid_argument`. Side
 effects: writes `trust.json` (atomic, under a short file lock). Emits nothing (`project_trust` is the first-decision
-event raised when untrusted resources are first used, IC-71). Called from model code during a run it is a
-`control`-category action (IC-53).
+event raised when untrusted resources are first used, IC-71). Called from model code during a run, recording
+(`trust = TRUE` or `FALSE`, or a value the code computes) is a `control`-category action (IC-53); reading is level 0
+(D-347).
 
 ```r
 d = tempfile("proj"); dir.create(d)
@@ -1986,9 +1987,10 @@ gptr_risk(code, envir = NULL, root = NULL)
 
 The advisory static classifier (not a security boundary). `code`: chr (R code) or a call/expression; `envir`:
 optional environment the code would run in (enables overwrite-size detection of bound names by `env_snapshot()`'s
-size rule, D-247: a plain assignment evaluated in `envir` is looked up there only; a `<<-`, `assign()` or replacement
-target, or one inside `local()`, `with()` or `within()`, also in the enclosing environments up to the global one,
-D-213; read-only lookups, never forcing promises); `root`: project root (default `project_root()`). Never evaluates
+size rule, D-247: a plain assignment evaluated in `envir` is looked up there only, and one in the code of a
+one-argument `local()` not at all (D-346); a `<<-`, `assign()` or replacement target, or one inside
+`local(envir =)`, `with()` or `within()`, also in the enclosing environments up to the global one, D-213; read-only
+lookups, never forcing promises); `root`: project root (default `project_root()`). Never evaluates
 `code`. Returns a `gptr_risk` (§5.11). Commands passed to `peter$sh()` are classified with the command table,
 `peter$sql()`/`peter$py()` with keyword classifiers (P11 registers them for P22). Copy-safety: [R4].
 
@@ -2427,11 +2429,11 @@ eol = "\n" | "\r\n", bom = lgl(1), encoding = chr(1), final_newline = lgl(1))`, 
 
 | Function | Contract | Consumers |
 |---|---|---|
-| `truncate_output(text, budget_tokens, class = "r_output", head = 0.4)` | `list(text = chr(1), truncated = lgl(1), omitted = int(1), total_lines = int(1), out_id = chr(1) \| NULL, spill = chr(1) \| NULL)`; keeps the first 40% and last 60% of lines within the budget, inserts `[... n lines omitted; all: peter$out(<id>)]`, stores the full text with `out_put()` and a spill file | P09, P10, P18, P22 |
+| `truncate_output(text, budget_tokens, class = "r_output", head = 0.4)` | `list(text = chr(1), truncated = lgl(1), omitted = int(1), total_lines = int(1), out_id = chr(1) \| NULL, spill = chr(1) \| NULL)`; returns text within the budget unchanged; otherwise lines over 400 characters continue as 400-character pieces, it keeps the first 40% and last 60% of those lines within the budget, inserts `[... n lines omitted; all: peter$out(<id>)]`, and stores all of them with `out_put()` and a spill file (D-345) | P09, P10, P18, P22 |
 | `out_put(text, stream = "stdout", meta = list(), session = NULL)` | chr(1) id `o` + 6 hex (RNG-free); kept in the session's store (the process store when `session` is `NULL`), the last `gptr.out_keep` entries (IC-71) | P09, P22 |
 | `out_get(id, stream = c("stdout", "stderr"), lines = NULL, session = NULL)` | chr (lines) from the session store, then the process store, then the spill file; `gptr_error_invalid_argument` when none has it | P10 (`peter$out`) |
 | `spill_write(text, prefix)` | path `<prefix>.txt` under `ws_path("cache", "tmp")`; redacted with `persist` | P09, P22 |
-| `clean_terminal(x)` | removes ANSI/OSC sequences, collapses `\r` progress, caps lines at 400 characters | P09, P22, P04 |
+| `clean_terminal(x)` | removes ANSI/OSC sequences, collapses `\r` progress; keeps every line whole (D-345) | P09, P22, P04 |
 | `new_listing(df, class, footer = NULL)` | the listing classes of §5.12 and their shared `print` method | P02, P05, P06, P11, P15-P18, P21, P23 |
 
 **`utils-tokens.R`**: `est_tokens(x, class = c("prose", "code", "r_output", "str", "csv", "json", "error",
@@ -3621,7 +3623,8 @@ Registered as tool specs with a `fun` by the plans named (`read`, `write`, `edit
 an `execute`, so presets can declare them as direct tools; IC-37). Every member validates its arguments with the
 §1.1 checkers; called from model code while a run executes, it passes `dispatch_nested()` (P06) with the risk shown;
 called by the user it runs directly. Prints are budgeted by `gptr.helper_output_tokens` (1,500), and at most 0.6x
-the remaining `r` budget when called inside `r`.
+the remaining `r` budget when called inside `r`; a print that must cut shows a line over 400 characters as its first
+400 and ` ...[+N chars]`, keeping the value's line count (D-348).
 
 | Member | Owner | Signature | Returns | Risk (level) |
 |---|---|---|---|---|
@@ -5012,22 +5015,22 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
 2. `run_start()` snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`,
    `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode` and `gptr.unsafe_no_permissions`; the run's gate
    reads only the snapshot.
-3. `risk-functions.csv` gains category `control`, level 4, `ask_human`: `gptr_config`, `gptr_permissions`,
-   `gptr_trust`, `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
+3. `risk-functions.csv` gains category `control`, level 4, `ask_human`: `gptr_config`, `gptr_permissions`, `gptr_trust`
+   (`trust = TRUE` or `FALSE`), `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
    `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune, clear),
-   `gptr_scrub` (`dry_run = FALSE`), and `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`, `gptr_rewind`
-   on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` and
+   `gptr_scrub` (`dry_run = FALSE`), and `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`, `gptr_rewind` on a
+   session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` and
    `withr::local_envvar()`/`withr::with_envvar()` of `GPTR_*`, `*_BASE_URL` or R startup names (`R_ENVIRON_USER`,
    `R_PROFILE_USER`, `R_ENVIRON`, `R_PROFILE`), of a variable a registered provider reads (its `auth` names and
    `compat$base_url_env`, such as `AWS_REGION`, the `bedrock-converse` key pair, and the names the `cli-claude` and
-   `cli-codex` child environments keep, such as `CODEX_HOME`) or of a variable that moves the user config directory
-   or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in
-   any letter case, or of a name the classifier cannot read (`do.call()` of a `list()` or `c()` written out and
-   `rlang::exec()` read as the call they make, review round 6), `readRenviron()`, `dotenv::load_dot_env()` (D-272),
-   `setHook()`, `assignInNamespace()`. These exports also check `run_current()`: called from model code during a
-   run they signal `gptr_error_permission` unless the dispatcher approved exactly that call through an
-   `ask_human` (a one-shot token on the run). `perm_check()` grants the token on any final allow (IC-78); outside
-   yolo only a person's approval or `gptr.unsafe_no_permissions` allows a control call.
+   `cli-codex` child environments keep, such as `CODEX_HOME`) or of a variable that moves the user config directory or
+   the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any letter case, or of a name
+   the classifier cannot read (`do.call()` of a `list()` or `c()` written out and `rlang::exec()` read as the call they
+   make, review round 6), `readRenviron()`, `dotenv::load_dot_env()` (D-272), `setHook()`, `assignInNamespace()`. These
+   exports also check `run_current()`: called from model code during a run they signal `gptr_error_permission` unless
+   the dispatcher approved exactly that call through an `ask_human` (a one-shot token on the run). `perm_check()` grants
+   the token on any final allow (IC-78); outside yolo only a person's approval or `gptr.unsafe_no_permissions` allows a
+   control call.
 4. Every gateway call made while `run_current()` is non-NULL (any route) inherits the running mode (only
    tightened) and filters; model code continuing an idle user session runs it in the stricter of the two modes.
 5. The parent re-classifies the raw input carried in every forwarded worker `permission_request`; the worker

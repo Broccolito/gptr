@@ -68,6 +68,18 @@ test_that("views keep head and tail within the budget and name the out id", {
   expect_identical(bridge_notice(3L), "[... 3 lines omitted]")
 })
 
+test_that("a view that must cut shows a line over 400 characters as its head (D-348)", {
+  skip_on_cran()
+  cut = paste0(strrep("a", 400), " ...[+49600 chars]")
+  expect_identical(bridge_view_lines(c(strrep("a", 5e4), "tail-line"), 1500L, id = "o1"),
+                   c(cut, "tail-line"))
+  v = bridge_view_lines(c(strrep("a", 5e4), sprintf("row %04d", 1:2000)), 1500L, id = "o1")
+  expect_identical(v[[1L]], cut)
+  expect_identical(v[[length(v)]], "row 2000")
+  expect_match(v, "^\\[\\.\\.\\. [0-9]+ lines omitted", all = FALSE)
+  expect_identical(bridge_view_lines(strrep("b", 450), 1500L), strrep("b", 450))
+})
+
 test_that("the print budget is the option, capped at 0.6 x the r budget inside a run", {
   skip_on_cran()
   expect_identical(bridge_budget(NULL), 1500L)

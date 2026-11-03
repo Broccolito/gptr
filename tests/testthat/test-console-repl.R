@@ -601,6 +601,15 @@ test_that("the @files of a prompt share the user_files budget, and the line unde
   expect_match(men$files, "<file path=\"wide.md\" truncated=\"true\">", fixed = TRUE)
 })
 
+test_that("a one-line @file over the budget attaches the head of its line (D-348)", {
+  skip_on_cran()
+  local_project(files = list("min.json" = strrep("a", 5e4)))
+  men = repl_mentions("see @min.json", new.env())
+  expect_identical(men$files, paste0("<file path=\"min.json\" truncated=\"true\">\n",
+                                     strrep("a", 400), " ...[+49600 chars]\n</file>"))
+  expect_identical(men$said, "@ min.json (first 1 line)")
+})
+
 test_that("!code runs in the REPL environment and leaves a note; !!code does not", {
   skip_on_cran()
   local_project()

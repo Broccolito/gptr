@@ -2016,8 +2016,9 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #'
 #' @param code R code: a character vector, a call or an expression.
 #' @param envir `NULL` or the environment the code would run in. When given, assignments to
-#'   existing bindings (of `envir` itself for a plain assignment evaluated in `envir`; for
-#'   `<<-`, `assign()`, replacement calls and an assignment inside `local()`, `with()` or
+#'   existing bindings (of `envir` itself for a plain assignment evaluated in `envir`; none for
+#'   one in the code of `local()` without `envir`, which binds in its own environment; for
+#'   `<<-`, `assign()`, replacement calls and an assignment inside `local(envir =)`, `with()` or
 #'   `within()` also of its enclosing environments up to the global environment) are
 #'   reported as overwrites with their size (the workspace's size rule in a leaf: each part
 #'   once, without code or shared environments; promises and active bindings are never forced)
@@ -2993,11 +2994,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
           pc)
       return(TRUE)
     }
-    if (name %in% c("gptr_cache", "gptr_scrub", "gptr_jobs")) {
+    if (name %in% c("gptr_cache", "gptr_scrub", "gptr_jobs", "gptr_trust")) {
       x = switch(name, gptr_cache = risk_arg(a, "action", 1L),
-                 gptr_scrub = risk_arg(a, "dry_run", 2L), risk_arg(a, "kill", 1L))
+                 gptr_scrub = risk_arg(a, "dry_run", 2L), gptr_trust = risk_arg(a, "trust", 2L),
+                 risk_arg(a, "kill", 1L))
       hit = switch(name, gptr_cache = is.character(x) && any(x %in% c("prune", "clear")),
-                   gptr_scrub = isFALSE(x), isTRUE(x))
+                   gptr_scrub = isFALSE(x), gptr_trust = !is.null(x), isTRUE(x))
       if (hit) {
         add(ctx, label, name, 4L, "control")
       } else if (!is.null(x) && !is.character(x) && !is.logical(x)) {
@@ -3077,12 +3079,14 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       }
       return(invisible())
     }
+    # local()'s code binds a plain name, and a for variable, in its own environment
+    if (isTRUE(ctx$own) && !is.call(target) && op %in% c(risk_arrow, "=")) return(invisible())
     add_tg(if (op == "<<-") "super" else "assign", nm)
     if (is.call(target)) add_tg("modify", nm)
     if (op == "<<-") add(ctx, paste(nm, "<<- ..."), "<<-", 2L, "object_write")
     # a plain assignment binds in envir; <<-, assign(), a replacement (of an environment, by
-    # reference) and one inside local(), with() or another risk_unknown_funs call can reach an
-    # enclosing one
+    # reference) and one inside local(envir =), with() or another risk_unknown_funs call can
+    # reach an enclosing one
     info = if (!is.null(envir)) {
       risk_binding_safe(nm, envir,
                         inherits = ctx$away || is.call(target) || !op %in% c(risk_arrow, "="))
@@ -3181,13 +3185,17 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     # a one-sided formula is a function (a lambda of purrr or dplyr)
     fun = r$name == "function" || (r$name == "~" && length(e) == 2L)
     if (fun) inner$def = TRUE
+    # base local() with one argument runs its code in an environment of its own
+    own = r$name == "local" && length(a) == 1L && !"local" %in% bound$all &&
+      (identical(r$pkg, "base") || is.na(r$pkg) && identical(risk_fn_where("local", envir)$pkg,
+                                                             "base"))
     # an assignment inside eval(), evalq(), with() or within() may bind in an enclosing
     # environment, as <<- and assign() may
-    inner$outer = !fun && (isTRUE(ctx$outer) || r$name %in% c("eval", "evalq", "with", "within"))
+    inner$outer = !fun && !own &&
+      (isTRUE(ctx$outer) || r$name %in% c("eval", "evalq", "with", "within"))
     if (r$name == "function") a = c(as.list(a[[1L]]), a[-1L])
-    # a function body and local()'s code (in an environment of its own) bind their own names
-    # (`known` above)
-    scope = fun || (r$name == "local" && length(a) == 1L && !"local" %in% bound$all)
+    # a function body and local()'s code bind their own names (`known` above)
+    scope = fun || own
     if (scope) {
       up = known
       if (fun) {
@@ -3211,7 +3219,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
         }
       }
     }
-    inner$away = ctx$away || r$name %in% risk_unknown_funs
+    inner$away = !own && (ctx$away || r$name %in% risk_unknown_funs)
+    inner$own = own || isTRUE(ctx$own) && !inner$away
     for (i in seq_along(a)) if (!identical(a[[i]], quote(expr = ))) walk(a[[i]], inner)
     if (!is.null(back)) attr(known, "wd") <<- back
     if (scope) {

@@ -4642,8 +4642,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule: `gptr_risk(envir =)` reports "overwrites `x`" (level 2, 3 above `gptr.protect_size`) for a
   plain `=`/`<-` or a `for` variable evaluated in `envir` only when `x` is bound in `envir` itself,
   where R creates the binding; `<<-`, `assign()`, replacement calls (an environment changes by
-  reference) and an assignment inside a call that may evaluate it elsewhere (`local()`, `with()`,
-  `within()`, `evalq()` and the other unknown-effect calls of IC-31) still look up the enclosing
+  reference) and an assignment inside a call that may evaluate it elsewhere (`local(envir =)`,
+  `with()`, `within()`, `evalq()` and the other unknown-effect calls of IC-31; amended by D-346 for
+  one-argument `local()`) still look up the enclosing
   environments to the global one. A sub-agent overlay's `x = ...` over a caller's `x` is level 1
   (new object), as is one in plan mode's scratch overlay over the home (it runs there and is
   discarded).
@@ -9692,3 +9693,81 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   "the coverage notice stays out of tool results, documents and notebooks", "a scan slower than
   gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
   progress/fixes-1.0.1/lane-A.md.
+
+## D-345 - Fixes 1.0.1 lane I Output lines reach the model whole (2026-11-02)
+- Rule (amends 04 `clean_terminal()` and `truncate_output()`, architecture `utils-text.R`):
+  `clean_terminal()` no longer cuts lines at 400 characters with ` ...[+N chars]`; it only removes
+  ANSI/OSC sequences and collapses `\r` progress. The cut happened before `truncate_output()`, so a
+  445-character answer of a sub-agent printed with `cat()` reached the parent cut, the out store
+  and spill file kept only the cut line, and the parent reported the answer as incomplete. The
+  same cut reached `peter$py()` and job output values, knitted engine output and attached files.
+  The token budget of each view is now the only bound: text within it (about 4000 tokens for `r`)
+  reaches the model as printed. When `truncate_output()` must cut, lines over 400 characters
+  continue as 400-character pieces first (split by code points, in time linear in the line,
+  non-ASCII included), so a long line cannot leave the 40% head or the 60% tail empty; the notice
+  counts those lines, and the out store and spill file hold the same lines, every character
+  included, so `peter$out(id, lines =)` matches the notice. The helper views cut as D-348 says.
+  No option. The token benchmark replays recorded results and is unchanged.
+- Contract-visible: 04 `clean_terminal()` and `truncate_output()` rows; architecture `utils-text.R`
+  row.
+- Tests: test-utils-text.R "a cut keeps lines over 400 characters as 400-character pieces",
+  "a cut splits a long non-ASCII line in linear time", "clean_terminal() drops ANSI and OSC
+  sequences, collapses progress, keeps long lines"; test-eval-format.R "a long line within the budget reaches the model whole". Evidence:
+  progress/fixes-1.0.1/lane-I.md.
+
+## D-346 - Fixes 1.0.1 lane I local()'s code binds plain names in its own environment (2026-11-02)
+- Rule (amends D-213 and 04 `gptr_risk()`): in the code of a one-argument `local()` that is base R's
+  (not bound by the code or in the session), a plain `=`/`<-` of a name and a `for` variable bind in
+  local()'s own environment, as R does. `gptr_risk()` no longer reports them as overwrites of the
+  caller's object or as `assigned`, `code_targets()` and the checkpointer no longer predict them,
+  and `eval_assign_targets()` leaves them out of the evaluation's `assigned`, so the result no
+  longer says `~ x modified` for an object the code only read. Formerly `local({ x = 5 })` with
+  `x` in the workspace read "overwrites `x`" (level 2, 3 above `gptr.protect_size`, 4 for a
+  harness) and reported `x` modified although it was unchanged. Unchanged: `<<-`, `assign()`,
+  `list2env()`, a replacement (an environment changes by reference), `:=` and `set*()` inside
+  local(), `local(expr, envir =)`, an assignment inside `eval()`, `evalq()`, `with()` or
+  `within()` within local()'s code, and a `local` the code or the session binds still reach the
+  caller's objects, in both walkers (`eval_assign_targets()` reads the code alone, so there a
+  `local` only the session binds reads as base R's; it can only miss a same-valued reassignment,
+  as `modified` comes from the environment diff). The guard still treats names local()'s code
+  binds as bound (`q = 1` there is not base `q`).
+- Contract-visible: 04 `gptr_risk()` (the lookup of overwrites); `?gptr_risk` (`envir`).
+- Tests: test-perm-classify.R "a plain assignment in local()'s code binds in local()'s own
+  environment (D-346)"; test-eval-guard.R "eval_assign_targets finds assignments, replacements,
+  assign(), := and set*()"; test-eval-core.R "an object local()'s code only reads is not reported
+  as modified (D-346)". Evidence: progress/fixes-1.0.1/lane-I.md.
+
+## D-347 - Fixes 1.0.1 lane I Reading the trust decision is level 0 (2026-11-02)
+- Rule (amends IC-53 item 3): `gptr_trust()`'s row in `risk-functions.csv` is level 0 `read`, and
+  `by_args()` adds level 4 `control` for any `trust` other than `NULL` (a value the code computes
+  included), as for `gptr_cache()`, `gptr_scrub()` and `gptr_jobs()`. A function value
+  (`lapply(dirs, gptr_trust)`) is control, since its arguments are unknown. Formerly every call was
+  level 4, so `print(gptr::gptr_trust("."))` asked a person even in `auto`, although the function
+  returns at once when `trust` is `NULL` and only the recording path calls
+  `session_control_check()`. `?gptr_security` already names only changes to gptr's configuration.
+  `gptr_config()` and `gptr_permissions()` with no arguments keep their level 4 rows (no report
+  asked for them; their recording paths are guarded at run time).
+- Contract-visible: 04 `gptr_trust()` and IC-53 item 3; `risk-functions.csv`.
+- Tests: test-perm-classify.R "gptr's own configuration is the control category, level 4 (IC-53,
+  IC-54)" (read forms level 0, write and computed forms 4); test-perm-gate.R "control actions need
+  a person in every mode, plan included (IC-53, IC-54)" (the read form runs in `auto`). Evidence:
+  progress/fixes-1.0.1/lane-I.md.
+
+## D-348 - Fixes 1.0.1 lane I A helper view that must cut shows the head of a long line (2026-11-02)
+- Rule (amends D-345, 04 section 9.4 and architecture `utils-text.R`): the views that show text they
+  did not store (`peter$sh()`, `peter$py()`, `peter$sql()` and job prints, `peter$out()` and
+  `peter$help()` values, an `@file` block) keep every line whole when the text fits their budget;
+  when it does not, `view_lines()` first shows each line over 400 characters as its first 400 and
+  ` ...[+N chars]` (the 1.0.0 marker), then the view cuts by lines as before. After D-345 such a
+  view left out a line larger than its budget, so `peter$sh()` of one 50,000-character line and
+  `tail-line` printed only the notice and `tail-line`, `print(peter$out(id))` of it said
+  `index the value`, and a one-line minified file was `not attached`. These views do not split a
+  line into pieces as `truncate_output()` does: their notices count the lines of the value or store
+  the model indexes, which they did not make, so a piece count would point `x[a:b]` and
+  `peter$out(id, lines =)` at the wrong lines. The value and the store keep the whole line. An
+  `@file` block cut this way is marked `truncated="true"`.
+- Contract-visible: 04 section 9.4 (prints); architecture `utils-text.R` row.
+- Tests: test-bridge-sh.R "a view that must cut shows a line over 400 characters as its head
+  (D-348)"; test-tool-namespace.R "print.gptr_text() prints head and tail within the budget with a
+  notice"; test-console-repl.R "a one-line @file over the budget attaches the head of its line
+  (D-348)". Evidence: progress/fixes-1.0.1/lane-I.md.
