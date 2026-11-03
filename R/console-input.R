@@ -636,8 +636,9 @@ console_live = function() {
 }
 
 #' The live row's state for the record `rec` of a foreground run (console_live_row()): the state
-#' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds, the
-#' person's messages waiting for its session, whether a question waits (`rec$question`,
+#' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds (a
+#' direct group's since the group started, as the row passes between its children), the person's
+#' messages waiting for its session, whether a question waits (`rec$question`,
 #' console_ask_wait()), whether an r call evaluates in this process (`rec$frozen`, its call id;
 #' during a sub-agent, which runs in the parent's r call and reads keys, one of the sub-agents'),
 #' and the console's interrupt key and what it does (in RStudio, also that a typed line is the next
@@ -668,7 +669,7 @@ console_live_state = function(rec) {
     if (length(kids)) paste("sub-agent", sub("^.* (#[0-9]+)$", "\\1", label))
   fate = console_typed_fate()
   list(what = what, short = short,
-       secs = as.numeric(Sys.time()) - rec$t0,
+       secs = as.numeric(Sys.time()) - ((if (direct) group_run$group$t0) %||% rec$t0),
        queued = if (direct) character() else console_queued(s),
        question = isTRUE(rec$question), frozen = isTRUE(frozen),
        key = console_interrupt_key(), pause = console_menu_available(),

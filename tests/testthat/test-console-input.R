@@ -619,6 +619,12 @@ test_that("the live row counts its group and shows active phases without hiding 
   withr::defer(assign(runs[[1L]]$id, recs[[1L]], active))
   expect_match(console_live_state(parent)$what,
                "sub-agents 1/3 done - 1 active - 1 pending", fixed = TRUE)
+  # a direct group's row counts the group's time, not its owner's, which a later child takes over
+  # (#99 review: the clock went back from 1.2 s to 0.9 s)
+  group$t0 = as.numeric(Sys.time()) - 30
+  recs[[2L]]$t0 = as.numeric(Sys.time()) - 2
+  expect_gte(console_live_state(recs[[2L]])$secs, 30)
+  expect_lt(console_live_state(parent)$secs, 30)
   withr::local_options(cli.dynamic = TRUE)
   local_live_console()
   recs[[2L]]$what = "working"
