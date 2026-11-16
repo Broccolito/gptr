@@ -10771,6 +10771,27 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   workspace line and change line (D-356)"; perm-battery's six `huge` rows re-recorded (decision and
   level unchanged). Evidence: progress/P32.md Task 2; progress/P32/evidence/prototype/.
 
+## D-357 - P32 One size per object version (2026-11-16)
+- Rule: one store (utils-size.R) keyed by address holds class, shape, fingerprint, bytes, `about`,
+  `volatile`, the home's address and an `epoch`, text and numbers only (R4). `env_size_of(x,
+  home, facts, fresh)` returns it while class, shape and fingerprint match, else walks once and
+  replaces it; a hit or walk lands in the current generation, the end of a sized snapshot drops
+  the older one. A walk that met a non-top environment, a closure or an unexpanded compact
+  sequence is volatile, and so is a size of an older epoch: served only to a snapshot (`fresh =
+  FALSE`) of its home. Readers: `env_snap_rows()`, `risk_binding_leaf()` and `dot_facts()`
+  (`fresh = TRUE`); `previous` and `ck$snap` are gone.
+- Rule (forget): `env_size_forget()` on exit of `tool_execute_frame()`, `nested_execute()`,
+  `mcp_serve_r()` and `mcp_serve_exec()`'s direct run drops, for `r`, the values bound to
+  `ckpt_predict()`'s `modify` and `super` names (`envir` up to a top-level environment), and
+  starts an epoch after an `unknown` target, a by-reference call (`code_targets()$inplace`: "by
+  reference" rows and `[` with `:=`; `byref` unchanged) or a tool not read-only other than write,
+  edit, sh, bg, script, jobs (no code in this R process).
+- Contract-visible: `code_targets()`/`ckpt_predict()` gain `inplace` (IC-31); the gate's size is
+  stored (`gptr.protect_size` row): stale after an in-place edit no call shows as by reference
+  (console `:=` on a nested table; a user or unlisted function editing by reference). T11.
+- Tests: utils-size (6), env-snapshot (3), agent-dispatch (3), copy-ckpt (1), perm-classify,
+  ckpt-objects (`inplace`); perm-battery unchanged. Evidence: progress/P32.md Task 3.
+
 ## D-363 - P32 Decision battery: condensed T03 inputs, the 13-million-string object in one mode (2026-11-16)
 - Rule: `t03_r2` and `t03_r3` are condensed T03-shaped codes (the dead branch that would build
   `raw`, setDTthreads, fread, rm, setorder by reference, fwrite and writeLines into the project),
@@ -10800,3 +10821,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: dev/bench/tests test-perf "the T03 workload passes the checks of T03's request inputs",
   test-common "bench_args() parses --check, --update, --full and --only". Evidence:
   progress/P32.md Task 1.
+
+## D-TBD-T3 - P32 T3: an epoch, not an empty store; PERF-4; describe; layering (2026-11-16)
+- Rule (epoch): where the plan empties the store, a new epoch makes every stored size
+  snapshot-only (as main's `previous` reuse) until the gate or a dot walks it. Emptying made the
+  next snapshot walk the whole workspace after each `:=`, `setorder()` or write call, where main
+  walked nothing; the gate stays as fresh as main's. Write, edit, sh, bg, script and jobs start no
+  epoch: they run no code in this R process.
+- Rule (PERF-4): "0 walks of an unchanged binding" cannot hold: T03's request 2 calls
+  `data.table::setorder()`, so request 3's gate walks the names it overwrites (`raw` and, native,
+  7 small objects) once. `a = raw$t[[2]]; set(a, ...)` must count, and no code shows that
+  `sample_summary` aliases nothing.
+- Rule (describe): `peter(raw, ...)` walks `raw` once in `gptr_describe()` (env-describe.R, a
+  not-reader by the plan); its dot facts walk none.
+- Rule (layering): utils-size.R (L0) finds `env_snap_leaf()` and `ckpt_predict()` with `ns_fun()`,
+  as doc-replay.R finds gptr-tailor.R. ckpt-rewind.R needed no change.
+- Contract-visible: none beyond D-357. Tests: as D-357. Evidence: progress/P32.md Task 3.

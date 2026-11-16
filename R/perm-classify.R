@@ -2283,7 +2283,8 @@ risk_binding_info = function(name, envir, inherits) {
       if (isTRUE(rlang::env_binding_are_lazy(e, name))) {
         return(list(class = "<promise>", bytes = NA_real_))
       }
-      return(risk_binding_leaf(get(name, envir = e, inherits = FALSE), e))
+      return(risk_binding_leaf(get(name, envir = e, inherits = FALSE), e,
+                               env_snap_facts(list(envir = e), name)))
     }
     if (!inherits || identical(e, globalenv())) break
     e = parent.env(e)
@@ -2291,11 +2292,11 @@ risk_binding_info = function(name, envir, inherits) {
   NULL
 }
 
-#' Class and bytes of an object (the closure-free leaf; the workspace's size rule), and whether
-#' it is a harness
+#' Class and bytes of an object (the closure-free leaf; the workspace's size, walked again when
+#' volatile, D-357), and whether it is a harness
 #' @noRd
-risk_binding_leaf = function(obj, home) {
-  list(class = class(obj)[1L], bytes = env_snap_size(obj, home),
+risk_binding_leaf = function(obj, home, facts) {
+  list(class = class(obj)[1L], bytes = env_size_of(obj, home, facts, fresh = TRUE),
        harness = inherits(obj, "gptr_harness"))
 }
 
@@ -2583,7 +2584,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   sizes = numeric()
   tg = list(assign = character(), modify = character(), byref = character(),
             remove = character(), super = character(), files = character(),
-            unknown = character(), process = character())
+            unknown = character(), process = character(), inplace = character())
   calls = list(fn = character(), package = character(), line = integer())
   values = character()
   # Paths held in names: every value a name may hold, NA for one the code computes. A
@@ -2723,8 +2724,9 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     slots(name, a, e, ctx)
     if (is.null(row)) return(add(ctx, label, name, 1L, "unlisted"))
     if (by_args(name, row, a, as.list(e)[-1L], ctx, label)) return(invisible())
-    if (startsWith(row$note, "by reference") && name != ":=" && is.symbol(e[[2L]])) {
-      add_tg("byref", as.character(e[[2L]]))
+    if (startsWith(row$note, "by reference")) {
+      add_tg("inplace", name)
+      if (name != ":=" && is.symbol(e[[2L]])) add_tg("byref", as.character(e[[2L]]))
     }
     if (name %in% risk_unknown_funs) add_tg("unknown", paste0(name, "()"))
     lk = risk_lookups[[name]]
@@ -3161,9 +3163,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
         for (nm in setdiff(names(x), "")) note_assign(as.name(nm), "assign", ctx, x[[nm]])
       }
     }
-    if (r$name == "[" && is.symbol(a[[1L]]) && any(vapply(a, function(x) {
+    if (r$name == "[" && any(vapply(a, function(x) {
       is.call(x) && identical(x[[1L]], as.name(":="))
-    }, logical(1)))) add_tg("byref", as.character(a[[1L]]))
+    }, logical(1)))) {
+      add_tg("inplace", "[")
+      if (is.symbol(a[[1L]])) add_tg("byref", as.character(a[[1L]]))
+    }
     if (r$name %in% c("parse", "str2lang", "str2expression")) {
       txt = if (r$name == "parse") a$text else a[[1L]]
       ex = if (is.character(txt)) tryCatch(parse(text = txt, keep.source = FALSE),
@@ -3310,9 +3315,10 @@ risk_plan_members = c("read", "grep", "find", "ls", "help", "search", "describe"
 
 #' Static targets of R code (the parse walk shared with the checkpointer, IC-31)
 #'
-#' Returns list(assign, modify, byref, remove, super, files, unknown, process, calls) where
-#' `calls` is a data frame (fn, package, line) of every call head and function value, and an
-#' additive `parse_error` flag. Never evaluates the code.
+#' Returns list(assign, modify, byref, remove, super, files, unknown, process, inplace, calls)
+#' where `inplace` names the by-reference functions the code calls (and `[` holding `:=`), whatever
+#' they edit, `calls` is a data frame (fn, package, line) of every call head and function value,
+#' and an additive `parse_error` flag. Never evaluates the code.
 #' @noRd
 code_targets = function(code) {
   parsed = risk_parse(code)

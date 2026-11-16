@@ -204,7 +204,7 @@ test_that("ckpt_predict() reduces code_targets() to the checkpointers' fields (I
   skip_on_cran()
   tg = ckpt_predict("x[1] = 0; y = f(y); write.csv(d, 'out.csv'); rm(z)")
   expect_named(tg, c("assign", "modify", "byref", "remove", "super", "files", "unknown",
-                     "process"))
+                     "process", "inplace"))
   expect_true("x" %in% tg$modify)
   expect_true("y" %in% tg$assign)
   expect_true("z" %in% tg$remove)

@@ -143,3 +143,124 @@ test_that("a sampled walk leaves the object in place (R4)", {
   expect_no_copy(setup, "invisible(env_snap_size(c(big, 'x'), shared = big))", "big[1] = 'z'",
                  label = "the current value after a sampled image is sized against it")
 })
+
+# ---- one size per object version (P32 T3, D-357) -------------------------------------------------
+
+# The addresses of what each plain walk (env_snap_size() without `shared`) sized, in order
+local_walks = function(.env = parent.frame()) {
+  log = new.env(parent = emptyenv())
+  log$a = character()
+  size = env_snap_size
+  local_mocked_bindings(env_snap_size = function(x, home = NULL, shared = NULL, ...) {
+    if (is.null(shared)) log$a = c(log$a, rlang::obj_address(x))
+    size(x, home, shared, ...)
+  }, .env = .env)
+  function() log$a
+}
+
+test_that("a size is walked once per object version, whatever reads it (D-357)", {
+  walked = local_walks()
+  e = new.env()
+  e$x = lapply(1:3, function(i) as.numeric(seq_len(1000)))
+  b = env_size_of(e$x, e)
+  expect_identical(b, env_snap_size(e$x))
+  expect_identical(env_size_of(e$x, e), b)
+  expect_identical(env_size_of(e$x, NULL, fresh = TRUE), b)
+  expect_length(walked(), 2L)
+  evalq(x[[1]] <- NULL, e)
+  expect_lt(env_size_of(e$x, e), b)
+  e$v = as.numeric(1:100)
+  env_size_of(e$v, e)
+  evalq(dim(v) <- c(10L, 10L), e)
+  env_size_of(e$v, e)
+  evalq(class(v) <- "thing", e)
+  env_size_of(e$v, e)
+  e$x = lapply(1:3, function(i) as.numeric(seq_len(1000)))
+  env_size_of(e$x, e)
+  expect_length(walked(), 7L)
+})
+
+test_that("an environment, an R6 object, a closure and 1:1e6 are walked at every gate (D-357)", {
+  root = local_project()
+  e = new.env()
+  e$cache = new.env(parent = emptyenv())
+  e$cache$d = numeric(10)
+  e$held = list(env = e$cache, v = numeric(10))
+  e$box = new.env(parent = emptyenv())
+  e$box$.__enclos_env__ = list2env(list(self = e$box), parent = baseenv())
+  class(e$box) = c("Box", "R6")
+  e$acc = local({
+    v = numeric(10)
+    function() v
+  }, envir = new.env(parent = baseenv()))
+  e$x = 1:1e6
+  nms = c("cache", "held", "box", "acc", "x")
+  code = paste(nms, "= NULL", collapse = "; ")
+  walked = local_walks()
+  for (i in 1:2) gptr_risk(code, envir = e, root = root)
+  s = env_snapshot(e)
+  addr = vapply(nms, function(nm) rlang::obj_address(get(nm, envir = e)), "")
+  expect_identical(vapply(addr, function(a) sum(walked() == a), 0L), stats::setNames(rep(2L, 5L),
+                                                                                    nms))
+  expect_false(anyNA(s$bytes))
+  e$cache$d = numeric(1e5)
+  r = gptr_risk("cache = NULL", envir = e, root = root)
+  expect_gt(r$sizes[["cache"]], 8e5)
+})
+
+test_that("raw = f(raw) walks the new raw once and the next calls never (D-357)", {
+  local_project()
+  home = new.env()
+  home$raw = list(ids = paste0("id", 1:2e4), v = as.numeric(1:2e4))
+  fake = local_fake_provider(list(
+    fake_tool("r", code = "raw = lapply(raw, rev)"), "done",
+    fake_tool("r", code = "n = length(raw$ids)"), fake_tool("r", code = "raw = raw"), "done"))
+  walked = local_walks()
+  s = peter("Reverse.", model = fake, mode = "auto", envir = home)
+  expect_identical(sum(walked() == rlang::obj_address(home$raw)), 1L)
+  peter(s, "Count.")
+  expect_identical(home$n, 20000L)
+  expect_identical(sum(walked() == rlang::obj_address(home$raw)), 1L)
+})
+
+test_that("a session opened on a loaded object walks it once before its first call (D-357)", {
+  local_project()
+  home = new.env()
+  home$big = paste0("s", 1:5e4)
+  a0 = rlang::obj_address(home$big)
+  fake = local_fake_provider(list(fake_tool("r", code = "big = toupper(big)"), "done"))
+  walked = local_walks()
+  peter("Upper.", model = fake, mode = "auto", envir = home)
+  expect_identical(sum(walked() == a0), 1L)
+})
+
+test_that("peter(raw, ...) after a snapshot walks raw only to describe it (D-357)", {
+  raw = list(ids = paste0("id", 1:2e4))
+  s = env_snapshot(environment())
+  fake = local_fake_provider(list("done"))
+  walked = local_walks()
+  expect_identical(dot_facts(raw)$bytes, s$bytes[s$name == "raw"])
+  expect_identical(sum(walked() == rlang::obj_address(raw)), 0L)
+  # gptr_describe() sizes for display on request, one walk outside the store
+  peter(raw, "Describe.", model = fake, .run = FALSE)
+  expect_identical(sum(walked() == rlang::obj_address(raw)), 1L)
+})
+
+test_that("the size store holds text and numbers only (R4, D-357)", {
+  env_size_store()
+  e = new.env()
+  e$l = list(a = letters, f = function() 1)
+  e$env = new.env()
+  e$n = 1:1e6
+  env_snapshot(e)
+  env_size_of(e$l, e, fresh = TRUE)
+  entries = c(as.list(the$size_cur), as.list(the$size_old))
+  expect_length(entries, 4L)
+  for (en in entries) {
+    expect_named(en, c("class", "shape", "fp", "bytes", "about", "volatile", "home", "epoch"))
+    expect_true(all(vapply(en, function(v) {
+      length(v) == 1L && (is.character(v) || is.double(v) || is.logical(v)) &&
+        is.null(attributes(v))
+    }, NA)))
+  }
+})

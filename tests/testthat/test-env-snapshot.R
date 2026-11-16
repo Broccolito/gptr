@@ -51,15 +51,45 @@ test_that("a binding whose methods fail is listed with its class and shape \"?\"
   expect_false(is.na(s$address))
 })
 
-test_that("env_snapshot reuses sizes from the previous snapshot", {
+test_that("env_snapshot reuses the stored size of an unchanged object (D-357)", {
   e = new.env()
   e$x = 1:10 + 0
-  s1 = env_snapshot(e)
-  s1$bytes[s1$name == "x"] = 12345
-  s2 = env_snapshot(e, previous = s1)
+  env_snapshot(e)
+  key = rlang::obj_address(e$x)
+  entry = the$size_old[[key]]
+  entry$bytes = 12345
+  assign(key, entry, envir = the$size_old)
+  s2 = env_snapshot(e)
   expect_equal(s2$bytes[s2$name == "x"], 12345)
-  expect_error(env_snapshot(e, previous = "no"), class = "gptr_error_invalid_argument")
   expect_error(env_snapshot(list()), class = "gptr_error_invalid_argument")
+})
+
+test_that("10,001 bindings are sized once across two snapshots (D-357)", {
+  e = new.env()
+  for (i in 1:10001) assign(sprintf("o%05d", i), i + 0, envir = e)
+  n = local_calls("env_snap_size")
+  env_snapshot(e)
+  env_snapshot(e)
+  expect_identical(n()[["env_snap_size"]], 10001L)
+})
+
+test_that("a removed object's size lives two snapshots; promises stay unsized (D-357)", {
+  e = new.env()
+  e$a = numeric(10)
+  e$b = numeric(20)
+  delayedAssign("lazy", stop("forced!"), assign.env = e)
+  makeActiveBinding("act", function() stop("called!"), e)
+  s = env_snapshot(e)
+  expect_identical(is.na(s$bytes), c(FALSE, TRUE, FALSE, TRUE))
+  key = rlang::obj_address(e$b)
+  env_size_of(e$b, e)
+  rm("b", envir = e)
+  env_snapshot(e)
+  expect_false(is.null(the$size_old[[key]]))
+  s = env_snapshot(e)
+  expect_null(the$size_cur[[key]] %||% the$size_old[[key]])
+  expect_identical(s$name[is.na(s$bytes)], c("act", "lazy"))
+  expect_true(rlang::env_binding_are_lazy(e, "lazy"))
 })
 
 test_that("a compact integer sequence counts its state, a changed one its elements (D-247)", {
@@ -152,7 +182,7 @@ test_that("a sampled size is marked about in its row, workspace line and change 
   e$y = letters
   s1 = env_snapshot(e)
   expect_identical(s1$about, c(TRUE, FALSE))
-  expect_identical(env_snapshot(e, previous = s1)$about, c(TRUE, FALSE))
+  expect_identical(env_snapshot(e)$about, c(TRUE, FALSE))
   expect_identical(workspace_lines(s1),
                    c("x  character  length 10,000  about 79 KB", "y  character  length 26  1.7 KB"))
   expect_identical(changes_lines(list(added = "x"), s1, character()),
@@ -164,7 +194,7 @@ test_that("a snapshot re-sizes a list edited in place (its fingerprint changed)"
   e$l = list(a = 1, b = 2)
   s1 = env_snapshot(e)
   evalq(l$b <- numeric(1e5), e)
-  s2 = env_snapshot(e, previous = s1)
+  s2 = env_snapshot(e)
   expect_identical(s2$address, s1$address)
   expect_gt(s2$bytes, 8e5)
 })

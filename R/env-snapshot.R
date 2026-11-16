@@ -117,25 +117,24 @@ env_snap_facts = function(box, name) {
            error = function(e) env_snap_bare(get(name, envir = box$envir, inherits = FALSE)))
 }
 
-#' Snapshot rows; `sizes = FALSE` skips env_snap_size() (the evaluator needs no sizes)
+#' Snapshot rows; `sizes = FALSE` skips the sizes (the evaluator needs none)
 #' `envir` is held only in a box binding reset on exit: a loop in a frame binding a function-frame
 #' home left it referenced (tracemem), so the loop is in env_snap_rows().
 #' @noRd
-env_snapshot_rows = function(envir, previous = NULL, sizes = TRUE) {
+env_snapshot_rows = function(envir, sizes = TRUE) {
   box = new.env(parent = emptyenv())
   box$envir = envir
   on.exit({
     box$envir = NULL
   }, add = TRUE)
-  env_snap_rows(box, previous, sizes)
+  env_snap_rows(box, sizes)
 }
 
-#' The snapshot loop; addresses objects by name through box$envir
+#' The snapshot loop; addresses objects by name through box$envir; sizes from env_size_of()
 #' Fills vectors and builds the data frame once (cell assignment copied a column: quadratic).
 #' @noRd
-env_snap_rows = function(box, previous, sizes) {
+env_snap_rows = function(box, sizes) {
   force(box)
-  force(previous)
   force(sizes)
   # Named `envir =`: a positional ls(envir) runs tryCatch() on it and pins a frame home (tracemem)
   nms = setdiff(ls(envir = box$envir, all.names = TRUE, sorted = TRUE),
@@ -154,7 +153,6 @@ env_snap_rows = function(box, previous, sizes) {
     kind[act] = "active"
     kind[lazy & !act] = "promise"
   }
-  prev = if (is.null(previous)) rep(NA_integer_, n) else match(nms, previous$name)
   for (i in which(kind == "value")) {
     f = env_snap_facts(box, nms[i])
     address[i] = f$address
@@ -162,48 +160,39 @@ env_snap_rows = function(box, previous, sizes) {
     shape[i] = f$shape
     fp[i] = f$fp
     if (!sizes || is.na(f$address)) next
-    j = prev[i]
-    reuse = !is.na(j) && identical(previous$address[j], f$address) &&
-      identical(previous$class[j], f$class) && identical(previous$shape[j], f$shape) &&
-      identical(previous$fp[j], f$fp)
-    b = if (reuse) {
-      previous$bytes[j]
-    } else {
-      env_snap_size(get(nms[i], envir = box$envir, inherits = FALSE), box$envir)
-    }
+    b = env_size_of(get(nms[i], envir = box$envir, inherits = FALSE), box$envir, f)
     bytes[i] = b
-    about[i] = isTRUE(if (reuse) previous$about[j] else attr(b, "about"))
+    about[i] = isTRUE(attr(b, "about"))
   }
   data.frame(name = nms, kind = kind, address = address, class = cls, bytes = bytes,
              about = about, shape = shape, fp = fp, stringsAsFactors = FALSE)
 }
 
 #' Copy-safe snapshot of an environment, forcing no promise and calling no active binding (R4)
-#' One row per binding: name, kind (value, promise, active), address, class, bytes (reused from
-#' `previous` while address, class, shape and fp hold), about (bytes is an estimate), shape, fp;
-#' missing arguments are `<missing>`.
+#' One row per binding: name, kind (value, promise, active), address, class, bytes (one walk per
+#' object version, env_size_of()), about (bytes is an estimate), shape, fp; missing arguments are
+#' `<missing>`. A sized snapshot ages the size store (env_size_age()).
 #' @noRd
-env_snapshot = function(envir, previous = NULL) {
+env_snapshot = function(envir) {
   check_env(envir, "envir")
-  if (!is.null(previous) && !is.data.frame(previous)) {
-    gptr_abort("`previous` must be a snapshot data frame or NULL.", "invalid_argument",
-               arg = "previous", expected = "a data frame or NULL")
-  }
-  env_snapshot_rows(envir, previous, sizes = TRUE)
+  snap = env_snapshot_rows(envir)
+  env_size_age()
+  snap
 }
 
 #' Snapshot of what code in `envir` reads: an overlay's own rows, then each lower overlay's and
 #' the first other environment's (binding_env()), a nearer binding shadowing a farther; column
 #' `own` is TRUE for a binding of `envir` itself (D-252)
 #' @noRd
-env_view_snapshot = function(envir, previous = NULL, sizes = TRUE) {
+env_view_snapshot = function(envir, sizes = TRUE) {
   check_env(envir, "envir")
-  snap = env_snapshot_rows(envir, previous, sizes)
+  snap = env_snapshot_rows(envir, sizes)
   n = nrow(snap)
   while (!is.null(attr(envir, "gptr_overlay", exact = TRUE))) {
     envir = parent.env(envir)
-    snap = rbind(snap, env_snapshot_rows(envir, previous, sizes))
+    snap = rbind(snap, env_snapshot_rows(envir, sizes))
   }
+  if (sizes) env_size_age()
   # Dropped first: `[.data.frame` left this frame referenced, pinning a function-frame home (R2)
   envir = NULL
   snap$own = seq_len(nrow(snap)) <= n
@@ -362,7 +351,7 @@ env_block_workspace = function(ctx, budget) {
   mode = env_context_mode(ctx)
   envir = env_home(ctx)
   if (identical(mode, "none") || is.null(envir)) return(NULL)
-  snap = env_view_snapshot(envir, env_memory(ctx)$snapshot)
+  snap = env_view_snapshot(envir)
   env_remember(ctx, snap)
   lines = if (identical(mode, "names")) {
     env_names_lines(snap, budget)
@@ -393,7 +382,7 @@ env_block_changes = function(ctx, budget) {
   if (identical(env_context_mode(ctx), "none") || is.null(envir)) return(NULL)
   mem = env_memory(ctx)
   old = mem$snapshot
-  new = env_view_snapshot(envir, old)
+  new = env_view_snapshot(envir)
   ran = user_expr_log(since = mem$since)
   env_remember(ctx, new)
   d = if (is.null(old)) {
@@ -488,7 +477,7 @@ env_eval_service = function(code, envir, ...) {
 env_on_agent_end = function(event, ctx) {
   envir = env_home(ctx)
   old = env_memory(ctx)$snapshot
-  if (!is.null(envir) && !is.null(old)) env_remember(ctx, env_view_snapshot(envir, old))
+  if (!is.null(envir) && !is.null(old)) env_remember(ctx, env_view_snapshot(envir))
   NULL
 }
 
@@ -500,7 +489,7 @@ env_on_tree = function(event, ctx) {
   envir = env_home(ctx)
   mem = env_memory(ctx)
   if (!identical(event$restore, "workspace") && !is.null(envir) && !is.null(mem$snapshot)) {
-    mem$snapshot = env_view_snapshot(envir, mem$snapshot)
+    mem$snapshot = env_view_snapshot(envir)
   }
   NULL
 }

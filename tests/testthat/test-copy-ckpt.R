@@ -185,6 +185,16 @@ test_that("gptr_preimage() is a leaf (R4)", {
                  label = "gptr_preimage() default method")
 })
 
+test_that("a size kept in the size store leaves the object editable in place (R4, D-357)", {
+  ns = paste("ns = asNamespace('gptr'); env_snapshot = ns$env_snapshot; gptr_risk = ns$gptr_risk",
+             "env_size_of = ns$env_size_of", sep = "; ")
+  expect_no_copy(c("big = runif(5e6)", ns),
+                 c("invisible(env_snapshot(globalenv()))", "invisible(env_snapshot(globalenv()))",
+                   "invisible(gptr_risk('big = 1', envir = globalenv(), root = tempdir()))",
+                   "invisible(env_size_of(big, NULL, fresh = TRUE))"),
+                 label = "two snapshots, the gate and a dot fact through the size store")
+})
+
 test_that("gptr_checkpoints() reads only", {
   expect_no_copy(ckpt_e2e_setup("n = length(big)"),
                  c("s = peter('count', model = fake, mode = 'auto', envir = globalenv())",

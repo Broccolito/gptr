@@ -1343,6 +1343,10 @@ test_that("code_targets() reports the static targets of G7's walk without evalua
   t = code_targets(paste("dt[, b := a * 2]; data.table::set(dt2, 1L, 'a', 0);",
                          "setnames(dt3, 'a', 'b')"))
   expect_setequal(t$byref, c("dt", "dt2", "dt3"))
+  expect_setequal(t$inplace, c("[", ":=", "set", "setnames"))
+  t = code_targets("raw$t[[1]][, x := 1]; data.table::set(raw$t[[2]], j = 'y', value = 1)")
+  expect_identical(t$byref, character())
+  expect_setequal(t$inplace, c("[", ":=", "set"))
   t = code_targets("rm(a, 'b'); rm(list = c('c1', 'c2')); rm(list = ls())")
   expect_setequal(t$remove, c("a", "b", "c1", "c2"))
   expect_identical(t$unknown, "rm(list = ls())")
@@ -1369,7 +1373,7 @@ test_that("code_targets() lists every call with its package and line (IC-31)", {
   expect_identical(t$calls$package, c(NA, NA, NA, NA, "stats"))
   expect_identical(t$calls$line, c(1L, 2L, 2L, 3L, 3L))
   expect_named(code_targets("x"), c("assign", "modify", "byref", "remove", "super", "files",
-                                    "unknown", "process", "calls", "parse_error"))
+                                    "unknown", "process", "inplace", "calls", "parse_error"))
   expect_true(code_targets("not valid (")$parse_error)
 })
 

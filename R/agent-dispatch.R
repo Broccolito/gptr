@@ -130,8 +130,9 @@ tool_call_hook = function(run, call, risk = NULL) {
 }
 
 #' Execute a tool; the frame marks the running tool for run_current() (`.gptr_tool_run`)
-#' The control tokens of an approval (IC-53 item 3) are cleared when the call ends; `st$exec_t0`
-#' marks the start of execute() for tool_interrupted().
+#' The control tokens of an approval (IC-53 item 3) are cleared when the call ends, and the sizes
+#' it may have changed are forgotten (env_size_forget()); `st$exec_t0` marks the start of execute()
+#' for tool_interrupted().
 #' @noRd
 tool_execute_frame = function(run, call, ctx, st = NULL) {
   .gptr_tool_run = run
@@ -142,6 +143,7 @@ tool_execute_frame = function(run, call, ctx, st = NULL) {
     run$signal$control = character()
   }, add = TRUE)
   if (!is.null(st)) st$exec_t0 = reactor_now()
+  on.exit(env_size_forget(call, run_eval_env(run)), add = TRUE)
   tool_run(call$tool, call$input, ctx, call$name)
 }
 
@@ -508,13 +510,15 @@ nested_next_id = function(run, outer_id) {
 }
 
 #' Execute a nested call between its tool_execution_start and tool_execution_end
-#' on.exit() emits the end on an interrupt too, so the events stay paired (INFRA-10).
+#' on.exit() forgets the sizes it may have changed (env_size_forget()) and emits the end on an
+#' interrupt too, so the events stay paired (INFRA-10).
 #' @noRd
 nested_execute = function(run, call, ctx) {
   t0 = reactor_now()
   done = FALSE
   run_emit(run, "tool_execution_start", tool_call_id = call$id, tool_name = call$name,
            input = call$input)
+  on.exit(env_size_forget(call, run_eval_env(run)), add = TRUE)
   on.exit(if (!done) {
     tryCatch(run_emit(run, "tool_execution_end", tool_call_id = call$id, tool_name = call$name,
                       is_error = TRUE, elapsed = reactor_now() - t0,

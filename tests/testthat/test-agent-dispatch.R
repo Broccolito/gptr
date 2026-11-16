@@ -1215,3 +1215,79 @@ test_that("nested sh, bg, script, write and edit calls meet every rules-like pol
   expect_identical(readLines(file.path(root, "notes.md")), "a")
   expect_identical(sum(ui$log$method == "permission"), 0L)
 })
+
+# ---------------------------------------------------------------- the size store (P32 T3, D-357)
+# No checkpointer snapshot sizes again (checkpoint = "off"), so the store shows what a call forgot.
+
+test_that("after a by-reference call, source() or a plugin's tool the gate walks again (D-357)", {
+  local_project()
+  local_permissive()
+  local_gptr_options(checkpoint = "off")
+  home = new.env(parent = globalenv())
+  home$keep = numeric(10)
+  local_tool("plug", function(input, ctx) "ran")
+  local_tool("look", function(input, ctx) "read", annotations = list(read_only = TRUE))
+  codes = c(source = "source(exprs = expression(1))")
+  if (requireNamespace("data.table", quietly = TRUE)) {
+    home$raw = list(t = list(data.table::data.table(a = 1:3), data.table::data.table(b = 1:3)))
+    codes = c(codes, index = "raw$t[[1]][, x := 1]",
+              set = "data.table::set(raw$t[[1]], j = 'y', value = 2)",
+              alias = "a = raw$t[[2]]\ndata.table::set(a, j = 'z', value = 3)")
+  }
+  runs = c(list(keep = list(tc("r", list(code = "y = sum(keep)")), tc("look"),
+                            tc("write", list(path = "a.txt", content = "a"))),
+                plug = list(tc("plug"))),
+           lapply(codes, function(code) list(tc("r", list(code = code)))))
+  n = local_calls("env_snap_size")
+  walks = integer()
+  for (nm in names(runs)) {
+    env_size_of(home$keep, home)
+    dispatch(test_session(home = home), runs[[nm]])
+    n0 = n()[["env_snap_size"]]
+    env_size_of(home$keep, home)
+    env_size_of(home$keep, home, fresh = TRUE)
+    walks[[nm]] = n()[["env_snap_size"]] - n0
+  }
+  # a snapshot keeps the size, as main's `previous` did; the gate walks once
+  expect_identical(walks, stats::setNames(as.integer(names(runs) != "keep"), names(runs)))
+  if (!is.null(home$raw)) {
+    expect_identical(lapply(home$raw$t, names), list(c("a", "x", "y"), c("b", "z")))
+  }
+})
+
+test_that("an error or an interrupt inside an in-place loop still forgets its target (D-357)", {
+  local_permissive()
+  local_gptr_options(checkpoint = "off")
+  n = local_calls("env_size_forget")
+  home = new.env()
+  loop = "for (k in names(parts)) {\n  parts[[k]] = c(parts[[k]], 1)\n  if (k == 'b') %s\n}"
+  for (stop_with in c("stop('boom')", "rlang::interrupt()")) {
+    home$parts = list(a = numeric(200), b = numeric(200))
+    a0 = rlang::obj_address(home$parts)
+    env_size_of(home$parts, home)
+    code = sprintf(loop, stop_with)
+    tryCatch(dispatch(test_session(home = home), list(tc("r", list(code = code)))),
+             interrupt = function(cnd) NULL)
+    expect_identical(lengths(home$parts), c(a = 201L, b = 201L))
+    expect_identical(rlang::obj_address(home$parts), a0)
+    expect_null(the$size_cur[[a0]] %||% the$size_old[[a0]])
+  }
+  expect_identical(n()[["env_size_forget"]], 2L)
+})
+
+test_that("a nested peter$ call forgets as a call of its own (D-357)", {
+  local_permissive()
+  local_gptr_options(checkpoint = "off")
+  home = new.env()
+  home$keep = numeric(10)
+  local_tool("inner", function(input, ctx) "x")
+  local_tool("outer", function(input, ctx) {
+    dispatch_nested("inner", json_obj(), ctx)
+    "ok"
+  }, annotations = list(read_only = TRUE))
+  env_size_of(home$keep, home)
+  dispatch(test_session(home = home), list(tc("outer")))
+  n = local_calls("env_snap_size")
+  env_size_of(home$keep, home, fresh = TRUE)
+  expect_identical(n()[["env_snap_size"]], 1L)
+})

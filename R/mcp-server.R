@@ -299,6 +299,8 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     call$approved_level = as.integer((d$risk %||% call$risk)$level %||% 2L)
     mcp_serve_r(call, env, run, s, ctx)
   } else if (is.null(st)) {
+    # nothing follows the tool here (no checkpoint tokens): forget at this frame's exit
+    on.exit(env_size_forget(call, env), add = TRUE)
     tool_run(spec, call$input, ctx, name)
   } else {
     tool_execute_frame(run, call, ctx)
@@ -307,10 +309,11 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
 }
 
 #' Evaluate the served r call `call` in `env` through the eval.r service (the evaluator kind,
-#' IC-69). Mark the running tool on this call stack, as tool_execute_frame() does, so gptr_return()
-#' and nested calls belong to the session whose MCP token authorized this evaluation, and bind the
-#' r tool's marker (`gptr_r_call`, ctx `ctx`) with `call` as the run's tool call, so nested
-#' `peter$` calls pass dispatch_nested() as the loop's `r` calls do; with no pump the idle gate
+#' IC-69); at exit forget the sizes it may have changed (env_size_forget()). Mark the running tool
+#' on this call stack, as tool_execute_frame() does, so gptr_return() and nested calls belong to
+#' the session whose MCP token authorized this evaluation, and bind the r tool's marker
+#' (`gptr_r_call`, ctx `ctx`) with `call` as the run's tool call, so nested `peter$` calls pass
+#' dispatch_nested() as the loop's `r` calls do; with no pump the idle gate
 #' decides each first (the marker's `gate`, mcp_nested_gate()). During a run its plots are drawn
 #' and its printed output shown as the loop's `r` tool does ("auto", tee for a depth-0 run with a
 #' human; P28 Task 31), else offscreen and silent (#42).
@@ -319,6 +322,7 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
   input = call$input
   .gptr_tool_run = run
   force(.gptr_tool_run)
+  on.exit(env_size_forget(call, env), add = TRUE)
   gptr_r_call = r_call_new(ctx)
   if (!mcp_pumped(run)) {
     sid = if (!is.null(session)) session_data(session)$id

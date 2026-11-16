@@ -163,8 +163,10 @@ perf_p32_rows = function(gate, m, n) {
       row("plain walks of raw's version made by request 1", m[["walks_v1"]], 1, "=="),
       row("plain walks of raw's version made by raw$note = \"x\"", m[["walks_v2"]], 1, "=="),
       row("shared walks of raw's held version", m[["shared_v1"]], 1),
-      row(sprintf("request 1 wall s at %d (bar set in T3)", n), m[["wall_create"]]),
-      row(sprintf("raw$note = \"x\" wall s at %d (bar set in T3)", n), m[["wall_modify"]])),
+      # bars: twice T3's medians at 300 tables (P32 progress, Task 3)
+      row(sprintf("request 1 wall s at %d", n), m[["wall_create"]], if (n == 300L) 3.7 else NA),
+      row(sprintf("raw$note = \"x\" wall s at %d", n), m[["wall_modify"]],
+          if (n == 300L) 1.1 else NA)),
     "PERF-7" = rbind(
       row("scans per ten-call writing request, 600 entries", m[["scans_ten_600"]], 4),
       row("scan s per ten-call request less two scans, max of 0 to 1,500 entries",

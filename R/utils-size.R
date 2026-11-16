@@ -15,10 +15,11 @@
 #' current value) the parts and strings `shared` reaches count 0. Long lists and environments are
 #' sampled (env_size_items()); past 100 levels or ten budgets a part counts object.size(). Past
 #' env_size_strings_max strings a walk samples each character vector's strings: the size is then
-#' an estimate, at or above the truth in expectation, with attribute `about` (TRUE).
+#' an estimate, at or above the truth in expectation, with attribute `about` (TRUE). The walk
+#' leaves `st$volatile` TRUE when it met a non-top environment, a closure or an unexpanded compact
+#' sequence (env_size_of()).
 #' @noRd
-env_snap_size = function(x, home = NULL, shared = NULL) {
-  st = new.env(parent = emptyenv())
+env_snap_size = function(x, home = NULL, shared = NULL, st = new.env(parent = emptyenv())) {
   st$seen = new.env(hash = TRUE, parent = emptyenv())
   st$s7 = new.env(hash = TRUE, parent = emptyenv())
   st$cls = FALSE
@@ -46,6 +47,87 @@ env_snap_size = function(x, home = NULL, shared = NULL) {
   b
 }
 
+#' A new size store (D-357): two generations of entries by object address, each the class, shape
+#' and fingerprint the size was taken at, the bytes, `about`, `volatile`, the address of the home
+#' it was taken in and the store's `epoch` then; text and numbers only, never a reference (R4)
+#' @noRd
+env_size_store = function() {
+  the$size_cur = new.env(hash = TRUE, parent = emptyenv())
+  the$size_old = new.env(hash = TRUE, parent = emptyenv())
+  the$size_epoch = 0
+}
+
+on_load(env_size_store())
+
+#' End of a sized snapshot: entries neither read nor written since the one before are dropped
+#' @noRd
+env_size_age = function() {
+  the$size_old = the$size_cur
+  the$size_cur = new.env(hash = TRUE, parent = emptyenv())
+}
+
+#' Bytes of x (env_snap_size()) walked once per version (D-357): the stored size while the
+#' address, class, shape and fingerprint (`facts`, env_snap_leaf(), env-snapshot.R, a higher layer,
+#' so found at call time) hold, else a walk that replaces it. A volatile size (env_snap_size()'s
+#' `st$volatile`: contents the facts cannot see) or one taken before a call that may have edited
+#' objects in place (an older `epoch`, env_size_forget()) serves only a snapshot (`fresh = FALSE`)
+#' of the home it was taken in; the gate and dot facts pass `fresh = TRUE` and walk it again.
+#' @noRd
+env_size_of = function(x, home, facts = ns_fun("env_snap_leaf")(x), fresh = FALSE) {
+  at = if (is.environment(home)) rlang::obj_address(home) else NA_character_
+  key = facts$address
+  e = the$size_cur[[key]] %||% the$size_old[[key]]
+  hit = !is.null(e) && identical(e$class, facts$class) && identical(e$shape, facts$shape) &&
+    identical(e$fp, facts$fp) &&
+    ((!e$volatile && e$epoch == the$size_epoch) || (!fresh && identical(e$home, at)))
+  if (!hit) {
+    st = new.env(parent = emptyenv())
+    b = env_snap_size(x, home, st = st)
+    e = list(class = facts$class, shape = facts$shape, fp = facts$fp, bytes = as.numeric(b),
+             about = st$about, volatile = st$volatile, home = at, epoch = the$size_epoch)
+  }
+  assign(key, e, envir = the$size_cur)
+  if (e$about) structure(e$bytes, about = TRUE) else e$bytes
+}
+
+#' After a tool ran, forget the sizes it may have changed in place (D-357; on.exit() of
+#' tool_execute_frame(), nested_execute() and mcp_serve_r(), so also on an error, an interrupt or
+#' a time limit). For `r` code (ckpt_predict(), ckpt-objects.R, a higher layer, so found at call
+#' time) the sizes of the values bound to its `modify` and `super` names, from `envir` up to the
+#' first top-level environment, are dropped. After an `unknown` target or a by-reference call
+#' (`inplace`), or a tool other than `r` that is not read-only and not a file or process tool
+#' (which run no code in this R process), every stored size serves only snapshots until walked
+#' again (a new `epoch`): a snapshot is as stale as before, the gate as fresh.
+#' @noRd
+env_size_forget = function(call, envir) {
+  if (!identical(call$name, "r")) {
+    edits = !isTRUE(call$tool$annotations$read_only) && !any(call$name %in% env_size_outside)
+  } else {
+    tg = ns_fun("ckpt_predict")(call$input$code)
+    edits = length(tg$unknown) || length(tg$inplace)
+    for (nm in unique(c(tg$modify, tg$super))) {
+      e = envir
+      while (is.environment(e)) {
+        if (exists(nm, envir = e, inherits = FALSE) && !bindingIsActive(nm, e) &&
+              !rlang::env_binding_are_lazy(e, nm) &&
+              !identical(.subset2(e, nm), quote(expr = ))) {
+          key = rlang::obj_address(.subset2(e, nm))
+          for (g in list(the$size_cur, the$size_old)) {
+            if (exists(key, envir = g, inherits = FALSE)) rm(list = key, envir = g)
+          }
+        }
+        e = if (env_size_top(e)) NULL else parent.env(e)
+      }
+    }
+  }
+  if (edits) the$size_epoch = the$size_epoch + 1
+  invisible()
+}
+
+#' Tools that are not read-only but run no code in this R process: files and child processes
+#' @noRd
+env_size_outside = c("write", "edit", "sh", "bg", "script", "jobs")
+
 #' Strings a walk reads before it samples (D-356): at 8 bytes a pointer a sampled object holds at
 #' least 1e8 bytes, the default gptr.protect_size and gptr.undo_capture_max, so at the defaults no
 #' gate or capture decision rests on an estimate
@@ -60,10 +142,11 @@ env_size_budget = 10000
 #' @noRd
 env_size_small = c(0, 1, 2, 4, 4, 6, 6, 8, 8, rep(16, 8))
 
-#' A fresh part count, string store, string weights and count of strings read; `mark`: a cut
-#' list or environment marks its other items seen (the walk of `shared`)
+#' A fresh part count, string store, string weights, count of strings read and volatile bit;
+#' `mark`: a cut list or environment marks its other items seen (the walk of `shared`)
 #' @noRd
 env_size_reset = function(st, mark) {
+  st$volatile = FALSE
   st$parts = 0
   st$mark = mark
   st$strs = new.env(hash = TRUE, parent = emptyenv())
@@ -140,6 +223,7 @@ env_compact_seq = function(x) {
 env_size_walk = function(x, st) {
   t = typeof(x)
   if (t == "NULL" || t == "symbol" || t == "builtin" || t == "special") return(0)
+  if (t == "closure" || (t == "environment" && !env_size_top(x))) st$volatile = TRUE
   a = rlang::obj_address(x)
   seen = st$seen
   if (!is.null(seen[[a]])) return(0)
@@ -154,6 +238,7 @@ env_size_walk = function(x, st) {
   b = switch(t,
     environment = env_size_env(x, st),
     logical = , integer = , double = , complex = , raw = if (env_compact_seq(x)) {
+      st$volatile = TRUE  # a read may expand it in place
       length(serialize_leaf(x))
     } else {
       env_size_code(x, an)

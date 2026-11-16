@@ -379,12 +379,13 @@ ckpt_limits = function() {
        spill_max = gptr_opt("undo_spill_max"), turns = gptr_opt("undo_turns"))
 }
 
-#' Targets of R code for the checkpointers: P11's code_targets() reduced (contract 7.16, IC-31);
-#' code that cannot be analysed has the one `unknown` target
-#' @return `list(assign, modify, byref, remove, super, files, unknown, process)`, chr each.
+#' Targets of R code for the checkpointers and the size store: P11's code_targets() reduced
+#' (contract 7.16, IC-31); code that cannot be analysed has the one `unknown` target
+#' @return `list(assign, modify, byref, remove, super, files, unknown, process, inplace)`, chr each.
 #' @noRd
 ckpt_predict = function(code) {
-  fields = c("assign", "modify", "byref", "remove", "super", "files", "unknown", "process")
+  fields = c("assign", "modify", "byref", "remove", "super", "files", "unknown", "process",
+             "inplace")
   out = sapply(fields, function(f) character(), simplify = FALSE)
   if (!rlang::is_string(code)) return(out)
   tg = tryCatch(code_targets(code), error = function(e) list(parse_error = TRUE))
@@ -461,8 +462,7 @@ ckpt_objects_before = function(ck, call, envir, turn = 1L) {
   store = ck$obj
   ckpt_obj_sweep(store)
   lim = ckpt_limits()
-  ck$snap = env_snapshot(envir, ck$snap)
-  full = ck$snap
+  full = env_snapshot(envir)
   snap = full[full$kind == "value", , drop = FALSE]
   tg = ckpt_predict(code)
   pred = ckpt_predicted(snap$name, tg)
@@ -544,8 +544,7 @@ ckpt_objects_after = function(ck, call, envir, token) {
   if (is.null(token)) return(NULL)
   store = ck$obj
   snap = token$snap
-  ck$snap = env_snapshot(envir, ck$snap)
-  full = ck$snap
+  full = env_snapshot(envir)
   post = full[full$kind == "value", , drop = FALSE]
   refs = which(token$how == "ref")
   ckpt_settle(store, envir, data.frame(name = snap$name[refs], key = token$key[refs],
