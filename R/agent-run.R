@@ -1109,15 +1109,16 @@ run_append_messages = function(run, msgs) {
 # ---------------------------------------------------------------------------- driving the loop
 
 #' The reactor task of a run: one loop action per call while not waiting
-#' @return `TRUE` while the run is active.
+#' @return `FALSE` once settled; `0` (due now) after a step that advanced the loop, else `TRUE`.
 #' @noRd
 run_drive = function(run) {
   if (isTRUE(run$settled)) return(FALSE)
   if (isTRUE(run$busy)) return(TRUE)
+  state = run$loop$state
   tryCatch({
     if (is.null(run$compact_pending)) run_step(run) else run_compact_resume(run)
   }, error = function(e) run_fail(run, e))
-  !isTRUE(run$settled)
+  if (isTRUE(run$settled)) FALSE else if (identical(run$loop$state, state)) TRUE else 0
 }
 
 #' One step: abort when signalled, else the loop's next action

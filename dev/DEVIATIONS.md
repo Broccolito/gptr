@@ -10849,6 +10849,28 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   person's edit between two calls stays theirs (D-360)", "once the scan budget is spent, the
   request's end scan records that edit (D-360)". Evidence: progress/P32.md Task 6.
 
+## D-361 - P32 A request reuses its messages' kept parts; a loop step that advanced is due now (2026-11-16)
+- Rule (`request_build()`, `prompt_request_keep()`): each build keeps, in the session's live
+  memo, its messages with each one's element sha256 and estimate per ledger component; the next
+  build reuses the sha256 of a message `identical()` (bitwise) to the kept one at its position,
+  and its estimate when the API family and the estimator are also the same. Each build replaces
+  the whole kept list; `prefix_reset()` (rewind, refreeze) clears it. `prompt_request_estimate()`
+  reads the kept estimates, so `run_build()`'s estimate after image elision redoes only the
+  elided messages.
+- Rule (`run_drive()`, `reactor_next_due()`): the run's task returns 0 after a step that changed
+  the loop's state, and a task that returned a number is due at that time instead of at the
+  5 ms tick; a task that returned TRUE or NULL (one that waits) keeps the tick.
+- Why: every request re-encoded, hashed and estimated every message (0.55 ms per message per
+  turn), and each loop step waited 5 ms for the next (about 22 ms of a 135 ms turn).
+- Plan text changed: the estimate is keyed on the estimator, not `registry_generation()`, which
+  only `gptr_reload()` bumps (an estimator registered mid-session would keep stale estimates);
+  the kept list holds the sha256, not the JSON element, which is only the hash's input.
+- Contract-visible: none (context, view, `tokens_est` and components equal the uncached build).
+- Tests: prompt-cache "a request built from kept parts equals the uncached build (D-361)", "a
+  build encodes and estimates only the messages that changed (D-361)", "after a rewind the kept
+  parts are no longer than the transcript (D-361)"; agent-run "a run's step that advanced the
+  loop is due now; a waiting run ticks at 5 ms". Evidence: progress/P32.md Task 9.
+
 ## D-363 - P32 Decision battery: condensed T03 inputs, the 13-million-string object in one mode (2026-11-16)
 - Rule: `t03_r2` and `t03_r3` are condensed T03-shaped codes (the dead branch that would build
   `raw`, setDTthreads, fread, rm, setorder by reference, fwrite and writeLines into the project),

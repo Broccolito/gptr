@@ -371,3 +371,114 @@ test_that("cache_break carries the event envelope of contract 4.5 in and outside
   expect_identical(ev$turn, d$turns)
   expect_identical(ev$entry, leaf)
 })
+
+# ---- P32 Task 9: a request reuses the kept parts of its messages (D-361) ------------------------
+
+p32_append = function(s, m) session_append(s, list(type = "message", message = m))
+
+# 300 messages on the path: the first turn, then tool calls after thinking, their results (an
+# image in every 50th) and user prompts
+p32_session = function(.env = parent.frame()) {
+  s = p07_session(.env = .env)
+  p07_first_turn(s)
+  for (k in seq_len(100L)) {
+    id = paste0("c", k)
+    call = block_tool_call(id, "r", list(code = paste0("x", k, " = ", k)))
+    p32_append(s, msg_assistant(list(block_thinking("plan", signature = "s"), call), api = "fake",
+                                provider = "fake", model = "fake-1", stop_reason = "tool_use"))
+    out = list(block_text(paste0("[1] ", k)))
+    if (k %% 50L == 1L) out = c(out, list(block_image("QUFB", width = 800L, height = 600L)))
+    p32_append(s, msg_tool_result(id, "r", out))
+    if (k < 100L) p32_append(s, msg_user(paste("step", k)))
+  }
+  s
+}
+
+# A build without its random request id; `fresh` forgets the kept parts first (the uncached build)
+p32_build = function(s, target, fresh = FALSE) {
+  if (fresh) prefix_reset(s)
+  req = request_build(s, target)
+  req$context$request_id = NULL
+  req
+}
+
+p32_kept = function(s) get0("prompt_kept", envir = session_live(s)$memo, inherits = FALSE)
+
+test_that("a request built from kept parts equals the uncached build (D-361)", {
+  skip_on_cran()
+  s = p32_session()
+  target = model_resolve("fake/fake-1")
+  same = function(tg = target) {
+    req = p32_build(s, tg)
+    expect_identical(req, p32_build(s, tg, fresh = TRUE))
+    req
+  }
+  expect_length(same()$context$messages, 300L)
+  same()
+  p32_append(s, msg_user("one more"))
+  same()
+  d = session_data(s)
+  k = which(vapply(d$entries, function(e) identical(e$message$role, "tool_result"), NA))[3]
+  d$entries[[k]]$message$content[[1]]$text = "[redacted]"
+  same()
+  other = target
+  other$api = "openai-responses"
+  a = same(other)
+  b = same()
+  expect_false(identical(a$components[["images"]], b$components[["images"]]))
+  off = gptr_register(gptr_spec("estimator", "default", estimate = function(x, class) {
+    nchar(x) / 3
+  }))
+  c = same()
+  expect_false(identical(c$tokens_est, b$tokens_est))
+  off()
+  expect_identical(same(), b)
+  compact_run(s, "manual")
+  expect_lt(length(same()$context$messages), 300L)
+  same()
+  gptr_rewind(s, to = d$entries[[60]]$id, restore = "conversation")
+  same()
+})
+
+test_that("a build encodes and estimates only the messages that changed (D-361)", {
+  skip_on_cran()
+  s = p32_session()
+  target = model_resolve("fake/fake-1")
+  n = local_calls(c("prompt_message_json", "prompt_message_estimate"))
+  counts = function(json, est) c(prompt_message_json = json, prompt_message_estimate = est)
+  request_build(s, target)
+  expect_identical(n(), counts(300L, 300L))
+  request_build(s, target)
+  expect_identical(n(), counts(300L, 300L))
+  p32_append(s, msg_assistant("noted", api = "fake", provider = "fake", model = "fake-1"))
+  p32_append(s, msg_user("next"))
+  request_build(s, target)
+  expect_identical(n(), counts(302L, 302L))
+  d = session_data(s)
+  k = which(vapply(d$entries, function(e) identical(e$message$role, "user"), NA))[10]
+  d$entries[[k]]$message$content[[1]]$text = "[redacted]"
+  request_build(s, target)
+  expect_identical(n(), counts(303L, 303L))
+  off = gptr_register(gptr_spec("estimator", "default", estimate = function(x, class) 1))
+  request_build(s, target)
+  expect_identical(n(), counts(303L, 605L))
+  off()
+  request_build(s, target)
+  expect_identical(n(), counts(303L, 907L))
+  prefix_reset(s)
+  expect_null(p32_kept(s))
+  request_build(s, target)
+  expect_identical(n(), counts(605L, 1209L))
+})
+
+test_that("after a rewind the kept parts are no longer than the transcript (D-361)", {
+  skip_on_cran()
+  s = p32_session()
+  target = model_resolve("fake/fake-1")
+  request_build(s, target)
+  expect_length(p32_kept(s)$msgs, 300L)
+  gptr_rewind(s, to = session_data(s)$entries[[60]]$id, restore = "conversation")
+  n = length(request_build(s, target)$context$messages)
+  expect_lt(n, 300L)
+  expect_length(p32_kept(s)$msgs, n)
+})

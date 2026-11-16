@@ -1101,6 +1101,35 @@ test_that("run_start() is non-blocking; run_wait() settles; the run carries its 
   expect_identical(gptr_last(), s)
 })
 
+# P32 (D-361): a fake clock that advances only by the reactor's sleeps, so wakes are counts
+test_that("a run's step that advanced the loop is due now; a waiting run ticks at 5 ms", {
+  skip_on_cran()
+  local_permissive()
+  clock = new.env()
+  clock$now = 0
+  clock$sleeps = 0L
+  local_mocked_bindings(reactor_now = function() clock$now)
+  local_mocked_bindings(Sys.sleep = function(time) {
+    if (time > 0) clock$sleeps = clock$sleeps + 1L
+    clock$now = clock$now + time
+    invisible(NULL)
+  }, .package = "base")
+  wakes = function(delay) {
+    clock$sleeps = 0L
+    local_fake_provider(list(fake_tool("r", code = "1"), fake_text("done", delay = delay)))
+    n = local_calls("run_drive")
+    s = test_session()
+    session_run(s, msg_user("go"))
+    expect_identical(s$status, "idle")
+    c(drives = n()[["run_drive"]], sleeps = clock$sleeps)
+  }
+  quick = wakes(0)
+  # sleeps only before the first step and after each of the two model responses
+  expect_identical(quick, c(drives = 6L, sleeps = 3L))
+  # a 0.5 s wait for the model still wakes the run every 5 ms
+  expect_identical(wakes(0.5) - quick, c(drives = 100L, sleeps = 100L))
+})
+
 test_that("agent events are paired and ordered", {
   skip_on_cran()
   local_permissive()

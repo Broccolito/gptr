@@ -117,8 +117,8 @@ reactor_timer = function(at, fn, run = NULL) {
 #'
 #' `TRUE` or `NULL` means "call me again in the next iteration" (repeating tasks cap the next
 #' I/O wait at 5 ms: see reactor_next_due()); a number means "call me again after that many
-#' seconds" (the `wait` of an `inprocess` generator, contract 8.1). A task that fails is
-#' removed (the error becomes a diagnostic).
+#' seconds" (the `wait` of an `inprocess` generator, contract 8.1; 0: without waiting). A task
+#' that fails is removed (the error becomes a diagnostic).
 #' @return the task id
 #' @noRd
 reactor_task = function(fn, run = NULL) {
@@ -292,9 +292,10 @@ reactor_wait_ms = function(r, allow_runs, slice_ms, t_end) {
 #'
 #' A task that asked to run again in the next iteration (it returned TRUE or NULL) counts as due
 #' 5 ms from now, not now: tasks run once per iteration, but they never shorten the wait to
-#' zero. P06's `run_drive()` and P05's abort watcher return TRUE for the whole of a request, so
-#' a zero wait would make every peter() call spin a CPU core while it waits for the model. A task
-#' whose call is still running (a pump nested inside it) is not due at all.
+#' zero. P06's `run_drive()` and P05's abort watcher return TRUE while they wait for the model,
+#' so a zero wait would make every peter() call spin a CPU core. A task that returned a number is
+#' due then: `run_drive()` returns 0 after a step that advanced the loop (D-361). A task whose
+#' call is still running (a pump nested inside it) is not due at all.
 #' @noRd
 reactor_next_due = function(r) {
   at = Inf
@@ -302,7 +303,7 @@ reactor_next_due = function(r) {
   tick = reactor_now() + 0.005
   for (id in ls(r$tasks, sorted = FALSE)) {
     t = r$tasks[[id]]
-    if (!isTRUE(t$busy)) at = min(at, max(t$next_at, tick))
+    if (!isTRUE(t$busy)) at = min(at, if (t$next_at == -Inf) tick else t$next_at)
   }
   at
 }

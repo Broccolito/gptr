@@ -71,60 +71,120 @@ prompt_prefix_epoch = function(s) {
   n
 }
 
-#' The element view for the prefix guard: sha256 per element, with epoch and generation
+#' The element view for the prefix guard: sha256 per element (the messages' `hashes` given),
+#' with epoch and generation
 #' @noRd
-prompt_request_view = function(elements, epoch) {
-  v = as.character(hash_sha256(unname(elements)))
-  names(v) = names(elements)
+prompt_request_view = function(context, hashes, epoch) {
+  head = prompt_request_elements(context[c("tools_json", "system")])
+  v = c(as.character(hash_sha256(unname(head))), hashes)
+  names(v) = c(names(head), sprintf("message %d", seq_along(hashes)))
   attr(v, "epoch") = epoch
   attr(v, "generation") = registry_generation()
   v
 }
 
-#' Estimated input tokens of a request, in total and per ledger component (contract 4.3)
+#' The parts of the session's last build (D-361): its messages with each one's element sha256 and
+#' estimate (for API family `fam` and estimator `est`), or NULL
+#' @noRd
+prompt_kept = function(s) {
+  memo = prompt_memo(s)
+  if (is.null(memo)) NULL else get0("prompt_kept", envir = memo, inherits = FALSE)
+}
+
+#' Which of `msgs` are identical (bitwise) to the kept message at the same position
+#' @noRd
+prompt_kept_same = function(kept, msgs) {
+  vapply(seq_along(msgs), function(i) {
+    i <= length(kept$msgs) && identical(kept$msgs[[i]], msgs[[i]], num.eq = FALSE)
+  }, NA)
+}
+
+#' Keep a build's messages with their estimates `comp` for the next build, replacing the kept
+#' parts; a message the same as the kept one at its position reuses its sha256. Returns the sha256s.
+#' @noRd
+prompt_request_keep = function(s, msgs, api, comp) {
+  kept = prompt_kept(s)
+  same = prompt_kept_same(kept, msgs)
+  hash = vapply(seq_along(msgs), function(i) {
+    if (same[i]) kept$hash[[i]] else hash_sha256(prompt_message_json(msgs[[i]]))
+  }, "")
+  memo = prompt_memo(s)
+  if (!is.null(memo)) {
+    assign("prompt_kept", list(msgs = msgs, hash = hash, comp = comp, fam = prompt_api_family(api),
+                               est = prompt_estimator(session_data(s)$id)), envir = memo)
+  }
+  hash
+}
+
+#' The API family of an estimate ("anthropic", "openai" or "google": image tokens differ)
+#' @noRd
+prompt_api_family = function(api) {
+  api = api %||% ""
+  if (startsWith(api, "openai")) return("openai")
+  if (startsWith(api, "google")) return("google")
+  "anthropic"
+}
+
+#' Estimated input tokens of a request, in total, per ledger component and per message
+#' (contract 4.3); a message the same as the kept one at its position reuses its estimate when the
+#' API family and the estimator are the same (D-361)
 #' @noRd
 prompt_request_estimate = function(context, api = "anthropic", session_id = NULL) {
   est = prompt_estimator(session_id)
   e = function(x, cls) if (is.null(x) || !nzchar(x)) 0 else as.numeric(est(x, cls))
-  api = api %||% ""
-  fam = "anthropic"
-  if (startsWith(api, "openai")) fam = "openai"
-  if (startsWith(api, "google")) fam = "google"
-  comp = c(t0 = 0, t1 = 0, tools = 0, project = 0, environment = 0, workspace = 0,
-           attached = 0, transcript = 0, tool_results = 0, images = 0, other = 0)
+  fam = prompt_api_family(api)
+  kept = prompt_kept(session_by_id(session_id))
+  msgs = context$messages
+  same = identical(kept$fam, fam) && identical(kept$est, est)
+  same = same & prompt_kept_same(kept, msgs)
+  each = lapply(seq_along(msgs), function(i) {
+    if (same[i]) kept$comp[[i]] else prompt_message_estimate(msgs[[i]], e, fam)
+  })
+  comp = prompt_ledger_zero
   comp[["tools"]] = e(as.character(context$tools_json), "json")
   comp[["t0"]] = e(context$system$t0, "prose")
   comp[["t1"]] = e(context$system$t1, "prose")
-  for (m in context$messages) {
-    role = m$role %||% ""
-    for (b in m$content) {
-      type = b$type %||% ""
-      k = "transcript"
-      n = 0
-      if (identical(type, "image")) {
-        k = "images"
-        n = as.numeric(est_image_tokens(b$width %||% 768L, b$height %||% 512L, fam))
-      } else if (identical(type, "context")) {
-        k = switch(b$kind, project_instructions = , project_instructions_update = "project",
-                   environment = "environment", workspace = , workspace_changes = "workspace",
-                   attached = "attached", "other")
-        n = e(b$text, if (k %in% c("workspace", "attached")) "describe" else "prose")
-      } else if (identical(type, "text")) {
-        if (identical(role, "tool_result")) k = "tool_results"
-        if (identical(role, "operator")) k = "other"
-        n = e(b$text, if (identical(k, "tool_results")) "r_output" else "prose")
-      } else if (identical(type, "thinking")) {
-        n = e(b$thinking, "prose") + if (is.null(b$signature)) 0 else 80
-      } else if (identical(type, "tool_call")) {
-        n = e(paste(b$name, json_encode(b$arguments)), "code")
-      } else if (identical(type, "opaque")) {
-        n = e(b$json, "json")
-      }
-      comp[[k]] = comp[[k]] + n
+  for (x in each) comp = comp + x
+  list(total = sum(comp), components = comp, messages = each)
+}
+
+#' The ledger components of an estimate (contract 4.3), at zero
+#' @noRd
+prompt_ledger_zero = c(t0 = 0, t1 = 0, tools = 0, project = 0, environment = 0, workspace = 0,
+                       attached = 0, transcript = 0, tool_results = 0, images = 0, other = 0)
+
+#' Estimated tokens of one message per ledger component; `e(text, class)` estimates one text
+#' @noRd
+prompt_message_estimate = function(m, e, fam) {
+  comp = prompt_ledger_zero
+  role = m$role %||% ""
+  for (b in m$content) {
+    type = b$type %||% ""
+    k = "transcript"
+    n = 0
+    if (identical(type, "image")) {
+      k = "images"
+      n = as.numeric(est_image_tokens(b$width %||% 768L, b$height %||% 512L, fam))
+    } else if (identical(type, "context")) {
+      k = switch(b$kind, project_instructions = , project_instructions_update = "project",
+                 environment = "environment", workspace = , workspace_changes = "workspace",
+                 attached = "attached", "other")
+      n = e(b$text, if (k %in% c("workspace", "attached")) "describe" else "prose")
+    } else if (identical(type, "text")) {
+      if (identical(role, "tool_result")) k = "tool_results"
+      if (identical(role, "operator")) k = "other"
+      n = e(b$text, if (identical(k, "tool_results")) "r_output" else "prose")
+    } else if (identical(type, "thinking")) {
+      n = e(b$thinking, "prose") + if (is.null(b$signature)) 0 else 80
+    } else if (identical(type, "tool_call")) {
+      n = e(paste(b$name, json_encode(b$arguments)), "code")
+    } else if (identical(type, "opaque")) {
+      n = e(b$json, "json")
     }
-    if (!is.null(m$tool_add)) comp[["other"]] = comp[["other"]] + e(json_encode(m$tool_add), "json")
+    comp[[k]] = comp[[k]] + n
   }
-  list(total = sum(comp), components = comp)
+  if (!is.null(m$tool_add)) comp[["other"]] = comp[["other"]] + e(json_encode(m$tool_add), "json")
+  comp
 }
 
 # ---- cache plans --------------------------------------------------------------------------------
@@ -206,9 +266,9 @@ request_build = function(s, target, extra = NULL) {
     caps = tryCatch(adapter_get(target$api), error = function(e) NULL)$capabilities
     policy$plan(parts, caps %||% list(), s)
   }
-  el = prompt_request_elements(context)
   est = prompt_request_estimate(context, target$api, d$id)
-  list(context = context, view = prompt_request_view(el, prompt_prefix_epoch(s)),
+  hashes = prompt_request_keep(s, context$messages, target$api, est$messages)
+  list(context = context, view = prompt_request_view(context, hashes, prompt_prefix_epoch(s)),
        tokens_est = est$total, components = est$components)
 }
 
@@ -229,13 +289,13 @@ prompt_view_key = function(target) {
   paste0("prompt_view_", prompt_target_ref(target))
 }
 
-#' Forget the stored request views of a session (on session_tree, i.e. a rewind)
+#' Forget the stored request views and the kept parts of a session (a rewind, a refreeze)
 #' @noRd
 prefix_reset = function(s) {
   memo = prompt_memo(s)
   if (is.null(memo)) return(invisible(NULL))
   keys = ls(memo, all.names = TRUE)
-  rm(list = keys[startsWith(keys, "prompt_view_")], envir = memo)
+  rm(list = keys[startsWith(keys, "prompt_view_") | keys == "prompt_kept"], envir = memo)
   invisible(NULL)
 }
 
