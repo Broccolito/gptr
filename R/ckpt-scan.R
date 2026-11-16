@@ -137,7 +137,14 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
     f$size[i] = info$size
     f$mtime[i] = as.numeric(info$mtime)
     i = i[!f$link[i] & !is.na(f$mtime[i]) & !f$isdir[i] %in% TRUE]
-    f$regular[i] = ckpt_regular(f$full[i]) %in% TRUE
+    # an entry gone since its stat fails the call for all: each is then checked alone, and one
+    # whose check fails is unread, as an entry gone before its stat
+    regular = tryCatch(ckpt_regular(f$full[i]), error = function(e) {
+      vapply(f$full[i], function(p) tryCatch(ckpt_regular(p), error = function(e) NA), NA,
+             USE.NAMES = FALSE)
+    })
+    f$mtime[i[is.na(regular)]] = NA
+    f$regular[i] = regular %in% TRUE
     i = i[f$regular[i]]
     f$class[i] = path_class(f$full[i], root)
     i = i[!f$class[i] %in% c("protected", "control")]

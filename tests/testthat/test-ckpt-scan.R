@@ -265,3 +265,20 @@ test_that("an entry or folder swapped for a link after its folder's checks is ne
   expect_length(s$hash, 0L)
   expect_null(ckpt_blob_find(hash_file(file.path(outside, "a.R")), ckpt_store_root(root)))
 })
+
+test_that("a file deleted between its folder's stat and type checks is unread, the rest kept", {
+  skip_on_os("windows")
+  root = local_project(files = list("a.R" = "a = 1", "b.R" = "b = 1", "c.R" = "c = 1",
+                                    "sub/d.R" = "d = 1"))
+  local_gptr_options(checkpoint_scan_timeout = 30)
+  regular = ckpt_regular
+  # the root's type check finds b.R gone; it fails as one call, so each entry is checked alone
+  local_mocked_bindings(ckpt_regular = function(full) {
+    if (length(full) > 1L) unlink(file.path(root, "b.R"))
+    regular(full)
+  })
+  s = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
+  expect_identical(s$reason, "a path could not be read")
+  expect_setequal(s$walk$path, c("a.R", "c.R", "sub/d.R"))
+  expect_setequal(names(s$hash), s$walk$path)
+})

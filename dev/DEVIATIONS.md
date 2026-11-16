@@ -10977,11 +10977,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Counts: one `ckpt_regular()` call per folder plus one per captured file (the check before
   reading). `ckpt_is_link()` calls are a fixed number per folder plus three per captured file.
   The plan's "one call per directory" is read as "no call per entry".
-- Trade-off: a file deleted between a folder's stat call and its type call stops the scan ("an
-  error stopped it", as before). Main kept the entries before it in that folder; now none of that
-  folder's entries are kept.
+- Rule (vanished entry): a file deleted between a folder's stat call and its type call fails the
+  type call for all; each entry is then checked alone, and the one gone is unread, as an entry
+  gone before its stat ("a path could not be read"); the scan goes on. Main stopped the scan
+  there ("an error stopped it").
 - Contract-visible: none (identical results); the plan's floor paragraph carries the new scan
   numbers.
 - Tests: ckpt-scan "a scan's rows, captures and reasons equal main's on a tree of every entry
   kind", "a scan checks each folder's entries with one call per check", "an entry or folder
-  swapped for a link after its folder's checks is never read". Evidence: progress/P32.md Task 7.
+  swapped for a link after its folder's checks is never read", "a file deleted between its
+  folder's stat and type checks is unread, the rest kept". Evidence: progress/P32.md Task 7,
+  Review fixes - checkpoint.
