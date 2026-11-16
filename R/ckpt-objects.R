@@ -485,13 +485,14 @@ ckpt_objects_before = function(ck, call, envir, turn = 1L) {
        pred = pred)
 }
 
-#' A fragment row: names, classes, sizes and addresses, never a value (contract 4.6)
+#' A fragment row: names, classes, sizes and addresses, never a value (contract 4.6); `about`:
+#' the size is an estimate (D-356)
 #' @noRd
 ckpt_obj_row = function(name, status, how, class, bytes, pre, post, restorable, reason,
-                        image = "", where = "", held = NA) {
+                        image = "", where = "", held = NA, about = FALSE) {
   list(name = name, status = status, how = how, class = class, bytes = ckpt_json_num(bytes),
-       pre_address = pre, post_address = post, restorable = restorable, reason = reason,
-       image = image, where = where, held_bytes = ckpt_json_num(held))
+       about = about, pre_address = pre, post_address = post, restorable = restorable,
+       reason = reason, image = image, where = where, held_bytes = ckpt_json_num(held))
 }
 
 #' The fragment row of binding i of the token, changed by the call; `j` is its row in `post`, NA
@@ -509,11 +510,12 @@ ckpt_settle_row = function(store, envir, token, i, j, post) {
   status = if (removed) "removed" else "changed"
   if (identical(how, "ref") && same) {
     return(ckpt_obj_row(nm, status, how, s0$class, s0$bytes, s0$address, now, FALSE,
-                        "modified by reference (the pre-image is the live object)"))
+                        "modified by reference (the pre-image is the live object)",
+                        about = s0$about))
   }
   if (!how %in% c("ref", "copy", "disk")) {
     return(ckpt_obj_row(nm, status, how, s0$class, s0$bytes, s0$address, now, FALSE,
-                        token$reason[i]))
+                        token$reason[i], about = s0$about))
   }
   disk = identical(how, "disk")
   held = if (disk) 0 else ckpt_unshared_bytes(store, key, envir, nm)
@@ -526,7 +528,7 @@ ckpt_settle_row = function(store, envir, token, i, j, post) {
                    bytes = if (disk) s0$bytes else held, turn = token$turn, expect = now)
   }
   ckpt_obj_row(nm, status, how, s0$class, s0$bytes, s0$address, now, TRUE, "", image = key,
-               where = if (disk) "disk" else "memory", held = held)
+               where = if (disk) "disk" else "memory", held = held, about = s0$about)
 }
 
 #' Objects checkpointer, after the call: settle every capture and build the JSON-able fragment
@@ -556,7 +558,8 @@ ckpt_objects_after = function(ck, call, envir, token) {
     nm = post$name[k]
     ckpt_mark(store, token$frag, nm, token$turn, post$address[k])
     rows[[length(rows) + 1L]] = ckpt_obj_row(nm, "created", "created", post$class[k],
-                                             post$bytes[k], "", post$address[k], TRUE, "")
+                                             post$bytes[k], "", post$address[k], TRUE, "",
+                                             about = post$about[k])
   }
   pred = ckpt_predicted(token$others, token$tg)
   gone = !token$others %in% full$name
@@ -705,7 +708,7 @@ ckpt_objects_notes = function(fragment) {
     } else {
       "overwritten"
     }
-    size = if (r$bytes < 0) "unknown size" else env_fmt_bytes(r$bytes)
+    size = if (r$bytes < 0) "unknown size" else env_fmt_bytes(r$bytes, isTRUE(r$about))
     out = c(out, paste0("note: ", r$name, " (", size, ") was ", verb,
                         " without an undo copy (", r$reason, ")."))
   }
@@ -770,7 +773,7 @@ ckpt_note = function(call, run = NULL) {
   how = ckpt_capture_how(snap$bytes, pred, pm$mode, ckpt_spill_allowed(), lim)
   bad = how %in% c("none", "skip")
   if (!any(bad)) return(NULL)
-  size = vapply(snap$bytes[bad], env_fmt_bytes, "")
+  size = mapply(env_fmt_bytes, snap$bytes[bad], snap$about[bad])
   why = ifelse(how[bad] == "skip", paste0(size, ", over the undo budget"), pm$reason[bad])
   paste0("cannot be undone: ", paste0(snap$name[bad], " (", why, ")", collapse = "; "))
 }

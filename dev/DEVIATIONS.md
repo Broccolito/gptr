@@ -10753,9 +10753,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   exact. A walk that sampled returns its bytes with attribute `about` (TRUE).
 - Rule: `about` reaches the snapshot (logical column `about` after `bytes`, kept in the size
   store, D-357), `env_fmt_bytes()` (an `about` argument, by default the attribute) and so the
-  `<workspace>` and `<workspace_changes>` lines and every `gptr_describe()` header, and
-  `risk_bytes()` (the overwrite note, "about 99.2 MB"). Risk `sizes`, checkpoint records and
-  `gptr_checkpoints()` stay plain numbers.
+  `<workspace>` and `<workspace_changes>` lines and every `gptr_describe()` header,
+  `risk_bytes()` (the overwrite note, "about 99.2 MB") and the undo notes (`ckpt_note()`'s "cannot
+  be undone", `ckpt_objects_notes()` from an object row's logical `about`; review fix). Risk
+  `sizes`, checkpoint records and `gptr_checkpoints()` stay plain numbers.
 - Why: at 8 bytes a pointer the exact part of a sampled object is at least 1e8 bytes, the default
   `gptr.protect_size` and `gptr.undo_capture_max`, so at the defaults no gate or capture decision
   rests on an estimate. T03's list at 300 tables: 1.42 s to 0.27-0.39 s, same bytes (T2).
@@ -10787,8 +10788,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: utils-size (new: main's bytes for 17 objects and 4 `shared` cases, a 1e8-byte string with
   no large allocation, the read counter at a budget of 1e5, accuracy over the budget, the note and
   the describe header, two no-copy rows); env-snapshot "a sampled size is marked about in its row,
-  workspace line and change line (D-356)"; perm-battery's six `huge` rows re-recorded (decision and
-  level unchanged). Evidence: progress/P32.md Task 2; progress/P32/evidence/prototype/.
+  workspace line and change line (D-356)"; ckpt-objects "a sampled size reads about in both undo
+  notes (D-356)"; perm-battery's six `huge` rows re-recorded (decision and level unchanged), then
+  the two `huge.change` undo notes ("about 99 MB"). Evidence: progress/P32.md Task 2; progress/P32/evidence/prototype/.
 
 ## D-357 - P32 One size per object version (2026-11-16)
 - Rule: one store (utils-size.R) keyed by address holds class, shape, fingerprint, bytes, `about`,

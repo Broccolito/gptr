@@ -603,6 +603,23 @@ test_that("checkpoint.note names what cannot be undone", {
   expect_match(ckpt_note(list(input = list(code = "small = 2")), run), "checkpoints are off")
 })
 
+test_that("a sampled size reads about in both undo notes (D-356)", {
+  skip_on_cran()
+  local_mocked_bindings(env_size_strings_max = 1e4)
+  local_gptr_options(undo_capture_max = 100, undo_max_bytes = 200, undo_spill_max = 150)
+  e = new.env()
+  e$big = paste0("s", 1:2e4)
+  local_mocked_bindings(run_eval_env = function(run) run$envir, session_home = function(s) e)
+  call = list(id = "c4", name = "r", input = list(code = "big[1] = 'a'"))
+  expect_match(ckpt_note(call, list(envir = e)), "big (about 1.2 MB, over the undo budget)",
+               fixed = TRUE)
+  ck = ckpt_ck_new("s0000000004")
+  tok = ckpt_objects_before(ck, call, e)
+  agent_eval(call$input$code, e)
+  expect_match(ckpt_objects_notes(ckpt_objects_after(ck, call, e, tok)),
+               "^note: big \\(about 1.2 MB\\) was (modified|overwritten) without an undo copy")
+})
+
 test_that("the state checkpointer restores options and the working directory (3-way)", {
   skip_on_cran()
   ck = ckpt_ck_new("s0000000011")
