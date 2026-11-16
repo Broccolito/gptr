@@ -1,0 +1,41 @@
+built raw: N=1231 kind=chr object.size=15.24 GB in 21.5 s
+  variant rep wall_s outer_s internal_s gap_s is_error
+1    warm   1  2.364   0.644      0.097 0.547    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1    warm   2  0.918   0.544       0.37 0.174    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   1  5.506   5.398      1.386 4.012    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   2  1.641   1.522      1.286 0.236    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   3  1.541   1.436      1.236   0.2    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a3   1  1.551   1.407      1.086 0.321    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a3   2  1.622   1.459      1.124 0.335    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a3   3  1.521   1.364      1.031 0.333    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       e   1  7.154   3.474        3.4 0.074    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       e   2  7.118   3.429      3.357 0.072    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       e   3  7.524   3.521       3.45 0.071    FALSE
+       71.85 real        69.23 user         1.88 sys
+         12200640512  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1240824  page reclaims
+                  28  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 490  voluntary context switches
+               18869  involuntary context switches
+       1138333400636  instructions retired
+        286947460464  cycles elapsed
+         10092782880  peak memory footprint

@@ -1,0 +1,4 @@
+           used (Mb) gc trigger  (Mb) limit (Mb) max used  (Mb)
+Ncells  1678524 89.7    3129975 167.2         NA  3129975 167.2
+Vcells 10758654 82.1   17279438 131.9     131072 12066623  92.1
+done vec__ckpton_spill0_prof0_trace1_n100000_files0_fine1_linksym__1 

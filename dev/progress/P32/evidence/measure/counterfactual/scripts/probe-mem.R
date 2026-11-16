@@ -1,0 +1,13 @@
+N = as.integer(Sys.getenv("N", "100")); TAG = paste0("probe", N)
+source("/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/counterfactual/scripts/workload.R")
+t0 = clock()
+home = new.env(parent = globalenv())
+home$raw = list(files = files, tables = setNames(lapply(files, cf_table), files))
+cat(sprintf("N=%d build %.1f s\n", N, clock() - t0))
+g = gc(reset = TRUE); cat(sprintf("live MB %.0f rss %.2f GB\n", sum(g[, 2]), rss_gb()))
+t0 = clock(); b = ns$env_snap_size(home$raw, home); t1 = clock() - t0
+g = gc(); cat(sprintf("env_snap_size %.3f s bytes %.3e  gc max used MB %.0f rss %.2f GB\n", t1, b, sum(g[, grep("max used", colnames(g))[1] + 1L]), rss_gb()))
+t0 = clock(); lb = ns$cf_lower_bound(home$raw, 1e8); cat(sprintf("lower bound %.4f s = %.3e\n", clock() - t0, lb))
+t0 = clock(); lbf = ns$cf_lower_bound(home$raw, Inf); cat(sprintf("full lower bound %.4f s = %.3e\n", clock() - t0, lbf))
+t0 = clock(); f = ns$env_snap_leaf(home$raw); cat(sprintf("snap facts %.4f s key=%s\n", clock() - t0, substr(ns$cf_key(f), 1, 60)))
+setwd(W); unlink(work, recursive = TRUE)

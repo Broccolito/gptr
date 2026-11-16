@@ -1,0 +1,64 @@
+built raw: N=1231 kind=chr object.size=15.24 GB in 24.4 s
+  variant rep wall_s outer_s internal_s gap_s is_error
+1    warm   1  2.587   0.704      0.108 0.596    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1    warm   2  1.014    0.61      0.421 0.189    FALSE
+  variant rep wall_s outer_s internal_s  gap_s is_error
+1      a2   1 16.004  15.891      1.427 14.464    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   2 10.479  10.357       1.37 8.987    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   3 10.008   9.898      1.347 8.551    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a3   1 10.772  10.618      1.162 9.456    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a3   2 10.566  10.394      1.147 9.247    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a3   3 11.014  10.842      1.149 9.693    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      b2   1  1.721   1.561      1.371  0.19    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      b2   2  1.716   1.562      1.367 0.195    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      b2   3   1.71   1.555       1.36 0.195    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      b3   1  1.713   1.532      1.116 0.416    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      b3   2  1.641   1.457      1.037  0.42    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      b3   3  1.636   1.452      1.043 0.409    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       c   1  0.281   0.117      0.048 0.069    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       c   2  0.284   0.117       0.05 0.067    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       c   3  0.281   0.112      0.047 0.065    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       d   1  0.321    0.15      0.073 0.077    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       d   2  0.597   0.423      0.071 0.352    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       d   3  0.363   0.164      0.077 0.087    FALSE
+  variant rep wall_s outer_s internal_s  gap_s is_error
+1       e   1 21.879  16.283      5.054 11.229    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       e   2  20.32  15.112      5.165 9.947    FALSE
+time: command terminated abnormally
+      174.18 real       169.64 user         3.09 sys
+         13779320832  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1400346  page reclaims
+                 262  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 201  voluntary context switches
+               53064  involuntary context switches
+       2321014162691  instructions retired
+        676114652355  cycles elapsed
+          8820794200  peak memory footprint

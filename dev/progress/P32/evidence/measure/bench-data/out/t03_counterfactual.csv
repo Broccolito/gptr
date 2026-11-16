@@ -1,0 +1,4 @@
+run,wall_s,gap_excess_s,after_provider_excess_s,before_provider_excess_s,outside_requests_excess_s,cf1_gap_only_s,cf2_plus_turn_edges_s,cf3_plus_startup_s
+A1-1,322.349,112.722,31.265,6.214,4.546,209.627,172.148,167.602
+A1-2,244.463,66.128,16.98,6.64,4.49,178.335,154.715,150.225
+A1-3,237.286,57.333,19.873,6.242,4.624,179.953,153.838,149.214

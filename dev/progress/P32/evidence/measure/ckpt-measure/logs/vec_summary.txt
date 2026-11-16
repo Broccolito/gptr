@@ -1,0 +1,33 @@
+('ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym', '__final__') {'tmp_ckpt': [0, 0], 'tmp_objects': [0, 0], 'tmp_sessions': [2, 17283], 'ws_objects': [0, 0], 'ws_ckpt': [0, 0], 'private': [0, 0], 'ws_sessions': [0, 0]}
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 1   __request__    n=3 t=2.039 r=0.087 ckb=0.004 cka=0.000 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.50
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 1   modify_3_a     n=3 t=0.639 r=0.087 ckb=0.004 cka=0.000 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.50
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 2   __request__    n=3 t=1.130 r=0.104 ckb=0.001 cka=0.003 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.51
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 2   modify_3_b     n=3 t=0.260 r=0.104 ckb=0.001 cka=0.003 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.51
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 3   __request__    n=3 t=0.178 r=0.007 ckb=0.001 cka=0.000 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.51
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 3   modify_3_c     n=3 t=0.025 r=0.007 ckb=0.001 cka=0.000 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.51
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 4   __request__    n=3 t=0.128 r=0.007 ckb=0.001 cka=0.000 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.51
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 4   modify_3_d     n=3 t=0.027 r=0.007 ckb=0.001 cka=0.000 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.51
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 5   __request__    n=3 t=0.140 r=0.011 ckb=0.000 cka=0.000 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.51
+ckptoff_spill0_prof0_trace1_n500_files0_fine1_linksym 5   modify_again   n=3 t=0.027 r=0.011 ckb=0.000 cka=0.000 aend=0.000 spill=0.000 wimg=0.000 held_rows=0 held_mem=0.00GB disk_rows=0 rss_max=1.51
+('ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym', '__final__') {'tmp_ckpt': [0, 0], 'tmp_objects': [0, 0], 'tmp_sessions': [2, 21866], 'ws_objects': [0, 0], 'ws_ckpt': [0, 0], 'private': [0, 0], 'ws_sessions': [0, 0]}
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 1   __request__    n=3 t=2.182 r=0.093 ckb=0.027 cka=0.029 aend=0.002 spill=0.000 wimg=0.000 held_rows=3 held_mem=0.27GB disk_rows=0 rss_max=1.59
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 1   modify_3_a     n=3 t=0.695 r=0.093 ckb=0.027 cka=0.029 aend=0.000 spill=0.000 wimg=0.000 held_rows=3 held_mem=0.27GB disk_rows=0 rss_max=1.59
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 2   __request__    n=3 t=1.265 r=0.112 ckb=0.028 cka=0.042 aend=0.009 spill=0.000 wimg=0.000 held_rows=6 held_mem=0.54GB disk_rows=0 rss_max=1.84
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 2   modify_3_b     n=3 t=0.327 r=0.112 ckb=0.028 cka=0.042 aend=0.000 spill=0.000 wimg=0.000 held_rows=6 held_mem=0.54GB disk_rows=0 rss_max=1.84
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 3   __request__    n=3 t=0.286 r=0.025 ckb=0.006 cka=0.011 aend=0.001 spill=0.000 wimg=0.000 held_rows=9 held_mem=0.81GB disk_rows=0 rss_max=2.10
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 3   modify_3_c     n=3 t=0.057 r=0.025 ckb=0.006 cka=0.011 aend=0.000 spill=0.000 wimg=0.000 held_rows=9 held_mem=0.81GB disk_rows=0 rss_max=2.10
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 4   __request__    n=3 t=0.169 r=0.034 ckb=0.005 cka=0.011 aend=0.001 spill=0.000 wimg=0.000 held_rows=11 held_mem=0.99GB disk_rows=0 rss_max=2.35
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 4   modify_3_d     n=3 t=0.066 r=0.034 ckb=0.005 cka=0.011 aend=0.000 spill=0.000 wimg=0.000 held_rows=12 held_mem=1.08GB disk_rows=0 rss_max=2.35
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 5   __request__    n=3 t=0.243 r=0.024 ckb=0.005 cka=0.087 aend=0.009 spill=0.000 wimg=0.000 held_rows=11 held_mem=0.99GB disk_rows=0 rss_max=2.60
+ckpton_spill0_prof0_trace1_n500_files0_fine1_linksym 5   modify_again   n=3 t=0.131 r=0.024 ckb=0.005 cka=0.087 aend=0.000 spill=0.000 wimg=0.000 held_rows=14 held_mem=1.26GB disk_rows=0 rss_max=2.60
+('ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym', '__final__') {'tmp_ckpt': [0, 0], 'tmp_objects': [0, 0], 'tmp_sessions': [0, 0], 'ws_objects': [4, 360000124], 'ws_ckpt': [4, 360000124], 'private': [0, 0], 'ws_sessions': [2, 21944]}
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 1   __request__    n=3 t=2.181 r=0.092 ckb=0.027 cka=0.028 aend=0.002 spill=0.000 wimg=0.000 held_rows=3 held_mem=0.27GB disk_rows=0 rss_max=1.59
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 1   modify_3_a     n=3 t=0.699 r=0.092 ckb=0.027 cka=0.028 aend=0.000 spill=0.000 wimg=0.000 held_rows=3 held_mem=0.27GB disk_rows=0 rss_max=1.59
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 2   __request__    n=3 t=1.261 r=0.112 ckb=0.027 cka=0.042 aend=0.009 spill=0.000 wimg=0.000 held_rows=6 held_mem=0.54GB disk_rows=0 rss_max=1.84
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 2   modify_3_b     n=3 t=0.327 r=0.112 ckb=0.027 cka=0.042 aend=0.000 spill=0.000 wimg=0.000 held_rows=6 held_mem=0.54GB disk_rows=0 rss_max=1.84
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 3   __request__    n=3 t=0.286 r=0.028 ckb=0.006 cka=0.015 aend=0.001 spill=0.000 wimg=0.000 held_rows=9 held_mem=0.81GB disk_rows=0 rss_max=2.10
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 3   modify_3_c     n=3 t=0.063 r=0.028 ckb=0.006 cka=0.015 aend=0.000 spill=0.000 wimg=0.000 held_rows=9 held_mem=0.81GB disk_rows=0 rss_max=2.10
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 4   __request__    n=3 t=0.212 r=0.036 ckb=0.006 cka=0.013 aend=0.046 spill=0.045 wimg=0.045 held_rows=12 held_mem=0.99GB disk_rows=1 rss_max=2.53
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 4   modify_3_d     n=3 t=0.071 r=0.036 ckb=0.006 cka=0.013 aend=0.000 spill=0.000 wimg=0.000 held_rows=12 held_mem=1.08GB disk_rows=0 rss_max=2.35
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 5   __request__    n=3 t=0.384 r=0.015 ckb=0.089 cka=0.010 aend=0.140 spill=0.132 wimg=0.129 held_rows=15 held_mem=0.99GB disk_rows=4 rss_max=2.90
+ckpton_spill1_prof0_trace1_n500_files0_fine1_linksym 5   modify_again   n=3 t=0.132 r=0.015 ckb=0.089 cka=0.010 aend=0.000 spill=0.000 wimg=0.000 held_rows=15 held_mem=1.26GB disk_rows=1 rss_max=2.53

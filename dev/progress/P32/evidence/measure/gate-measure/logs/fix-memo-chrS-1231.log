@@ -1,0 +1,35 @@
+built raw: N=1231 kind=chr object.size=15.24 GB in 21.8 s
+  variant rep wall_s outer_s internal_s gap_s is_error
+1    warm   1   2.44   0.667      0.102 0.565    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1    warm   2  0.943   0.559      0.386 0.173    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   1  9.611   9.496      1.405 8.091    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   2  1.705   1.594      1.342 0.252    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   3  1.598   1.485      1.274 0.211    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a3   1  1.559    1.41      1.067 0.343    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a3   2  1.679   1.522      1.123 0.399    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a3   3  1.674   1.509      1.108 0.401    FALSE
+       54.95 real        52.60 user         1.72 sys
+         13939294208  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1152550  page reclaims
+                  27  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 524  voluntary context switches
+               13971  involuntary context switches
+        815215087566  instructions retired
+        219550925069  cycles elapsed
+         12435499472  peak memory footprint

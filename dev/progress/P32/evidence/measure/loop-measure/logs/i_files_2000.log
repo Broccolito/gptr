@@ -1,0 +1,10 @@
+[1] FALSE
+workspace empty built in 0.2s, object.size total 0.000 GB, 0 bindings
+requests:
+  req    label  k    t0    t1  wall  gc_s
+1   1     warm 10 0.681 2.286 1.605 0.110
+2   2     warm 10 2.286 3.481 1.195 0.058
+3   3 measured 10 3.482 4.711 1.229 0.035
+4   4 measured 10 4.711 6.100 1.389 0.047
+5   5 measured 10 6.100 7.647 1.547 0.046
+done i_files_2000 

@@ -1,0 +1,22 @@
+          used (Mb) gc trigger  (Mb) limit (Mb) max used  (Mb)
+Ncells 1677848 89.7    3130021 167.2         NA  3130021 167.2
+Vcells 9558127 73.0   17279429 131.9     131072 10308285  78.7
+done big__ckpton_spill0_prof0_trace1_n250_files0_fine1__1 
+       24.12 real        23.18 user         0.48 sys
+          3659333632  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              250659  page reclaims
+                  27  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 389  voluntary context switches
+                8404  involuntary context switches
+        334756230675  instructions retired
+         93580136384  cycles elapsed
+          3321302328  peak memory footprint

@@ -1,0 +1,56 @@
+built raw: N=300 kind=num object.size=0.87 GB in 2.4 s
+  variant rep wall_s outer_s internal_s gap_s is_error
+1    warm   1  2.316   0.638      0.094 0.544    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1    warm   2   0.69   0.319      0.151 0.168    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   1  0.656   0.554       0.09 0.464     TRUE
+  text: Error in startsWith(tab$gene_id, "ENSG"): non-character object(s)  [expression at line 10]
+Traceback (outermost first):
+ 1: data.table::rbindlist(lapply(seq_along(raw$tables), function(i) {     tab = raw$tables[[i]]
+ 2: lapply(seq_along(raw$tables), function(i) {     tab = raw$tables[[i]]
+ 3: FUN(X[ 
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   2  0.537   0.423      0.103  0.32     TRUE
+  text: Error in startsWith(tab$gene_id, "ENSG"): non-character object(s)  [expression at line 10]
+Traceback (outermost first):
+ 1: data.table::rbindlist(lapply(seq_along(raw$tables), function(i) {     tab = raw$tables[[i]]
+ 2: lapply(seq_along(raw$tables), function(i) {     tab = raw$tables[[i]]
+ 3: FUN(X[ 
+  variant rep wall_s outer_s internal_s gap_s is_error
+1      a2   3   0.42   0.313      0.028 0.285     TRUE
+  text: Error in startsWith(tab$gene_id, "ENSG"): non-character object(s)  [expression at line 10]
+Traceback (outermost first):
+ 1: data.table::rbindlist(lapply(seq_along(raw$tables), function(i) {     tab = raw$tables[[i]]
+ 2: lapply(seq_along(raw$tables), function(i) {     tab = raw$tables[[i]]
+ 3: FUN(X[ 
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       f   1  0.291   0.186      0.025 0.161    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       f   2  0.286   0.174       0.02 0.154    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       f   3  0.291    0.18      0.022 0.158    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       e   1  0.476   0.316      0.158 0.158    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       e   2  0.381   0.219      0.069  0.15    FALSE
+  variant rep wall_s outer_s internal_s gap_s is_error
+1       e   3   0.38   0.221      0.066 0.155    FALSE
+       12.52 real        11.46 user         0.37 sys
+          1844248576  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              167486  page reclaims
+                  27  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 371  voluntary context switches
+                3039  involuntary context switches
+        168131582614  instructions retired
+         47210383920  cycles elapsed
+          1826179280  peak memory footprint

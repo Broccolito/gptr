@@ -1,0 +1,6 @@
+{"what": "rscript_vanilla_empty", "n": 7, "median_s": 0.407162707997486, "min_s": 0.3588152499869466, "max_s": 0.4600577500532381, "rc": 0}
+{"what": "codex_version", "n": 7, "median_s": 0.10851904202718288, "min_s": 0.0982690830132924, "max_s": 0.11777941696345806, "rc": 0}
+{"what": "codex_exec_help", "n": 7, "median_s": 0.10459808399900794, "min_s": 0.09537033399101347, "max_s": 0.12684879102744162, "rc": 0}
+{"what": "claude_version", "n": 7, "median_s": 0.0286992919864133, "min_s": 0.021527250006329268, "max_s": 0.03048174997093156, "rc": 0}
+{"what": "codex_app_server_initialize_nonet_emptyhome", "n": 7, "ok": true, "spawn_to_all_responses_median_s": 0.1505939170019701, "initialize_median_s": 0.15059291699435562, "initialize_min_s": 0.13081458304077387}
+{"what": "codex_mcp_server_initialize_toolslist_nonet_emptyhome", "n": 7, "ok": false, "spawn_to_all_responses_median_s": 0.13127395801711828}

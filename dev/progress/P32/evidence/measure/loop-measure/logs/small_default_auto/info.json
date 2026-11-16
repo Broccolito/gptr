@@ -1,0 +1,26 @@
+{
+  "cfg": {
+    "scenario": "small",
+    "tools": "default",
+    "mode": "auto",
+    "K": 10,
+    "reps": 3,
+    "warm": 2,
+    "ntab": 500,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 0,
+    "trace": 1,
+    "tag": "small_default_auto",
+    "hooks": 1
+  },
+  "ws_gb": 0.0006,
+  "ws_build_s": 0.02,
+  "entries": 112,
+  "turns": 5,
+  "mode": "auto",
+  "preset": "standard",
+  "text": "Done.",
+  "maxrss_gb": null
+}

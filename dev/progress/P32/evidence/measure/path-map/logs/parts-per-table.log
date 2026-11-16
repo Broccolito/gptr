@@ -1,0 +1,4 @@
+attributes: row.names, class, names, .internal.selfref 
+[1] 122088
+parts for one table (walk): 13  + 1 per list item in env_size_items
+tables walked before the budget of 10000 parts: 716 

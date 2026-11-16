@@ -1,0 +1,233 @@
+{
+ "summary": "Checkpointing is not what causes the ~26 s gap in T03 requests 2 and 3. When a later call only reads `raw`, the checkpointers add 0.10-0.15 s, because sizes are reused by address and fingerprint. With checkpointing off, those calls change by no more than 0.15 s; the gap comes from risk and gate sizing, which other agents are covering. The large checkpoint cost falls on calls that create or rebind a big object. After such a call, env_snapshot re-sizes the binding with env_snap_size(), and 85-89% of that time is unique.default() over every character column plus a global unique(unlist()). Measured locally: checkpoint_after median 5.65 s (range 4.69-6.93) for a T03-sized list (1,231 data.tables, which gptr sizes at 4.5e9 B), 1.66 s at 250 tables and 0.91 s at 125. Each such sizing also allocates an extra +3.4-3.5 GB of heap at 1,231 tables. This is the same mechanism as the benchmark's 13.9 s: in its own profile, env_snapshot takes 13.07 s of the 13.87 s checkpoint_after. A reassign of `raw` costs 3.98 s at 1,231 tables, and 2.05 s at 250 tables, where a by-reference image is also kept and walked a second time. In-place edits of objects over the undo budget cost about 5 ms, but only when gptr may write images to disk (a `.gptr` folder or a human present). In that case a predicted in-place edit writes a full image before the call: 0.87-0.95 s and 705 MB per call for a 0.46 GB object. Many objects cost per call +0.17 s at 1,000 bindings and +2.1-2.3 s at 10,000; the first call at 10,000 costs +7.3 s, mostly env_snap_size walking the ~70-frame call stack once per binding. The after-loop is O(n\u00b2) (match() per binding: 2.84 s at 30,000). File scans are capped at 2,000 entries and cost about 0.3-0.45 ms per entry. In a T03-like project root (1,231 linked TSVs), they add 0.31-0.47 s inside the call and 0.31-0.45 s at request end, which matches the benchmark's ckpt_files_before of 0.52-0.92 s. With checkpointing off, checkpoint_before plus checkpoint_after fall to 1-5 ms, and the T03-sized create call drops from 13.3 s to 7.2 s. Contention: load average was 8-14 on 16 cores during the runs, and N=1231 repetitions varied by up to about 20%. Memory: the N=1231 end-to-end processes peaked at 11.8-13.1 GiB RSS, above the ~12 GB target.",
+ "causes": [
+  {
+   "id": "C1",
+   "title": "Sizing a new or rebound large object in the after-snapshot (env_snap_size string de-duplication)",
+   "where": "R/ckpt-objects.R:547 (ck$snap = env_snapshot in ckpt_objects_after); R/env-snapshot.R:157-173 (size recomputed unless address/class/shape/fp match previous); R/utils-size.R:133-137 (unique.default(x) stored for every character vector), :66-69 (unique(unlist(mget(...)))), :43, :209 (second string pass when a list is sampled past env_size_budget = 10,000 parts)",
+   "mechanism": "After a call, env_snapshot sizes every binding whose address, class, shape or fingerprint changed. For a list of data.tables, env_snap_size walks about 714 tables before it starts sampling (10,000-part budget). For each table it hashes 3 character columns of 60,664 strings with unique.default and keeps the results. It then unlists and unique()s all of them, and runs a second pass over the sampled strings. That is about 86-127M string pointers hashed and a ~1 GB transient STRSXP. Walking the numeric data costs almost nothing.",
+   "cost": "Measured, create call (T03 request-1 analogue), checkpoint_after median: 5.65 s (4.69/5.65/6.93) at N=1231 (gptr size 4.50e9 B; object.size 1.51e10); 1.66 s at N=250; 0.91 s at N=125. Unit env_snap_size(raw) median: 5.03 s (1231), 2.30 s (500), 0.85 s (250), 0.55 s (125). Transient R heap per call: +3.39-3.51 GB at N=1231 (base 4.47 GB), +0.90-1.05 GB at N=250. Rprof: unique.default 85-89% self, unlist 8-13%. The benchmark (AWS) saw 13.87 s, with env_snapshot at 13.07 s.",
+   "evidence": "measured",
+   "safety_role": "Provides the bytes column used by the next call's capture plan (ref, disk or skip against gptr.undo_capture_max 1e8, undo_max_bytes 1e9 and undo_spill_max 2e9), the sizes in fragment rows and in the 'modified without an undo copy' notes, and the memory-budget accounting. Removing it loses size-based undo decisions and size text, not undo itself. A cheaper size estimate or a size cache shared with the risk path would keep the role.",
+   "scales_with": "Character vectors reached \u00d7 their length (capped near 714 tables, then extrapolated), i.e. object size and structure. Paid once per new binding and again on every address or fingerprint change."
+  },
+  {
+   "id": "C2",
+   "title": "Rebinding a large object: recompute plus unshared-bytes walk of the retained by-reference image",
+   "where": "R/ckpt-objects.R:411-420 (capture plan: an assign target up to 1e9 B gets 'ref'), :142-150 (ckpt_capture), :527 and :312-317 (ckpt_unshared_bytes = env_snap_size(image, shared = current))",
+   "mechanism": "A predicted assign (including the dead `if (!exists('raw')) raw = ...` branch) of an object up to 1 GB keeps the old value by reference. If the address changes, the after-snapshot re-sizes the new value, and ckpt_unshared_bytes walks the current value as `shared` and then the image: two more full string passes. Above 1 GB the plan is 'skip', and only the re-size happens.",
+   "cost": "Measured checkpoint_after for `raw = c(raw, list(note = 'x'))`: N=250 median 2.05 s (snapshot 0.96 + unshared 1.02); N=125 0.91 s (0.44 + 0.47); N=1231 3.98 s (snapshot only; over 1e9, so skip). The held image counts 184 unshared bytes, so its memory cost is small.",
+   "evidence": "measured",
+   "safety_role": "Allows undoing a rebinding of objects up to 1 GB without copying them; held-bytes accounting for the 1 GB in-memory budget.",
+   "scales_with": "Object size and structure (as C1), times 2-3 walks; only when the binding's address changes."
+  },
+  {
+   "id": "C3",
+   "title": "Eager full disk image before a predicted in-place modify of a 100 MB-2 GB object (only when spill is allowed)",
+   "where": "R/ckpt-objects.R:416 (plan 'disk'), :476-482, :169-174 (ckpt_capture_disk), :160-164 (ckpt_write_image = serialize_leaf(xdr = FALSE) + write_atomic); :371-373 (spill allowed only with .gptr/ or a human present)",
+   "mechanism": "Before the call runs, the whole object is serialized into an in-memory raw vector and written atomically to <workspace>/checkpoints/objects/<sid>/<key>.rdsx. serialize writes every string element in full, so the file is about 1.5\u00d7 gptr's de-duplicated size. This did not happen in the benchmark: it ran non-interactive with no .gptr/, so spill was off and objects over 100 MB were 'skip'.",
+   "cost": "Measured with .gptr/ at N=125 (gptr size 0.46 GB): checkpoint_before 0.87-0.95 s per predicted-modify call, 705,285,432 B written per call (1.41 GB on disk after 2 calls), RSS 1.67 \u2192 3.05 GB. Unit at N=250: serialize 1.31 s for 1.41 GB, ckpt_write_image median 3.38 s (1.76-3.73), heap +1.35 GB. Rprof: serialize 43%, writeBin 2-3% of the call.",
+   "evidence": "measured",
+   "safety_role": "Restorable undo of an in-place edit to a large object (copy-on-modify does not apply to edits R makes in place).",
+   "scales_with": "Serialized object size; per predicted-modify call, before execution; not done above gptr.undo_spill_max (2e9)."
+  },
+  {
+   "id": "C4",
+   "title": "Per-binding snapshot, capture and settle work with many objects (settle is O(n\u00b2))",
+   "where": "R/env-snapshot.R:136-176 (loop: tryCatch, env_snap_leaf at :82-88 \u2192 env_shape/env_fmt_n format(), fingerprint SHA-256); R/ckpt-objects.R:142-150 (id_new SHA-256 and assign per ref capture), :426-451 (gptr_preimage S3 dispatch per binding), :500-538 and :555-558 (ckpt_settle_row per binding: data.frame row subset plus match(nm, post$name) at :505)",
+   "mechanism": "Every value binding is snapshotted twice per call (before and after), offered to gptr_preimage, captured by reference with a fresh SHA-256 key, then settled row by row. The per-row match() over all post names makes the after loop quadratic.",
+   "cost": "Measured end-to-end, warm call: +0.17 s at 1,000 bindings (before 0.083, after 0.093) and +2.1-2.3 s at 10,000 (before 0.83-0.92, after 1.23-1.28; on 3.17-3.47 s vs off 1.04-1.34 s). Unit (objects checkpointer alone), before/after: 0.16/0.10 s (1k), 0.24/0.28 (3k), 0.80/1.30 (10k), 2.76/8.13 (30k). Micro: match loop 0.32 s (10k), 2.84 s (30k); row subset 0.23 s (10k), 0.69 s (30k). Rprof, warm 10k call: env_snap_facts 64% (env_shape/format 39%, fingerprint 14%), ckpt_settle_row 19%, ckpt_capture 6.6%. Pure reads skip all of this (5 ms).",
+   "evidence": "measured",
+   "safety_role": "Detects changes (address plus fingerprint) and keeps a copy-free by-reference undo image of every value binding until the call settles; unchanged images are released.",
+   "scales_with": "Number of bindings: before is linear; after is quadratic (match)."
+  },
+  {
+   "id": "C5",
+   "title": "First checkpointed call sizes every binding cold; each env_snap_size walks the whole call stack",
+   "where": "R/utils-size.R:24-33 (every frame on the stack and its enclosure chain marked seen: env_size_top/identical/topenv/assign); called once per binding from R/env-snapshot.R:171 while ck$snap is NULL (R/ckpt-objects.R:464)",
+   "mechanism": "With no previous snapshot, every binding is sized. Each env_snap_size call first walks all ~70 frames of the served-call stack (peter \u2192 reactor \u2192 hooks \u2192 mcp dispatch \u2192 checkpointer) and their enclosures, so the per-object cost is dominated by stack depth rather than object size.",
+   "cost": "Measured: first call with 10,000 small objects, checkpoint_before 7.3 s (7.32 median; outer 10.26 s on vs 1.74 s off), against env_snapshot cold 1.02 s in a shallow unit call. Rprof: env_size_top 34%, identical 22%, assign 13% of the call; stack depth 68-72 frames. With 1,000 objects: +0.75 s.",
+   "evidence": "measured",
+   "safety_role": "Keeps frames of running calls (and a function-frame home) out of sizes.",
+   "scales_with": "Bindings \u00d7 stack depth; once per session, plus once per new binding later."
+  },
+  {
+   "id": "C6",
+   "title": "Files checkpointer: bounded project scans before the call, after the call and at turn end",
+   "where": "R/ckpt-files.R:444-466 (before: sync scan, once per turn in per-turn mode, :447), :508-529 (after: scan unless per-turn; switch at :517 when walk_secs > gptr.checkpoint_scan_budget 0.25 s), :537-545 and R/ckpt-rewind.R:237-255 (turn-end scan in agent_end); R/ckpt-scan.R:27-220 (\u22642,000 entries ckpt_entry_max :12, \u2264256 captures :144, \u22641e8 bytes, 2 s timeout); skipped for file-free calls (R/ckpt-rewind.R:46-49)",
+   "mechanism": "Each scan stats every entry up to 2,000 (path_info, Sys.readlink, ps_fs_stat, file.access, path_class) and hashes with xxh128, and touches the blob of, up to 256 capturable files: \u22641 MB each at baseline, \u226450 MB later. New contents are copied into the blob store (gzip level 1 up to 8 MB). Once a scan takes over 0.25 s or stops early, the session switches to one sync per turn plus one turn-end scan.",
+   "cost": "Measured end-to-end. 1,000 files: first call 2.08 s on vs 0.82 s off (before 0.75, after 0.48); first call of turn 2 0.43 vs 0.04 s; turn-end scan 0.39-0.46 s per request. 20,000 files: first call before 0.96 s (stops at 2,000 entries, partial coverage), turn 2 +0.55 s, turn-end 0.52-0.72 s. T03-like root (1,231 TSVs linked to one 4.2 MB file): +0.31-0.47 s per request in the call (sym: request 2 0.80 vs 0.31 s, request 3 0.36 vs 0.03 s) plus 0.31-0.45 s at agent_end, which matches the benchmark's ckpt_files_before 0.52-0.92 s. About 0.3-0.45 ms per entry. Rprof: path_class 34-43%, ckpt_is_link 10-22%, ckpt_regular 11-18%, ckpt_store_put 6-16%.",
+   "evidence": "measured",
+   "safety_role": "File undo/rewind from content-addressed blobs, including writes the code analysis did not predict; created/modified/deleted reports and coverage notices.",
+   "scales_with": "min(project entries, 2,000), plus the count and size of capturable files; independent of what the call writes. Per turn rather than per call once a scan is slow."
+  },
+  {
+   "id": "C7",
+   "title": "Copy-safety cost: by-reference pre-images force duplicates on the agent's next in-place edit and stay in memory",
+   "where": "R/ckpt-objects.R:142-150 (ref capture), :180-193 (settle keeps changed images), :731-745 (turn-end budget: drop after gptr.undo_turns 20, spill or drop above gptr.undo_max_bytes 1e9)",
+   "mechanism": "Holding a reference raises the refcount, so `x[1] = 0` on a captured value of 100 MB or less copies the whole vector. The old value is kept as the undo image until the budget drops or spills it at agent_end.",
+   "cost": "Measured with 12 numeric vectors of 90 MB, 3 modified per request. R time 0.024-0.036 s vs 0.007-0.011 s off (+17-29 ms per 270 MB). Held images grew 0.27 \u2192 1.08 GB, then were capped at 0.99 GB by the budget. Peak RSS 2.59-2.60 GiB on vs 1.50 GiB off. With .gptr/, agent_end spilled 1-3 images in 0.045-0.13 s, 360 MB on disk.",
+   "evidence": "measured",
+   "safety_role": "Exact undo of in-place edits to objects up to 100 MB without copying anything at capture time.",
+   "scales_with": "Size of modified captured values; retained memory is capped at undo_max_bytes per session."
+  },
+  {
+   "id": "C8",
+   "title": "Fixed per-call overhead: repeated code parsing, state snapshot, session entry",
+   "where": "R/ckpt-rewind.R:37-41 and :55-61 (ckpt_pure_read \u2192 ckpt_predict once per checkpointer for level-0 code); R/ckpt-objects.R:386-394 and :467; R/ckpt-files.R:395-400 (ckpt_call_paths parses again); R/ckpt-objects.R:805-845 (state: options(), Sys.getenv(), search(), connections, RNG hash); R/agent-dispatch.R:387-404 (run_append_custom)",
+   "mechanism": "code_targets() parses the same code 2-5 times per call; the state checkpointer copies the options and environment-variable lists twice; one gptr.checkpoint entry is appended to the session JSONL.",
+   "cost": "Measured: ckpt_predict about 10-17 ms per parse of the 25-line T03 code (0.035 s for 2 parses in create); state before plus after 1-22 ms; run_append_custom 1-2 ms. Checkpointed small call total about 0.01-0.06 s; pure read 5-6 ms. Session file grows 0.42-0.46 KB per objects-only call and 0.9-1.3 KB per call with file rows (11-call run: 15.3 KB off vs 20.0 KB on).",
+   "evidence": "measured",
+   "safety_role": "Pure-read detection (skips all checkpointers); undo of options, working directory and attached packages; the durable fragment record used by /undo, /rewind and gptr_checkpoints().",
+   "scales_with": "Code length (parsing); nothing else significant."
+  },
+  {
+   "id": "C9",
+   "title": "checkpoint.note re-snapshots the whole workspace without a previous snapshot for each permission question",
+   "where": "R/ckpt-objects.R:751-780 (env_snapshot(envir) at :761 with no `previous`), called from R/agent-dispatch.R:788-789 (perm_request_record) and R/console-ui.R:364-370",
+   "mechanism": "Every permission question with an undo note sizes every binding from scratch (C1 plus C5 cost), separately from ck$snap.",
+   "cost": "Not measured directly (no question is asked in auto mode). By construction it equals a cold env_snapshot: measured 5.41 s (N=1231 unit), 0.89 s (N=250), 1.02 s for 10k objects in a shallow stack (7 s+ in the served stack).",
+   "evidence": "inferred",
+   "safety_role": "The 'cannot be undone: ...' line in permission prompts.",
+   "scales_with": "Workspace size and binding count, once per permission question."
+  },
+  {
+   "id": "C10",
+   "title": "Same object sized again outside the checkpointer (context, not checkpoint cost)",
+   "where": "R/env-snapshot.R:485-490 and :388-404 (P09 workspace memory: env_on_agent_end / workspace_changes keep their own previous snapshot); risk_binding_info (R/perm-classify.R ~2298) in the pre-gate and gate",
+   "mechanism": "ck$snap, P09's mem$snapshot and the risk classifier each compute env_snap_size(raw) on their own; nothing shares a size cache keyed on address and fingerprint.",
+   "cost": "Measured at N=1231: the P09 request-end re-size of raw is 4.43-5.97 s in request 1 and 3.87-4.72 s after the reassign, outside the tool interval and still present with checkpoint off (5.92 s). Risk pre-gate 4.2-5.2 s and gate 4.4-5.3 s per later call (other agents' scope).",
+   "evidence": "measured",
+   "safety_role": "Workspace change block for the model, and risk notes.",
+   "scales_with": "Object size and structure, per request (P09) and per call (risk)."
+  }
+ ],
+ "measurements": [
+  {
+   "what": "Create call (T03 request-1 analogue), served r call, outer s, checkpoint on vs off, N=1231 tables (gptr size 4.50e9 B)",
+   "result": "on 13.32 s median (11.26/13.32/14.60), off 7.19 s (6.65/7.19/7.56); checkpoint_after 5.65 s (4.69/5.65/6.93), of which env_snapshot 5.52 s median; checkpoint_before 0.10 s",
+   "method": "driver.R big n=1231, 3 reps each, coarse+fine trace() accumulators, proc.time"
+  },
+  {
+   "what": "Create call, N=250 (0.92e9 B) and N=125 (0.46e9 B)",
+   "result": "N=250: on 4.76 s vs off 2.97 s, checkpoint_after 1.66 s (env_snapshot 1.56 s). N=125: on 3.17 s vs off 2.14 s, checkpoint_after 0.91 s",
+   "method": "driver.R big, 3 reps"
+  },
+  {
+   "what": "Later calls that only read raw (read+write CSV with dead fallback branch; assign of a scalar; pure read), N=1231",
+   "result": "checkpoint_before + after = 0.145 s (read_write_csv: 0.062 + 0.083), 0.011 s (read_assign), 0.006 s (pure_read; all checkpointers skipped). On/off outer medians 9.50/9.94 s and 0.030/0.024 s; the remaining ~9-10 s is risk and gate sizing",
+   "method": "driver.R big, 3 reps"
+  },
+  {
+   "what": "In-place modify `raw$tables[[1]]$x = 1` and by-reference `data.table::set(...)` without spill",
+   "result": "checkpoint_before + after about 0.01 s at N=125/250/1231 (plan 'skip', over the budget; address unchanged, so no re-size); a 'modified without an undo copy' row is recorded",
+   "method": "driver.R big, 3 reps"
+  },
+  {
+   "what": "Reassign `raw = c(raw, list(note = 'x'))`",
+   "result": "checkpoint_after N=1231 3.98 s (3.63-4.69), N=250 2.05 s (0.96 snapshot + 1.02 unshared), N=125 0.91 s; on vs off at N=1231 12.03 vs 8.18 s",
+   "method": "driver.R big, 3 reps"
+  },
+  {
+   "what": "Eager disk image with .gptr/ (spill allowed), predicted modify, N=125",
+   "result": "checkpoint_before 0.87-0.95 s per call; 705,285,432 B .rdsx written per call to proj/.gptr/checkpoints/objects/<sid>/; 1,411,541,540 B after 2 calls; RSS 1.67 \u2192 3.05 GB; modify outer 1.87 vs 0.94 s off",
+   "method": "driver.R big n=125 spill=1, 3 reps"
+  },
+  {
+   "what": "env_snap_size(raw) alone, and its transient memory",
+   "result": "Median 0.55 s (125), 0.85 s (250), 2.30 s (500), 5.03 s (1231). Cold env_snapshot 5.41 s at 1231; warm (previous reused) ~0 s. fingerprint(raw) ~0 s. object.size 2.17 s at 1231. Heap +3.39/+3.51 GB at 1231, +0.90/+1.05 GB at 250. Rprof: unique.default 85-89% self, unlist 8-13%",
+   "method": "unit_size.R and mem_size.R, 3 reps (gc between), gc(reset = TRUE) max used, Rprof 5 ms"
+  },
+  {
+   "what": "Disk image building blocks, unit, N=250",
+   "result": "serialize_leaf 1.31 s \u2192 1,410,570,682 B; ckpt_write_image median 3.38 s (1.76/3.73/3.38); heap +1.35 GB. N=125: 0.69 s serialize, 705 MB, write_image median 1.88 s",
+   "method": "unit_size.R / mem_size.R"
+  },
+  {
+   "what": "Many small objects, served path, warm call (v2 = sum(o00004))",
+   "result": "1,000: on 0.289 vs off 0.118 s (before 0.083, after 0.093). 10,000: on 3.25 vs off 1.07 s (before 0.83, after 1.28). Pure read: no checkpoint cost",
+   "method": "driver.R many, 3 reps, coarse trace"
+  },
+  {
+   "what": "Many small objects, first (cold) call",
+   "result": "1,000: on 1.64 vs off 0.78 s (before 0.75). 10,000: on 10.26 vs off 1.74 s (before 7.32); Rprof: env_size_top 34%, identical 22%, assign 13%; served-path stack depth at env_snap_size 68-72 frames",
+   "method": "driver.R many, 3 reps; Rprof run"
+  },
+  {
+   "what": "Objects checkpointer alone vs number of bindings (shallow stack)",
+   "result": "before/after s: 1k 0.16/0.10, 3k 0.24/0.28, 10k 0.80/1.30, 30k 2.76/8.13; snapshot cold/warm 10k 1.02/0.55, 30k 3.61/1.71; ckpt_capture 10k 0.22 s; match(nm, post$name) loop 0.32 s (10k), 2.84 s (30k)",
+   "method": "unit_many.R (3 reps per n), micro_settle.R"
+  },
+  {
+   "what": "File scans, served path",
+   "result": "1,000 files: first call 2.08 vs 0.82 s off (before 0.75, after 0.48); turn-2 first call 0.43 vs 0.04 s; agent_end turn scan 0.39-0.46 s. 20,000 files: first call before 0.96 s (2,000-entry cap, partial), turn 2 +0.55 s, agent_end 0.52-0.72 s. Disk: 261 blobs / 20.0 MB in tempdir()/gptr/checkpoints/blobs (the 20 MB file stored raw)",
+   "method": "driver.R files, 3 reps"
+  },
+  {
+   "what": "T03-like project root (1,231 TSVs, symlink or hard link to one 4.2 MB file) + one CSV write per request",
+   "result": "sym: request 1 call 1.58 vs 0.81 s, request 2 0.80 vs 0.31 s, request 3 0.36 vs 0.03 s; ckpt_files_before 0.31-0.42 s; agent_end scan 0.31-0.33 s per request. hard: ckpt_files_before 0.46-0.48 s, agent_end 0.44-0.47 s. Request totals: on 2.10 vs off 1.30 s (sym, request 2)",
+   "method": "driver.R files_t03, 3 reps"
+  },
+  {
+   "what": "Copy-safety: 12 \u00d7 90 MB vectors, 3 modified in place per request, 5 requests",
+   "result": "R exec 0.024-0.036 s on vs 0.007-0.011 s off; held images 0.27/0.54/0.81/1.08 \u2192 0.99 GB after the budget; peak RSS 2.59-2.60 GiB on, 2.89-2.90 GiB with spill, 1.50 GiB off; spill at agent_end 0.045 s (1 image) and 0.13 s (3 images), 360 MB on disk",
+   "method": "driver.R vec, 3 reps per config"
+  },
+  {
+   "what": "Checkpointing off (options(gptr.checkpoint = 'off'), verified with setting_get)",
+   "result": "checkpoint_before + after 1-5 ms per call; no blobs or images; session file 15.3 KB vs 20.0 KB on for the 11-call big run; the P09 request-end re-size (5.9 s at N=1231) remains",
+   "method": "driver.R ckpt=off runs"
+  },
+  {
+   "what": "Peak RSS of my processes",
+   "result": "End-to-end N=1231 runs: 11.84-13.12 GiB (on and off alike, above the ~12 GB target); unit N=1231: 10.4 GiB; others \u2264 3.96 GiB",
+   "method": "/usr/bin/time -l max RSS"
+  }
+ ],
+ "open_questions": [
+  "The benchmark (AWS) is about 2.4\u00d7 slower than this machine for the same step (13.07 s vs 5.5 s env_snapshot). It is unclear how much comes from CPU speed and how much from real TCGA strings, which are longer than my synthetic IDs.",
+  "The benchmark's ckpt_objects_before of 0.89 s in request 2 was not reproduced (0.02-0.03 s here). It may be a GC pause attributed to that frame with a 5 GB heap.",
+  "The Codex CLI route was not reproduced: the fake provider is not type 'cli', so ckpt_on_cli's agent_start sync and turn_end scan, and sync = FALSE for served calls, did not run. In the real benchmark those scans fall into harness time between tool calls.",
+  "ckpt_note (checkpoint.note in permission prompts) was not measured directly; its cost is inferred from cold env_snapshot timings.",
+  "The benchmark README says a default-checkpoint gptr_doc replay 'exceeded the memory guard'. This fits the measured +3.4-3.5 GB transient per env_snap_size of raw, but the doc path was not measured.",
+  "Machine contention: load average was 8-14 on 16 cores during the runs; N=1231 repetitions varied by up to \u00b120%.",
+  "N=1231 end-to-end processes peaked at 11.8-13.1 GiB RSS, slightly over the ~12 GB target; no further N=1231 runs were made."
+ ],
+ "artifacts": [
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/driver.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/scenarios.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/unit_size.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/mem_size.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/unit_many.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/micro_settle.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/profsum.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/aggregate.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/batch_big.sh",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/batch_light.sh",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/scripts/batch_vec.sh",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/runs/big_agg.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/runs/light_agg.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/runs/big",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/runs/light",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/runs/vec",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/runs/unit",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/runs/mem",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/big_agg.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/light_agg.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/vec_summary.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/prof_big.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/prof_light.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/prof_files1000.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/unit_1231.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/unit_500.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/unit_250.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/unit_125.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/mem_1231.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/mem_250.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/unit_many.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/micro_settle.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/batch_big.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/batch_light.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/ckpt-measure/logs/batch_vec.log"
+ ]
+}

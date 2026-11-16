@@ -1,0 +1,25 @@
+raw size (object.size) MB: 0 Mb 
+  req   wall_s status
+1   1 9.614615   idle
+2   2 3.491628   idle
+3   3 2.061757   idle
+4   4 2.225880   idle
+status: idle 
+       19.58 real        15.07 user         1.88 sys
+          2086797312  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              480941  page reclaims
+                 287  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                 242  messages sent
+                  68  messages received
+                  11  signals received
+                1011  voluntary context switches
+                9859  involuntary context switches
+        208918528731  instructions retired
+         61156659848  cycles elapsed
+          1892881280  peak memory footprint

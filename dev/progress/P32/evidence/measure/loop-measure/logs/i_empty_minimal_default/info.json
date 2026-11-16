@@ -1,0 +1,28 @@
+{
+  "cfg": {
+    "scenario": "empty",
+    "tools": "minimal",
+    "mode": "default",
+    "K": 10,
+    "reps": 3,
+    "warm": 2,
+    "ntab": 300,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 0,
+    "trace": 1,
+    "tag": "i_empty_minimal_default",
+    "hooks": 1,
+    "hcode": "x = rnorm(100); summary(x)",
+    "lib": "installed"
+  },
+  "ws_gb": 0,
+  "ws_build_s": 0.001,
+  "entries": 112,
+  "turns": 5,
+  "mode": "manual",
+  "preset": "minimal",
+  "text": "Done.",
+  "maxrss_gb": null
+}

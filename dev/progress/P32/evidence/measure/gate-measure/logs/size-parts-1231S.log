@@ -1,0 +1,27 @@
+[1] "env_size_items"
+     n sharenum rep total_s       gb strings_calls strings_s strings_s_each
+1 1231     TRUE   1   4.876 1.811733             2     3.344    1.729+1.615
+2 1231     TRUE   2   3.762 1.811733             2     2.279    1.068+1.211
+3 1231     TRUE   3   3.719 1.811733             2     2.267    1.056+1.211
+  strings_nidx_each walk_s tables_walked
+1         3560+3578  1.532           715
+2         3560+3578  1.483           715
+3         3560+3578  1.452           715
+       35.98 real        34.62 user         0.99 sys
+          8343289856  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              810789  page reclaims
+                 235  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 444  voluntary context switches
+                9144  involuntary context switches
+        494173994553  instructions retired
+        143913136245  cycles elapsed
+          8147360296  peak memory footprint

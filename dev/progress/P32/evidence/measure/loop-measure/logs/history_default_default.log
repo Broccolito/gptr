@@ -1,0 +1,78 @@
+[1] FALSE
+workspace history built in 0.0s, object.size total 0.000 GB, 0 bindings
+requests:
+   req    label  k     t0     t1  wall  gc_s
+1    1  history  1  1.489  4.190 2.701 0.125
+2    2  history  1  4.190  5.451 1.261 0.139
+3    3  history  1  5.451  5.752 0.301 0.012
+4    4  history  1  5.752  6.007 0.255 0.009
+5    5  history  1  6.007  6.275 0.268 0.013
+6    6  history  1  6.275  6.546 0.271 0.011
+7    7  history  1  6.546  6.830 0.284 0.013
+8    8  history  1  6.830  7.119 0.289 0.015
+9    9  history  1  7.120  7.413 0.293 0.015
+10  10  history  1  7.413  7.712 0.299 0.013
+11  11  history  1  7.712  8.037 0.325 0.014
+12  12  history  1  8.037  8.351 0.314 0.013
+13  13  history  1  8.352  8.688 0.336 0.020
+14  14  history  1  8.689  9.016 0.327 0.013
+15  15  history  1  9.016  9.356 0.340 0.018
+16  16  history  1  9.356  9.699 0.343 0.015
+17  17  history  1  9.699 10.051 0.352 0.017
+18  18  history  1 10.052 10.419 0.367 0.021
+19  19  history  1 10.419 10.794 0.375 0.016
+20  20  history  1 10.794 11.177 0.383 0.016
+21  21  history  1 11.177 11.587 0.410 0.019
+22  22  history  1 11.587 11.998 0.411 0.020
+23  23  history  1 11.998 12.422 0.424 0.021
+24  24  history  1 12.422 12.844 0.422 0.021
+25  25  history  1 12.844 13.275 0.431 0.028
+26  26  history  1 13.275 13.710 0.435 0.019
+27  27  history  1 13.711 14.181 0.470 0.028
+28  28  history  1 14.182 14.639 0.457 0.022
+29  29  history  1 14.639 15.169 0.530 0.122
+30  30  history  1 15.169 15.606 0.437 0.025
+31  31  history  1 15.606 16.045 0.439 0.026
+32  32  history  1 16.045 16.524 0.479 0.033
+33  33  history  1 16.524 17.005 0.481 0.025
+34  34  history  1 17.005 17.512 0.507 0.027
+35  35  history  1 17.512 18.071 0.559 0.035
+36  36  history  1 18.072 18.649 0.577 0.030
+37  37  history  1 18.649 19.214 0.565 0.039
+38  38  history  1 19.215 19.797 0.582 0.031
+39  39  history  1 19.797 20.398 0.601 0.029
+40  40  history  1 20.398 21.002 0.604 0.036
+41  41  history  1 21.002 21.669 0.667 0.035
+42  42  history  1 21.669 22.333 0.664 0.044
+43  43  history  1 22.333 23.015 0.682 0.037
+44  44  history  1 23.016 23.684 0.668 0.035
+45  45  history  1 23.685 24.362 0.677 0.124
+46  46  history  1 24.362 24.903 0.541 0.033
+47  47  history  1 24.903 25.479 0.576 0.040
+48  48  history  1 25.480 26.076 0.596 0.039
+49  49  history  1 26.077 26.667 0.590 0.037
+50  50  history  1 26.667 27.295 0.628 0.039
+51  51     warm 10 27.303 30.359 3.056 0.178
+52  52     warm 10 30.359 33.543 3.184 0.276
+53  53 measured 10 33.560 36.614 3.054 0.194
+54  54 measured 10 36.614 40.054 3.440 0.317
+55  55 measured 10 40.054 43.530 3.476 0.237
+done history_default_default 
+       43.71 real        39.11 user         0.75 sys
+           494256128  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               33784  page reclaims
+                  28  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 742  voluntary context switches
+               12917  involuntary context switches
+        560560943997  instructions retired
+        155685987195  cycles elapsed
+           469418968  peak memory footprint

@@ -1,0 +1,58 @@
+{
+ "req1": {
+  "pre_turn_request_to_user_message_end": 2.073,
+  "request_to_spawn": 2.49,
+  "call_outer": 5.784,
+  "call_start_to_tool_call_hook": 0.316,
+  "call_gate": 0.376,
+  "call_checkpoint_before": 0.03,
+  "call_eval_mcp_serve_r": 4.355,
+  "call_checkpoint_after": 0.831,
+  "post_turn_cli_end_to_request_exit": 0.733,
+  "agent_end_env_view_snapshot": 0.565,
+  "ckpt_on_agent_end": 0.008,
+  "request_wall": 9.829
+ },
+ "req2": {
+  "pre_turn_request_to_user_message_end": 0.516,
+  "request_to_spawn": 0.816,
+  "call_outer": 1.373,
+  "call_start_to_tool_call_hook": 0.564,
+  "call_gate": 0.518,
+  "call_checkpoint_before": 0.05,
+  "call_eval_mcp_serve_r": 0.116,
+  "call_checkpoint_after": 0.049,
+  "post_turn_cli_end_to_request_exit": 0.27,
+  "agent_end_env_view_snapshot": 0.001,
+  "ckpt_on_agent_end": 0.01,
+  "request_wall": 3.571
+ },
+ "req3": {
+  "pre_turn_request_to_user_message_end": 0.089,
+  "request_to_spawn": 0.166,
+  "call_outer": 0.953,
+  "call_start_to_tool_call_hook": 0.467,
+  "call_gate": 0.433,
+  "call_checkpoint_before": 0.019,
+  "call_eval_mcp_serve_r": 0.01,
+  "call_checkpoint_after": 0.017,
+  "post_turn_cli_end_to_request_exit": 0.042,
+  "agent_end_env_view_snapshot": 0.001,
+  "ckpt_on_agent_end": 0.004,
+  "request_wall": 2.061
+ },
+ "req4": {
+  "pre_turn_request_to_user_message_end": 0.033,
+  "request_to_spawn": 0.11,
+  "call_outer": 1.141,
+  "call_start_to_tool_call_hook": 0.489,
+  "call_gate": 0.465,
+  "call_checkpoint_before": 0.019,
+  "call_eval_mcp_serve_r": 0.01,
+  "call_checkpoint_after": 0.006,
+  "post_turn_cli_end_to_request_exit": 0.166,
+  "agent_end_env_view_snapshot": 0.001,
+  "ckpt_on_agent_end": 0.004,
+  "request_wall": 2.253
+ }
+}

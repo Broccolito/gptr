@@ -1,0 +1,42 @@
+List of 4
+ $ n             : int 250
+ $ env_snap_size :List of 6
+  ..$ s            : num 1.44
+  ..$ base_mb      : num 1044
+  ..$ peak_mb      : num 1948
+  ..$ extra_peak_mb: num 904
+  ..$ rss_before_gb: num 1.37
+  ..$ rss_after_gb : num 2.37
+ $ env_snap_size2:List of 6
+  ..$ s            : num 1.13
+  ..$ base_mb      : num 1045
+  ..$ peak_mb      : num 2097
+  ..$ extra_peak_mb: num 1053
+  ..$ rss_before_gb: num 2.37
+  ..$ rss_after_gb : num 2.53
+ $ write_image   :List of 7
+  ..$ s            : num 1.98
+  ..$ base_mb      : num 1045
+  ..$ peak_mb      : num 2390
+  ..$ extra_peak_mb: num 1346
+  ..$ rss_before_gb: num 2.53
+  ..$ rss_after_gb : num 5.34
+  ..$ file_bytes   : num 1.41e+09
+        9.47 real         7.87 user         0.61 sys
+          5736497152  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              353758  page reclaims
+                  27  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 341  voluntary context switches
+                4672  involuntary context switches
+        102905579389  instructions retired
+         32685730847  cycles elapsed
+          5720724160  peak memory footprint

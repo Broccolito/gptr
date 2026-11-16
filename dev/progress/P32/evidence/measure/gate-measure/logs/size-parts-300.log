@@ -1,0 +1,9 @@
+[1] "env_size_items"
+    n sharenum rep total_s       gb strings_calls strings_s strings_s_each
+1 300    FALSE   1   1.352 1.101316             1     0.718          0.718
+2 300    FALSE   2   1.107 1.101316             1     0.494          0.494
+3 300    FALSE   3   1.055 1.101316             1     0.452          0.452
+  strings_nidx_each walk_s tables_walked
+1              1503  0.634           300
+2              1503  0.613           300
+3              1503  0.603           300

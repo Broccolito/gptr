@@ -1,0 +1,107 @@
+[N1231_R60664] built workspace in 5.68 s; object.size(raw) = 14.10 GB
+Tracing function "env_snap_size" in package "namespace:gptr"
+[1] "env_snap_size"
+Untracing function "env_snap_size" in package "namespace:gptr"
+[N1231_R60664] request 2: level 3 (dangerous); env_snap_size calls 2 (7.089, 0 s); sizes: raw=4.498e+09, sample_summary=158700
+[N1231_R60664] request 3: level 3 (dangerous); env_snap_size calls 3 (5.512, 0.003, 0 s); sizes: raw=4.498e+09, reference_gene_ids=5338000, gene_rows=242700
+                                                                             call
+                                                      data.table::setDTthreads(1)
+                                                  overwrites `raw` <list, 4.2 GB>
+                                                                       rm(tables)
+                                 overwrites `sample_summary` <data.table, 155 KB>
+                                       data.table::setorder(sample_summary, file)
+ data.table::fwrite(sample_summary, file = "sample-summary.csv", row.names = F...
+ level     category
+     1     unlisted
+     3 object_write
+     2 object_write
+     2 object_write
+     2 object_write
+     2   file_write
+[N1231_R60664] request 2 without the dead branch: level 2 (mutating), categories unlisted,object_write,file_write
+[N1231_R60664] classify_r2_no_envir               median    0.030 s  (0.03, 0.03, 0.029)
+[N1231_R60664] classify_r3_no_envir               median    0.050 s  (0.048, 0.05, 0.051)
+[N1231_R60664] secret_scan_r2                     median    0.004 s  (0.004, 0.004, 0.003)
+[N1231_R60664] code_targets_r2 (ckpt_predict)     median    0.024 s  (0.026, 0.024, 0.024)
+[N1231_R60664] eval_parse_r2                      median    0.001 s  (0, 0.001, 0.001)
+[N1231_R60664] eval_guard_r2                      median    0.015 s  (0.062, 0.015, 0.002)
+[N1231_R60664] classify_r2_envir                  median    4.729 s  (4.729, 4.322, 4.741)
+[N1231_R60664] classify_r2_nobranch_envir         median    0.024 s  (0.023, 0.024, 0.024)
+[N1231_R60664] classify_r3_envir                  median    4.418 s  (4.649, 4.418, 4.395)
+[N1231_R60664] classify_r3_nobranch_envir         median    0.046 s  (0.045, 0.047, 0.046)
+[N1231_R60664] env_snap_size_raw                  median    4.218 s  (4.432, 4.136, 4.218)
+[N1231_R60664] fingerprint_raw (cache key)        median    0.000 s  (0, 0.007, 0)
+[N1231_R60664] obj_address+class+length_raw       median    0.000 s  (0, 0, 0)
+[N1231_R60664] object.size_raw (shallow-ish)      median    2.272 s  (2.272)
+[N1231_R60664] env_snapshot_cold                  median    5.069 s  (4.897, 5.069, 5.19)
+[N1231_R60664] env_snapshot_warm (cache hit)      median    0.001 s  (0.001, 0.002, 0.001)
+[N1231_R60664] Rprof classify_r2_envir: sampling time 3.37 s
+-- by.self (top 15)
+                 self.time self.pct total.time total.pct
+"unique.default"     2.870    85.16      2.870     85.16
+"unlist"             0.325     9.64      0.335      9.94
+"env_size_vec"       0.040     1.19      1.245     36.94
+"env_size_items"     0.030     0.89      2.130     63.20
+"env_size_walk"      0.020     0.59      2.130     63.20
+"assign"             0.010     0.30      0.800     23.74
+"mget"               0.010     0.30      0.010      0.30
+"structure"          0.010     0.30      0.010      0.30
+"nchar"              0.005     0.15      1.205     35.76
+"seq"                0.005     0.15      0.015      0.45
+"seq.default"        0.005     0.15      0.010      0.30
+"%in%"               0.005     0.15      0.005      0.15
+"as.numeric"         0.005     0.15      0.005      0.15
+"chkDots"            0.005     0.15      0.005      0.15
+"env_size_len"       0.005     0.15      0.005      0.15
+-- by.total (top 30)
+                    total.time total.pct self.time self.pct
+"classify"               3.370    100.00     0.000     0.00
+"doTryCatch"             3.370    100.00     0.000     0.00
+"ns$risk_classify"       3.370    100.00     0.000     0.00
+"risk_classify_r"        3.370    100.00     0.000     0.00
+"tryCatch"               3.370    100.00     0.000     0.00
+"tryCatchList"           3.370    100.00     0.000     0.00
+"tryCatchOne"            3.370    100.00     0.000     0.00
+"risk_scan"              3.365     99.85     0.000     0.00
+"walk"                   3.365     99.85     0.000     0.00
+"env_snap_size"          3.350     99.41     0.000     0.00
+"note_assign"            3.350     99.41     0.000     0.00
+"risk_binding_info"      3.350     99.41     0.000     0.00
+"risk_binding_leaf"      3.350     99.41     0.000     0.00
+"risk_binding_safe"      3.350     99.41     0.000     0.00
+"unique.default"         2.870     85.16     2.870    85.16
+"unique"                 2.420     71.81     0.000     0.00
+"env_size_strings"       2.415     71.66     0.000     0.00
+"env_size_items"         2.130     63.20     0.030     0.89
+"env_size_walk"          2.130     63.20     0.020     0.59
+"env_size_vec"           1.245     36.94     0.040     1.19
+"nchar"                  1.205     35.76     0.005     0.15
+"env_size_chars"         1.205     35.76     0.000     0.00
+"assign"                 0.800     23.74     0.010     0.30
+"unlist"                 0.335      9.94     0.325     9.64
+"seq"                    0.015      0.45     0.005     0.15
+"env_compact_seq"        0.015      0.45     0.000     0.00
+"env_size_code"          0.015      0.45     0.000     0.00
+"FUN"                    0.015      0.45     0.000     0.00
+"vapply"                 0.015      0.45     0.000     0.00
+"mget"                   0.010      0.30     0.010     0.30
+[N1231_R60664] gc max used: 10.00 GB (Ncells+Vcells)
+[N1231_R60664] done
+      100.10 real        96.97 user         1.56 sys
+         12409929728  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              889269  page reclaims
+                  28  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                 674  signals received
+                  35  voluntary context switches
+               59113  involuntary context switches
+       1233437900025  instructions retired
+        382874357380  cycles elapsed
+         10924221776  peak memory footprint

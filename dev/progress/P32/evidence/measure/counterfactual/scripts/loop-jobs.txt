@@ -1,0 +1,39 @@
+L_history_none_1 scenario=history tools=minimal mode=auto trace=0
+L_history_lm_1 scenario=history tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape
+L_history_loop_1 scenario=history tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reactor
+L_history_all_1 scenario=history tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reuse,size_cache,share,reactor
+L_empty_none_1 scenario=empty tools=minimal mode=auto trace=0 reps=5
+L_empty_lm_1 scenario=empty tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape reps=5
+L_empty_reactor_1 scenario=empty tools=minimal mode=auto trace=0 cf=reactor reps=5
+L_empty_loop_1 scenario=empty tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reactor reps=5
+L_empty_all_1 scenario=empty tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reuse,size_cache,share,reactor reps=5
+L_small_none_1 scenario=small tools=minimal mode=auto trace=0 nobj=1000
+L_small_lm_1 scenario=small tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape nobj=1000
+L_small_loop_1 scenario=small tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reactor nobj=1000
+L_small_all_1 scenario=small tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reuse,size_cache,share,reactor nobj=1000
+L_history_none_2 scenario=history tools=minimal mode=auto trace=0
+L_history_lm_2 scenario=history tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape
+L_history_loop_2 scenario=history tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reactor
+L_history_all_2 scenario=history tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reuse,size_cache,share,reactor
+L_empty_none_2 scenario=empty tools=minimal mode=auto trace=0 reps=5
+L_empty_lm_2 scenario=empty tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape reps=5
+L_empty_reactor_2 scenario=empty tools=minimal mode=auto trace=0 cf=reactor reps=5
+L_empty_loop_2 scenario=empty tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reactor reps=5
+L_empty_all_2 scenario=empty tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reuse,size_cache,share,reactor reps=5
+L_small_none_2 scenario=small tools=minimal mode=auto trace=0 nobj=1000
+L_small_lm_2 scenario=small tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape nobj=1000
+L_small_loop_2 scenario=small tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reactor nobj=1000
+L_small_all_2 scenario=small tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reuse,size_cache,share,reactor nobj=1000
+L_history_none_3 scenario=history tools=minimal mode=auto trace=0
+L_history_lm_3 scenario=history tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape
+L_history_loop_3 scenario=history tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reactor
+L_history_all_3 scenario=history tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reuse,size_cache,share,reactor
+L_empty_none_3 scenario=empty tools=minimal mode=auto trace=0 reps=5
+L_empty_lm_3 scenario=empty tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape reps=5
+L_empty_reactor_3 scenario=empty tools=minimal mode=auto trace=0 cf=reactor reps=5
+L_empty_loop_3 scenario=empty tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reactor reps=5
+L_empty_all_3 scenario=empty tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reuse,size_cache,share,reactor reps=5
+L_small_none_3 scenario=small tools=minimal mode=auto trace=0 nobj=1000
+L_small_lm_3 scenario=small tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape nobj=1000
+L_small_loop_3 scenario=small tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reactor nobj=1000
+L_small_all_3 scenario=small tools=minimal mode=auto trace=0 patch=json,est,settings,model,shape cf=reuse,size_cache,share,reactor nobj=1000

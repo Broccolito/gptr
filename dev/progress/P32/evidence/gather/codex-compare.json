@@ -1,0 +1,274 @@
+{
+ "summary": "Codex keeps each tool call cheap by not inspecting content. A shell call is tokenized, matched against prefix rules loaded once per session, run through a small dangerous-command check (rm -f, sudo, nesting) and then started under an OS sandbox (Seatbelt deny-default on macOS; bubblewrap plus seccomp on Linux). Nothing reads file contents, workspace size or process memory. Measured here: Seatbelt adds about 17.5 ms per spawn (30.7 vs 13.2 ms). `codex sandbox -P :read-only -- /usr/bin/true` takes 63 ms against 21.5 ms for `codex --version`. An exec-policy check is lost in process start-up (20 ms with 3 rules, 28.8 ms with 2,003). A 20k-file workspace with a 2 GB file changes nothing. gptr's per-call checks that only read the code text are constant and small: parse and walk 0.03-0.05 s, secret scan 0.004 s, eval_guard up to 0.06 s. The one check that grows with data is the overwrite-size walk. Whenever code assigns to a name already bound in the session (even inside the dead `if (!exists(\"raw\"))` branch), the classifier calls env_snap_size(raw). At full T03 scale (1,231 tables x 60,664 rows, 4.50e9 bytes) that call takes a median 4.2 s, and classification goes from 0.024 s without the branch to 4.73 s with it; Rprof puts 99.4% of it in env_snap_size and 85% in unique.default. The walk is capped by a 10,000-part budget, documented as about 0.07 s. That cap stops it at 715 tables and 2,146 character vectors, but nothing caps the length of each vector, so cost grows linearly with rows (0.118 s, 0.392 s and 4.218 s at 606, 6,066 and 60,664 rows). Each served call classifies twice, once before the tool_call hook and again in perm_decide, so steady state is two full sizings per call. A served replay at 300 tables measured 1.53 s and 1.70 s per sizing with a warm checkpoint snapshot (0.005 s). That fits the benchmark's two ~13 s blocks on AWS; the roughly 2.8x machine factor is inferred, not measured. gptr already has the cheap pattern Codex-style systems rely on: env_snapshot reuses sizes while address, class, shape and fingerprint hold (warm 0.001 s against 5.07 s cold). The classifier never uses it. A lower-bound threshold check answers the `protect_size` question (`gptr.protect_size`, default 1e8 bytes) for `raw` in 0.001 s. From the mode table, the 2-to-3 size escalation changes no `r` decision in any mode; it matters only for level allow rules, nested-call level comparisons and the size shown when a person is asked. Measurements ran under contention (load average 8-14 on 16 cores, single-threaded R). The full-size process peaked at 12.4 GB RSS, slightly over the 12 GB guidance.",
+ "causes": [
+  {
+   "id": "G1",
+   "title": "Overwrite-size walk of an existing binding inside the static classifier",
+   "where": "R/perm-classify.R:3088-3101 (note_assign: risk_binding_safe, sizes, level 3 when bytes > protect), R/perm-classify.R:2277-2300 (risk_binding_info, risk_binding_leaf), R/perm-classify.R:2610 (protect = 1e8), R/utils-size.R:18-49 (env_snap_size), :46-48 (env_size_budget = 10000, 'about 0.07 s'), :133-137 (unique.default per character vector), :66-70 (env_size_strings global dedupe), :177-213 (env_size_items sampling)",
+   "mechanism": "For every assignment target that names an existing binding in envir, risk_scan sizes the old value with the D-247 exact walk. That walk calls unique.default() on every character vector and then deduplicates all collected strings at the end with unique(unlist(mget(...))). The 10,000-part budget counts parts, not elements, so a part can be a 60,664-string vector. On a list of 1,231 data.tables it walks 715 tables and 2,146 long character vectors before sampling (measured with walk-count.R).",
+   "cost": "Measured at full scale (N=1231, R=60664): env_snap_size(raw) median 4.218 s (4.136-4.432; 5.932 s in a separate process). risk_classify of the request-2 code takes 4.729 s and the request-3 code 4.418 s, against 0.024 and 0.046 s with the dead branch removed. Rprof: env_snap_size 99.4% of classification, unique.default 85.2% self, unlist 9.6%. Process peak RSS 12.4 GB for about 4.5 GB of data (gc max used 10 GB).",
+   "evidence": "measured",
+   "safety_role": "Escalates an overwrite of an object above gptr.protect_size (1e8) from level 2 to level 3 and puts '<class, size>' in the flag and ask text (IC-53 item 8). It feeds the protect_size policy, which asks in manual and edits and is skipped in auto and yolo (perm-gate.R:200-207). Per the 03-architecture 6.8.1 table (L1495-1501), level 2 and 3 give the same decision for `r` in every mode. The size matters only for r(level<=N) allow rules (perm-rules.R:114), the nested-call level comparison (agent-dispatch.R:443) and the ask text. In the benchmark's auto mode it changes no decision.",
+   "scales_with": "Number of walked parts (capped at about 10,000, here 715 data.tables) times the length of each character vector (uncapped), plus one global string dedupe over everything walked. Measured: linear in rows (N=1231: 0.118 s at R=606, 0.392 s at 6,066, 4.218 s at 60,664) and in table count up to the cap (R=60664: 0.114 s for 30, 0.408 s for 100, 1.183 s for 300, 4.218 s for 1,231). It triggers on any assignment to an existing name, including one inside a dead branch."
+  },
+  {
+   "id": "G2",
+   "title": "Each call is classified twice (pre-gate and again inside perm_decide)",
+   "where": "R/mcp-server.R:268-272 (risk.classify before the tool_call hook), :276 (tool_call_hook), :281 (mcp_serve_gate); R/agent-dispatch.R:587-611 (perm_decide, call_risk at :590, again at :598 after a modify), :573 (comment: 'the risk is recomputed from the raw input'); loop route R/agent-dispatch.R:96 and :99",
+   "mechanism": "The served path computes the risk for the tool_call hook payload. perm_check then recomputes it from the call input through call_risk. Both runs size the same objects, because the classifier keeps no cache.",
+   "cost": "Measured in a served replay at N=300, R=60664 (one run each). First served call 6.356 s: env_snap_size(raw) 1.781 s pre-gate and 1.495 s in the gate; mcp_serve_gate equals perm_decide at 1.954 s. Second served call 3.932 s: 1.527 + 1.697 s, gate 1.876 s. At full scale each classification is about 4.4-4.7 s here. The benchmark measured 12.8-13.3 s pre-gate plus 13.4 s gate on AWS.",
+   "evidence": "measured",
+   "safety_role": "Makes the gate judge the final input after a tool_call hook may modify it (contract 04 L2762 and IC-53 item 7: a modify is re-classified and re-checked once). The second classification adds nothing when the input and the bindings are unchanged.",
+   "scales_with": "Doubles G1; constant otherwise."
+  },
+  {
+   "id": "G3",
+   "title": "Three independent size computations; only the checkpoint snapshot is cached and the classifier ignores it",
+   "where": "R/env-snapshot.R:161-172 (reuse while address, class, shape and fp hold), R/utils-hash.R:155-178 (fingerprint), R/ckpt-objects.R:464 and :547 (ck$snap = env_snapshot(envir, ck$snap)); classifier path R/perm-classify.R:2297-2300 has no cache",
+   "mechanism": "The workspace snapshot at session start, the objects checkpointer's snapshot and the classifier each size `raw`. The snapshot reuses a size while address, class, shape and fingerprint hold. The classifier always recomputes. Also, the first checkpointed call does not reuse the session-start snapshot.",
+   "cost": "Measured at full scale: env_snapshot cold 5.069 s (4.897-5.190), warm 0.001 s, fingerprint(raw) under 0.001 s. In the N=300 served replay: session start sized raw in 1.979 s; the first checkpoint_before re-sized it cold in 1.457 s (checkpoint_before 1.59 s); the next call was warm (0.005 s). Inferred: request 1's 13.9 s checkpoint_after on AWS is the cold sizing of the newly created raw (5.07 s here).",
+   "evidence": "measured",
+   "safety_role": "The snapshot sizes drive the workspace block, the undo capture plans (gptr.undo_capture_max) and the diffs. Caching is already accepted by contract (04 L2867; D-247 at DEVIATIONS.md:6963).",
+   "scales_with": "Cold cost as in G1. Warm cost scales with binding count, and with up to 1,000 element addresses and 20 x 64 samples per binding for the fingerprint."
+  },
+  {
+   "id": "G4",
+   "title": "The static analysis counts a dead fallback branch as an overwrite",
+   "where": "benchmark code `if (!exists(\"raw\", inherits = FALSE)) { ... raw = list(...) }`; R/perm-classify.R:3088-3101; 03-architecture.md:1562-1563 ('reads code as written and does not run it')",
+   "mechanism": "The classifier treats the guarded assignment as a possible overwrite of the bound 5 GB `raw`. That sizes raw (G1) and raises the level from 2 to 3.",
+   "cost": "Measured at full scale: classify 4.729 s with the branch vs 0.024 s without it (request 2), and 4.418 vs 0.046 s (request 3). Level 3 ('dangerous') vs level 2 ('mutating'); both are allowed in auto.",
+   "evidence": "measured",
+   "safety_role": "Conservative reading: if raw were absent, the branch would run, but then nothing is overwritten.",
+   "scales_with": "Only the presence of a guarded re-creation idiom; cost then follows G1."
+  },
+  {
+   "id": "G5",
+   "title": "Constant-cost per-call checks (code text and name lookups only)",
+   "where": "R/perm-classify.R:2096-2131 (parse, risk_scan, risk_secret_scan), R/perm-gate.R:97-106 (eval_parse plus eval_guard in the mode policy), :186-187 (secret scan again in secret_guard), R/eval-guard.R:276-345, R/ckpt-objects.R:386-395 (code_targets via ckpt_predict), R/perm-rules.R:141-156 (rule_match)",
+   "mechanism": "Parsing and walking the code, plus existence lookups of call heads and values along the environment chain. None of it touches object contents.",
+   "cost": "Measured, nearly identical in every configuration: classify without envir 0.027-0.030 s (request 2) and 0.045-0.051 s (request 3); risk_secret_scan 0.004 s (3 calls per served call); code_targets 0.022-0.026 s (2 calls); eval_guard 0.002-0.068 s (2 calls); eval_parse 0.001 s. Together under about 0.2 s per call.",
+   "evidence": "measured",
+   "safety_role": "The parts of the mode, rules, critical-guard and secret-guard decisions that do not depend on data.",
+   "scales_with": "Code length, number of rules, and environment chain depth. Not data size."
+  },
+  {
+   "id": "G6",
+   "title": "Files checkpointer scan (already bounded)",
+   "where": "R/ckpt-scan.R:1-30 (ckpt_entry_max = 2000, timeout), R/ckpt-files.R:444-470; contract 04 7.16 L3073-3078 (gptr.checkpoint_scan_timeout = 2 s, 2,000 entries, 256 captures, partial coverage reported)",
+   "mechanism": "stat-based project scan with entry, capture, byte and time limits. When a limit stops it, it records partial coverage instead of running unbounded.",
+   "cost": "Not measured here. Bounded by contract at 2 s per scan.",
+   "evidence": "source",
+   "safety_role": "File undo and rewind. Its coverage notice states what may not be undoable.",
+   "scales_with": "File count and changed bytes, up to the contract's bounds."
+  },
+  {
+   "id": "X1",
+   "title": "Reference: Codex per-tool-call safety pipeline",
+   "where": "openai/codex at tag rust-v0.157.1 (commit 36650394, 2026-09-25): codex-rs/core/src/tools/orchestrator.rs:1-8, 137-222 (approval), 223 (sandboxed attempt), 357-500 (escalated retry); codex-rs/core/src/exec_policy.rs:277-297 (policy in ArcSwap, loaded once), 337-450 (rules then fallback), 770-857 (unmatched: dangerous heuristic plus approval policy plus sandbox kind); codex-rs/shell-command/src/command_safety/is_dangerous_command.rs:37-75, 133-140; codex-rs/sandboxing/src/seatbelt.rs:59 (/usr/bin/sandbox-exec), 872; seatbelt_base_policy.sbpl ('(deny default)'); codex-rs/sandboxing/src/bwrap.rs:77-79 (--unshare-user, --unshare-net, --ro-bind); codex-rs/core/src/safety.rs:29-140 (apply_patch: writable-path check only); codex-rs/core/src/tools/sandboxing.rs:41-112 (ApprovalStore, approved-for-session cache)",
+   "mechanism": "Tokenize the command, including literal commands inside bash -lc. Match prefix rules in memory. For an unmatched command, a dangerous-command heuristic and the approval policy decide allow, prompt or forbidden; in a restricted sandbox, non-dangerous commands are allowed without asking and the sandbox enforces the limits. The command then runs under Seatbelt or bubblewrap plus seccomp; a denial leads to an escalated retry only with approval. Approvals are cached per session. The known-safe command allowlist (is_safe_command.rs) was removed on 2026-08-20 (commit 942af8447b, 'Retire the untrusted approval policy'). Only the rules, the dangerous-command heuristics and the sandbox remain. No step reads file contents, workspace size or memory.",
+   "cost": "Measured on this Mac (python subprocess wall time, medians of 3 rounds x 9 runs): direct /usr/bin/true 13.2 ms; sandbox-exec with a trivial profile 30.7 ms (allow-default) and 32.2 ms (deny-default), so Seatbelt adds about 17.5 ms per spawn; native `codex sandbox -P :read-only` 63.0 ms and `-P :workspace` 79.4 ms vs native `--version` 21.5 ms (includes per-invocation config load); execpolicy check 20.0-20.5 ms with 3 rules and 28.8 ms with 2,003 rules (startup plus Starlark parse); 20k files plus a 2 GB file in the workspace: 60.9 / 66.2 ms vs 62.2 / 68.7 ms. The per-call cost inside the agent loop could not be measured without a model call; it is inferred to be roughly the sandbox-exec spawn.",
+   "evidence": "measured",
+   "safety_role": "The OS enforces the write and network boundary whatever the command text says; the rules only decide whether to prompt. It cannot protect in-memory state. The benchmark's C1 keeps none (one-shot Rscript per request) and pays to re-read its inputs instead (86.71 s of extra read time on average, per the T03 README).",
+   "scales_with": "Command length and rule count. Not data size or file count."
+  },
+  {
+   "id": "X2",
+   "title": "Reference: Claude Code per-tool-call checks (documentation only, not measured)",
+   "where": "code.claude.com/docs/en/permissions (rule order deny, then ask, then allow; compound-command splitting; built-in read-only commands; PreToolUse hooks; 'isn't a security boundary around the program'); code.claude.com/docs/en/sandboxing (Seatbelt on macOS, bubblewrap on Linux/WSL2, built on @anthropic-ai/sandbox-runtime; sandboxed commands can be auto-allowed; network goes through a proxy with an empty allowlist by default)",
+   "mechanism": "Pattern matching on parsed command text plus an optional OS sandbox. The auto-mode classifier, a model, reviews only actions not otherwise decided, and the docs point to sandboxing for real enforcement.",
+   "cost": "unmeasured",
+   "evidence": "source",
+   "safety_role": "Same split as Codex: cheap text rules for prompting, the OS sandbox as the boundary.",
+   "scales_with": "Command text and rule count."
+  },
+  {
+   "id": "P1",
+   "title": "Pattern: the classifier reads the snapshot's cached size (key: address + class + shape + fingerprint)",
+   "where": "apply at R/perm-classify.R:2297-2300 using R/env-snapshot.R:161-172 and ck$snap (R/ckpt-objects.R:464)",
+   "mechanism": "Look up the binding in the session's latest snapshot and call env_snap_size only when its fingerprint no longer matches.",
+   "cost": "Measured: warm lookup 0.001 s and fingerprint under 0.001 s, against 4.2 s per sizing at full scale; it would remove both sizings of G2 in requests 2 and 3. The first sizing of a new object stays cold (5.07 s here).",
+   "evidence": "measured",
+   "safety_role": "Within the contract: gptr_risk sizes by 'env_snapshot()'s size rule, D-247' (04 L2004-2006), and that rule reuses a size while address, class, shape and fp hold (04 L2867; DEVIATIONS.md:6963). It also takes on the same staleness: a by-reference edit deep in a list (data.table := on raw$tables[[i]]) leaves fingerprint(raw) unchanged, because the fingerprint covers top-level elements only (utils-hash.R:155-178). The effect is limited to level 2 vs 3, as for the undo capture plans.",
+   "scales_with": "Binding count only."
+  },
+  {
+   "id": "P2",
+   "title": "Pattern: classify once per call and revalidate cheaply before the gate",
+   "where": "R/mcp-server.R:268-281; R/agent-dispatch.R:96-99, 587-611",
+   "mechanism": "perm_decide reuses the earlier risk when the post-hook input is identical (string comparison) and the bindings named in risk$assigned keep their address and fingerprint. Otherwise it reclassifies, as it already does for a modify.",
+   "cost": "Saves one full classification per call: 1.5-1.8 s measured at N=300, about 4.5 s at full scale here, about 13 s on AWS (benchmark).",
+   "evidence": "measured",
+   "safety_role": "Keeps re-classification after a modify (IC-53 item 7; 04 L2762). The parent still re-classifies worker-forwarded raw input (IC-53 item 5). The comment at agent-dispatch.R:573 and the contract text for perm_check would need a note that unchanged input and bindings reuse the earlier analysis. Inferred: a hook only receives a copy of the risk record (R value semantics), so it cannot change the gate's copy.",
+   "scales_with": "Number of assigned names."
+  },
+  {
+   "id": "P3",
+   "title": "Pattern: threshold check from a bounded lower bound; exact size only when displayed",
+   "where": "R/perm-classify.R:3099-3101; R/perm-gate.R:200-207",
+   "mechanism": "protect_size only needs 'bytes > 1e8'. Summing vector headers and element arrays (8-byte string pointers, without string contents) never exceeds the D-247 size, so passing the limit proves level 3; the walk stops at the limit. Only a result below the limit needs the exact or cached size.",
+   "cost": "Measured (prototype bounded-size.R, not gptr code): size_exceeds(raw, 1e8) 0.001 s; full lower-bound walk over 1,231 tables 0.027 s; env_snap_size 5.932 s; object.size 2.243 s (15.1e9 bytes, overcounts shared strings).",
+   "evidence": "measured",
+   "safety_role": "Gives the same decision whenever the bound is proven. The flag text '<class, size>' (IC-53 item 8) would read as a bound (for example '> 95.4 MB') unless the size is cached. The exported gptr_risk(envir=) can keep exact sizes.",
+   "scales_with": "Parts walked until the limit; independent of string length."
+  },
+  {
+   "id": "P4",
+   "title": "Pattern: time or element budget with a cautious fallback, as the file scans already have",
+   "where": "R/utils-size.R:46-48 (part budget documented as 'about 0.07 s', measured 4.2 s), R/ckpt-scan.R:10-30, contract 04 7.16 L3073-3078; fallback precedent R/agent-dispatch.R:850 ('a failing classifier ... gives 3: never a lower gate')",
+   "mechanism": "Bound the classifier's size walk by time or by number of string elements. When the budget runs out, record 'size unknown (over budget)' and treat the object as above protect_size (level 3).",
+   "cost": "Bounded by the chosen budget, against the unbounded 4.2 s now.",
+   "evidence": "inferred",
+   "safety_role": "Fails toward caution, so protect_size keeps its meaning (a larger object is level 3, 04 L377). D-247 says NA sizes remain only for promises, active bindings and missing arguments, so an over-budget unknown in the classifier is a documented deviation unless P1 or P3 answers first.",
+   "scales_with": "Nothing beyond the budget."
+  },
+  {
+   "id": "P5",
+   "title": "Pattern: run the deep check only when it can change the outcome",
+   "where": "R/perm-gate.R:86-139 (auto allows at :127), :200-207; 03-architecture.md:1495-1501 (mode x level table); R/perm-rules.R:114 (level rules); R/agent-dispatch.R:443 (nested comparison)",
+   "mechanism": "Skip sizing in auto and yolo (and in plan, manual and edits) unless an r(level<=N) allow rule, a nested-call level comparison or a prompt needs it. Level 2 and level 3 give identical `r` decisions in every mode.",
+   "cost": "Would remove all sizing in the benchmark's auto mode, about 2 x 4.5 s per call here and about 2 x 13 s on AWS.",
+   "evidence": "inferred",
+   "safety_role": "Same decisions (inferred from the table). Less information: risk$sizes (04 section 5.11) and the overwrite flag text would be absent or lazy in those modes, and tool_call hooks that read risk$sizes would see less. This needs a contract note.",
+   "scales_with": "Nothing on the default path."
+  },
+  {
+   "id": "P6",
+   "title": "Pattern: OS sandbox instead of code inspection (limited fit for gptr)",
+   "where": "03-architecture.md:1562 ('in-process R cannot be sandboxed'), :3474 (risk register), :2003 and :3182 (a remote or sandboxed evaluator, IC-69)",
+   "mechanism": "Codex and Claude Code bound shell children with Seatbelt or bubblewrap at a constant cost (about 17.5 ms per spawn measured). gptr's `r` tool evaluates in the user's live session, which no process sandbox can wrap. One could wrap only peter$sh()/bg/script children, or offer a sandboxed evaluator plugin that gives up live objects.",
+   "cost": "Measured spawn cost about 17.5 ms. It does not remove G1 or G2, which protect in-memory objects.",
+   "evidence": "measured",
+   "safety_role": "Would add a real file and network boundary for child processes; today the classifier is documented as advisory, not a security boundary (03-arch L1562; 04 L2004). It cannot replace object protection (protect_size, checkpoints), which Codex has no equivalent for.",
+   "scales_with": "Spawn count."
+  },
+  {
+   "id": "P7",
+   "title": "Pattern: do not count assignments in a guard branch the environment already decides",
+   "where": "R/perm-classify.R risk_scan branch handling (note_assign at :3088-3101)",
+   "mechanism": "With `if (!exists(\"x\", inherits = FALSE))` and x bound in envir, the branch cannot run, so it overwrites nothing.",
+   "cost": "Measured effect: 0.024 s vs 4.729 s classification.",
+   "evidence": "measured",
+   "safety_role": "It is a special case, against the convention preferring one general rule, and the classifier 'reads code as written' (03-arch L1562-1563). P1 to P3 make it unnecessary; lowest priority.",
+   "scales_with": "n/a"
+  }
+ ],
+ "measurements": [
+  {
+   "what": "Seatbelt cost per spawn",
+   "result": "direct /usr/bin/true 13.21 ms; sandbox-exec allow-default 30.72 ms; deny-default 32.21 ms (medians of 3 rounds x 9); about 17.5 ms added",
+   "method": "time_sandbox.py, python3 -I subprocess wall time, sandbox-timing.log"
+  },
+  {
+   "what": "Codex CLI sandboxed trivial command (node wrapper)",
+   "result": "codex --version 100.4 ms; codex sandbox -P :read-only -- /usr/bin/true 148.6 ms; -P :workspace 153.2 ms; sh -c 'echo hi' 163.3 ms; read-only write attempt denied ('Operation not permitted', rc 1) 162.2 ms",
+   "method": "time_sandbox.py, 3 rounds x 9 runs, medians; the CLI requires -P (built-in :read-only, :workspace)"
+  },
+  {
+   "what": "Codex native binary sandbox (no node wrapper)",
+   "result": "--version 21.5 ms; sandbox :read-only 63.0 ms; :workspace 79.4 ms; with --log-denials 86.4 ms",
+   "method": "time_native.py, 3 rounds x 9 runs, medians; native-timing.log"
+  },
+  {
+   "what": "Codex execpolicy check",
+   "result": "3 rules: 20.0-20.5 ms (prompt / forbidden / allow / null decisions correct); 2,003 rules: 27.7-30.0 ms, mostly process start-up and Starlark parse",
+   "method": "time_execpolicy.py with rules/small.rules and rules/large.rules, 3 rounds x 7 runs; execpolicy-timing.log"
+  },
+  {
+   "what": "Codex sandbox cost vs workspace size",
+   "result": "empty workspace 62.2 / 68.7 ms vs 20,000 files plus a 2 GB sparse file 60.9 / 66.2 ms (:read-only / :workspace), so no dependence",
+   "method": "time_wsbig.py, 3 rounds x 9 runs; wsbig-timing.log"
+  },
+  {
+   "what": "gptr risk_classify, full T03 scale (1,231 x 60,664 x 9, raw = 4.498e9 bytes by D-247)",
+   "result": "request 2: 4.729 s (4.322-4.741); request 3: 4.418 s; without the dead branch 0.024 / 0.046 s; without envir 0.030 / 0.050 s; level 3 with the branch, 2 without",
+   "method": "check-costs.R, 3 reps, median, proc.time; logs/check-costs-N1231_R60664.log"
+  },
+  {
+   "what": "env_snap_size(raw) scaling",
+   "result": "R=60664: N=30 0.114 s, N=100 0.408 s, N=300 1.183 s, N=1231 4.218 s; N=1231: R=606 0.118 s, R=6066 0.392 s, R=60664 4.218 s",
+   "method": "check-costs.R grid, 3 reps each, medians; results/check-costs-*.csv"
+  },
+  {
+   "what": "Items walked by env_snap_size before sampling",
+   "result": "715 of 1,231 data.tables and 2,146 long character vectors; 715 of 5,000 too; all walked at N <= 300",
+   "method": "walk-count.R, trace counter on env_size_walk, R=2000; logs/walk-count.log"
+  },
+  {
+   "what": "Rprof of one full-scale classification",
+   "result": "sampling 3.37 s: env_snap_size via note_assign/risk_binding_info 99.4% total; unique.default 85.2% self; unlist 9.6%",
+   "method": "utils::Rprof(interval = 0.005) plus summaryRprof; results/rprof-classify-r2-N1231_R60664.out"
+  },
+  {
+   "what": "env_snap_size calls per classification",
+   "result": "request 2 code: 2 calls (raw 7.089 s, sample_summary 0 s); request 3 code: 3 calls (raw 5.512 s, reference_gene_ids 0.003 s, gene_rows 0 s)",
+   "method": "trace() enter/exit timers on env_snap_size, full scale, single run"
+  },
+  {
+   "what": "Served r call breakdown at N=300, R=60664 (mcp_dispatch_local from before_request, fake provider, auto mode)",
+   "result": "first served call 6.356 s: env_snap_size(raw) 1.781 s pre-gate, 1.495 s gate, 1.457 s cold checkpoint snapshot; mcp_serve_gate = perm_decide 1.954 s; checkpoint_before 1.590 s; mcp_serve_r 0.445 s; checkpoint_after 0.138 s. Second served call 3.932 s: raw sized 1.527 + 1.697 s (classifier only), gate 1.876 s, checkpoint_before 0.144 s (snapshot 0.005 s). Session start sized raw once (1.979 s).",
+   "method": "replay-count.R, trace() on 12 functions, one run (n=1). The risk.classify service closure is not reachable by namespace trace, so it was counted through env_snap_size. The second call's code errored during execution after the gate (row-count edits), which does not affect the gate timings."
+  },
+  {
+   "what": "Snapshot cache (existing gptr pattern)",
+   "result": "env_snapshot cold 5.069 s (4.897-5.190) vs warm 0.001 s; fingerprint(raw) under 0.001 s",
+   "method": "check-costs.R, full scale, 3 reps"
+  },
+  {
+   "what": "Bounded lower-bound threshold prototype",
+   "result": "size_exceeds(raw, 1e8) 0.001 s (TRUE); full lower-bound walk 0.027 s; env_snap_size 5.932 s (n=1); object.size 2.243 s (15.1e9 bytes)",
+   "method": "bounded-size.R, 5 reps (env_snap_size and object.size 1 rep), full scale"
+  },
+  {
+   "what": "Constant per-call parts",
+   "result": "risk_secret_scan 0.004 s; code_targets 0.024 s; eval_parse 0.001 s; eval_guard 0.015 s median (0.002-0.062); classify without envir 0.027-0.030 s (request 2); the same in every configuration",
+   "method": "check-costs.R, 3 reps"
+  },
+  {
+   "what": "Memory and contention",
+   "result": "full-scale check-costs process peak RSS 12.41 GB (gc max used 10.0 GB, about 4.5 GB data); bounded-size 10.96 GB; load average 8-14 on 16 cores during runs (single-threaded R, spreads within about 10%)",
+   "method": "/usr/bin/time -l; uptime"
+  }
+ ],
+ "artifacts": [
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/time_sandbox.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/time_native.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/time_execpolicy.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/time_wsbig.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/sandbox-timing.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/sandbox-timing.json",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/native-timing.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/execpolicy-check.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/execpolicy-timing.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/wsbig-timing.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/rules/small.rules",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/rules/large.rules",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/codex-help.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/codex-sandbox-help.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/codex-exec-help.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/codex-src (openai/codex sources at rust-v0.157.1 = 36650394, plus is_safe_command_pre_removal.rs, REF.txt, tree.txt)",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/check-costs.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/run-grid.sh",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/bounded-size.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/replay-count.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/walk-count.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/logs/check-costs-N1231_R60664.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/logs/check-costs-N300_R60664.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/logs/check-costs-N100_R60664.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/logs/check-costs-N30_R60664.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/logs/check-costs-N1231_R6066.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/logs/check-costs-N1231_R606.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/logs/bounded-size-N1231_R60664.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/logs/replay-count-N300_R60664.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/logs/walk-count.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/codex-compare/r/results (check-costs-*.csv, bounded-size-*.csv, replay-count-N300_R60664.csv, rprof-classify-r2-N1231_R60664.out)"
+ ],
+ "open_questions": [
+  "The per-classification time here (about 4.5 s at full scale) is about 2.8x less than the benchmark's ~13 s per block on AWS. The machine factor and the real-data string mix (fread gene_name and gene_type uniqueness) were not measured.",
+  "The full served-call replay at N=1231 was not run, to stay near the 12 GB cap. The double sizing per call was measured at N=300 and the component costs at full scale.",
+  "Do tool_call hooks in real deployments modify `r` inputs or change bindings between the first classification and the gate? P2's revalidation key (identical code plus addresses and fingerprints of risk$assigned) assumes a hook can only change things it can be seen to change.",
+  "Request 1's 13.9 s checkpoint_after on AWS is inferred, not decomposed, to be the cold D-247 sizing of the new raw (5.07 s here).",
+  "Codex's per-call cost inside its agent loop (config already loaded) cannot be measured without a model call. The CLI numbers include per-invocation config loading. The benchmark used codex 0.165.0; source and timings here are 0.157.1, and main (2026-11-16) has the same command_safety layout.",
+  "Claude Code was not timed; its pipeline is described from the docs only.",
+  "Is the decision-equivalence of level 2 vs 3 for `r` (P5) complete? It was read from the 03-architecture 6.8.1 table and perm-gate.R. Other consumers of risk$sizes or the level (plan allowlist, nested gating, UI, third-party hooks) were not traced exhaustively."
+ ]
+}

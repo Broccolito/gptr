@@ -1,0 +1,32 @@
+
+===== ckpt-records =====
+c1     share rep 1: identical vs base: 
+c1     files rep 1: DIFFERENT vs base: only base: [objects | files | created | created | character | 12048 | TRUE | ; objects | gene_rows | created | created | logical | 242704 | TRUE | ; objects | input_audit | created | created | data.frame | 1296 | TRUE | ; objects | raw | created | created | list | 156698880 | TRUE | ; objects | reference_gene_ids | created | created | character | 5338416 | TRUE | ; objects | total_gene_counts | created | created | numeric | 56 | TRUE | ; objects | zero_gene_values | created | created | numeric | 56 | TRUE | ]  only files: []
+c1     off rep 1: DIFFERENT vs base: only base: [files |  |  |  |  | NA | FALSE | ; objects | files | created | created | character | 12048 | TRUE | ; objects | gene_rows | created | created | logical | 242704 | TRUE | ; objects | input_audit | created | created | data.frame | 1296 | TRUE | ; objects | raw | created | created | list | 156698880 | TRUE | ; objects | reference_gene_ids | created | created | character | 5338416 | TRUE | ; objects | total_gene_counts | created | created | numeric | 56 | TRUE | ; objects | zero_gene_values | created | created | numeric | 56 | TRUE | ]  only off: [(none) |  |  |  |  | NA | NA | no checkpoint entry]
+c1     all rep 1: identical vs base: 
+c1     share rep 2: identical vs base: 
+c1     files rep 2: DIFFERENT vs base: only base: [objects | files | created | created | character | 12048 | TRUE | ; objects | gene_rows | created | created | logical | 242704 | TRUE | ; objects | input_audit | created | created | data.frame | 1296 | TRUE | ; objects | raw | created | created | list | 156698880 | TRUE | ; objects | reference_gene_ids | created | created | character | 5338416 | TRUE | ; objects | total_gene_counts | created | created | numeric | 56 | TRUE | ; objects | zero_gene_values | created | created | numeric | 56 | TRUE | ]  only files: []
+c1     off rep 2: DIFFERENT vs base: only base: [files |  |  |  |  | NA | FALSE | ; objects | files | created | created | character | 12048 | TRUE | ; objects | gene_rows | created | created | logical | 242704 | TRUE | ; objects | input_audit | created | created | data.frame | 1296 | TRUE | ; objects | raw | created | created | list | 156698880 | TRUE | ; objects | reference_gene_ids | created | created | character | 5338416 | TRUE | ; objects | total_gene_counts | created | created | numeric | 56 | TRUE | ; objects | zero_gene_values | created | created | numeric | 56 | TRUE | ]  only off: [(none) |  |  |  |  | NA | NA | no checkpoint entry]
+c1     all rep 2: identical vs base: 
+e      share rep 1: identical vs base: 
+e      files rep 1: DIFFERENT vs base: only base: [objects | raw | changed | skip | list | 156698880 | FALSE | over the undo budget]  only files: [(none) |  |  |  |  | NA | NA | no checkpoint entry]
+e      off rep 1: DIFFERENT vs base: only base: [objects | raw | changed | skip | list | 156698880 | FALSE | over the undo budget]  only off: [(none) |  |  |  |  | NA | NA | no checkpoint entry]
+e      all rep 1: identical vs base: 
+e      share rep 2: identical vs base: 
+e      files rep 2: DIFFERENT vs base: only base: [objects | raw | changed | skip | list | 156698880 | FALSE | over the undo budget]  only files: [(none) |  |  |  |  | NA | NA | no checkpoint entry]
+e      off rep 2: DIFFERENT vs base: only base: [objects | raw | changed | skip | list | 156698880 | FALSE | over the undo budget]  only off: [(none) |  |  |  |  | NA | NA | no checkpoint entry]
+e      all rep 2: identical vs base: 
+
+===== rewind-preview =====
+c1     share rep 1: identical vs base: 
+c1     files rep 1: DIFFERENT vs base: only base: [undo | objects | object files | TRUE | would be removed; undo | objects | object gene_rows | TRUE | would be removed; undo | objects | object input_audit | TRUE | would be removed; undo | objects | object raw | TRUE | would be removed; undo | objects | object reference_gene_ids | TRUE | would be removed; undo | objects | object total_gene_counts | TRUE | would be removed; undo | objects | object zero_gene_values | TRUE | would be removed]  only files: []
+c1     all rep 1: identical vs base: 
+c1     share rep 2: identical vs base: 
+c1     files rep 2: DIFFERENT vs base: only base: [undo | objects | object files | TRUE | would be removed; undo | objects | object gene_rows | TRUE | would be removed; undo | objects | object input_audit | TRUE | would be removed; undo | objects | object raw | TRUE | would be removed; undo | objects | object reference_gene_ids | TRUE | would be removed; undo | objects | object total_gene_counts | TRUE | would be removed; undo | objects | object zero_gene_values | TRUE | would be removed]  only files: []
+c1     all rep 2: identical vs base: 
+e      share rep 1: identical vs base: 
+e      files rep 1: DIFFERENT vs base: only base: [undo | objects | object raw | FALSE | not restored (over the undo budget)]  only files: []
+e      all rep 1: identical vs base: 
+e      share rep 2: identical vs base: 
+e      files rep 2: DIFFERENT vs base: only base: [undo | objects | object raw | FALSE | not restored (over the undo budget)]  only files: []
+e      all rep 2: identical vs base: 

@@ -1,0 +1,6 @@
+{"spawn_to_initialize_response_s": 0.5093334999983199, "first_line_s": 0.5092545840307139, "subtype": "success", "rc": 0, "stderr_head": ""}
+{"spawn_to_initialize_response_s": 0.31605845800368115, "first_line_s": 0.3159870829549618, "subtype": "success", "rc": 0, "stderr_head": ""}
+{"spawn_to_initialize_response_s": 0.33295783400535583, "first_line_s": 0.3328919170307927, "subtype": "success", "rc": 0, "stderr_head": ""}
+{"spawn_to_initialize_response_s": 0.3772390839876607, "first_line_s": 0.37716991698835045, "subtype": "success", "rc": 0, "stderr_head": ""}
+{"spawn_to_initialize_response_s": 0.33809600002132356, "first_line_s": 0.33804000000236556, "subtype": "success", "rc": 0, "stderr_head": ""}
+{"summary": true, "n_ok": 5, "median_s": 0.33809600002132356}

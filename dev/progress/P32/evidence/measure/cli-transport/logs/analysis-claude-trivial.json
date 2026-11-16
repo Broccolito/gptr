@@ -1,0 +1,70 @@
+{
+ "cli": "claude",
+ "runs": [
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/claude-trivial-1",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/claude-trivial-2",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/claude-trivial-3"
+ ],
+ "per_request": {
+  "req1": {
+   "request_to_spawn_s": 2.66,
+   "run_start_s": 2.1493,
+   "spawn_call_s": 0.0454,
+   "spawn_to_fake_main_s": 0.3315,
+   "handshake_s": 0.067,
+   "fake_start_to_initialize_received_s": 0.0298,
+   "n_calls": 20,
+   "calls_total_s": 1.7503,
+   "last_call_to_turn_completed_s": 0.0007,
+   "turn_completed_to_session_sees_it_s": 0.0505,
+   "turn_end_processing_to_request_exit_s": 0.4544,
+   "run_settle_s": 0.3286,
+   "request_wall_s": 5.4042
+  },
+  "req2plus": {
+   "request_to_spawn_s": 0.1063,
+   "run_start_s": 0.0132,
+   "spawn_call_s": 0.037,
+   "spawn_to_fake_main_s": 0.3364,
+   "handshake_s": 0.0289,
+   "fake_start_to_initialize_received_s": 0.0301,
+   "n_calls": 20.0,
+   "calls_total_s": 0.9644,
+   "last_call_to_turn_completed_s": 0.0008,
+   "turn_completed_to_session_sees_it_s": 0.0023,
+   "turn_end_processing_to_request_exit_s": 0.326,
+   "run_settle_s": 0.3013,
+   "request_wall_s": 1.9584
+  }
+ },
+ "per_request_n": {
+  "req1": 3,
+  "req2plus": 12
+ },
+ "per_call_median": {
+  "rtt": 0.046,
+  "hop_in": 0.0005,
+  "fifo_wait": 0.001,
+  "pre_start": 0.0022,
+  "outer": 0.0323,
+  "post_end": 0.0013,
+  "hop_out": 0.007,
+  "in_session": 0.0385
+ },
+ "per_call_p90": {
+  "rtt": 0.0538,
+  "hop_in": 0.0007,
+  "fifo_wait": 0.0014,
+  "pre_start": 0.0049,
+  "outer": 0.0381,
+  "post_end": 0.0016,
+  "hop_out": 0.008,
+  "in_session": 0.0451
+ },
+ "per_call_n": 300,
+ "handshake_median": {
+  "relay_or_init_first": null,
+  "initialized_rtt": null,
+  "toolslist_rtt": null
+ }
+}

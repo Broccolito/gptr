@@ -1,0 +1,70 @@
+{
+ "cli": "codex",
+ "runs": [
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/codex-create30-1",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/codex-create30-2",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/codex-create30-3"
+ ],
+ "per_request": {
+  "req1": {
+   "request_to_spawn_s": 2.5457,
+   "run_start_s": 2.1201,
+   "spawn_call_s": 0.0393,
+   "spawn_to_fake_main_s": 0.3045,
+   "relay_spawn_to_initialize_answer_s": 0.3274,
+   "rest_of_handshake_s": 0.0802,
+   "n_calls": 1,
+   "calls_total_s": 13.918,
+   "last_call_to_turn_completed_s": 0.0645,
+   "turn_completed_to_session_sees_it_s": 0.0275,
+   "turn_end_processing_to_request_exit_s": 1.2836,
+   "run_settle_s": 1.1265,
+   "request_wall_s": 18.5551
+  },
+  "req2plus": {
+   "request_to_spawn_s": 0.4574,
+   "run_start_s": 0.0389,
+   "spawn_call_s": 0.1072,
+   "spawn_to_fake_main_s": 0.2889,
+   "relay_spawn_to_initialize_answer_s": 0.3394,
+   "rest_of_handshake_s": 0.061,
+   "n_calls": 1.0,
+   "calls_total_s": 2.8061,
+   "last_call_to_turn_completed_s": 0.06,
+   "turn_completed_to_session_sees_it_s": 0.0257,
+   "turn_end_processing_to_request_exit_s": 0.156,
+   "run_settle_s": 0.0625,
+   "request_wall_s": 4.243
+  }
+ },
+ "per_request_n": {
+  "req1": 3,
+  "req2plus": 6
+ },
+ "per_call_median": {
+  "rtt": 2.8885,
+  "hop_in": 0.0118,
+  "fifo_wait": 0.001,
+  "pre_start": 0.0024,
+  "outer": 2.8442,
+  "post_end": 0.0018,
+  "hop_out": 0.0078,
+  "in_session": 2.8627
+ },
+ "per_call_p90": {
+  "rtt": 14.2506,
+  "hop_in": 0.0179,
+  "fifo_wait": 0.0092,
+  "pre_start": 0.0057,
+  "outer": 14.2172,
+  "post_end": 0.0115,
+  "hop_out": 0.0149,
+  "in_session": 14.228
+ },
+ "per_call_n": 9,
+ "handshake_median": {
+  "relay_or_init_first": 0.3338,
+  "initialized_rtt": null,
+  "toolslist_rtt": 0.0654
+ }
+}

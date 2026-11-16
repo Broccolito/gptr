@@ -1,0 +1,15 @@
+### round 1
+native_version {"n": 9, "median_ms": 19.3, "min_ms": 17.75, "rc": 0, "err": ""}
+native_sandbox_readonly_true {"n": 9, "median_ms": 58.01, "min_ms": 51.75, "rc": 0, "err": ""}
+native_sandbox_workspace_true {"n": 9, "median_ms": 79.37, "min_ms": 67.22, "rc": 0, "err": ""}
+native_sandbox_workspace_log_denials_true {"n": 9, "median_ms": 81.53, "min_ms": 79.74, "rc": 0, "err": "\n=== Sandbox denials ===\n(true) sysctl-read security.mac.lockdown_mode_state\n(true) sysctl-read kern.bootargs\n(true) file-write-data /dev/dtracehelper\n(true) sysctl-read kern.iossupportversion\n"}
+### round 2
+native_version {"n": 9, "median_ms": 21.51, "min_ms": 20.8, "rc": 0, "err": ""}
+native_sandbox_readonly_true {"n": 9, "median_ms": 62.95, "min_ms": 59.6, "rc": 0, "err": ""}
+native_sandbox_workspace_true {"n": 9, "median_ms": 83.52, "min_ms": 64.51, "rc": 0, "err": ""}
+native_sandbox_workspace_log_denials_true {"n": 9, "median_ms": 86.43, "min_ms": 80.96, "rc": 0, "err": "\n=== Sandbox denials ===\n(true) sysctl-read security.mac.lockdown_mode_state\n(true) sysctl-read kern.bootargs\n(true) file-write-data /dev/dtracehelper\n(true) sysctl-read kern.iossupportversion\n"}
+### round 3
+native_version {"n": 9, "median_ms": 24.98, "min_ms": 22.7, "rc": 0, "err": ""}
+native_sandbox_readonly_true {"n": 9, "median_ms": 67.68, "min_ms": 61.47, "rc": 0, "err": ""}
+native_sandbox_workspace_true {"n": 9, "median_ms": 67.57, "min_ms": 65.62, "rc": 0, "err": ""}
+native_sandbox_workspace_log_denials_true {"n": 9, "median_ms": 87.39, "min_ms": 80.43, "rc": 0, "err": "\n=== Sandbox denials ===\n(true) sysctl-read security.mac.lockdown_mode_state\n(true) sysctl-read kern.bootargs\n(true) file-write-data /dev/dtracehelper\n(true) sysctl-read kern.iossupportversion\n"}

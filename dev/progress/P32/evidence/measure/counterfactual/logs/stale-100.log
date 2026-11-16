@@ -1,0 +1,3 @@
+                     when key_unchanged base_bytes cache_bytes base_level cache_level
+1             before edit            NA  156698880   156698880          3           3
+2 after by-reference edit          TRUE  178538496   156698880          3           3

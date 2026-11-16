@@ -1,0 +1,26 @@
+{
+  "cfg": {
+    "scenario": "big",
+    "tools": "default",
+    "mode": "default",
+    "K": 10,
+    "reps": 3,
+    "warm": 2,
+    "ntab": 500,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 0,
+    "trace": 1,
+    "tag": "big_default_default",
+    "hooks": 1
+  },
+  "ws_gb": 6.1894,
+  "ws_build_s": 2.274,
+  "entries": 112,
+  "turns": 5,
+  "mode": "manual",
+  "preset": "standard",
+  "text": "Done.",
+  "maxrss_gb": null
+}

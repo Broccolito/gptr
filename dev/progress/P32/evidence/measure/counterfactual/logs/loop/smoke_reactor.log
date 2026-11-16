@@ -1,0 +1,11 @@
+[1] FALSE
+workspace empty built in 0.0s, object.size total 0.000 GB, 0 bindings
+requests:
+  req    label  k    t0     t1  wall  gc_s
+1   1     warm 10 1.283  4.852 3.569 0.314
+2   2     warm 10 4.852  6.510 1.658 0.083
+3   3 measured 10 6.531  7.840 1.309 0.057
+4   4 measured 10 7.840  9.280 1.440 0.075
+5   5 measured 10 9.280 10.946 1.666 0.083
+done smoke_reactor 
+       11.11 real        10.11 user         0.30 sys

@@ -1,0 +1,24 @@
+N=1231 build 2.4 s
+live MB 1907 rss 2.02 GB
+env_snap_size 4.829 s bytes 1.812e+09  gc max used MB 4969 rss 6.16 GB
+lower bound 0.0120 s = 1.002e+08
+full lower bound 0.1110 s = 1.795e+09
+snap facts 0.0010 s key=0x915e28908listlength 26d61bbd88c6d72d651f8217588432f3179
+        9.44 real         8.53 user         0.55 sys
+          6760153088  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              417535  page reclaims
+                  37  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  67  voluntary context switches
+                1883  involuntary context switches
+        144391134644  instructions retired
+         37420030380  cycles elapsed
+          6440621456  peak memory footprint

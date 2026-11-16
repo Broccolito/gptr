@@ -1,0 +1,27 @@
+### round 1
+small|git push origin main {"n": 7, "median_ms": 20.17, "decision": "prompt"}
+small|rm -rf build {"n": 7, "median_ms": 27.21, "decision": "forbidden"}
+small|ls -la {"n": 7, "median_ms": 20.47, "decision": "allow"}
+small|python3 script.py {"n": 7, "median_ms": 32.49, "decision": null}
+large|git push origin main {"n": 7, "median_ms": 29.15, "decision": "prompt"}
+large|rm -rf build {"n": 7, "median_ms": 29.01, "decision": "forbidden"}
+large|ls -la {"n": 7, "median_ms": 28.37, "decision": "allow"}
+large|python3 script.py {"n": 7, "median_ms": 28.82, "decision": null}
+### round 2
+small|git push origin main {"n": 7, "median_ms": 20.21, "decision": "prompt"}
+small|rm -rf build {"n": 7, "median_ms": 20.12, "decision": "forbidden"}
+small|ls -la {"n": 7, "median_ms": 20.22, "decision": "allow"}
+small|python3 script.py {"n": 7, "median_ms": 20.03, "decision": null}
+large|git push origin main {"n": 7, "median_ms": 28.78, "decision": "prompt"}
+large|rm -rf build {"n": 7, "median_ms": 28.08, "decision": "forbidden"}
+large|ls -la {"n": 7, "median_ms": 29.29, "decision": "allow"}
+large|python3 script.py {"n": 7, "median_ms": 30.0, "decision": null}
+### round 3
+small|git push origin main {"n": 7, "median_ms": 20.06, "decision": "prompt"}
+small|rm -rf build {"n": 7, "median_ms": 19.74, "decision": "forbidden"}
+small|ls -la {"n": 7, "median_ms": 21.43, "decision": "allow"}
+small|python3 script.py {"n": 7, "median_ms": 19.77, "decision": null}
+large|git push origin main {"n": 7, "median_ms": 28.77, "decision": "prompt"}
+large|rm -rf build {"n": 7, "median_ms": 28.98, "decision": "forbidden"}
+large|ls -la {"n": 7, "median_ms": 27.69, "decision": "allow"}
+large|python3 script.py {"n": 7, "median_ms": 28.25, "decision": null}

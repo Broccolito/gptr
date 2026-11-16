@@ -1,0 +1,70 @@
+== rprof-rprof-chrS-1231-a2-2.out  sampling.time = 6.47 s
+-- by.total
+                    total.time total.pct self.time self.pct
+"<Anonymous>"             6.47       100     0.005     0.08
+"tryCatch"                6.47       100     0.005     0.08
+"ctx_with_source"         6.47       100     0.000     0.00
+"doTryCatch"              6.47       100     0.000     0.00
+"ev_call"                 6.47       100     0.000     0.00
+"ev_dispatch"             6.47       100     0.000     0.00
+"ev_try"                  6.47       100     0.000     0.00
+"expr_fun"                6.47       100     0.000     0.00
+"fn"                      6.47       100     0.000     0.00
+"fun"                     6.47       100     0.000     0.00
+"gateway_dispatch"        6.47       100     0.000     0.00
+"gateway_run"             6.47       100     0.000     0.00
+"lapply"                  6.47       100     0.000     0.00
+"mcp_dispatch_impl"       6.47       100     0.000     0.00
+"mcp_dispatch"            6.47       100     0.000     0.00
+-- by.self
+                     self.time self.pct total.time total.pct
+"unique.default"         4.550    70.32      4.550     70.32
+"unlist"                 0.710    10.97      0.720     11.13
+"startsWith"             0.165     2.55      0.165      2.55
+"setalloccol"            0.150     2.32      0.150      2.32
+"env_size_walk"          0.105     1.62      3.670     56.72
+"identical"              0.075     1.16      0.085      1.31
+"all"                    0.075     1.16      0.075      1.16
+">"                      0.060     0.93      0.060      0.93
+"sum"                    0.050     0.77      0.050      0.77
+"file.exists"            0.040     0.62      0.055      0.85
+"=="                     0.040     0.62      0.040      0.62
+"stopifnot"              0.035     0.54      0.290      4.48
+"max"                    0.035     0.54      0.035      0.54
+"as.data.table.list"     0.030     0.46      0.195      3.01
+">="                     0.030     0.46      0.030      0.46
+== rprof-rprof-chrS-1231-a3-2.out  sampling.time = 5.805 s
+-- by.total
+                    total.time total.pct self.time self.pct
+"<Anonymous>"            5.805       100     0.010     0.17
+"doTryCatch"             5.805       100     0.005     0.09
+"ctx_with_source"        5.805       100     0.000     0.00
+"ev_call"                5.805       100     0.000     0.00
+"ev_dispatch"            5.805       100     0.000     0.00
+"ev_try"                 5.805       100     0.000     0.00
+"expr_fun"               5.805       100     0.000     0.00
+"fn"                     5.805       100     0.000     0.00
+"fun"                    5.805       100     0.000     0.00
+"gateway_dispatch"       5.805       100     0.000     0.00
+"gateway_run"            5.805       100     0.000     0.00
+"lapply"                 5.805       100     0.000     0.00
+"mcp_dispatch_impl"      5.805       100     0.000     0.00
+"mcp_dispatch"           5.805       100     0.000     0.00
+"mcp_serve_call"         5.805       100     0.000     0.00
+-- by.self
+                     self.time self.pct total.time total.pct
+"unique.default"         3.940    67.87      3.940     67.87
+"unlist"                 0.710    12.23      0.715     12.32
+"+"                      0.140     2.41      0.140      2.41
+"eval"                   0.125     2.15      0.735     12.66
+">"                      0.080     1.38      0.080      1.38
+"pmax"                   0.070     1.21      0.070      1.21
+">="                     0.065     1.12      0.065      1.12
+"identical"              0.060     1.03      0.070      1.21
+"all"                    0.060     1.03      0.060      1.03
+"floor"                  0.055     0.95      0.055      0.95
+"env_size_walk"          0.040     0.69      3.230     55.64
+"*"                      0.040     0.69      0.040      0.69
+"rlang::obj_address"     0.040     0.69      0.040      0.69
+"file.exists"            0.030     0.52      0.035      0.60
+"=="                     0.030     0.52      0.030      0.52

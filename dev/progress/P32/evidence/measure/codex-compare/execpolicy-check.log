@@ -1,0 +1,12 @@
+== git push origin main
+{"matchedRules":[]}
+
+== rm -rf build
+{"matchedRules":[]}
+
+== ls -la
+{"matchedRules":[]}
+
+== python3 script.py
+{"matchedRules":[]}
+

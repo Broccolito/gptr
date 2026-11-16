@@ -1,0 +1,27 @@
+{
+  "cfg": {
+    "scenario": "big",
+    "tools": "default",
+    "mode": "default",
+    "K": 10,
+    "reps": 3,
+    "warm": 0,
+    "ntab": 500,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 1,
+    "trace": 0,
+    "tag": "prof_big_def_def_first",
+    "hooks": 1,
+    "hcode": "x = rnorm(100); summary(x)"
+  },
+  "ws_gb": 6.1894,
+  "ws_build_s": 2.067,
+  "entries": 68,
+  "turns": 3,
+  "mode": "manual",
+  "preset": "standard",
+  "text": "Done.",
+  "maxrss_gb": null
+}

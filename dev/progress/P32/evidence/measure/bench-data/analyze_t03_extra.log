@@ -1,0 +1,19 @@
+C1 request_start->turn/started median/max: 0.02 0.091
+C1 turn/completed->request_end median/max: 0.023 0.028
+run | wall_s | gap_excess_s | after_provider_excess_s | before_provider_excess_s | outside_requests_excess_s | cf1_gap_only_s | cf2_plus_turn_edges_s | cf3_plus_startup_s
+A1-1 | 322.35 | 112.72 | 31.27 | 6.21 | 4.55 | 209.63 | 172.15 | 167.60
+A1-2 | 244.46 | 66.13 | 16.98 | 6.64 | 4.49 | 178.33 | 154.71 | 150.22
+A1-3 | 237.29 | 57.33 | 19.87 | 6.24 | 4.62 | 179.95 | 153.84 | 149.21
+median wall_s 244.46 mean 268.03
+median gap_excess_s 66.13 mean 78.73
+median after_provider_excess_s 19.87 mean 22.71
+median before_provider_excess_s 6.24 mean 6.37
+median outside_requests_excess_s 4.55 mean 4.55
+median cf1_gap_only_s 179.95 mean 189.31
+median cf2_plus_turn_edges_s 154.71 mean 160.23
+median cf3_plus_startup_s 150.22 mean 155.68
+C1 wall median/mean: 226.3 228.03
+C1 per-command overhead level used: 0.671 C1 outside-requests median: 1.027
+A1-1 large bindings in dead branch: 2 req2/3 gaps: [57.08, 55.34] gap per binding per pass: [14.27, 13.83] req1 post-provider: 29.4 per binding: 14.7 req1 internal-minus-read: 35.7
+A1-2 large bindings in dead branch: 1 req2/3 gaps: [29.9, 36.02] gap per binding per pass: [14.95, 18.01] req1 post-provider: 15.06 per binding: 15.06 req1 internal-minus-read: 21.5
+A1-3 large bindings in dead branch: 1 req2/3 gaps: [28.96, 28.33] gap per binding per pass: [14.48, 14.17] req1 post-provider: 18.03 per binding: 18.03 req1 internal-minus-read: 21.39

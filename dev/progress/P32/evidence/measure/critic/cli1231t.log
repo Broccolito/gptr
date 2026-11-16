@@ -1,0 +1,18 @@
+nfiles=1231 code=trivial calls/request=5 status=idle
+request walls: 2.85 1.35 1.32 
+  req 0 env_view_snapshot: n=1 total=0.001 s [0.001]
+  req 1 ckpt_files_sync: n=1 total=0.493 s [0.493]
+  req 1 ckpt_files_turn_scan: n=2 total=0.000 s [0.000 0.000]
+  req 1 ckpt_scan_run: n=1 total=0.493 s [0.493]
+  req 1 env_view_snapshot: n=11 total=0.001 s [0.000 0.000 0.000 0.001 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+  req 1 mcp_serve_exec: n=5 total=0.097 s [0.044 0.012 0.014 0.015 0.012]
+  req 2 ckpt_files_sync: n=1 total=0.321 s [0.321]
+  req 2 ckpt_files_turn_scan: n=2 total=0.000 s [0.000 0.000]
+  req 2 ckpt_scan_run: n=1 total=0.283 s [0.283]
+  req 2 env_view_snapshot: n=12 total=0.002 s [0.000 0.000 0.000 0.001 0.000 0.000 0.000 0.000 0.001 0.000 0.000 0.000]
+  req 2 mcp_serve_exec: n=5 total=0.073 s [0.016 0.013 0.014 0.016 0.014]
+  req 3 ckpt_files_sync: n=1 total=0.308 s [0.308]
+  req 3 ckpt_files_turn_scan: n=2 total=0.000 s [0.000 0.000]
+  req 3 ckpt_scan_run: n=1 total=0.307 s [0.307]
+  req 3 env_view_snapshot: n=12 total=0.002 s [0.000 0.000 0.001 0.000 0.000 0.000 0.001 0.000 0.000 0.000 0.000 0.000]
+  req 3 mcp_serve_exec: n=5 total=0.078 s [0.016 0.017 0.015 0.014 0.016]

@@ -1,0 +1,27 @@
+{
+  "cfg": {
+    "scenario": "empty",
+    "tools": "minimal",
+    "mode": "auto",
+    "K": 10,
+    "reps": 5,
+    "warm": 2,
+    "ntab": 300,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 0,
+    "trace": 0,
+    "tag": "base_empty_min_auto_hooks",
+    "hooks": 1,
+    "hcode": "x = rnorm(100); summary(x)"
+  },
+  "ws_gb": 0,
+  "ws_build_s": 0.001,
+  "entries": 156,
+  "turns": 7,
+  "mode": "auto",
+  "preset": "minimal",
+  "text": "Done.",
+  "maxrss_gb": null
+}

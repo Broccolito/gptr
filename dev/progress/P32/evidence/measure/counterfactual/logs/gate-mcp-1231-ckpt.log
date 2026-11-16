@@ -1,0 +1,68 @@
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   1  2.319   0.646      0.085 0.561       0.595    FALSE 0.3656006
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   2  0.623    0.26      0.138 0.122       0.169    FALSE 0.4083252
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+  create   c1   1 13.776   9.315      8.804 0.511        4.41    FALSE 7.949417
+home: files, gene_rows, input_audit, raw, reference_gene_ids, total_gene_counts, zero_gene_values
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   0  1.984   1.623      1.208 0.415       0.322    FALSE 7.990219
+   variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_files   a2   0   1.87   1.523      1.141 0.382       0.313    FALSE 7.991486
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_off   a2   0  1.617   1.545      1.174 0.371       0.038    FALSE 8.767365
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   1  1.537   1.186      1.135 0.051       0.314    FALSE 8.772034
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a3   1   1.85   1.502      1.048 0.454       0.312    FALSE 10.93991
+   variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_files   a2   1  1.902   1.546      1.161 0.385       0.318    FALSE 10.94359
+   variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_files   a3   1  1.797   1.417      1.012 0.405       0.339    FALSE 13.74512
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_off   a2   1  1.631   1.556      1.174 0.382       0.034    FALSE 13.42059
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error  rss_gb
+ all_off   a3   1  1.109   1.021      0.938 0.083       0.048    FALSE 13.4218
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   2   1.56   1.198      1.146 0.052       0.321    FALSE 13.42198
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a3   2  1.997   1.425      0.976 0.449        0.53    FALSE 13.42239
+   variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_files   a2   2  1.926   1.568      1.176 0.392       0.312    FALSE 13.42252
+   variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_files   a3   2  1.712   1.319      0.911 0.408       0.344    FALSE 11.45598
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_off   a2   2  1.268   1.189      1.138 0.051       0.033    FALSE 11.45618
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_off   a3   2  1.062   0.972      0.891 0.081       0.044    FALSE 11.45633
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   3  1.257   1.175      1.119 0.056       0.033    FALSE 11.45648
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a3   3  1.779   1.412      0.966 0.446       0.318    FALSE 11.45679
+   variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_files   a2   3  1.899   1.522      1.141 0.381       0.318    FALSE 11.46431
+   variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_files   a3   3  1.718   1.322      0.903 0.419       0.336    FALSE 10.46251
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_off   a2   3  1.273   1.179      1.133 0.046       0.038    FALSE 10.46259
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+ all_off   a3   3  1.089   0.983      0.909 0.074       0.046    FALSE 10.46281
+DONE
+       60.00 real        53.58 user         3.48 sys
+         14758805504  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              994000  page reclaims
+                 508  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                1312  voluntary context switches
+                5912  involuntary context switches
+       1112127258789  instructions retired
+        233272454725  cycles elapsed
+         14045817848  peak memory footprint

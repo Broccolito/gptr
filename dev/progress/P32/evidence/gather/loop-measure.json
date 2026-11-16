@@ -1,0 +1,248 @@
+{
+ "summary": "I measured the native agent loop offline with the fake provider: K=10 one-line `r` calls (`1 + 1`) per peter() request, 2 warm-up requests, then 3 measured requests (5 for baselines). Headline numbers come from a byte-compiled install of the pinned source. pkgload::load_all made the first request 2-3x slower through JIT compiling and steady state about 10% slower, so those runs are only a cross-check.\n\nOn an empty workspace one turn costs about 135 ms of pure harness time (installed, both modes, both tool sets within \u00b13%). It splits into: rebuilding the request 45-49 ms, response accounting 21 ms, the tool dispatcher about 35 ms around 21 ms of evaluation, and about 22 ms of reactor sleep (3 pump iterations of about 7 ms each). Each peter(s, prompt=) request adds about 150 ms on top of its turns. The first request of a new session costs 1.7-1.9 s for K=10, against 1.24-1.30 s for the second.\n\nThree costs grow with use. (1) Request building re-encodes every transcript message to JSON, hashes it and estimates its tokens on every model request: run_build = 4-6 ms + 0.54-0.59 ms per message (R2 >= 0.93), so at about 300 messages a turn costs 245-265 ms instead of 135. Caching that per-message work by content hash cut the turn from 243 to 106 ms and the request from 2.76 to 1.23 s. (2) The number of objects in the workspace: each `r` call takes two snapshots of every object, and with 1,000 small objects each takes 57 ms, so a turn costs 252 ms. Most of that is number formatting in env_shape(); a faster integer formatter cut the turn to 190 ms. (3) Object size matters only when the code names a big object as a possible overwrite target. On the native loop, `if (!exists(\"raw\")) raw = NULL; length(raw)` with a 2.2 GB, 500-table `raw` costs 3.36 s per call outside execution against 38 ms inside. call_risk runs twice per call, at 1.67 s each, both spent sizing `raw`, and peak memory rose from 4.3 to 7.9 GB. `length(raw)` alone costs a normal turn.\n\nSmaller per-turn items: uncached model_resolve (4 ms per call, about 6 ms per turn), setting_get read through every settings layer 181 times per request (about 3-7 ms per turn), a session-file append (open, write, flush, close) of about 5.6 ms per entry, and GC at 4-9% of wall time. Rprof overstates setting_get, proc.time and normalizePath (system-call sampling bias); the patch experiments give the true savings. Thousands of project files, my own instrumentation hooks (installed build) and document recording after the first request all cost nothing measurable.",
+ "causes": [
+  {
+   "id": "C1",
+   "title": "Every model request re-serialises, hashes and token-estimates the whole transcript",
+   "where": "R/prompt-cache.R:48-61 (prompt_message_json, prompt_request_elements), R/prompt-cache.R:86-133 (prompt_request_estimate), R/prompt-cache.R:191-220 (request_build), R/agent-run.R:626-658 (run_build: project_messages, run_identity, request.build, then prompt_request_estimate again at :653)",
+   "mechanism": "request_build JSON-encodes each message with jsonlite (0.2-0.8 ms per message, measured) and sha256-hashes every element to build the request view. prompt_request_estimate walks every content block and runs 3 times per request. project_messages and handoff_transform rebuild the message list. All of this happens on every model request, so each turn costs O(messages) and a session costs O(n^2). json_encode calls per K=10 request grew 440, 881, 1343, 1805 over consecutive requests of one session, and est_tokens grew 519 to 1871.",
+   "cost": "Installed: run_build = 4.2-5.9 ms + 0.54-0.59 ms per message (R2 0.93-0.95, n=155). That is 45-49 ms per turn at 44-110 messages and 152-164 ms per turn at about 300 messages (turn_end to before_request: 152-170 ms against 49-54 ms empty). Rprof of the history run: json_encode is 49% of CPU, prompt_request_elements 46%. Patch experiment (installed, history of about 300 messages): per-turn 243 -> 140 ms with a JSON cache alone, -> 106 ms with the estimate cache added; request 2.76 -> 1.61 -> 1.23 s. Empty workspace, all patches: per-turn 144 -> 85.5 ms.",
+   "evidence": "measured",
+   "safety_role": "The per-element sha256 view feeds the prefix guard and cache-break detection and is sent in the before_request event. The estimate feeds budget_check and the token ledger. Caching by content hash keeps all of this, since messages are append-only; nothing is lost.",
+   "scales_with": "transcript length (messages on the active path)"
+  },
+  {
+   "id": "C2",
+   "title": "Risk classification runs twice per call and sizes possible overwrite targets with env_snap_size",
+   "where": "R/agent-dispatch.R:105 (call_risk passed to tool_call_hook), R/agent-dispatch.R:590 (perm_decide calls call_risk again), R/agent-dispatch.R:852-877 (call_risk -> risk.classify), R/perm-classify.R:2296-2299 (risk_binding_leaf -> env_snap_size), R/utils-size.R:18-46",
+   "mechanism": "Static analysis of `if (!exists(\"raw\")) raw = NULL` treats `raw` as a possible overwrite target, so it computes the full gptr size of the bound object. That walk calls unique() over every string pointer (env_size_strings) and samples list items (env_size_items). The dispatcher classifies once for the tool_call hook and again inside perm_decide, and nothing is reused between the two.",
+   "cost": "Installed, native loop, raw = 500 data.tables of 60,664 x 9 with 3 character columns (about 2.2 GB): 3.36 s per call outside execution against 38 ms inside. call_risk takes 1.67 s per call and runs 2x per tool call; env_snap_size runs 7 times per K=3 request. Peak RSS 7.9 GB against 4.3 GB without the sizing. load_all: 4.22 s per call. The same workspace with code `length(raw)`: 143 ms per turn (load_all), no penalty.",
+   "evidence": "measured",
+   "safety_role": "Risk level and object-protection notes (size of what an overwrite would destroy) for the permission gate and the tool_call hook payload. Running it once per call and reusing the result loses nothing. Computing the size lazily or caching it by address and fingerprint keeps the protection.",
+   "scales_with": "bytes and string count of bindings the code may overwrite (not workspace size in general), times 2 calls"
+  },
+  {
+   "id": "C3",
+   "title": "Two workspace snapshots per r call, with slow per-binding shape formatting and fingerprints",
+   "where": "R/eval-core.R:188 and :192 (env_view_snapshot before and after evaluation), R/env-snapshot.R:20-22 (env_fmt_n uses format(big.mark=)), R/env-snapshot.R:64-90 (env_shape, env_snap_leaf), R/utils-hash.R:155-178 (fingerprint, sha256), R/ckpt-objects.R:464,547 (checkpointer env_snapshot)",
+   "mechanism": "eval_run snapshots every binding of the session home before and after each evaluation to report created or modified objects. Per binding it computes class, address, env_shape() (format() with big.mark through prettyNum, about 20 us) and a sha256 fingerprint.",
+   "cost": "Installed, 1,000 small objects: env_view_snapshot takes 57 ms each, 2 per call. tool_internal rises from 21 to 133-135 ms, the turn from 135 to 252 ms, the request from 1.50 to 2.79 s. Rprof (load_all): env_shape is 54% and fingerprint 32% of snapshot CPU. A fast integer formatter (patch) cut tool_internal from 132 to 74.5 ms and the turn from 238 to 189.5 ms. With a single 2.2 GB binding the snapshot takes only 2.8 ms.",
+   "evidence": "measured",
+   "safety_role": "Object-change lines in the tool result (+ created, ~ modified, - removed) and detection of in-place modification, used for rewind and checkpoints. Reusing the previous row when address, class and fingerprint are unchanged, or formatting shapes lazily, keeps it.",
+   "scales_with": "number of bindings in the session home (not their size)"
+  },
+  {
+   "id": "C4",
+   "title": "Workspace description at request start and snapshot at agent_end; first request sizes every object",
+   "where": "R/env-snapshot.R:358-386 (env_block_workspace), R/env-snapshot.R:388-406 (env_block_changes), R/env-snapshot.R:485-490 (env_on_agent_end), R/env-snapshot.R:136-180 (env_snap_rows sizes with reuse)",
+   "mechanism": "Each peter() request snapshots the home for <workspace> or <workspace_changes>, and agent_end snapshots it again. The first snapshot of a session computes env_snap_size for every binding; later ones reuse sizes when address, class, shape and fingerprint are unchanged.",
+   "cost": "context_collect takes 5 ms (empty), 65 ms (1,000 objects) and 7 ms (2.2 GB raw, steady). agent_end to return takes 7 ms (empty) and 66 ms (1,000 objects). First request with the 2.2 GB raw: context_collect 2.41-2.44 s, of which env_snap_size(raw) is 2.39 s; the first request takes 4.2-4.5 s against 1.77 s empty (installed), with minimal or default tools alike.",
+   "evidence": "measured",
+   "safety_role": "The model's view of the workspace and the change log the user made between requests. Removing it loses context.",
+   "scales_with": "object count each request; object size once per session (or whenever an object changes)"
+  },
+  {
+   "id": "C5",
+   "title": "Reactor pump sleeps about 5-7 ms between loop actions",
+   "where": "R/http-reactor.R:299-309 (reactor_next_due: tasks returning TRUE are due at now + 5 ms), R/http-reactor.R:238-273 (reactor_io waits), R/agent-run.R:1114-1136 (run_drive: one loop action per pump iteration), R/agent-run.R:1579-1604 (run_tools enqueues to the FIFO)",
+   "mechanism": "The loop advances one action per pump iteration (request, then tools, then after_turn). Each iteration waits for the 5 ms task tick. Rprof records 0 CPU samples inside reactor_io, so the time is idle.",
+   "cost": "reactor_io takes 7.3 ms per iteration x 33 iterations per K=10 request, about 22 ms per turn (installed and load_all alike). This shows in the boundary intervals: assistant message_end to tool_execution_start 11-12 ms, and tool_execution_end to turn_end 9-10 ms.",
+   "evidence": "measured",
+   "safety_role": "Avoids a busy-wait CPU spin while waiting for the model (stated in the comment at R/http-reactor.R:290-297). Advancing again immediately after an in-process step finishes would keep that benefit.",
+   "scales_with": "nothing (fixed per turn)"
+  },
+  {
+   "id": "C6",
+   "title": "Per-response accounting: uncached model resolution, usage rows and session-file appends",
+   "where": "R/agent-run.R:1308-1340 (run_response), R/provider-usage.R:339-360 (usage_row -> model_resolve at :359), R/catalog-models.R:877 (model_resolve -> catalog_get), R/session-object.R:179-190 (session_append), R/session-store.R:8-15, 30-55, 84-121 (store_impl, store_persist, open-append-flush-close per entry)",
+   "mechanism": "Each model response resolves its model record through the catalog (about 4 ms per call, 16 calls per request). It builds and stores a usage row, then redacts and JSON-encodes each new entry and opens, appends, flushes and closes the session file once per entry (2 entries per turn). store_impl() calls setting_get for every entry.",
+   "cost": "run_response takes 20-22 ms per model request; session_append 5.5-6.0 ms per entry x 2 per turn. Patch (memo of model_resolve): the provider interval fell from 29-31 to 23-26 ms, about 5-6 ms per turn; the request fell 4-7%.",
+   "evidence": "measured",
+   "safety_role": "Usage and cost ledger and budgets; crash-safe append-only transcript (IC-59). A model-record cache keyed by ref and registry generation keeps the semantics. Keeping the file open or batching the two appends per turn would change the crash-safety profile.",
+   "scales_with": "model responses and entries (fixed per turn)"
+  },
+  {
+   "id": "C7",
+   "title": "setting_get resolves every settings layer, including file stat and path normalisation, on every call",
+   "where": "R/utils-options.R:49-54 (setting_get), R/gptr-config.R:918-958 (settings_layered), R/gptr-config.R:263-278 (settings_file_read stamp check), R/gptr-config.R:208-226 (settings_path), R/utils-paths.R:148-153 (gptr_user_dir), R/tool-r.R:67-72 (r_evaluator per call)",
+   "mechanism": "There are 181 setting_get calls, 196 settings_file_read calls, 505 service_lookup calls and 258 project_root calls per K=10 request. Each setting_get does a service lookup, then tools::R_user_dir, file.exists, workspace_dir and project_root path normalisation.",
+   "cost": "Microbenchmark: setting_get 181 us, service_lookup 62.5 us, project_root 31 us. 181 calls x 181 us is about 33 ms per request. Patch (1 s memo): tool_internal fell from 19.5-21 to 13-14 ms; the turn fell 3-7 ms (2-5%). Rprof's 22% share is an artefact of system-call sampling bias.",
+   "evidence": "measured",
+   "safety_role": "Settings changed on disk or by option take effect immediately. A memo invalidated by option or file stamp per pump iteration would keep that behaviour.",
+   "scales_with": "number of setting reads (fixed per turn)"
+  },
+  {
+   "id": "C8",
+   "title": "Fixed per-call dispatcher and event costs",
+   "where": "R/agent-dispatch.R:79-116 (dispatch_steps), :226-240 (dispatch_finish), :372-414 (checkpointers), R/agent-run.R:113-126 (session_emit), R/ext-events.R (ev_dispatch)",
+   "mechanism": "Per call: validate, call_risk x2, the tool_call hook, perm_check, checkpoint_before and after, execute, result hooks, the tool-result append, and about 14 events per turn dispatched to builtin hooks (console status, checkpoint CLI hook and so on). There are 3,228 registry_get calls per request at 19 us each.",
+   "cost": "Installed empty: dispatch_call 34.8 ms per call, made up of tool_run 10.9, call_risk 1.5 x 2, tool_call_hook 2.6, perm_check 4.0, checkpoint_before 4.2, dispatch_finish 9.6. session_emit costs 1.0 ms per event, 151 events per request. registry_get totals about 61 ms per request (inferred from count x microbenchmark).",
+   "evidence": "measured",
+   "safety_role": "Permission gate, hooks and undo checkpoints. Only the duplicate call_risk and the repeated lookups are redundant.",
+   "scales_with": "tool calls (fixed per call)"
+  },
+  {
+   "id": "C9",
+   "title": "Per-request gateway start and end, including sizing every dot argument",
+   "where": "R/gptr-capture.R:10-24 (dot_facts: env_snap_size(x) at :18, on the session object for peter(s, ...)), R/gptr-gateway.R:165-280 (peter), R/agent-run.R:947-994 (run_start), R/agent-run.R:346-368 (run_freeze)",
+   "mechanism": "peter() sizes each dot argument; for peter(s, prompt=) that is the session object, whose size grows with the transcript until sampling caps it. Then come route matching, document location, context blocks, run start and the prompt freeze (once per session).",
+   "cost": "Installed, per request, outside the turns: gateway_pre 40 ms + agent_start to first request 62 ms + final answer turn 40 ms + settle 7 ms, about 150 ms (empty). With a 300-message history: 83 + 183 + 48 + 10 ms, about 324 ms. With 1,000 objects: about 269 ms. dot_facts env_snap_size: 28 ms (empty) to 57-61 ms (300 messages), plateauing at about 85 ms (load_all trace). First request of a new session: 1.72-1.90 s for K=10 against 1.24-1.30 s for the second; run_freeze 300 ms (minimal) or 425 ms (default tools).",
+   "evidence": "measured",
+   "safety_role": "Dot facts drive prompt and context selection and size notes. Sizing a gptr_session (or any object that will not be described) is unnecessary.",
+   "scales_with": "transcript length (session sizing) and dot-argument size"
+  },
+  {
+   "id": "C10",
+   "title": "Garbage collection driven by harness allocation",
+   "where": "whole loop (allocation from JSON encoding, data frames, snapshots)",
+   "mechanism": "Heavy allocation per turn triggers GCs, and full GCs must mark the large live heap.",
+   "cost": "gc.time per K=10 request (installed): 48-54 ms empty, 94-100 ms with 2.2 GB raw, 153-197 ms in a 300-message history; 4-9% of wall time. The all-patches history run fell from 177 to 55 ms.",
+   "evidence": "measured",
+   "safety_role": "none",
+   "scales_with": "allocation volume (history) and live heap size (workspace)"
+  },
+  {
+   "id": "C11",
+   "title": "pkgload::load_all inflates timings through JIT compiling (method caveat)",
+   "where": "measurement method; benchmark T03 mcp-replay-analysis/evidence/profile-mcp.R uses load_all",
+   "mechanism": "Source loaded with load_all is not byte-compiled, so the JIT compiles closures at run time; compiler::cmpfun was 12% of CPU even in measured requests.",
+   "cost": "First request with K=10: 3.5-3.8 s (load_all) against 1.72-1.90 s (installed). Steady-state turn: 146-154 ms against 135-139 ms. My hooks: no measurable overhead installed (1.574 s vs 1.596 s median per request); 4-13% under load_all.",
+   "evidence": "measured",
+   "safety_role": "n/a",
+   "scales_with": "first calls of each closure"
+  }
+ ],
+ "measurements": [
+  {
+   "what": "Per-turn harness time, empty workspace, installed build, K=10, by tools x mode",
+   "result": "turn (before_request to next before_request) median: minimal/auto 135 ms, minimal/manual 136, default/auto 137, default/manual 139. Intervals (minimal/auto): before_request to assistant message_end 32 ms; to tool_execution_start 12; tool outer 33 (internal 21); to turn_end 10; to next before_request 49.",
+   "method": "loop4.R (lib=installed), gptr_register hooks with proc.time stamps, 2 warm-up + 3 measured requests in one session, medians over 30 turns"
+  },
+  {
+   "what": "Per-request overhead outside the turns, installed, empty",
+   "result": "gateway_pre 40 ms, agent_start to first request 62 ms, final answer turn 40 ms, agent_end to return 7 ms. Whole request with K=10: 1.50-1.56 s median.",
+   "method": "loop4.R events and requests.csv"
+  },
+  {
+   "what": "First request of a new session (K=10), installed",
+   "result": "empty: 1.72-1.90 s against 1.24-1.30 s for the 2nd request; run_freeze 300 ms (minimal) or 425 ms (default tools). 2.2 GB raw: 4.22 s (minimal/auto), 4.48 s (default/manual); context_collect 2.41-2.44 s, env_snap_size(raw) 2.39 s.",
+   "method": "loop4.R trace() inclusive timers, request 1"
+  },
+  {
+   "what": "Growth with transcript length (history of 50 prior prompts, each with 1 tool call; about 310 message_end events), installed",
+   "result": "run_build = 4.2 ms + 0.591 ms per message (minimal/auto, R2 0.93) and 5.9 ms + 0.537 ms per message (default/manual, R2 0.95). Per turn 245-265 ms, against 135 ms empty; next_req 152-170 ms. Request with K=10: 2.75-2.95 s. Per-request start costs 324 ms.",
+   "method": "growth.R linear fit over 155 run_build calls; summary.R"
+  },
+  {
+   "what": "Workspace with 1,000 small objects, installed",
+   "result": "turn 252-253 ms (tool_internal 133-135 ms); env_view_snapshot 57 ms each, 2 per call; context_collect 64-65 ms per request; agent_end to return 66-67 ms; request 2.79 s.",
+   "method": "loop4.R scenario=small"
+  },
+  {
+   "what": "Workspace with 2.2 GB raw (500 data.tables 60,664 x 9, 3 character columns), installed, code 1 + 1",
+   "result": "turn 144-151 ms (+10 ms over empty); tool_internal 27 ms; env_view_snapshot 2.8 ms; GC 94-100 ms per request; peak RSS 4.3 GB. object.size reports 6.19 GB (it counts shared strings repeatedly).",
+   "method": "loop4.R scenario=big ntab=500"
+  },
+  {
+   "what": "T03 code pattern on the native loop, 2.2 GB raw, minimal/auto, K=3",
+   "result": "Installed: 3.36 s per call outside execution, 38 ms inside; call_risk 1.67 s, 2 per call; 10.5 s per request; peak RSS 7.9 GB. load_all: 4.22 s per call, peak 8.0 GB. Code `length(raw)` alone: 143 ms per turn, peak 4.8 GB (load_all).",
+   "method": "loop4.R / loop2.R with code='if (!exists(\"raw\")) raw = NULL; length(raw)'"
+  },
+  {
+   "what": "Counterfactual patches, installed patched copy, minimal/auto, history of about 300 messages",
+   "result": "per turn / request: none 243 ms / 2.76 s; json cache 140 / 1.61; json + est cache 106 / 1.23; settings memo 236 / 2.67; model memo 239 / 2.64; all 104 / 1.20.",
+   "method": "src-patched copy with options(lm.patch), loop4.R lib=patched, trace off"
+  },
+  {
+   "what": "Counterfactual patches, empty (5 requests) and 1,000 objects",
+   "result": "Empty per turn: none 144 ms, settings 141.5, model 135.5, all 85.5; request 1.60 -> 0.96 s. 1,000 objects per turn: none 238, shape 189.5 (tool_internal 132 -> 74.5 ms; agent_end to return 66 -> 37 ms), all 141.5.",
+   "method": "same patched copy"
+  },
+  {
+   "what": "Hot-helper call counts per K=10 request (counts are identical across builds)",
+   "result": "setting_get 181, settings_file_read 196, service_lookup 505, registry_get 3,228, project_root 258, session_emit 151, session_append 22, call_risk 20 (2 per tool call), model_resolve 16. json_encode 440/881/1343/1805 and est_tokens 519/903/1387/1871 over 4 consecutive requests.",
+   "method": "count.R with trace() counters"
+  },
+  {
+   "what": "Microbenchmarks (loaded package)",
+   "result": "setting_get 181 us; settings_get 91 us; service_lookup 62.5 us; workspace_dir 32.5 us; project_root 31 us; registry_get 19 us; est_tokens (200 chars) 19.5 us; json_encode of one message 200-812 us; model_resolve 4.07 ms; project_messages (7 messages) 130 us; redact_tree of one message 113 us; proc.time 1 us",
+   "method": "Rscript loops of 300-2,000 calls"
+  },
+  {
+   "what": "Reactor idle time",
+   "result": "reactor_io 7.3 ms per iteration, 33 per K=10 request, about 22 ms per turn; 0 CPU samples inside (idle)",
+   "method": "trace() timers plus Rprof (CPU-time sampling)"
+  },
+  {
+   "what": "GC share",
+   "result": "48-54 ms per request empty, 94-100 ms big, 153-197 ms history (4-9% of wall)",
+   "method": "gc.time() deltas per request (loop2.R and later)"
+  },
+  {
+   "what": "Instrumentation overhead",
+   "result": "Installed: no hooks 1.596 s vs hooks 1.574 s median per request. load_all: hooks +4-13%, growing with history. trace() adds about 4% (load_all).",
+   "method": "hooks=0 vs hooks=1, trace=0, 5 measured requests"
+  },
+  {
+   "what": "Project files",
+   "result": "2,000 or 10,000 files in the project: per turn 125/124 ms against 135 ms with none (no penalty; within the \u00b18% run-to-run noise)",
+   "method": "loop5.R nfiles=..."
+  },
+  {
+   "what": "Document recording (options(gptr.record='auto'), Rscript deferred backend, load_all)",
+   "result": "+0.20-0.29 s on request 1, +0.13-0.24 s on request 2, about 0 afterwards. Default 'ask' in a non-interactive run records nothing; doc_locate takes 2-8 ms per request.",
+   "method": "rec/rec_template.R, 3 alternating runs per setting"
+  },
+  {
+   "what": "load_all vs installed",
+   "result": "First request 3.5-3.8 s vs 1.72-1.90 s; steady-state turn 146-154 ms vs 135-139 ms; cmpfun 12% of CPU in measured load_all requests",
+   "method": "same driver, lib=installed vs load_all"
+  }
+ ],
+ "artifacts": [
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/loop.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/loop2.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/loop3.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/loop4.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/loop5.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/analyze.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/summary.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/growth.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/count.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/prof.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/callers.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/callees.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/batch1.sh",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/batch2.sh",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/batch5.sh",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/src-patched/gptr/R/zzz-lm-patches.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/rec/rec_template.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/summary_installed.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/summary_loadall.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/summary_patch_history.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/summary_patch_empty_small.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/summary_files.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/count_min_auto-counts.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/batch1.out",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/batch2.out",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/batch5.out",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/i_prof_empty.rprof",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/i_prof_history.rprof",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/i_prof_small.rprof",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/i_prof_big_first.rprof",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/p_prof_history_all.rprof",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/i_t03code_big",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/i_history_minimal_auto",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/i_empty_minimal_auto",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/i_small_minimal_auto",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/loop-measure/logs/i_big_minimal_auto"
+ ],
+ "open_questions": [
+  "A1 in the benchmark used the Codex CLI route, with tools served over MCP (mcp_serve_gate). I measured only gptr's native loop with the fake provider. CLI-route costs per request (process start, transport, the MCP server path) were not measured, so these loop numbers cannot be mapped directly onto A1's extra ~29 s of harness/model/network time.",
+  "Real HTTP providers stream many small deltas, each going through redact_stream and message_update events. The fake provider sends 16-character chunks, so per-delta costs on long real replies are unmeasured.",
+  "Extrapolating to T03 (1,231 tables, ~5.2 GB), assuming env_snap_size grows linearly: each call_risk would take ~4 s and allocate ~9 GB transiently on this machine. This is an inference; the AWS replay's ~13 s per gate half suggests a slower host, or possibly memory pressure there (unverified).",
+  "The history fits count message_end events (user, assistant, tool_result) and leave out operator reminder messages, so the true per-message slope over all sent messages is somewhat lower.",
+  "Other measurement agents ran at the same time. Identical configurations varied about \u00b18% between runs (for example 124-139 ms per empty turn), so differences under ~10 ms per turn are within noise.",
+  "The patches are measurement-only counterfactuals: content-hash memos, a 1 s settings memo and a fast formatter for integers under 1000. Correctness and invalidation were not checked beyond the runs completing without tool errors."
+ ]
+}

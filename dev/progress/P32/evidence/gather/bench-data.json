@@ -1,0 +1,155 @@
+{
+ "summary": "I worked only from the benchmark's published traces (T03 gptr 1.0.1 at commit 5e2992b, and T01/T08 with gptr 1.0.0). In T03 the median wall time was 244.46 s for A1 (gptr) and 226.30 s for C1 (Codex), with 3-4 versus 19-28 tool calls. Nearly all of A1's extra time is gptr's own in-process time, not the model.\n\n1. **Gap around each r call.** The gap is the outer interval minus the internal elapsed time. It is 2.1-2.3 s in request 1. In requests 2 and 3 it is 28.3-36.0 s in A1-2 and A1-3, and 55.3-57.1 s in A1-1, which is 88-96% of each call. Per run that totals 59.4-114.9 s (median 68.1 s). C1's matching cost is 0.63-0.78 s per Rscript (median 0.67 s) for launch and exit, plus 2.5-3.7 s per run of Codex wrapper time outside R.\n2. **The \"harness/model/network\" excess is not the model.** The benchmark reports A1 +29.15 s on the mean. A1's time inside the Codex CLI provider, net of tool calls, is 74-82 s per run, no more than C1's model/harness time of 74-86 s. The excess is gptr time outside the provider:\n   - 15.1-29.4 s after the provider returns in request 1 (0.7-1.3 s in requests 2 and 3), against C1's 0.02 s;\n   - 0.9-3.4 s before each provider start, 6.2-6.6 s per run;\n   - 4.5 s more startup and cleanup outside the requests.\n3. **The cost tracks large bindings.** A1-1's code never ran `rm(tables)`, so the dead fallback branch assigned two 5 GB bindings (`tables` and `raw`) instead of one. Its request-2/3 gaps (57.1 and 55.3 s) and its request-1 post-provider time (29.4 s) are about twice A1-2/A1-3's. That gives about 14-18 s per large binding per pass, roughly one whole-object size scan each (inference).\n4. **Not a 1.0.1 regression, and specific to this data.** The same ~32-35 s request-2/3 tool time shows in the T03 gptr 1.0.0 batches (dev29, dev30). With gptr 1.0.0, T08 (lists of numeric peak matrices, about 8 GB) has only 1.7-2.75 s per-call gaps, and T01's request-2/3 A1 intervals are 1.15 and 4.61 s. So the cost is tied to T03's 1,231 data.tables, which hold about 224 M strings in 3 character columns (inference).\n5. **Counterfactuals.** If each call's gap fell to C1's 0.67 s, A1's median would be 179.95 s, 20% below C1. Removing gptr's pre- and post-provider time as well gives 154.71 s, and matching C1's startup gives 150.22 s.\n\nAll of this is computed from published traces, with no new R timing runs, so other agents on this machine could not affect the numbers.",
+ "causes": [
+  {
+   "id": "C1-gate-risk-scan",
+   "title": "Pre-gate risk classification plus permission gate on every r call whose code overwrites a large existing binding",
+   "where": "R/agent-dispatch.R:96 (call_risk via tool_call_hook), R/agent-dispatch.R:587-598 (perm_decide recomputes call_risk), R/perm-classify.R:2277-2299 (risk_binding_info -> risk_binding_leaf -> env_snap_size), R/utils-size.R:18 (env_snap_size); MCP entry R/mcp-server.R:73 and :191",
+   "mechanism": "The model's code always has a dead branch, `if (!exists(\"raw\")) { files = ...; tables = ...; raw = ... }`. Static risk analysis treats those as overwrites of existing bindings and sizes each large one through env_snap_size. Classification runs once before the gate and again inside perm_decide. Trace data: the gap is 2.1-2.3 s when `raw` does not exist yet (request 1) and 28-36 s once it exists (requests 2 and 3). It roughly doubles to 55-57 s when the code also overwrites a second large binding (`tables`, A1-1). The single published replay splits it into 12.8-13.3 s before the gate and 13.4 s inside mcp_serve_gate.",
+   "cost": "Measured from traces (AWS, 2 vCPU, R 4.3.3). One large binding: 28.96, 29.90, 28.33, 36.02 s per call (median 29.4 s). Two bindings: 57.08 and 55.34 s. That is 88-96% of each call's outer time and 57.3-112.7 s of gap above C1's level per run. The gap is the same under gptr 1.0.0 (T03 dev29/dev30 request-2/3 tool time 30.1-35.8 s).",
+   "evidence": "measured",
+   "safety_role": "Risk classification flags writes, deletes, network use and overwrites of existing objects, and the gate enforces mode and rules on the final, post-hook input. Removing it would remove overwrite protection and the guarantee that approval applies to the hooked call.",
+   "scales_with": "Number of large existing bindings the code assigns, including in branches that never run, times the number of classification passes (2). Per binding it scales with object content: about 224 M strings costs ~14 s per pass, while T08's numeric matrices (1.0.0) cost <2.75 s per whole call."
+  },
+  {
+   "id": "C2-post-provider-req1",
+   "title": "gptr time after the Codex provider returns in the request that creates the large object",
+   "where": "Between the usage event and request_end in A1 trace.jsonl (gptr_wait/peter run end). Mechanism not traced; candidate env snapshot with sizes at R/env-snapshot.R:120-171, called from R/ckpt-objects.R:464 and :547 (unverified)",
+   "mechanism": "After the CLI turn ends (usage event), gptr takes another 15-29 s before the request returns, but only in request 1, the request that creates `raw`. It doubles in A1-1 (29.4 s), which also kept `tables`. That points to one size or snapshot scan per new large binding at run end (inference). The benchmark counts it as harness/model/network time.",
+   "cost": "Measured, request 1: 29.40 s (A1-1, 2 bindings), 15.07 s (A1-2), 18.03 s (A1-3). Requests 2/3: 0.71-1.27 s. C1 analog (turn/completed to request_end): 0.023 s. Excess per run: 31.3, 17.0, 19.9 s (median 19.9 s).",
+   "evidence": "measured",
+   "safety_role": "Unknown from traces. Probably the end-of-run object ledger, checkpoint baseline or replay record that undo and session documents rely on.",
+   "scales_with": "Number of newly created large bindings in the run, and their content (strings)."
+  },
+  {
+   "id": "C3-checkpoint-after-req1",
+   "title": "checkpoint_after in the request that creates raw",
+   "where": "internal elapsed of request-1 r call; R/ckpt-objects.R (object checkpoint policy, ~L458 per replay README)",
+   "mechanism": "Internal elapsed includes checkpoint_after. In request 1, A1's internal time minus input reading is 21.4-21.5 s (A1-2, A1-3), against 3.7-3.9 s of non-read R time in C1's request 1. The replay measured checkpoint_after at 13.865 s there and 0.08-0.15 s in requests 2/3. A1-1, with two bindings, has 35.7 s, about +14 s more.",
+   "cost": "Replay measured 13.9 s (single replay). In the original runs the excess over C1's R work is ~17.6 s in A1-2/A1-3 and ~31.9 s in A1-1; attributing it to checkpoint_after is inference.",
+   "evidence": "inferred",
+   "safety_role": "Records which objects and files changed so undo can restore the pre-call state.",
+   "scales_with": "Size and content of newly added or modified bindings."
+  },
+  {
+   "id": "C4-pre-provider",
+   "title": "gptr work before each Codex exec starts",
+   "where": "request_start to user message_end to provider start (usage.ts - seconds) in A1 trace",
+   "mechanism": "1.0-3.4 s per request before `codex exec` is spawned: 2.8-3.0 s before the user message is even recorded in request 1, 1.6-1.7 s in request 2 and 0.85-1.07 s in request 3. C1's app-server takes 0.02 s from request start to turn/started.",
+   "cost": "Measured: 6.27, 6.70, 6.30 s per run (excess over C1 6.2-6.6 s).",
+   "evidence": "measured",
+   "safety_role": "Unknown from traces (run setup, prompt assembly, possible env baseline).",
+   "scales_with": "Decreases over requests 1 to 3 and is not tied to raw's presence. Unclear."
+  },
+  {
+   "id": "C5-startup-outside-requests",
+   "title": "A1 startup and cleanup outside requests",
+   "where": "biomedical/v0.5/aws/peter.R (benchmark driver: pkgload::load_all of gptr source, gptr_config, Matrix load)",
+   "mechanism": "A1's wall time includes R startup, load_all of the gptr source tree and session setup. C1 has app-server initialize plus thread start.",
+   "cost": "Measured: A1 5.52-5.65 s vs C1 1.02-1.36 s (excess about 4.5 s per run).",
+   "evidence": "measured",
+   "safety_role": "None (benchmark harness choice; an installed package would differ).",
+   "scales_with": "Nothing task-specific."
+  },
+  {
+   "id": "C6-checkpoint-before",
+   "title": "checkpoint_before per call",
+   "where": "replay phase timing (mcp-replay-analysis/figures/phase-timing.csv)",
+   "mechanism": "Object, file and state capture before execution.",
+   "cost": "Replay measured 1.01 s (req 1), 1.44 s (req 2), 0.82 s (req 3); included in the gap above.",
+   "evidence": "measured",
+   "safety_role": "Undo/restore of the pre-call state.",
+   "scales_with": "Objects the code may modify."
+  },
+  {
+   "id": "C7-cli-route",
+   "title": "Per-request Codex CLI process plus R MCP relay (A1 transport)",
+   "where": "R/cli-codex.R:1-9 (one `codex exec --json` per turn), R/cli-codex.R:45-54 (relay `Rscript --vanilla inst/gptr/mcp_relay.R`)",
+   "mechanism": "Every request spawns a new codex exec and an R relay process, and tool calls travel through the relay's mailbox. C1 uses one persistent app-server thread.",
+   "cost": "Not separable from model time. A1 time inside the provider minus tool outer is 74.3-81.9 s per run, versus C1 model/harness 74.1-86.3 s. Per request: req1 21.1-23.0 vs 21.0-26.2, req2 17.2-20.3 vs 17.5-19.3, req3 36.0-39.9 vs 35.6-40.8. No measurable penalty above noise.",
+   "evidence": "measured",
+   "safety_role": "gptr's hook in front of every tool, sandbox mapping (cli-codex.R:1-9).",
+   "scales_with": "Number of requests."
+  }
+ ],
+ "measurements": [
+  {
+   "what": "Benchmark inventory (what was run)",
+   "result": "| Task | Data | Bench ver | gptr source | Trials/arm | Order | Limits |\n|---|---|---|---|---|---|---|\n| T01 | GSE236581 450,000 cells x 36,027 genes, gzip input.rds (A1 harness preloads it, 25.37 s, before request 1) | 0.5.0-dev.20 | 1.0.0 snapshot, sha 591d14.. (=85c7201) | 3 | C1>A1, A1>C1, C1>A1 | 2M tokens, 1200 s, 16 GiB/2 vCPU, 10 GiB R heap |\n| T03 latest | 1,231 TCGA-BRCA STAR Counts TSV, 5,223,524,326 B, 60,664 rows x 9 cols each; agent loads into raw | 0.5.0-dev.30 | 1.0.1 dev, 5e2992b (sha 2e35e4..) | 3 | C1-1, A1-1, A1-2, C1-2, C1-3, A1-3 (07:36-08:00 UTC 2026-11-07) | 1800 s, 2M tokens, cost 5 |\n| T03 earlier | same | dev.29, dev.30 | 1.0.0 (591d14..) | 3 each | first arm C1 | same |\n| T08 | MassIVE MSV000100943 mzML 6,415,611,632 B, 307,590 spectra, 512,278,842 peaks (mzR) | 0.5.0-dev.24 | 1.0.0 (591d14..) | 3 | C1-1, A1-1, A1-2, C1-2, C1-3, A1-3 | 1800 s, 2M tokens, 16 GiB/2 vCPU |\n\nCommon settings: model gpt-6.1-sol, reasoning low (A1 via a launcher injecting -c model_reasoning_effort=\"low\" and --ignore-rules into `codex exec`); codex-cli 0.165.0; Linux 7.0.0-1014-aws x86_64, Ubuntu 24.04, R 4.3.3, data.table 1.18.6.1, Python 3.12.3; OMP/BLAS threads=1; OS cache not cleared.\n\nA1: peter(mode=\"auto\", tools=\"minimal\"), provider codex route plan-cli (one codex exec per request plus gptr MCP stdio relay), gptr loaded with pkgload::load_all, GPTR_REPLAY=live, default checkpoints.\n\nC1: Codex app-server, persistent thread, sandbox workspace-write, approval never, AGENTS.md/developer policy enforcing finite one-shot `bench-rscript --vanilla`, code-mode `exec` wrapper with exec_command/apply_patch/write_stdin, polling allowed.",
+   "method": "Source reading of README.md, REPORT-T01-live.en.md, T03 README/report.md, t08 method.md/result.md, metadata/manifest.json, figures/provenance.json, aws/peter.R, aws/shared/execute.py, aws/config.json."
+  },
+  {
+   "what": "T03 1.0.1: every A1 tool call, outer interval vs internal elapsed",
+   "result": "| Run | Req | Tool | Outer s | Internal s | Gap s | Gap share | TSV read s |\n|---|---|---|---:|---:|---:|---:|---:|\n| A1-1 | 1 | r | 79.24 | 76.92 | 2.32 | 0.03 | 41.22 |\n| A1-1 | 2 | r | 59.88 | 2.80 | 57.08 | 0.95 | 0 |\n| A1-1 | 3 | r | 57.94 | 2.60 | 55.34 | 0.96 | 0 |\n| A1-1 | 3 | write | 0.21 | 0.01 | 0.20 | 0.95 | 0 |\n| A1-2 | 1 | r | 68.50 | 66.28 | 2.22 | 0.03 | 44.78 |\n| A1-2 | 2 | r | 34.08 | 4.18 | 29.90 | 0.88 | 0 |\n| A1-2 | 3 | r | 38.37 | 2.35 | 36.02 | 0.94 | 0 |\n| A1-3 | 1 | r | 63.88 | 61.82 | 2.06 | 0.03 | 40.43 |\n| A1-3 | 2 | r | 32.16 | 3.21 | 28.96 | 0.90 | 0 |\n| A1-3 | 3 | r | 31.22 | 2.89 | 28.33 | 0.91 | 0 |\n\nA1-1 never ran rm(tables), so its dead branch overwrites two large bindings (tables, raw). A1-2 and A1-3 overwrite only raw. Gap per binding per classification pass: A1-1 14.27/13.83, A1-2 14.95/18.01, A1-3 14.48/14.17 s (inference: two passes per call).",
+   "method": "python3 -I analyze_t03.py: tool_execution_start/end data.ts and data.elapsed from replay/A1-*/trace.jsonl; reads = union of fread(*.tsv) intervals from io.jsonl clipped to [end-elapsed, end]. Reproduces tool-timing.csv outside_reported_elapsed_s exactly."
+  },
+  {
+   "what": "T03 1.0.1: C1 per R command, Codex command span vs Rscript process time",
+   "result": "9 R commands: command span 40.49-56.88 s vs Rscript process 39.82-56.25 s.\n- Overhead: median 0.67 s (0.63-0.78 s).\n- Launch to R start: 0.19-0.22 s; R end to command end: 0.43-0.57 s.\n- The wrapper call that launches R returns after 1.18-1.24 s (1 s yield), with R still running.\n- Non-R, non-poll wrapper calls: median 0.11 s (0.09-0.71, n=6).\n- Poll calls (write_stdin): median 5.03 s (n=51).\n- Model turnaround before each poll: median 2.01 s (1.61-7.88).\n- Latency from R finishing to Codex seeing it: 0.44-1.63 s per request.\n- Codex wrapper time outside the Rscript process: 2.46-3.73 s per run.\n- Tool counts: 19-28 inner calls and 19-25 outer exec wrappers per run, matching the benchmark's calls-by-tool.csv.",
+   "method": "commandExecution item/started.startedAtMs and item/completed.completedAtMs from replay/C1-*/trace.jsonl app_server_event; Rscript start/finish from io.jsonl operation=rscript (recorded by io-bootstrap.R inside R); custom_tool_call and custom_tool_call_output emittedAtMs matched by call_id; inner tools counted by regex tools.<name>( in the exec input."
+  },
+  {
+   "what": "T03 1.0.1 per-request timing, median across 3 runs (s)",
+   "result": "| Arm | Req | Wall | Calls | Start to first call | Between calls (sum) | After last call | Read | R non-read | Tool overhead | Model/harness |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n| A1 | 1 | 108.08 | 1 | 21.49 | 0 | 22.26 | 41.22 | 21.50 | 2.22 | 44.19 |\n| A1 | 2 | 54.68 | 1 | 17.95 | 0 | 3.70 | 0 | 3.21 | 29.90 | 21.65 |\n| A1 | 3 | 76.22 | 1 | 32.71 | 0 (A1-1: 14.60) | 3.41 | 0 | 2.62 | 36.02 | 38.52 |\n| C1 | 1 | 66.81 | 8 | 5.66 | 26.64 | 3.22 | 36.09 | 3.75 | 1.15 | 25.82 |\n| C1 | 2 | 72.62 | 9 | 15.70 | 16.99 | 2.25 | 49.90 | 4.40 | 0.86 | 19.12 |\n| C1 | 3 | 86.66 | 8 | 31.04 | 16.58 | 3.37 | 43.84 | 4.99 | 0.87 | 40.24 |\n\nTime to the first R work (A1 internal start; C1 Rscript start):\n- Request 1: A1 23.7-24.0 s, C1 18.5-23.8 s.\n- Request 2: A1 46.9-76.9 s, C1 15.6-17.4 s.\n- Request 3: A1 61.0-79.0 s, C1 31.4-38.7 s.\n\nThe A1 delay in requests 2/3 is the pre-gate plus gate time. A1's after-last-call in request 1 is a 3.0-4.2 s CLI tail plus 15.1-29.4 s of gptr post-provider time.",
+   "method": "analyze_t03.py. The per-request split is exclusive. A1: read, then internal-minus-read (includes checkpoint_after), then outer-minus-internal, then the remainder. C1: read, then Rscript-minus-read, then wrapper time outside Rscript, then the remainder. C1 model time that overlaps Rscript stays hidden, as in the benchmark's convention."
+  },
+  {
+   "what": "T03 1.0.1 whole-run decomposition of wall time (s)",
+   "result": "| Component | A1 median | C1 median | A1 mean | C1 mean | C1 - A1 mean |\n|---|---:|---:|---:|---:|---:|\n| Wall | 244.46 | 226.30 | 268.03 | 228.03 | -40.00 |\n| Input reading (TSV fread union) | 41.22 | 130.41 | 42.14 | 128.84 | +86.70 |\n| R compute, non-read (A1 includes checkpoint_after) | 28.03 | 13.21 | 32.21 | 13.25 | -18.96 |\n| Tool overhead (A1 gptr outer-internal; C1 Codex wrapper outside Rscript) | 68.14 | 2.65 | 80.81 | 2.95 | -77.86 |\n| Model/harness inside requests | 104.36 | 85.17 | 107.29 | 81.86 | -25.43 |\n| - A1 gptr before provider start | 6.30 | 0.06 (C1 analog) | 6.42 | 0.06 | |\n| - A1 gptr after provider end | 19.94 | 0.07 (C1 analog) | 22.77 | 0.07 | |\n| - A1 model + Codex CLI + relay (provider seconds minus tool outer) | 78.12 | n/a | 78.09 | n/a | |\n| Outside requests (startup/cleanup) | 5.57 | 1.03 | 5.58 | 1.14 | -4.44 |\n| Tool calls | 3 | 25 | | | |\n\nThe benchmark's own grouping gives harness/model/network as A1 112.87 vs C1 83.72 s mean, a +29.15 s difference. Of that, about 22.7 s is gptr after the provider, 6.4 s gptr before the provider and 4.4 s startup. A1's model, CLI and relay time is 3.8 s less than C1's.",
+   "method": "analyze_t03.py and analyze_t03_extra.py. Provider start = usage.ts - usage.row.seconds (matches usage 'started' to the second). Run wall time from gptr-1.0.1/figures/all-attempts.csv."
+  },
+  {
+   "what": "T03 1.0.1 counterfactual A1 wall time (s)",
+   "result": "| Run | Wall | Gap excess over 0.671 s/call | CF1: gap at C1 level | CF2: + gptr pre/post-provider at C1 level | CF3: + startup parity |\n|---|---:|---:|---:|---:|---:|\n| A1-1 | 322.35 | 112.72 | 209.63 | 172.15 | 167.60 |\n| A1-2 | 244.46 | 66.13 | 178.33 | 154.71 | 150.22 |\n| A1-3 | 237.29 | 57.33 | 179.95 | 153.84 | 149.21 |\n| Median | 244.46 | 66.13 | 179.95 | 154.71 | 150.22 |\n\nC1 median is 226.30 s. CF1 alone puts A1 46.4 s (20.5%) below C1, and CF3 puts it 76.1 s below. Request-1 checkpoint_after is not removed in any CF: about 14 s per large binding in the replay (inferred), which could take roughly another 14-28 s off.",
+   "method": "analyze_t03_extra.py: subtract max(0, gap - median C1 per-Rscript overhead 0.671 s) per call. Then subtract (gptr_after_provider - 0.023 s) and (gptr_before_provider - 0.020 s) per request, then outside_requests minus C1's median 1.027 s."
+  },
+  {
+   "what": "T08 (gptr 1.0.0, mzML numeric peak matrices): A1 per-call gaps and C1 per-command overhead",
+   "result": "| Run | Req | Tool | Outer s | Internal s | Gap s |\n|---|---|---|---:|---:|---:|\n| A1-1 | 1 | r | 111.23 | 109.92 | 1.31 |\n| A1-1 | 2 | r | 8.07 | 5.72 | 2.35 |\n| A1-1 | 3 | r | 6.05 | 4.37 | 1.69 |\n| A1-2 | 1 | r | 104.13 | 102.79 | 1.34 |\n| A1-2 | 2 | r | 8.16 | 5.76 | 2.41 |\n| A1-2 | 3 | r | 6.60 | 3.85 | 2.75 |\n| A1-3 | 1 | r | 101.71 | 100.37 | 1.34 |\n| A1-3 | 2 | r | 10.87 | 8.46 | 2.41 |\n| A1-3 | 3 | r | 7.98 | 5.80 | 2.18 |\n\nThe A1 write and edit calls had gaps of 0.03-0.11 s, and codex_shell calls took 0.03 s. C1 per-Rscript overhead: median 1.46 s (1.37-1.50, n=9). Applying the gap counterfactual changes A1 wall by only -1.1 to -2.3 s (A1 median 199.74 vs C1 399.41). The A1 code was not published, so whether it had the same dead raw branch is unverified, although the prompt has the same reuse rule.",
+   "method": "python3 -I analyze_other.py: trace/key-events.jsonl tool_execution_start/end (ts, elapsed), commandExecution events and io rscript events; reads from trace/all-run-intervals.csv."
+  },
+  {
+   "what": "T01 (gptr 1.0.0) aggregate split and median-run spans",
+   "result": "Aggregates (median A1 / C1):\n- Wall: 246.51 / 285.15 s.\n- Calls: 5 / 21.\n- input_read: 25.24 / 72.79 s.\n- Other serialization: 0.02 / 10.82 s.\n- R execution outside serialization: 28.20 / 28.80 s (A1 includes framework overhead).\n- Remaining (model/harness): 192.92 / 179.50 s.\n\nMedian run (trial 3), A1 execution outer spans:\n- Request 1: 2.65 and 19.79 s.\n- Request 2: 1.15 s.\n- Request 3: 4.61 s.\n\nC1 spans: request 1 25.26 and 47.41 s, request 2 2.33 s, request 3 38.07 s (24.27 s of it reading). No internal elapsed is published for T01, but A1's request-2/3 outer spans are no more than 4.6 s, so there is no T03-style ~30 s gap. A1's time from request start to first execution is 43.05 s in request 2 and 77.52 s in request 3, consistent with model time.",
+   "method": "analyze_other.py on docs/t01-results-current/timeline.csv (median runs only); all-attempts.csv and group-statistics.csv read directly."
+  },
+  {
+   "what": "T03 A1 request-2/3 tool time across gptr versions (benchmark request-stages tool_nonread_s, three trials each)",
+   "result": "| Batch | A1 req1 | A1 req2 | A1 req3 | A1 run harness_model median | A1 / C1 wall median |\n|---|---|---|---|---:|---|\n| 1.0.0 dev29 | 19.58, 20.83, 20.09 | 33.51, 32.59, 31.89 | 30.10, 31.17, 32.27 | 102.18 | 226.90 / 303.76 |\n| 1.0.0 dev30 | 19.81, 20.64, 20.78 | 32.32, 31.64, 35.77 | 34.61, 32.45, 35.22 | 94.55 | 223.41 / 222.11 |\n| 1.0.1 | 38.02, 23.72, 23.45 | 59.88, 34.08, 32.16 | 58.15, 38.37, 31.22 | 110.01 | 244.46 / 226.30 |\n\nThe ~30 s request-2/3 overhead was already in 1.0.0. In 1.0.1, request 1 is about 3 s higher, and A1-1 doubled because of its second large binding.",
+   "method": "analyze_other.py over reports/T03/gptr-1.0.0-dev29, -dev30 and gptr-1.0.1 figures/request-stages.csv and all-attempts.csv."
+  },
+  {
+   "what": "Method confounders found",
+   "result": "1. **Category asymmetry.** A1 tool_nonread is gptr's full outer interval, so gate, risk and checkpoint time count as tool time. C1 tool_nonread is only Rscript program time minus reads, so C1's launch/exit (0.67 s per call), wrapper, polling and detection latency fall into C1 harness/model time. A1 harness/model also includes gptr's own pre- and post-provider time (6.4 + 22.8 s mean).\n2. **Transport differs.** A1 uses one `codex exec` per request plus an R MCP relay and its own instructions and tools (fewer tokens: input 308k vs 590k median, output 3.1k vs 4.3k). C1 uses a persistent app-server thread with code mode and 5 s polls.\n3. **Execution conditions differ by design.** C1 must re-read inputs in finite Rscript processes; A1 is persistent.\n4. **Different gptr versions per task.** T01, T08 and T03 dev29/30 used 1.0.0; T03 latest used 1.0.1. Benchmark versions also differ (dev.20/24/29/30), and A1 loads gptr with pkgload::load_all rather than an installed build.\n5. **Agent-written code changes harness cost.** A1-1 kept `tables`, which doubled its gaps: the 322 s outlier comes from the code it wrote, not noise.\n6. **Small, uncontrolled samples.** Three trials per arm, interleaved, OS cache not cleared, network and model latency uncontrolled, 2 vCPU host shared by the Codex CLI, relay and main R process, and A1 peak RSS 10.5-11.6 GiB on a 16 GiB host.\n7. **Different runtime from local re-runs.** R 4.3.3 on AWS x86_64, versus the local R 4.6.1 arm64 any reproduction would use.\n8. **Replay limits.** The published replay is a single offline-provider run of A1-2.\n9. **T01 preload.** In T01 the A1 driver preloads input.rds before request 1, unlike T03, where the agent loads the data.",
+   "method": "Source reading of the benchmark driver (aws/peter.R, aws/shared/execute.py), C1 app-server-client.jsonl thread/start params, gptr R/cli-codex.R:1-54, and the trace comparisons above."
+  }
+ ],
+ "artifacts": [
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/analyze_t03.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/analyze_t03_extra.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/analyze_other.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/analyze_t03.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/analyze_t03_extra.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/analyze_other.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t03_a1_calls.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t03_c1_calls.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t03_c1_commands.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t03_requests.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t03_decomposition_requests.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t03_runs.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t03_counterfactual.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t03_versions.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t08_a1_calls.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t08_c1_commands.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t08_requests.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/bench-data/out/t01_median_run_requests.csv"
+ ],
+ "open_questions": [
+  "What runs in the 15-29 s between the provider returning (usage event) and request_end, only in request 1? Is it an end-of-run env snapshot with sizes (env-snapshot.R:120-171 via ckpt-objects.R:464/547), the replay recorder (GPTR_REPLAY=live), or something else? The published replay used an offline provider and did not time run end.",
+  "Is the ~14-18 s per-binding unit one env_snap_size walk over ~224 M strings (3 character columns x 60,664 rows x 1,231 tables)? Does it count shared sub-objects twice across bindings? A1-1's `tables` and `raw$tables` share the same data.tables, yet its cost doubled.",
+  "Does the T08 A1 code also contain the dead `if (!exists(\"raw\"))` reassignment? Its tool inputs are not published. If it does, T08's 1.7-2.75 s gaps show the cost depends on content (strings), not on binding size in bytes.",
+  "gptr's object diff lists raw, files and other bindings assigned only in the dead branch as 'modified' in requests 2/3. Does checkpoint_before/after then snapshot them needlessly? Replay: 0.8-1.4 s before, 0.08-0.15 s after.",
+  "What is in A1's 0.9-3.4 s before-provider time? It falls from request 1 to 3 and does not depend on raw existing.",
+  "How much of A1's ~74-82 s per-run model+CLI+relay time is codex exec process startup plus relay R startup? It cannot be separated from the published traces."
+ ]
+}

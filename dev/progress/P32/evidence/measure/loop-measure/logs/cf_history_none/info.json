@@ -1,0 +1,29 @@
+{
+  "cfg": {
+    "scenario": "history",
+    "tools": "minimal",
+    "mode": "auto",
+    "K": 10,
+    "reps": 3,
+    "warm": 2,
+    "ntab": 300,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 0,
+    "trace": 0,
+    "tag": "cf_history_none",
+    "hooks": 1,
+    "hcode": "x = rnorm(100); summary(x)",
+    "src": "src-patched/gptr",
+    "patch": ""
+  },
+  "ws_gb": 0,
+  "ws_build_s": 0.001,
+  "entries": 362,
+  "turns": 55,
+  "mode": "auto",
+  "preset": "minimal",
+  "text": "Done.",
+  "maxrss_gb": null
+}

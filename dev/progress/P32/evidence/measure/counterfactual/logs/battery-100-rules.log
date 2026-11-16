@@ -1,0 +1,92 @@
+raw env_snap_size = 1.567e+08 bytes (protect_size 1e8)
+mode manual_r2 variant base done
+mode manual_r2 variant reuse done
+mode manual_r2 variant cache done
+mode manual_r2 variant bound done
+mode manual_r2 variant skip done
+mode manual_r2 variant share done
+mode manual_r2 variant loop done
+mode manual_r2 variant rc done
+mode manual_r2 variant all done
+mode manual_r2 variant all_bound done
+mode manual_r3 variant base done
+mode manual_r3 variant reuse done
+mode manual_r3 variant cache done
+mode manual_r3 variant bound done
+mode manual_r3 variant skip done
+mode manual_r3 variant share done
+mode manual_r3 variant loop done
+mode manual_r3 variant rc done
+mode manual_r3 variant all done
+mode manual_r3 variant all_bound done
+
+==== base decisions ====
+ mode      snippet      decision level reason                                              
+ manual_r2 rm_all       deny     4     approval is needed and no one can answer in this run
+ manual_r2 file_remove  deny     3     approval is needed and no one can answer in this run
+ manual_r2 unlink_dot   deny     4     approval is needed and no one can answer in this run
+ manual_r2 system_ls    allow    0     read-only                                           
+ manual_r2 setenv       allow    2     allowed by the rule r(level<=2)                     
+ manual_r2 write_tmp    deny     3     approval is needed and no one can answer in this run
+ manual_r2 raw_null     deny     3     approval is needed and no one can answer in this run
+ manual_r2 small_assign allow    2     allowed by the rule r(level<=2)                     
+ manual_r2 sum_raw      allow    0     read-only                                           
+ manual_r2 t03_r2       deny     3     approval is needed and no one can answer in this run
+ manual_r2 t03_r3       deny     3     approval is needed and no one can answer in this run
+ manual_r2 hook_modify  deny     4     approval is needed and no one can answer in this run
+ manual_r3 rm_all       deny     4     approval is needed and no one can answer in this run
+ manual_r3 file_remove  allow    3     allowed by the rule r(level<=3)                     
+ manual_r3 unlink_dot   deny     4     approval is needed and no one can answer in this run
+ manual_r3 system_ls    allow    0     read-only                                           
+ manual_r3 setenv       allow    2     allowed by the rule r(level<=3)                     
+ manual_r3 write_tmp    allow    3     allowed by the rule r(level<=3)                     
+ manual_r3 raw_null     deny     3     approval is needed and no one can answer in this run
+ manual_r3 small_assign allow    2     allowed by the rule r(level<=3)                     
+ manual_r3 sum_raw      allow    0     read-only                                           
+ manual_r3 t03_r2       deny     3     approval is needed and no one can answer in this run
+ manual_r3 t03_r3       deny     3     approval is needed and no one can answer in this run
+ manual_r3 hook_modify  deny     4     approval is needed and no one can answer in this run
+
+==== differences from base ====
+      mode   variant               snippet decision.base decision level.base level same_reason same_flags same_sizes
+ manual_r2        rc hook_modify_unguarded          <NA>    allow         NA     0          NA         NA         NA
+ manual_r2     reuse hook_modify_unguarded          <NA>    allow         NA     0          NA         NA         NA
+ manual_r2       all hook_modify_unguarded          <NA>    allow         NA     0          NA         NA         NA
+ manual_r2 all_bound hook_modify_unguarded          <NA>    allow         NA     0          NA         NA         NA
+ manual_r2      skip              raw_null          deny    allow          3     2       FALSE      FALSE      FALSE
+ manual_r2 all_bound              raw_null          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r2     bound              raw_null          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r2      skip          small_assign         allow    allow          2     2        TRUE      FALSE      FALSE
+ manual_r2     bound                t03_r2          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r2 all_bound                t03_r2          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r2      skip                t03_r2          deny    allow          3     2       FALSE      FALSE      FALSE
+ manual_r2     bound                t03_r3          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r2 all_bound                t03_r3          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r2      skip                t03_r3          deny    allow          3     2       FALSE      FALSE      FALSE
+ manual_r3     reuse hook_modify_unguarded          <NA>    allow         NA     0          NA         NA         NA
+ manual_r3       all hook_modify_unguarded          <NA>    allow         NA     0          NA         NA         NA
+ manual_r3        rc hook_modify_unguarded          <NA>    allow         NA     0          NA         NA         NA
+ manual_r3 all_bound hook_modify_unguarded          <NA>    allow         NA     0          NA         NA         NA
+ manual_r3      skip              raw_null          deny    allow          3     2       FALSE      FALSE      FALSE
+ manual_r3 all_bound              raw_null          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r3     bound              raw_null          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r3      skip          small_assign         allow    allow          2     2        TRUE      FALSE      FALSE
+ manual_r3     bound                t03_r2          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r3 all_bound                t03_r2          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r3      skip                t03_r2          deny    allow          3     2       FALSE      FALSE      FALSE
+ manual_r3     bound                t03_r3          deny     deny          3     3        TRUE      FALSE      FALSE
+ manual_r3      skip                t03_r3          deny    allow          3     2       FALSE      FALSE      FALSE
+ manual_r3 all_bound                t03_r3          deny     deny          3     3        TRUE      FALSE      FALSE
+
+==== count of differing rows per variant (excluding the unguarded contrast) ====
+   variant same_decision same_level same_reason same_flags same_sizes
+       all             0          0           0          0          0
+ all_bound             0          0           0          6          6
+     bound             0          0           0          6          6
+     cache             0          0           0          0          0
+      loop             0          0           0          0          0
+        rc             0          0           0          0          0
+     reuse             0          0           0          0          0
+     share             0          0           0          0          0
+      skip             6          6           6          8          8
+DONE

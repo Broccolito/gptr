@@ -1,0 +1,22 @@
+Warning messages:
+1: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+2: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+3: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+4: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+5: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+6: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+7: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+8: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+9: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+10: In ps::ps_find_tree("GPTR_NO_SUCH_MARKER_abc123") :
+  NAs introduced by coercion
+processes=1489 ps_find_tree median=0.0425 s min=0.0380 max=0.0570

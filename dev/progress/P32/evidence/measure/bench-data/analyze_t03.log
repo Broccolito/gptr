@@ -1,0 +1,161 @@
+
+## A1 calls
+run | request | tool | outer_s | internal_s | gap_s | gap_share | input_read_s | internal_minus_read_s | since_request_start_s
+A1-1 | 1 | r | 79.24 | 76.92 | 2.32 | 0.03 | 41.22 | 35.70 | 21.48
+A1-1 | 2 | r | 59.88 | 2.80 | 57.08 | 0.95 | 0.00 | 2.80 | 19.79
+A1-1 | 3 | r | 57.94 | 2.60 | 55.34 | 0.96 | 0.00 | 2.60 | 23.66
+A1-1 | 3 | write | 0.21 | 0.01 | 0.20 | 0.95 | 0.00 | 0.01 | 96.20
+A1-2 | 1 | r | 68.50 | 66.28 | 2.22 | 0.03 | 44.78 | 21.50 | 21.49
+A1-2 | 2 | r | 34.08 | 4.18 | 29.90 | 0.88 | 0.00 | 4.18 | 17.22
+A1-2 | 3 | r | 38.37 | 2.35 | 36.02 | 0.94 | 0.00 | 2.35 | 34.44
+A1-3 | 1 | r | 63.88 | 61.82 | 2.06 | 0.03 | 40.43 | 21.39 | 21.93
+A1-3 | 2 | r | 32.16 | 3.21 | 28.96 | 0.90 | 0.00 | 3.21 | 17.95
+A1-3 | 3 | r | 31.22 | 2.89 | 28.33 | 0.91 | 0.00 | 2.89 | 32.71
+
+## A1 requests
+run | request | wall_s | tool_calls | first_call_after_s | between_calls_s | after_last_call_s | sum_tool_outer_s | gptr_gap_s | gptr_before_provider_s | provider_s | model_cli_relay_in_provider_s | provider_start_to_first_call_s | last_call_to_provider_end_s | gptr_after_provider_s
+A1-1 | 1 | 133.53 | 1 | 21.48 | 0 | 32.81 | 79.24 | 2.32 | 3.20 | 100.94 | 21.69 | 18.28 | 3.42 | 29.40
+A1-1 | 2 | 83.47 | 1 | 19.79 | 0 | 3.80 | 59.88 | 57.08 | 2.14 | 80.15 | 20.27 | 17.64 | 2.63 | 1.18
+A1-1 | 3 | 99.77 | 2 | 23.66 | 14.60 | 3.36 | 58.15 | 55.54 | 0.93 | 98.08 | 39.93 | 22.74 | 2.60 | 0.76
+A1-2 | 1 | 108.04 | 1 | 21.49 | 0 | 18.05 | 68.50 | 2.22 | 3.40 | 89.58 | 21.08 | 18.09 | 2.99 | 15.07
+A1-2 | 2 | 54.68 | 1 | 17.22 | 0 | 3.39 | 34.08 | 29.90 | 2.15 | 51.26 | 17.18 | 15.06 | 2.12 | 1.27
+A1-2 | 3 | 76.22 | 1 | 34.44 | 0 | 3.41 | 38.37 | 36.02 | 1.15 | 74.36 | 35.99 | 33.29 | 2.70 | 0.71
+A1-3 | 1 | 108.08 | 1 | 21.93 | 0 | 22.26 | 63.88 | 2.06 | 3.20 | 86.85 | 22.97 | 18.73 | 4.23 | 18.03
+A1-3 | 2 | 53.82 | 1 | 17.95 | 0 | 3.70 | 32.16 | 28.96 | 2.05 | 50.59 | 18.43 | 15.90 | 2.53 | 1.17
+A1-3 | 3 | 69.74 | 1 | 32.71 | 0 | 5.81 | 31.22 | 28.33 | 1.05 | 67.95 | 36.72 | 31.66 | 5.06 | 0.74
+
+## C1 requests
+run | request | wall_s | tool_calls | outer_wrapper_calls | inner_counts | first_call_after_s | between_calls_s | n_between | after_last_call_s | sum_tool_outer_s | rscript_process_s | input_read_s | tool_outside_rscript_s | model_responses | r_end_to_observed_s
+C1-1 | 1 | 61.80 | 8 | 8 | {"exec_command": 2, "write_stdin": 6} | 5.87 | 24.08 | 7 | 3.05 | 28.80 | 39.82 | 36.18 | 0.97 | 9 | 0.48
+C1-1 | 2 | 72.62 | 9 | 9 | {"exec_command": 1, "write_stdin": 8} | 15.26 | 16.99 | 8 | 2.25 | 38.12 | 54.30 | 49.90 | 0.81 | 10 | 0.44
+C1-1 | 3 | 85.99 | 8 | 8 | {"exec_command": 1, "write_stdin": 7} | 31.04 | 14.53 | 7 | 4.58 | 35.83 | 49.50 | 44.34 | 0.87 | 9 | 0.50
+C1-2 | 1 | 67.99 | 8 | 7 | {"apply_patch": 1, "exec_command": 3, "write_stdin": 4} | 5.50 | 26.64 | 6 | 3.70 | 32.15 | 39.93 | 36.06 | 1.83 | 8 | 0.57
+C1-2 | 2 | 76.37 | 5 | 4 | {"apply_patch": 1, "exec_command": 1, "write_stdin": 3} | 17.01 | 6.14 | 3 | 2.25 | 50.97 | 56.25 | 51.60 | 0.87 | 5 | 0.46
+C1-2 | 3 | 90.65 | 6 | 5 | {"apply_patch": 1, "exec_command": 2, "write_stdin": 3} | 2.99 | 40.49 | 4 | 2.65 | 44.53 | 48.84 | 43.84 | 1.03 | 6 | 0.52
+C1-3 | 1 | 66.81 | 10 | 9 | {"apply_patch": 1, "exec_command": 3, "write_stdin": 6} | 5.66 | 30.08 | 8 | 3.22 | 27.85 | 39.84 | 36.09 | 1.15 | 10 | 0.50
+C1-3 | 2 | 71.81 | 9 | 8 | {"apply_patch": 1, "exec_command": 1, "write_stdin": 7} | 15.70 | 19.20 | 7 | 3.41 | 33.49 | 51.83 | 47.50 | 0.86 | 9 | 0.44
+C1-3 | 3 | 86.66 | 9 | 8 | {"apply_patch": 1, "exec_command": 1, "write_stdin": 7} | 35.27 | 16.58 | 7 | 3.37 | 31.44 | 45.96 | 41.00 | 0.45 | 9 | 1.63
+
+## C1 commands
+run | request | command | cmd_span_s | rscript_process_s | overhead_around_rscript_s | launch_to_r_start_s | r_end_to_cmd_end_s
+C1-1 | 1 | /bin/bash -lc 'ls -l input-files.txt instrumentation/bench-rscript && head -n 2 input-file | 0.00 | None | None | None | None
+C1-1 | 1 | /bin/bash -lc "cat > request1.R <<'EOF'
+library(data.table)
+setDTthreads(1)
+if ("'!exists( | 40.49 | 39.82 | 0.67 | 0.20 | 0.47
+C1-1 | 2 | /bin/bash -lc "cat > request2.R <<'EOF'
+library(data.table)
+setDTthreads(1)
+if ("'!exists( | 54.93 | 54.30 | 0.64 | 0.20 | 0.44
+C1-1 | 3 | /bin/bash -lc "cat > request3.R <<'EOF'
+library(data.table)
+setDTthreads(1)
+if ("'!exists( | 50.19 | 49.50 | 0.69 | 0.20 | 0.49
+C1-2 | 1 | /bin/bash -lc "pwd && rg --files -g 'input-files.txt' -g 'AGENTS.md' -g 'bench-rscript' -g | 0.27 | None | None | None | None
+C1-2 | 1 | /bin/bash -lc 'cat AGENTS.md && head -n 2 input-files.txt && ls -l instrumentation/bench-r | 0.00 | None | None | None | None
+C1-2 | 1 | /bin/bash -lc './instrumentation/bench-rscript --vanilla request1.R' | 40.71 | 39.93 | 0.78 | 0.22 | 0.57
+C1-2 | 2 | /bin/bash -lc './instrumentation/bench-rscript --vanilla request2.R' | 56.88 | 56.25 | 0.64 | 0.19 | 0.45
+C1-2 | 3 | /bin/bash -lc 'cat request1.R && head -n 3 sample-summary.csv && cat input-audit.csv' | 0.00 | None | None | None | None
+C1-2 | 3 | /bin/bash -lc './instrumentation/bench-rscript --vanilla request3.R' | 49.54 | 48.84 | 0.70 | 0.19 | 0.51
+C1-3 | 1 | /bin/bash -lc "pwd && rg --files -g 'input-files.txt' -g 'AGENTS.md' -g 'bench-rscript' -g | 0.00 | None | None | None | None
+C1-3 | 1 | /bin/bash -lc 'head -n 2 input-files.txt && cat AGENTS.md && head -n 60 instrumentation/be | 0.00 | None | None | None | None
+C1-3 | 1 | /bin/bash -lc './instrumentation/bench-rscript --vanilla request1.R' | 40.51 | 39.84 | 0.67 | 0.19 | 0.48
+C1-3 | 2 | /bin/bash -lc './instrumentation/bench-rscript --vanilla request2.R' | 52.46 | 51.83 | 0.63 | 0.20 | 0.43
+C1-3 | 3 | /bin/bash -lc './instrumentation/bench-rscript --vanilla request3.R' | 46.68 | 45.96 | 0.71 | 0.20 | 0.51
+
+## Time to first R start and after last R end
+arm | run | request | wall_s | first_r_internal_start_after_s | after_last_r_end_s
+A1 | A1-1 | 1 | 133.53 | 23.80 | 32.81
+A1 | A1-1 | 2 | 83.47 | 76.86 | 3.80
+A1 | A1-1 | 3 | 99.77 | 79.00 | 18.17
+A1 | A1-2 | 1 | 108.04 | 23.72 | 18.05
+A1 | A1-2 | 2 | 54.68 | 47.11 | 3.39
+A1 | A1-2 | 3 | 76.22 | 70.46 | 3.41
+A1 | A1-3 | 1 | 108.08 | 23.99 | 22.26
+A1 | A1-3 | 2 | 53.82 | 46.91 | 3.70
+A1 | A1-3 | 3 | 69.74 | 61.04 | 5.81
+C1 | C1-1 | 1 | 61.80 | 18.45 | 3.53
+C1 | C1-1 | 2 | 72.62 | 15.63 | 2.69
+C1 | C1-1 | 3 | 85.99 | 31.41 | 5.08
+C1 | C1-2 | 1 | 67.99 | 23.78 | 4.28
+C1 | C1-2 | 2 | 76.37 | 17.42 | 2.71
+C1 | C1-2 | 3 | 90.65 | 38.65 | 3.17
+C1 | C1-3 | 1 | 66.81 | 23.25 | 3.72
+C1 | C1-3 | 2 | 71.81 | 16.13 | 3.85
+C1 | C1-3 | 3 | 86.66 | 35.69 | 5.00
+
+## Decomposition per request
+arm | run | request | wall_s | input_read_s | r_compute_s | tool_overhead_s | model_harness_s
+A1 | A1-1 | 1 | 133.53 | 41.22 | 35.70 | 2.32 | 54.29
+A1 | A1-1 | 2 | 83.47 | 0.00 | 2.80 | 57.08 | 23.59
+A1 | A1-1 | 3 | 99.77 | 0.00 | 2.62 | 55.54 | 41.62
+A1 | A1-2 | 1 | 108.04 | 44.78 | 21.50 | 2.22 | 39.54
+A1 | A1-2 | 2 | 54.68 | 0.00 | 4.18 | 29.90 | 20.61
+A1 | A1-2 | 3 | 76.22 | 0.00 | 2.35 | 36.02 | 37.85
+A1 | A1-3 | 1 | 108.08 | 40.43 | 21.39 | 2.06 | 44.19
+A1 | A1-3 | 2 | 53.82 | 0.00 | 3.21 | 28.96 | 21.65
+A1 | A1-3 | 3 | 69.74 | 0.00 | 2.89 | 28.33 | 38.52
+C1 | C1-1 | 1 | 61.80 | 36.18 | 3.65 | 0.97 | 21.01
+C1 | C1-1 | 2 | 72.62 | 49.90 | 4.40 | 0.81 | 17.51
+C1 | C1-1 | 3 | 85.99 | 44.34 | 5.16 | 0.87 | 35.62
+C1 | C1-2 | 1 | 67.99 | 36.06 | 3.87 | 1.83 | 26.23
+C1 | C1-2 | 2 | 76.37 | 51.60 | 4.64 | 0.87 | 19.26
+C1 | C1-2 | 3 | 90.65 | 43.84 | 4.99 | 1.03 | 40.78
+C1 | C1-3 | 1 | 66.81 | 36.09 | 3.75 | 1.15 | 25.82
+C1 | C1-3 | 2 | 71.81 | 47.50 | 4.33 | 0.86 | 19.12
+C1 | C1-3 | 3 | 86.66 | 41.00 | 4.96 | 0.45 | 40.24
+
+## Runs
+arm | run | wall_s | outside_requests_s | tool_calls | input_read_s | r_compute_s | tool_overhead_s | model_harness_in_requests_s | first_call_after_s | between_calls_s | after_last_call_s | gptr_before_provider_s | gptr_after_provider_s | model_cli_relay_s | gap_excess_over_c1_level_s | counterfactual_wall_s
+A1 | A1-1 | 322.35 | 5.57 | 4 | 41.22 | 41.12 | 114.94 | 119.50 | 64.93 | 14.60 | 39.97 | 6.27 | 31.33 | 81.89 | 112.72 | 209.63
+A1 | A1-2 | 244.46 | 5.52 | 3 | 44.78 | 28.03 | 68.14 | 98.00 | 73.15 | 0 | 24.85 | 6.70 | 17.05 | 74.25 | 66.13 | 178.34
+A1 | A1-3 | 237.29 | 5.65 | 3 | 40.43 | 27.50 | 59.35 | 104.36 | 72.59 | 0 | 31.77 | 6.30 | 19.94 | 78.12 | 57.33 | 179.95
+C1 | C1-1 | 221.43 | 1.02 | 25 | 130.41 | 13.21 | 2.65 | 74.14 | 52.18 | 55.60 | 9.88 |  |  |  |  | 
+C1 | C1-2 | 236.37 | 1.36 | 19 | 131.50 | 13.51 | 3.73 | 86.27 | 25.50 | 73.26 | 8.60 |  |  |  |  | 
+C1 | C1-3 | 226.30 | 1.03 | 28 | 124.60 | 13.04 | 2.46 | 85.17 | 56.63 | 65.86 | 10.01 |  |  |  |  | 
+
+## A1 runs extra
+run | gptr_before_provider_s | gptr_after_provider_s | model_cli_relay_s | gap_excess_over_c1_level_s | counterfactual_wall_s
+A1-1 | 6.27 | 31.33 | 81.89 | 112.72 | 209.63
+A1-2 | 6.70 | 17.05 | 74.25 | 66.13 | 178.34
+A1-3 | 6.30 | 19.94 | 78.12 | 57.33 | 179.95
+
+C1 per-command overhead around Rscript (median, min, max): 0.671299934387207 0.6293001174926758 0.7821998596191406 n= 9
+C1 non-R, non-poll wrapper call outer (median, min, max): 0.1119999885559082 0.09299993515014648 0.7050001621246338 n= 6
+C1 poll call outer (median, min, max): 5.0269999504089355 0.0280001163482666 30.033999919891357 n= 51
+C1 model turnaround before a poll (median, min, max): 2.007999897003174 1.6129999160766602 7.883000135421753 n= 51
+A1 r-call gaps: [2.32, 57.08, 55.34, 2.22, 29.9, 36.02, 2.06, 28.96, 28.33]
+
+## Median per arm
+wall_s 244.4633219242096 226.2976987361908
+outside_requests_s 5.572799921035767 1.027418613433838
+tool_calls 3 25
+input_read_s 41.219008684158325 130.40960264205933
+r_compute_s 28.026798824310305 13.20609736442566
+tool_overhead_s 68.14080013847351 2.6523001194000244
+model_harness_in_requests_s 104.36269974708557 85.17447996139526
+first_call_after_s 72.58870005607605 52.176729917526245
+between_calls_s 0 65.86400008201599
+after_last_call_s 31.77399969100952 9.880364179611206
+gptr_before_provider_s 6.301599740982056 None
+gptr_after_provider_s 19.941699981689453 None
+model_cli_relay_s 78.11940013084413 None
+gap_excess_over_c1_level_s 66.12690033531189 None
+counterfactual_wall_s 179.95327580070494 None
+
+## Mean per arm (additive)
+wall_s 268.0325326124827 228.0333847204844
+outside_requests_s 5.579999367396037 1.1361667315165203
+input_read_s 42.14186946551005 128.83816703160605
+r_compute_s 32.213797201156616 13.250466346740723
+tool_overhead_s 80.8085000222524 2.9463000297546387
+model_harness_in_requests_s 107.2883665561676 81.8622845808665
+counterfactual_wall_s 189.30589906565348 None
+
+## Median per arm and request
+A1 1 wall 108.08 first 21.49 between 0 after 22.26 read 41.22 rcomp 21.5 toolover 2.22 modelharn 44.19
+A1 2 wall 54.68 first 17.95 between 0 after 3.7 read 0.0 rcomp 3.21 toolover 29.9 modelharn 21.65
+A1 3 wall 76.22 first 32.71 between 0 after 3.41 read 0.0 rcomp 2.62 toolover 36.02 modelharn 38.52
+C1 1 wall 66.81 first 5.66 between 26.64 after 3.22 read 36.09 rcomp 3.75 toolover 1.15 modelharn 25.82
+C1 2 wall 72.62 first 15.7 between 16.99 after 2.25 read 49.9 rcomp 4.4 toolover 0.86 modelharn 19.12
+C1 3 wall 86.66 first 31.04 between 16.58 after 3.37 read 43.84 rcomp 4.99 toolover 0.87 modelharn 40.24

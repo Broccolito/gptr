@@ -1,0 +1,25 @@
+run,request,command,cmd_span_s,duration_ms,rscript_process_s,overhead_around_rscript_s,launch_to_r_start_s,r_end_to_cmd_end_s
+C1-1,1,/bin/bash -lc 'ls -l input-files.txt instrumentation/bench-rscript && head -n 2 input-file,0.001,0,,,,
+C1-1,1,"/bin/bash -lc ""cat > request1.R <<'EOF'
+library(data.table)
+setDTthreads(1)
+if (""'!exists(",40.491,40490,39.82,0.671,0.2,0.471
+C1-1,2,"/bin/bash -lc ""cat > request2.R <<'EOF'
+library(data.table)
+setDTthreads(1)
+if (""'!exists(",54.933,54932,54.298,0.635,0.196,0.439
+C1-1,3,"/bin/bash -lc ""cat > request3.R <<'EOF'
+library(data.table)
+setDTthreads(1)
+if (""'!exists(",50.186,50185,49.498,0.688,0.195,0.493
+C1-2,1,"/bin/bash -lc ""pwd && rg --files -g 'input-files.txt' -g 'AGENTS.md' -g 'bench-rscript' -g",0.268,265,,,,
+C1-2,1,/bin/bash -lc 'cat AGENTS.md && head -n 2 input-files.txt && ls -l instrumentation/bench-r,0.0,0,,,,
+C1-2,1,/bin/bash -lc './instrumentation/bench-rscript --vanilla request1.R',40.713,40713,39.931,0.782,0.216,0.566
+C1-2,2,/bin/bash -lc './instrumentation/bench-rscript --vanilla request2.R',56.883,56882,56.246,0.637,0.185,0.452
+C1-2,3,/bin/bash -lc 'cat request1.R && head -n 3 sample-summary.csv && cat input-audit.csv',0.0,0,,,,
+C1-2,3,/bin/bash -lc './instrumentation/bench-rscript --vanilla request3.R',49.54,49540,48.837,0.703,0.19,0.512
+C1-3,1,"/bin/bash -lc ""pwd && rg --files -g 'input-files.txt' -g 'AGENTS.md' -g 'bench-rscript' -g",0.0,0,,,,
+C1-3,1,/bin/bash -lc 'head -n 2 input-files.txt && cat AGENTS.md && head -n 60 instrumentation/be,0.0,0,,,,
+C1-3,1,/bin/bash -lc './instrumentation/bench-rscript --vanilla request1.R',40.511,40511,39.84,0.671,0.195,0.477
+C1-3,2,/bin/bash -lc './instrumentation/bench-rscript --vanilla request2.R',52.462,52461,51.833,0.629,0.202,0.428
+C1-3,3,/bin/bash -lc './instrumentation/bench-rscript --vanilla request3.R',46.675,46674,45.964,0.711,0.197,0.514

@@ -1,0 +1,266 @@
+{
+ "summary": "Built the source map of one `r` tool call on both routes (native: dispatch_tools -> dispatch_call -> dispatch_steps; served MCP: mcp_dispatch_local -> mcp_dispatch_impl -> mcp_serve_call -> mcp_serve_exec). I confirmed call counts with trace() counters on a gptr copy (no .git/dev/.secrets) driven by the fake provider and the three T03 tool inputs, scaled down. Each call classifies its R code twice on both routes. On the MCP route the classifier runs once before the gate (mcp-server.R:270) and again inside perm_decide (agent-dispatch.R:590). The native route does the same (agent-dispatch.R:96, forced lazily inside tool_call_hook, then :590). Each classification measures the size of every existing binding the code assigns (perm-classify.R:3090-3095 -> risk_binding_leaf :2297 -> env_snap_size), with no cache, even for the dead branch `if (!exists(\"raw\")) raw = ...`. The trace confirms `raw` is sized exactly twice per call in requests 2 and 3, by risk_classify_r via mcp_serve_exec and via perm_decide. That matches the T03 replay's two ~13 s phases (12.8-13.3 s before the gate, 13.4 s inside the gate); the 13 s per walk is inferred, not timed here at full scale. In request 1, `raw` is new, so it is sized once in checkpoint_after (the replay measured 13.9 s). It is sized again at agent_end by env_on_agent_end, outside the tool interval. These are two separate snapshot caches, ck$snap and the workspace memory, so new objects pay twice, and that second walk probably counts as A1 harness time (inference). The size walk on a T03-shaped object took 0.48 s for 100 tables and 1.61 s for 300 (median of 3, this Mac, load avg 10-15). That is about 5.3 ms per table, 88-93% of it in unique.default on the character columns plus a union of all string sets. Each fread data.table costs 14 budget parts, so about 716 of the 1,231 tables are walked before sampling extrapolates the rest. Beyond sizing, every call parses the same code 9-10 times (eval_parse x6 plus parse() in secret_scan x3/4) and walks its syntax tree with risk_scan x4, eval_guard x2 and secret_scan x3/4. It also evaluates 6 policies (one of them re-reads up to 4 settings JSON files), takes 4 workspace snapshots with fingerprints and 4 eval_session_state plus 2 ckpt_state_snapshot, and runs up to 2 bounded project-folder scans. With 1,231 entries in the project folder each scan took 0.27-0.44 s, which switches to one scan per turn: one inside the first call and one at agent_end. With small data and no tracing, the per-call overhead outside execution (outer minus internal) is about 0.27-0.31 s in requests 2 and 3 on both routes, and about 1 s in request 1. Part of request 1 is first-use JIT compilation, because load_all code is not byte-compiled. Per-turn request building is O(history): 3 token estimates, 2 project_messages calls, a json_encode of every message and a sha256 of every element per turn. Reactor and relay polling are small: 47-93 ms of reactor waits over 3 requests, 20 ms session-side and 10 ms relay-side polls on the Codex route.",
+ "causes": [
+  {
+   "id": "C1",
+   "title": "Uncached size walk of every existing assigned binding inside each risk classification",
+   "where": "R/perm-classify.R:3048-3102 (note_assign; 3090-3095 risk_binding_safe, 3100 level rule), R/perm-classify.R:2277-2300 (risk_binding_info/leaf), R/utils-size.R:18-44 (env_snap_size), 48 (env_size_budget=10000), 112-158 (env_size_walk; 133-137 unique per character vector), 177-210 (env_size_items sampling), 66-69 (env_size_strings union)",
+   "mechanism": "The static scan records every assignment target, including ones in never-taken branches: static analysis cannot know exists('raw') is TRUE. For each target that already exists in envir it computes class and bytes with a fresh env_snap_size (new seen set, no reuse of env_snapshot's size cache). For T03 `raw` = list(files, tables = 1,231 data.tables, 60,664 x 9, 3 character columns): 14 budget parts per table, so about 716 tables are walked fully. That is about 2,148 unique.default() calls on 60,664-string vectors, then unlist+unique over all per-column string sets twice: once to extrapolate the unsampled tables, once for the final count. Each union covers about 86M string pointers (inference).",
+   "cost": "Measured, this Mac, load avg 10-15, median of 3: env_snap_size of a T03-shaped object took 0.48 s with 100 tables and 1.606 s with 300 tables, linear at about 5.3 ms per table. unique.default is 93% / 88% of self time; the final string union (env_size_strings) is 68% / 55% of total. Extrapolating to about 716 walked tables plus the second union gives roughly 4-6 s on this Mac (inference). The T03 AWS replay's ~13 s per classification phase is consistent with one walk of raw per classification (inference).",
+   "evidence": "measured",
+   "safety_role": "Bytes feed (1) policy protect_size (perm-gate.R:200-206), which asks before overwriting an object larger than gptr.protect_size=1e8 but returns NULL in auto and yolo; (2) level 3 vs 2 for an overwrite row (perm-classify.R:3100), which raises approved_level and so changes which nested peter$ calls skip a second gate (agent-dispatch.R:451-455); (3) the label shown in permission prompts; (4) gptr_risk$sizes. In auto mode, for T03, the decision is allow either way.",
+   "scales_with": "Size and string content of each existing object the code assigns, including in dead branches; number of such names; x2 per call"
+  },
+  {
+   "id": "C2",
+   "title": "Two full risk classifications per tool call (pre-gate and inside perm_decide)",
+   "where": "R/mcp-server.R:269-276 and 281; R/agent-dispatch.R:96 (native: call_risk passed lazily into tool_call_hook), 99, 573 (comment 'risk is recomputed from the raw input'), 587-611 (590; 598 a third run when a policy returns modify), 852-875 (call_risk -> risk.classify with envir = run_eval_env); R/perm-classify.R:2053-2064, 2096-2129",
+   "mechanism": "The first classification builds the `tool_call` hook payload (risk=) and call$risk. That risk is used by checkpointers (ckpt_pure_read and ckpt_file_free, ckpt-rewind.R:37-49), by the nested-call gate (outer$risk, mcp-server.R:376) and, as a fallback, for approved_level. perm_decide reclassifies because a tool_call hook may have changed the input (agent-dispatch.R:126-128); no hash links the first result to the final input, so nothing is reused. Each classification does: eval_parse (2089), risk_bound plus a risk_scan AST walk with envir (about 308 risk_fn_where exists() chain walks and one names(envir) sort for user S3 methods, 2606/2650), secret_scan (a second parse and walk, 2109), C1 sizes, and rule_call_path per target file (2124-2127). On the MCP route call$risk keeps the first result while approved_level uses d$risk (mcp-server.R:287-299).",
+   "cost": "Measured counts: risk_classify_r = 2 per call on both routes; risk_fn_where 308 per call; hash_xxh128 258 per call (the risk_table cache check per lookup). Measured small-data time (traced): 2 classifications = 0.093 s (MCP) / 0.105 s (native). With T03 data each one carries one walk of raw (C1). The T03 replay measured 12.773 / 13.339 s before the gate and 13.373 / 13.445 s inside mcp_serve_gate.",
+   "evidence": "measured",
+   "safety_role": "The second pass binds the decision to the final input after hooks and policies; the first lets hooks see a risk and gives checkpointers their target and pure-read decisions.",
+   "scales_with": "Code length and number of call heads, depth of the search path, plus C1"
+  },
+  {
+   "id": "C3",
+   "title": "Two independent snapshot-size caches: a new big object is sized twice per request (inside the tool and at agent_end)",
+   "where": "R/ckpt-objects.R:464 and 547 (ck$snap), R/env-snapshot.R:157-172 (reuse rule: address, class, shape, fingerprint), 321-346 (env_memory/env_remember), 358-383 (workspace block, first request), 388-404 (workspace_changes block at each later request start), 485-490 (env_on_agent_end)",
+   "mechanism": "The checkpointer and the workspace blocks each keep their own previous snapshot, and a size is reused only against the holder's own previous. A binding created in a request is new to both, so it is sized in checkpoint_after (ckpt_objects_after -> env_snapshot) and again in the agent_end hook (env_on_agent_end -> env_view_snapshot). Later unchanged objects are reused in both.",
+   "cost": "Measured counts: request 1 sizes `raw` at env_snapshot_rows<ckpt_objects_after (in the tool) and at env_snapshot_rows<env_view_snapshot<run_settle (outside the tool); requests 2 and 3 reuse it in both. The T03 replay measured checkpoint_after at 13.865 s in request 1. The agent_end walk was not measured at scale; it is inferred to cost about the same and lands outside the tool interval as harness time.",
+   "evidence": "measured",
+   "safety_role": "Checkpointer: undo budget (undo_capture_max 1e8, undo_max_bytes 1e9, spill) and fragment rows. Workspace memory: `<workspace>` / `<workspace_changes>` lines with sizes for the model, diffed against the user's own changes between requests.",
+   "scales_with": "Size of objects created or changed per request"
+  },
+  {
+   "id": "C4",
+   "title": "Bounded project-folder file scans for file undo: two per call, then per turn (one inside the call, one at agent_end)",
+   "where": "R/ckpt-files.R:444-466 (sync before), 508-529 (step after; 517 switch to per-turn above checkpoint_scan_budget=0.25 s), 537-545 (turn scan), R/ckpt-scan.R:27-220 (ckpt_scan_run: 2,000-entry cap, 2 s timeout, per-entry path_info + ps_fs_stat + path_class + link checks, ckpt_store_put hash and gz copy for capturable files), R/ckpt-rewind.R:237-253 (agent_end), 213-231 (CLI hooks: agent_start sync, turn_end scan; sync=FALSE before served calls, ckpt-rewind.R:88)",
+   "mechanism": "Before a mutating call, a scan absorbs edits made outside gptr; after it, a recording scan finds changed files. Once one scan exceeds 0.25 s the session switches to one scan per turn: a sync inside the first call of each turn plus ckpt_files_turn_scan at agent_end. Each scan stats every entry (up to 2,000), keeps `st$seen` with a quadratic %in% check, and hashes and stores up to 256 small files.",
+   "cost": "Measured, single traced run, 1,231 symlinked entries in the project root: 0.27-0.44 s per scan. After request 1 it switched to per-turn mode; requests 2 and 3 each ran one scan in checkpoint_before (0.35 / 0.50 s) and one at agent_end (0.43 / 0.44 s). Outer minus internal rose to 0.85 / 0.95 s, against 0.27-0.31 s with 42 entries. The T03 replay measured checkpoint_before at 1.443 / 0.817 s (AWS).",
+   "evidence": "measured",
+   "safety_role": "File undo and rewind of files the agent's code changes; on CLI routes, records edits the child made itself.",
+   "scales_with": "Number of entries in the project root (cap 2,000), small capturable files (up to 1e6 for the baseline, 5e7 otherwise)"
+  },
+  {
+   "id": "C5",
+   "title": "The same code is parsed 9-10 times and its syntax tree walked about 12 times per call",
+   "where": "Parses: R/perm-classify.R:2089 (risk_parse x4: 2 classifications + 2 code_targets), R/perm-gate.R:97 (mode policy), R/eval-core.R:169 (evaluation), R/auth-secrets.R:616 (secret_scan x3 MCP / x4 native). Walks: R/perm-classify.R:3316-3321 (code_targets, envir=NULL) via R/ckpt-objects.R:386-394 from :467 (objects before) and R/ckpt-files.R:395-400 (ckpt_call_paths); R/perm-gate.R:99 and R/eval-core.R:179 (eval_guard x2); R/eval-guard.R:420-426 (eval_assign_targets x3); R/perm-gate.R:186 (secret_guard policy), R/perm-gate.R:230 (native tool_result hook)",
+   "mechanism": "Each safety component re-derives its own facts from the code text; there is no shared parse and no memo keyed by the code hash.",
+   "cost": "Measured counts per call: eval_parse 6, risk_scan 4, code_targets 2, eval_guard 2, secret_scan 3 (MCP) / 4 (native), eval_assign_targets 3. Measured small-scale traced time: code_targets x2 = 0.064 s, secret_scan x3 = 0.012 s, eval_parse x6 = 0.004 s. Independent of data size; grows with code length.",
+   "evidence": "measured",
+   "safety_role": "Target prediction for object and file undo, the evaluator guard (q(), readline, stdin, secret markers), secret and taint flows to the network.",
+   "scales_with": "Code length and AST size"
+  },
+  {
+   "id": "C6",
+   "title": "Six permission policies per call, one of which reads settings files from disk every time",
+   "where": "R/agent-dispatch.R:635-667 (perm_policies/perm_strictest via ext_policy_decide, R/ext-events.R:660-676), R/perm-gate.R:86-206 (mode, rules, critical_guard, secret_guard, protect_size), R/perm-plan.R:287-320 (plan), R/perm-rules.R:232-266 (perm_rules_table: process store + up to 4 JSON files + trust.get), 141-150 (rule_match)",
+   "mechanism": "Every call evaluates every policy. perm_policy_rules calls perm_rules_effective(), which re-reads the user-level project file, .gptr/settings.json, settings.local.json and user settings.json, with no cache. The mode policy parses and guards the code again (C5). secret_guard runs secret_scan again.",
+   "cost": "Measured counts: ext_policy_decide 6 and perm_rules_table 1 per call. Small-scale traced time: perm_policies 0.06 s (including the mode policy's parse and guard), perm_rules_table 0.001 s.",
+   "evidence": "measured",
+   "safety_role": "Mode x level table, deny and ask rules, critical and control guard, secret guard, protect_size, plan-mode allowlist.",
+   "scales_with": "Number of policies and rules; code length"
+  },
+  {
+   "id": "C7",
+   "title": "Workspace snapshots with fingerprints: 4 per call plus 2 per request",
+   "where": "R/env-snapshot.R:124-208 (ls(envir=), env_snap_facts, fingerprint per binding), R/utils-hash.R:155-187 (fingerprint: up to 1,000 element addresses + 64 samples of the first 20 atomic elements), R/ckpt-objects.R:464, 547 (with sizes), R/eval-core.R:188, 192 (sizes=FALSE), R/env-snapshot.R:393, 488 (per request)",
+   "mechanism": "Each snapshot lists the home and fingerprints every value binding. Sizes are reused only when address, class, shape and fingerprint all match the holder's previous snapshot (C3). The fingerprint is shallow: a by-reference edit deep inside a list (data.table := in raw$tables[[i]]) keeps the address and fingerprint, so a stale size would be reused. Any new size cache must handle that.",
+   "cost": "Measured counts per call: env_snapshot 2 and env_view_snapshot 2 (plus 2 per request outside), fingerprint 30 per call and 15 per request outside, with 13 bindings; about 3-7 ms at small scale.",
+   "evidence": "measured",
+   "safety_role": "Object undo pre-images (captured by reference) and exact change detection; the evaluator's object diff reported to the model.",
+   "scales_with": "Number of bindings in the session home; list lengths up to 1,000"
+  },
+  {
+   "id": "C8",
+   "title": "Changed objects captured by reference are sized twice more in checkpoint_after",
+   "where": "R/ckpt-objects.R:500-538 (ckpt_settle_row; 527), 314-317 (ckpt_unshared_bytes -> env_snap_size(image, envir, shared = current value) walks shared first, then the image), 411-420 (capture plan: up to 1e9 bytes for predicted assign or remove)",
+   "mechanism": "For each binding that changed and was captured by reference, the bytes the pre-image holds beyond the current value come from two walks.",
+   "cost": "Unmeasured at scale. Counts: one small call (logical[2004]) in request 3 of the replay. It would be large when a big object of 1e8-1e9 bytes is reassigned.",
+   "evidence": "source",
+   "safety_role": "Undo memory budget accounting (undo_max_bytes) and spill decisions.",
+   "scales_with": "Size of changed objects within the capture budget"
+  },
+  {
+   "id": "C9",
+   "title": "Process-state snapshots: 4 eval_session_state and 2 ckpt_state_snapshot per call",
+   "where": "R/eval-core.R:96, 677, 825-828 (options(), Sys.getenv(), search(), loadedNamespaces(), dev.list()); R/ckpt-objects.R:805-810, 815-829 (plus Sys.getlocale, ckpt_cons = getAllConnections + summary of each connection, hash_xxh128 of .Random.seed), 833-846 (eval_state_diff loops over every option and env var)",
+   "mechanism": "The evaluator and the state checkpointer each take their own before and after copies of global R state.",
+   "cost": "Measured counts: eval_session_state 4 and ckpt_state_snapshot 2 per call; about 1 ms each at small scale.",
+   "evidence": "measured",
+   "safety_role": "Report and undo of option, env var, working directory, package, device, connection and RNG changes.",
+   "scales_with": "Number of options, env vars and open connections"
+  },
+  {
+   "id": "C10",
+   "title": "Per-turn request building is O(history): 3 token estimates, 2 projections, JSON encode and sha256 of every message",
+   "where": "R/agent-run.R:1182-1234 (run_request), 1459-1472 + 858-876 (compaction check: context_tokens re-estimates the path), 626-659 (run_build: project_messages, run_identity, a second prompt_request_estimate at 655), R/prompt-cache.R:191-213 (request_build: prompt_request_context project_messages + images_omit, 55-60 json_encode of every message, 76-82 sha256 of every element, 64-72 epoch path walk, 86-128 estimate), 246-287 (prefix_guard compare), R/agent-run.R:741-750 (images_elide)",
+   "mechanism": "Every model request re-serializes and re-hashes the whole transcript and estimates it three times; on the CLI routes the prompt also carries history text (cli-codex.R:273, pcli_history_text).",
+   "cost": "Measured counts, native route, request 2 (2 turns): project_messages 4, prompt_request_estimate 6, json_encode 42, hash_sha256 14, entries_path 6; a few ms at T03's short history. Unmeasured for long loops, where it grows quadratically over a run.",
+   "evidence": "measured",
+   "safety_role": "Prompt-cache prefix-break guard, token budgets, compaction trigger, usage ledger.",
+   "scales_with": "Transcript length per turn (quadratic over a long agent loop)"
+  },
+  {
+   "id": "C11",
+   "title": "Event emission redacts every payload string for each event that has hooks",
+   "where": "R/agent-run.R:113-124 (run_emit/session_emit), R/ext-events.R:548-574 (ev_dispatch), 199-205 (ev_view), 170-195 (ev_redact_payload, regex secret redaction), R/agent-dispatch.R:118-130 (tool_call payload includes the risk object), 226-238 (tool_execution_end, message_start, message_end)",
+   "mechanism": "Payloads (code, tool output, messages, risk) are redacted for the 'stream' profile before hooks see them. The built-in tool_call hooks (bridge_block_hook x2, bridge-sh.R:864, bridge-lang.R:537) make every tool_call event pay for this.",
+   "cost": "Measured: 16 (MCP) / 25 (native) ev_dispatch per request outside the tool and 2 / 4 inside; ev_redact_payload 136 calls, about 12 ms per request at small scale.",
+   "evidence": "measured",
+   "safety_role": "Secrets never reach extension hooks or the console stream.",
+   "scales_with": "Payload text size times number of events"
+  },
+  {
+   "id": "C12",
+   "title": "Session persistence per entry: redaction, timestamps that copy the environment, open/append/close",
+   "where": "R/session-object.R:179-209 (session_append, entry_prepare: redact_tree 'persist', id_entry, iso_time), R/utils-hash.R:59-91 (with_calendar_preserved copies Sys.getenv() for each timestamp), R/session-store.R:30-53, 84-121 (store_write_now: open-append-close, flush, no fsync), R/agent-dispatch.R:401 (gptr.checkpoint entry), 209-219 (dispatch_record json_encode check), R/mcp-server.R:346-354 (gptr.mcp_r entry when a document is recording)",
+   "mechanism": "Each tool result, checkpoint fragment, usage row and message is redacted, stamped and appended as its own write.",
+   "cost": "Measured: session_append 1-2 per call and 2-3 per request; 3-9 ms per request at small scale.",
+   "evidence": "measured",
+   "safety_role": "Durable, redacted, append-only transcript for resume, rewind and replay.",
+   "scales_with": "Entry size and count"
+  },
+  {
+   "id": "C13",
+   "title": "Route-specific transport: tools/list decoded per call, Codex mailbox polling, process spawns per turn",
+   "where": "R/mcp-server.R:30-53 (mcp_served_tools json_decodes the frozen tool array on every tools/call, 119), 258 (schema_validate), 207-226 (start and end events); R/cli-codex.R:46-50 (relay = Rscript --vanilla mcp_relay.R), 455-503 (per-exec spawn, pcli_probe, pcli_control_hash in workspace-write), 870-891 (session task polls the mailbox every 0.02 s), inst/gptr/mcp_relay.R:16-37 (relay polls resp with Sys.sleep(0.01)); R/cli-common.R:918-944 (pcli_mcp queues tools/call on the reactor tool FIFO); R/cli-claude.R:311-330 (Claude: mcp__gptr__* pre-allowed, gated once in mcp_message)",
+   "mechanism": "Codex: each gptr turn spawns a codex exec, which spawns an R relay process; every JSON-RPC message goes through renamed files picked up by 20 ms and 10 ms polls; tools/call waits for a reactor FIFO slot. Claude: stdin/stdout control protocol, no file polling.",
+   "cost": "Unmeasured for the real CLIs. By source, at most about 30 ms of polling per tools/call, plus R startup for the relay and codex startup once per gptr turn.",
+   "evidence": "source",
+   "safety_role": "Isolates the CLI from the live R session; one gate for served calls; a wall-clock limit per turn.",
+   "scales_with": "Number of JSON-RPC messages; gptr turns (exec spawns)"
+  },
+  {
+   "id": "C14",
+   "title": "Reactor pump cadence",
+   "where": "R/agent-run.R:1080-1090 (run_wait slice_ms=100), R/http-reactor.R:202-223 (reactor_pump), 227-234 (reactor_step: at most one FIFO tool per iteration), 238-271 (processx::poll then Sys.sleep(0)), 275-289 (reactor_wait_ms), 299-308 (tasks due every 5 ms), R/agent-run.R:1579-1605 (tools via reactor_enqueue_tool)",
+   "mechanism": "The single blocking wait: poll up to 100 ms or until the next timer or task; the run task ticks every 5 ms while it is busy.",
+   "cost": "Measured: total reactor waits of 47 ms over 9 waits (MCP) and 93 ms over 18 waits (native) across 3 requests.",
+   "evidence": "measured",
+   "safety_role": "Interruptibility, background runs, IC-57 nested pump rules.",
+   "scales_with": "Number of reactor iterations"
+  },
+  {
+   "id": "C15",
+   "title": "Per-request start and end work outside the tool interval",
+   "where": "R/gptr-gateway.R:1127-1186 (gateway_run: trust, filters sync, checks), 969-991 (gateway_input: input event, context.first/turn), R/gptr-capture.R:10-24 (dot_facts -> env_snap_size per dot value), R/prompt-context.R:103-129, 146-160 (context blocks: instruction files read, environment with ps memory, mode, workspace/workspace_changes, rewind), R/agent-run.R:947-992 (run_start, run_freeze 346-366: first request only, prompt.freeze + r_env_probe), 1033-1054 (run_wire, heartbeat 600 s timer), 1612-1676 (run_settle), 1692-1709 + 808-832 (plugin_state_persist json_encode), agent_end hooks: R/env-snapshot.R:485-490, R/ckpt-rewind.R:237-253 (ckpt_objects_budget, turn scan, ckpt_gc once), R/doc-replay.R:1235-1258 (only with a document), R/perm-plan.R:269-279, R/cli-common.R:1345-1356 (CLI: pcli_stop_child when a turn is open, pcli_codex_settle control hash)",
+   "mechanism": "Each peter() call captures its arguments, builds context blocks (including a workspace snapshot with sizes), starts and wires a run, then settles it with agent_end hooks: a workspace snapshot with sizes (C3), the checkpoint budget and file turn scan (C4), and optional document and CLI work.",
+   "cost": "Measured, small data, untraced: about 0.16 s outside the tool in request 3. Request 2 shows about 0.8 s of extra one-time cost, consistent with JIT compilation of not-byte-compiled load_all code (inference). dot_facts of the session object = 42,320 bytes in 0.003 s, and it does not walk the session home (measured with a 200 MB object in the home). In T03 the costly parts would be the agent_end walk of raw in request 1 (C3) and the turn scans (C4); both unmeasured at scale.",
+   "evidence": "measured",
+   "safety_role": "Trust prompt, plan hand-off, workspace awareness for the model, undo budgets, documents, CLI control-file integrity.",
+   "scales_with": "Number of new objects per request, number of project files, instruction file sizes"
+  },
+  {
+   "id": "C16",
+   "title": "Paths that size the whole workspace without reuse when a call needs approval",
+   "where": "R/agent-dispatch.R:786-800 (perm_request_record -> checkpoint.note), R/ckpt-objects.R:751-780 (ckpt_note: env_snapshot(envir) with no previous, so every binding is sized), R/perm-gate.R:200-206 (protect_size asks outside auto and yolo), R/perm-gate.R:213-224 (permissions:remember reclassifies)",
+   "mechanism": "In manual or edits mode, or for a level-4 action in auto, the ask path builds an undo note by snapshotting the whole home with fresh sizes. That walks raw, and every other object, again, on top of the two classifications.",
+   "cost": "Unmeasured; not exercised in T03 auto mode.",
+   "evidence": "source",
+   "safety_role": "Tells the person what cannot be undone before they approve.",
+   "scales_with": "Total size of all objects in the session home"
+  },
+  {
+   "id": "C17",
+   "title": "Measurement artifact: JIT warm-up under pkgload::load_all",
+   "where": "Benchmark replays: profile-mcp.R and minimal replay use load_all(GPTR_SOURCE); first-use costs in request 1 (risk table CSV read, R/perm-classify.R:28-45) and in the first continuation",
+   "mechanism": "load_all functions are not byte-compiled, so R's JIT compiles each closure on first use; request 1 also loads the risk tables.",
+   "cost": "Measured, small data, untraced: outer minus internal of 0.978 / 0.308 / 0.273 s (MCP, requests 1/2/3, median of 3) and 1.090 / 0.309 / 0.269 s (native).",
+   "evidence": "measured",
+   "safety_role": "None (measurement condition)",
+   "scales_with": "Number of distinct functions first used"
+  }
+ ],
+ "measurements": [
+  {
+   "what": "Classification, parse and walk counts per served `r` call (MCP route, request 2, 40 tables x 2,004 rows, T03 code with sizes substituted)",
+   "result": "risk_classify_r 2 (via mcp_serve_exec and via perm_decide), risk_scan 4, risk_parse 4, eval_parse 6, eval_guard 2, code_targets/ckpt_predict 2, secret_scan 3, risk_binding_info 8 (files, tables, raw, sample_summary x2), env_snap_size 5 in the tool (raw x2, files x2, 1 in checkpoint_after), ext_policy_decide 6, perm_rules_table 1, risk_fn_where 308, hash_xxh128 258, env_snapshot 2, env_view_snapshot 2 (+2 per request outside), fingerprint 30 (+15), ckpt_scan_run 2, ckpt_store_put 6, ckpt_state_snapshot 2, eval_session_state 4, ev_dispatch 2 in the tool / 16 outside",
+   "method": "trace() enter/exit counters on 120+ namespace functions, fake provider, mcp_dispatch_local from a before_request hook (profile-mcp.R pattern); runs/mcp-40x2004/calls-by-request.csv"
+  },
+  {
+   "what": "Same counts, native agent loop (fake provider scripted to return the tool call)",
+   "result": "Same as MCP, except secret_scan 4 (adds the perm_on_tool_result hook), tool_result hooks run (the MCP route skips them), and the first call_risk is forced inside tool_call_hook (lazy argument). Per request (2 turns): ev_dispatch 25 outside / 4 inside, json_encode 42, hash_sha256 14, prompt_request_estimate 6 (3 per turn), project_messages 4 (2 per turn), entries_path 6",
+   "method": "runs/native-40x2004/calls-by-request.csv"
+  },
+  {
+   "what": "Where `raw` is sized (env_snap_size call sites by request)",
+   "result": "Request 1: env_snapshot_rows<ckpt_objects_after<checkpoint_after (in the tool) and env_snapshot_rows<env_view_snapshot<run_settle (agent_end, outside the tool). Requests 2 and 3: risk_binding_leaf<risk_classify_r<mcp_serve_exec (or dispatch_steps) and risk_binding_leaf<risk_classify_r<perm_decide; checkpoint and workspace snapshots reuse the size. Identical on both routes",
+   "method": "sys.calls() site tagging in the env_snap_size tracer; runs/*/env-snap-size-calls.csv"
+  },
+  {
+   "what": "env_snap_size of a T03-shaped object: list(files, tables = k data.tables 60,664 x 9, 3 shared-string character columns)",
+   "result": "k=100: 0.480 s median (0.475, 0.480, 0.499); k=300: 1.606 s median (1.552, 1.606, 1.608); all k tables walked (under the budget). Rprof: unique.default 92.9% / 88.2% self; env_size_strings (final union) 67.9% / 54.5% of total. About 5.3 ms per table. This Mac, load avg about 10-15 (contention with other agents)",
+   "method": "probe-size.R; system.time x3 plus Rprof(interval=0.005)/summaryRprof; logs/probe-size-k100.log, logs/probe-size-k300.log"
+  },
+  {
+   "what": "Sampling-budget parts per fread data.table",
+   "result": "13 parts per table walk + 1 per list item = 14; about 716 of 1,231 tables are walked fully before env_size_items extrapolates (budget 10,000)",
+   "method": "parts-per-table.R calling env_size_walk on one fread table (attributes row.names, class, names, .internal.selfref); logs/parts-per-table.log"
+  },
+  {
+   "what": "Does sizing a session object (dot_facts of peter(s, ...)) walk the session home?",
+   "result": "No: 42,320 bytes both before and after adding a 200 MB vector to the home, 0.003 s",
+   "method": "session-size.R"
+  },
+  {
+   "what": "Per-call overhead outside execution (tool_execution_start->end minus internal elapsed), untraced, 40 tables x 2,004 rows, 3 runs each",
+   "result": "MCP requests 1/2/3: 0.977-0.994 / 0.305-0.320 / 0.267-0.277 s (medians 0.978 / 0.308 / 0.273). Native: 1.048-1.157 / 0.302-0.376 / 0.258-0.301 s (medians 1.090 / 0.309 / 0.269). Request walls, MCP: about 2.9 / 1.5 / 0.5 s",
+   "method": "count-calls.R notrace mode; logs/notrace-{mcp,native}-{1,2,3}.log; load avg 10-15"
+  },
+  {
+   "what": "File checkpoint scans with 1,231 entries in the project root (symlinked tiny TSVs, as replay.R lays them out)",
+   "result": "ckpt_scan_run 0.27-0.44 s per scan; switched to per-turn after request 1. Requests 2 and 3: checkpoint_before 0.42 / 0.57 s (its sync scan 0.31 / 0.43 s), checkpoint_after 0.07 / 0.03 s, agent_end turn scan 0.43 / 0.44 s. Outer minus internal 0.853 / 0.945 s. Classification 0.14-0.18 s each with 1,231 tiny tables",
+   "method": "count-calls.R mcp 1231 8 (single traced run); logs/mcp-1231x8.log, runs/mcp-1231x8/calls-raw.csv"
+  },
+  {
+   "what": "Reactor wait time",
+   "result": "MCP: 47 ms over 9 waits; native: 93 ms over 18 waits, across 3 requests",
+   "method": "exit tracer on reactor_wait_ms collecting returnValue()"
+  },
+  {
+   "what": "Small-scale traced split inside one served call (request 2, 40 x 2,004)",
+   "result": "mcp_serve_exec 0.559 s: 2 classifications 0.093, mcp_serve_gate 0.132 (perm_decide 0.121, policies 0.060), checkpoint_before 0.131 (files 0.056, objects 0.047), mcp_serve_r 0.121 (eval_run 0.058, format 0.026), checkpoint_after 0.097 (files 0.048); traced, so inflated",
+   "method": "inclusive outermost-call timings from trace enter/exit; runs/mcp-40x2004/calls-by-request.csv"
+  }
+ ],
+ "open_questions": [
+  "Full-scale split at T03 size (1,231 x 60,664) for env_snap_size(raw), each classification and the agent_end walk was not measured here; per-table extrapolation gives about 4-6 s per walk on this Mac against about 13 s per phase on AWS. The heavy-timing agents should confirm.",
+  "Was request 1's agent_end walk of raw (env_on_agent_end) part of A1's extra ~29 s harness time? Check the original A1 trace for the gap between the last tool_execution_end and agent_end in request 1.",
+  "Were the original T03 inputs real files or symlinks in the project root? Real files under 1e6 bytes would be captured (hashed and gz-copied) by the baseline scan; the 4.2 MB files are over that cap, and symlinks are never captured.",
+  "Was a document site bound, or tailor/coaching tool_call hooks or policies active, in the formal runs? That adds doc_on_agent_end and extra policies.",
+  "On the MCP route, tool_result hooks (perm_on_tool_result taint tracking, ckpt_on_tool_result notes and checkpoint event) never run, and call$risk keeps the pre-hook classification (mcp-server.R:287-306). Is that intended? It is a behaviour gap, not a cost.",
+  "Any size or risk cache needs a validity key beyond address and fingerprint: the fingerprint is shallow (utils-hash.R:155-187), so in-place data.table edits inside nested lists do not change it. Should sizes only be computed when a decision needs them (manual/edits mode, protect_size, nested approved level)?",
+  "Codex CLI route: per-exec costs (codex startup, relay Rscript startup, MCP initialize and tools/list, pcli_control_hash) were not measured; that needs a live CLI, which this task did not use."
+ ],
+ "artifacts": [
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/count-calls.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/probe-size.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/parts-per-table.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/session-size.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/mcp-40x2004.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/native-40x2004.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/mcp-1231x8.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/notrace-mcp-1.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/notrace-mcp-2.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/notrace-mcp-3.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/notrace-native-1.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/notrace-native-2.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/notrace-native-3.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/probe-size-k100.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/probe-size-k300.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/logs/parts-per-table.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/mcp-40x2004/calls-by-request.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/mcp-40x2004/calls-raw.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/mcp-40x2004/env-snap-size-calls.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/mcp-40x2004/binding-info.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/mcp-40x2004/events.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/native-40x2004/calls-by-request.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/native-40x2004/env-snap-size-calls.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/native-40x2004/events.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/mcp-1231x8/calls-raw.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/probe-size/rprof-k100.out",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/runs/probe-size/rprof-k300.out",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/path-map/src/gptr"
+ ]
+}

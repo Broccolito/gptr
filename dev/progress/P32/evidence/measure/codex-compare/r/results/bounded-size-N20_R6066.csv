@@ -1,0 +1,6 @@
+"config","what","reps","median_s","min_s","max_s","value"
+"N20_R6066","env_snap_size (gptr, exact by D-247)",1,0.036,0.036,0.036,"8182920"
+"N20_R6066","size_exceeds(1e8) lower bound, early exit",1,0.006,0.006,0.006,"FALSE"
+"N20_R6066","size_exceeds(Inf) lower bound, full walk",1,0.00100000000000011,0.00100000000000011,0.00100000000000011,"FALSE"
+"N20_R6066","fingerprint (cache key)",1,0.00099999999999989,0.00099999999999989,0.00099999999999989,"c9b40819357bfa62403883318af5888dc8a783fe47e5dd3551bf8862495a1b3c"
+"N20_R6066","utils::object.size (no string dedupe)",1,0.00300000000000011,0.00300000000000011,0.00300000000000011,"24537408"

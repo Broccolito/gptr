@@ -1,0 +1,31 @@
+medians over runs (ms); per-turn columns are medians over the turns of the measured requests
+ scenario variant runs req_wall t_turn t_provider t_pre_exec t_tool_outer t_tool_internal t_post_tool t_next_req  gc save_turn_ms save_turn_pct save_req_ms
+    empty    none    3     1784  160.5       31.0         11         37.0            25.0           9       69.0  89          0.0           0.0           0
+    empty      lm    3     1061   93.0       23.0         11         28.0            15.0           9       20.0  47         67.5          42.1         723
+    empty reactor    3     1637  144.5       23.0         11         36.0            25.0           2       68.0  90         16.0          10.0         147
+    empty    loop    3      880   77.0       16.0         11         28.0            15.0           2       20.0  47         83.5          52.0         904
+    empty     all    3      874   76.0       16.0         11         25.5            15.0           2       19.0  43         84.5          52.6         910
+  history    none    3     3035  267.5       33.0         12         37.0            22.0           9      172.5 243          0.0           0.0           0
+  history      lm    3     1441  116.0       26.0         12         30.0            16.0           9       36.5  82        151.5          56.6        1594
+  history    loop    3     1251  100.0       19.0         12         30.0            16.0           2       35.5  82        167.5          62.6        1784
+  history     all    3     1355  104.5       18.5         12         28.0            16.0           2       35.5  76        163.0          60.9        1680
+    small    none    3     2927  265.0       31.0         11        157.5           145.5           9       54.0 179          0.0           0.0           0
+    small      lm    3     1768  156.0       24.0         11         92.0            80.5           9       18.0  84        109.0          41.1        1159
+    small    loop    3     1600  140.0       16.0         11         93.0            80.5           2       17.5  83        125.0          47.2        1327
+    small     all    3     1593  138.5       16.0         11         90.0            80.0           2       17.5  88        126.5          47.7        1334
+
+per-run t_turn / req_wall (sorted):
+ scenario variant      t_turn       req_wall
+    empty    none 159/160/161 1783/1784/1839
+    empty      lm    90/93/94 1013/1061/1063
+    empty reactor 144/144/145 1629/1637/1639
+    empty    loop    77/77/77    876/880/890
+    empty     all    75/76/77    871/874/878
+  history    none 264/267/273 3005/3035/3088
+  history      lm 114/116/116 1416/1441/1462
+  history    loop  98/100/102 1236/1251/1293
+  history     all 104/105/105 1338/1355/1374
+    small    none 262/265/267 2883/2927/2954
+    small      lm 152/156/156 1733/1768/1770
+    small    loop 140/140/141 1596/1600/1601
+    small     all 132/138/140 1531/1593/1602

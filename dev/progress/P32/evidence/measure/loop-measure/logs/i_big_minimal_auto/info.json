@@ -1,0 +1,28 @@
+{
+  "cfg": {
+    "scenario": "big",
+    "tools": "minimal",
+    "mode": "auto",
+    "K": 10,
+    "reps": 3,
+    "warm": 2,
+    "ntab": 500,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 0,
+    "trace": 1,
+    "tag": "i_big_minimal_auto",
+    "hooks": 1,
+    "hcode": "x = rnorm(100); summary(x)",
+    "lib": "installed"
+  },
+  "ws_gb": 6.1894,
+  "ws_build_s": 1.23,
+  "entries": 112,
+  "turns": 5,
+  "mode": "auto",
+  "preset": "minimal",
+  "text": "Done.",
+  "maxrss_gb": null
+}

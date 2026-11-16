@@ -1,0 +1,38 @@
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   1  2.256   0.629       0.08 0.549       0.585    FALSE 0.3844147
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   2  0.603   0.249      0.133 0.116       0.165    FALSE 0.3915863
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+  create   c1   1 13.394   9.045      8.531 0.514       4.302    FALSE 8.289597
+home: files, gene_rows, input_audit, raw, reference_gene_ids, total_gene_counts, zero_gene_values
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a2   0    8.5    8.11      1.246 6.864        0.34    FALSE 8.850082
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   0  1.893   1.539      1.153 0.386       0.313    FALSE 8.862747
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a2   1  8.316   7.914      1.155 6.759       0.341    FALSE 10.31021
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a3   1  8.513   7.893      1.041 6.852       0.559    FALSE 11.46544
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   1  1.899   1.536      1.149 0.387       0.322    FALSE 11.46964
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a3   1  1.845   1.484      1.029 0.455       0.321    FALSE 13.35159
+DONE
+       51.74 real        47.73 user         2.59 sys
+         14336327680  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1059181  page reclaims
+                 481  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                4351  signals received
+                1249  voluntary context switches
+                2858  involuntary context switches
+        935625281341  instructions retired
+        208057281524  cycles elapsed
+         10981583552  peak memory footprint

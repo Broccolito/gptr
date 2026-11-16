@@ -1,0 +1,27 @@
+{
+  "cfg": {
+    "scenario": "history",
+    "tools": "default",
+    "mode": "default",
+    "K": 10,
+    "reps": 3,
+    "warm": 2,
+    "ntab": 300,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 0,
+    "trace": 1,
+    "tag": "history_default_default",
+    "hooks": 1,
+    "hcode": "summary(rnorm(100))"
+  },
+  "ws_gb": 0,
+  "ws_build_s": 0.001,
+  "entries": 312,
+  "turns": 55,
+  "mode": "manual",
+  "preset": "standard",
+  "text": "Done.",
+  "maxrss_gb": null
+}

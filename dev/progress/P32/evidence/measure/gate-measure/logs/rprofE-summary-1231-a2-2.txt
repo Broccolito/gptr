@@ -1,0 +1,35 @@
+== rprof-rprofE-chrS-1231-a2-2.out  sampling.time = 7.12 s
+-- by.total (whole-call wrappers and generic frames dropped)
+                    total.time total.pct self.time self.pct
+"risk_scan"              5.990     84.13     0.000     0.00
+"walk"                   5.985     84.06     0.005     0.07
+"risk_classify_r"        5.955     83.64     0.000     0.00
+"env_snap_size"          5.915     83.08     0.000     0.00
+"note_assign"            5.915     83.08     0.000     0.00
+"risk_binding_info"      5.915     83.08     0.000     0.00
+"risk_binding_leaf"      5.915     83.08     0.000     0.00
+"risk_binding_safe"      5.915     83.08     0.000     0.00
+"unique.default"         4.755     66.78     4.540    63.76
+"env_size_walk"          3.955     55.55     0.075     1.05
+"env_size_items"         3.955     55.55     0.010     0.14
+"env_size_strings"       3.815     53.58     0.000     0.00
+"unique"                 3.815     53.58     0.000     0.00
+"mcp_serve_gate"         2.980     41.85     0.000     0.00
+"perm_check"             2.980     41.85     0.000     0.00
+-- by.self
+                 self.time self.pct total.time total.pct
+"unique.default"     4.540    63.76      4.755     66.78
+"unlist"             0.865    12.15      0.935     13.13
+"<GC>"               0.370     5.20      0.370      5.20
+"startsWith"         0.190     2.67      0.190      2.67
+"all"                0.145     2.04      0.145      2.04
+"identical"          0.100     1.40      0.100      1.40
+">="                 0.095     1.33      0.095      1.33
+"floor"              0.085     1.19      0.085      1.19
+"env_size_walk"      0.075     1.05      3.955     55.55
+"sum"                0.070     0.98      0.070      0.98
+"=="                 0.065     0.91      0.065      0.91
+">"                  0.060     0.84      0.060      0.84
+"FUN"                0.045     0.63      1.060     14.89
+"is.finite"          0.030     0.42      0.030      0.42
+"mean.default"       0.030     0.42      0.030      0.42

@@ -1,0 +1,4 @@
+N=100 R=2000: data.tables walked 100 of 100; long character vectors walked 300; bytes 1.233e+07
+N=300 R=2000: data.tables walked 300 of 300; long character vectors walked 900; bytes 3.674e+07
+N=1231 R=2000: data.tables walked 715 of 1231; long character vectors walked 2146; bytes 1.504e+08
+N=5000 R=2000: data.tables walked 715 of 5000; long character vectors walked 2146; bytes 6.11e+08

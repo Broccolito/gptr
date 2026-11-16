@@ -1,0 +1,192 @@
+{
+ "summary": "Transport between the CLI and the R session is not where gptr loses time. Codex route (what A1 used): every peter() request starts a new `codex exec [resume <thread>] --json` process (through the benchmark's Python wrapper). Codex in turn starts a new `Rscript --vanilla inst/gptr/mcp_relay.R` stdio MCP server. Each JSON-RPC line goes relay stdin -> <mailbox>/req file -> a reactor task in the R session that polls every 20 ms -> mcp_dispatch -> <mailbox>/resp file -> the relay, which polls every 10 ms -> stdout.\n\nI drove the real adapter, real relay and real session offline with an instrumented fake codex (300 trivial calls). Transport outside the in-session interval is about 26 ms per call: hop-in 18 ms, hop-out 7.7 ms, FIFO 1 ms, decode 2.2 ms, encode/write 1.7 ms. That does not change with a 1.6 GB workspace. Per request, the fixed cost is about 0.75-0.9 s. Most of it is the relay's Rscript startup plus the initialize answer (0.33-0.46 s). Codex process startup is about 0.11-0.15 s plus 0.04 s for the Python wrapper, the initialized + tools/list handshake 0.06 s, and spawn plus gptr bookkeeping about 0.2 s.\n\nClaude route: per-call transport is event-driven at about 12 ms (hop-in 0.5 ms). But the default cost budget adds --max-budget-usd, so a new claude child (--resume) starts on every request: 0.34 s real-CLI startup to initialize, plus about 0.3 s to retire the old child at agent_end.\n\nIn the published traces, time from the user message to the first R execution is no longer for A1 than for C1 (medians 18.7/16.3/31.8 s vs 23.0/15.9/35.5 s), and token use is similar. So the per-request spawn and handshake is lost in model noise.\n\nA1's 29 s of extra harness/model/network time is almost entirely in-session pre-turn work (2.79/1.69/0.95 s vs at most 0.09 s for C1) and post-turn work (17.98/1.09/0.73 s vs at most 0.02 s). Summed per trial (means), that is about 28 s.\n\nThe request-1 post-turn also appears in the authors' offline replay, which has no CLI: 15.27 s between the request-1 tool end and the request-2 tool start. Source plus scaled runs point to the agent_end workspace snapshot re-sizing the newly created `raw` (env_view_snapshot -> env_snap_size). That repeats the sizing checkpoint_after already did (13.07 s in the replay). In my scaled runs it was 0.57 s at 10% scale and 1.11 s at 30%, against checkpoint_after's 0.83 s and 1.78 s. The full-scale share is inferred, not measured. The per-call 27 s gap (pre-gate plus gate) also scales with workspace size: 0.47+0.43 s at 10%, 1.25+1.35 s at 30%, while transport stays constant. That part belongs to the risk/gate investigation, not transport.",
+ "causes": [
+  {
+   "id": "T1",
+   "title": "New codex exec process per request (plus the benchmark's Python wrapper); codex thread resume",
+   "where": "R/cli-codex.R:455-497 (one exec per turn; resume at L478; args L82-97); R/provider-registry.R:1172-1233 (stream_process; spawn L1202-1208; prompt on stdin L1229-1230); R/provider-registry.R:1133-1166 (proc_spawn L1138); benchmark aws/shared/execute.py launchers() codex wrapper",
+   "mechanism": "build() always returns `start`, so each peter() request spawns `codex exec [resume <thread>] --json --ignore-user-config ... -`. The prompt goes on stdin and stdin is then closed. Codex must start, load config and auth, reload the thread rollout and set up its model client before the turn. C1 keeps one `codex app-server` for the whole trial and pays this once.",
+   "cost": "Measured proxies: `codex --version` 0.109 s median and `codex app-server` initialize with empty CODEX_HOME and no network 0.151 s median (n=7). The Python wrapper adds 0.040 s; gptr's spawn call (child_env, marker) adds 0.032-0.107 s. Codex's own auth, rollout and TLS setup is unmeasured. Trace comparison: A1 time-to-first-R is not longer than C1's, so the total is well under ~1 s per request.",
+   "evidence": "measured",
+   "safety_role": "Each exec is isolated and gets a fresh sandbox mapping (workspace-write in auto mode) plus control-file hashing around it. A persistent app-server would need the same per-turn sandbox and control-file checks.",
+   "scales_with": "Number of requests; the rollout reload grows slightly with conversation length (inferred)."
+  },
+  {
+   "id": "T2",
+   "title": "New stdio MCP relay (an Rscript process) and MCP handshake per request",
+   "where": "R/cli-codex.R:46-55 (mcp_servers.gptr.command=Rscript, args mcp_relay.R <mailbox> <secs>, required=true, startup_timeout_sec=60, tool_timeout_sec=3600); R/cli-codex.R:468-470 (fresh mailbox per exec); inst/gptr/mcp_relay.R:10-37",
+   "mechanism": "Codex spawns `Rscript --vanilla mcp_relay.R`, then sends initialize, notifications/initialized and tools/list. Each message, the notification included, makes a full mailbox round trip to the session. Every A1 request's r call has id mcp_2 in the published traces, which fits a fresh MCP session per request. Codex probably waits for this required server before the first model request (inferred).",
+   "cost": "Fake-codex end-to-end runs, real relay and session: relay spawn to initialize answered 0.430 s median warm (n=12; 0.33-0.37 s in the create10/30 runs). initialized + tools/list 0.06 s. Relay with an instant responder: spawn to first response 0.373 s (n=5). An empty Rscript starts in 0.407 s on this loaded machine.",
+   "evidence": "measured",
+   "safety_role": "Keeps the MCP stdio stream free of user-profile output (--vanilla). The relay dies with the mailbox, so no server outlives the turn.",
+   "scales_with": "Number of requests; R startup time; independent of workspace size (same in trivial and 30%-scale runs)."
+  },
+  {
+   "id": "T3",
+   "title": "File-mailbox polling hops on every JSON-RPC message (10 ms relay sleep, 20 ms session task)",
+   "where": "inst/gptr/mcp_relay.R:19-28 (req written via tmp+rename; resp polled with Sys.sleep(0.01)); R/cli-codex.R:870-891 (reactor_task returns 0.02 at L881/L889; read_utf8, unlink, json_decode); R/http-reactor.R:124-135, 361-375 (numeric task wait), 299-308 (5 ms tick), 202-223 (pump); R/agent-run.R:1088 (run_wait slice 100 ms)",
+   "mechanism": "Requests reach the R heap through files, not a pipe or socket. The session picks up `req` only when its relay task is due (every 20 ms). The relay sleeps 10 ms before each check for `resp`. The response is written with write_atomic (tmp file, chmod, rename).",
+   "cost": "Per tools/call (n=300, trivial runs): hop-in (relay stdin to session pcli_mcp) median 0.0181 s, p90 0.0231 s. Hop-out (resp written to codex reads the line) median 0.0077 s, p90 0.0131 s. Relay-only round trip with an instant responder 0.0127 s median, 0.0134 s with a 100 kB payload.",
+   "evidence": "measured",
+   "safety_role": "None specific: a cross-process transport that works on Windows (rename locking) without sockets.",
+   "scales_with": "Number of MCP messages (3 handshake messages per request plus one per tool call); not payload size up to 100 kB; not workspace size."
+  },
+  {
+   "id": "T4",
+   "title": "In-session per-call dispatch overhead outside the measured tool interval (JSON, served-tool list, FIFO)",
+   "where": "R/cli-common.R:918-944 (pcli_mcp; tools/call queued to the reactor FIFO at L936-942); R/http-reactor.R:323-336 (one FIFO tool per step); R/mcp-server.R:94-138 (tools/call calls mcp_served_tools L119), 30-53 (json_decode of the frozen tools JSON L39), 207-226 (tool_execution_start/end emitted here), 58-68 (redact in mcp_tool_content); R/cli-codex.R:885-887 (json_encode + write_utf8)",
+   "mechanism": "The message is decoded, then queued and run from the FIFO in the same reactor step. The served tool list is rebuilt by decoding the frozen tools JSON, and the input is schema-validated. The result is redacted, JSON-encoded and written atomically. tool_execution_start/end are emitted inside mcp_serve_call, so all of this plus the T3 hops falls outside the benchmark's 'outer' tool interval and lands in harness/model time.",
+   "cost": "Medians (n=300): FIFO wait 0.0009 s, dispatch start to tool_execution_start 0.0022 s, tool_execution_end to resp written 0.0017 s. T3+T4 together come to about 0.026 s per call, against the 27.6 s per-call gap in T03.",
+   "evidence": "measured",
+   "safety_role": "The FIFO serialises R tool calls across agents (IC-57) and refuses calls after the turn ended (D-104). Redaction keeps secrets out of tool results.",
+   "scales_with": "Number of calls; size of the tool result (bounded by gptr.r_output_tokens)."
+  },
+  {
+   "id": "T5",
+   "title": "Per-request gptr bookkeeping around the CLI (probes, control-file hashes, spawn, child exit, turn end)",
+   "where": "R/cli-common.R:1329-1335 (agent_start probe), 286-316 / 365-414 (version/help probes, cached per command+mtime), R/proc-spawn.R:276-300 (proc_run polls exit with a 20 ms pump), R/proc-supervise.R:420-455 (kill_all), 237-245 (proc_release), 228-233 (ps::ps_find_tree); R/cli-codex.R:487-491 and 673-678 (control hash before and after, unlink mailbox)",
+   "mechanism": "First request only: two probe runs of the CLI (`--version`, `exec --help`) through proc_run, each followed by kill_all with process-tree scans. Every request: control-file hashing before and after a workspace-write exec, process spawn with marker record, mailbox creation and removal, and a ps tree scan when the child exits.",
+   "cost": "Warm request to spawn 0.17 s median in the trivial env (n=12); first request 2.9 s, including run_freeze and probes (the fake probes are Rscript, about 0.35 s each; real codex about 0.1 s each). Turn end in the session 0.003-0.05 s, pcli_codex_end about 0.015 s, ps_find_tree 0.0425 s per call (1,489 processes).",
+   "evidence": "measured",
+   "safety_role": "Probes refuse unsupported CLIs. Control-file hashes detect Codex editing .gptr/.Rprofile/git hooks (IC-54). Marker and tree scans prevent orphaned children.",
+   "scales_with": "Number of requests and of processes on the machine; probes once per session."
+  },
+  {
+   "id": "T6",
+   "title": "Claude Code route: event-driven per call, but a new claude child per request under the default cost budget",
+   "where": "R/cli-claude.R:215-267 (reuse only when unbudgeted or same run, L226-230; old child retired L235; initialize L256); R/cli-common.R:1311-1323 (default budget list(tokens=2e6, cost=5) -> cli_budget cost, so --max-budget-usd); R/cli-claude.R:296-306, 339-352 (mcp_message over the control protocol); R/proc-spawn.R:397-446 (write_all only queues inside a pump, L437); R/http-reactor.R:279 (pending stdin caps the wait at 5 ms)",
+   "mechanism": "MCP messages arrive as control_request lines on the child's stdout, read through processx::poll with no sleep. Answers go to stdin through the reactor's stdin buffer. Because every run carries budget flags, build() retires the previous child (kill_all, grace 2 s) and starts `claude -p ... --resume`, with a fresh initialize and sdk-MCP handshake each request.",
+   "cost": "Fake claude, n=300: round trip 0.046 s with outer 0.032 s; hop-in 0.0005 s, hop-out 0.0070 s. Per request: real `claude -p` stream-json spawn to initialize response 0.338 s median (n=5, empty config, no network); handshake 0.029 s; retiring the child inside run_settle 0.30 s (fake).",
+   "evidence": "measured",
+   "safety_role": "--max-budget-usd is fixed at launch and counts the whole process, so a new child per run keeps CLI-side cost enforcement aligned with gptr's per-call budgets (IC-66).",
+   "scales_with": "Number of requests; Claude Code startup and exit time."
+  },
+  {
+   "id": "T7",
+   "title": "NOT transport: per-request in-session pre-turn and post-turn work (A1's extra harness time)",
+   "where": "R/agent-run.R:1612-1676 (run_settle -> agent_end L1671); R/env-snapshot.R:485-490 (env_on_agent_end -> env_view_snapshot with sizes), 136-180 (sizes reused only from its own `previous`); R/utils-size.R:18-46 (env_snap_size string walk); R/ckpt-rewind.R:237-253 (ckpt_on_agent_end)",
+   "mechanism": "After the CLI turn, agent_end hooks snapshot the workspace with sizes. A new object such as request 1's `raw` is sized again by the workspace memory snapshot, although checkpoint_after's env_snapshot already sized it, because the two caches are separate. Before each request, run_start and context work run in the session.",
+   "cost": "Published traces, medians: A1 pre-turn 2.79/1.69/0.95 s vs C1 0.09/0.02/0.02 s; A1 post-turn 17.98/1.09/0.73 s (trials 29.3/15.0/18.0 s in request 1) vs C1 at most 0.02 s. The summed mean excess, about 28 s per trial, matches the reported 29.15 s extra harness/model/network. Replay without a CLI: 15.27 s from the request-1 tool end to the request-2 tool start. My runs: agent_end env_view_snapshot 0.565 s at 10% scale and 1.112 s at 30%, vs checkpoint_after 0.831 s and 1.777 s. The full-scale share is inferred.",
+   "evidence": "inferred",
+   "safety_role": "Feeds the <workspace_changes> context block and the undo/checkpoint memory budget. Reusing one size cache keyed by address, class, shape and fingerprint would keep both.",
+   "scales_with": "Size and string count of newly created or changed workspace objects; mostly hits the request that created the big object."
+  },
+  {
+   "id": "T8",
+   "title": "Context only (other agents' scope): per-call pre-gate and gate cost scales with workspace while transport stays constant",
+   "where": "R/mcp-server.R:269-281 (risk.classify, tool_call_hook, mcp_serve_gate); Rprof: risk_binding_info/leaf -> env_snap_size, call_risk in perm_decide",
+   "mechanism": "Static risk analysis sizes bindings named in the code, including the dead `raw = ...` branch. The gate classifies the call again.",
+   "cost": "Scaled runs, medians over 3: tool start to tool_call_hook 0.47 s at 10% and 1.25 s at 30%; mcp_serve_gate 0.43 s and 1.35-1.43 s. Rprof at 10%: env_snap_size 2.60 s of 11.5 s sampled, risk_binding_* 1.61 s, call_risk 0.87 s. Transport hops in the same runs: 0.011-0.012 s in, 0.0076-0.0078 s out.",
+   "evidence": "measured",
+   "safety_role": "Permission and risk classification of R code.",
+   "scales_with": "Workspace object size; roughly linear from 10% to 30%."
+  }
+ ],
+ "measurements": [
+  {
+   "what": "CLI and interpreter startup (no prompt, no auth, no model)",
+   "method": "python3 -I scripts/cli_startup.py, n=7 each, medians; app-server under sandbox-exec deny network*, empty CODEX_HOME",
+   "result": "Rscript --vanilla -e 0: 0.407 s; codex --version: 0.109 s; codex exec --help: 0.105 s; claude --version: 0.029 s; codex app-server spawn to initialize response: 0.151 s (min 0.131). codex mcp-server is not a stdio server in 0.157.1 ('stdin is not a terminal'). python3 startup (benchmark codex wrapper): 0.040 s."
+  },
+  {
+   "what": "Real mcp_relay.R with an instant responder (relay hop alone)",
+   "method": "python3 -I scripts/relay_bench.py, responder polls every 0.5 ms; 5 spawns x 60 small + 10 x 100 kB messages",
+   "result": "Spawn to first response 0.373 s median; message round trip 0.0127 s median (p90 0.0131, max 0.026); 100 kB payload 0.0134 s."
+  },
+  {
+   "what": "Codex route end to end: real cli-codex adapter, process_jsonl transport, real relay, real session; instrumented fake codex; trivial code '1 + 1'",
+   "method": "Rscript --vanilla scripts/drive.R codex trivial 5 20 (x3 runs); trace() markers plus fake-side Sys.time() logs; scripts/analyze.py",
+   "result": "Per call (n=300): round trip 0.0658 s; hop-in 0.0181 (p90 0.0231); FIFO 0.0009; dispatch to tool start 0.0022; outer (risk+gate+eval) 0.0323; tool end to resp written 0.0017; hop-out 0.0077 (p90 0.0131). Warm request (n=12): request to spawn 0.175 s, spawn 0.032, fake CLI start 0.420 (Rscript fake), relay spawn to initialize answer 0.430, rest of handshake 0.059, turn end seen 0.003, post-turn 0.044, wall 2.76 s for 20 calls. First request: request to spawn 2.91 s (run_start 2.41 s incl. probes), wall 6.39 s. One exec per request; resume form with sandbox_mode=workspace-write for requests 2 and later (fake argv log)."
+  },
+  {
+   "what": "Claude route end to end with an instrumented fake claude (persistent stream-json child, sdk MCP over the control protocol)",
+   "method": "Rscript --vanilla scripts/drive.R claude trivial 5 20 (x3); scripts/analyze.py",
+   "result": "Per call (n=300): round trip 0.046 s; hop-in 0.0005; hop-out 0.0070; outer 0.0323. Per warm request: request to spawn 0.106 s, handshake 0.029, run_settle (retires the budgeted child) 0.301, wall 1.96 s. A new child is spawned on every request (5 per 5 requests, --resume on requests 2 and later) because the default cost budget adds --max-budget-usd."
+  },
+  {
+   "what": "Real Claude Code stream-json startup to initialize response (gptr's catalog argv, no MCP server, no user message)",
+   "method": "python3 -I scripts/claude_init.py, sandbox-exec deny network*, empty CLAUDE_CONFIG_DIR, n=5",
+   "result": "0.338 s median (0.316-0.509), subtype success."
+  },
+  {
+   "what": "Scaled T03-like workspace: request 1 creates `raw` (1,231 data.tables, 9 cols, 3 character); later requests run the dead-branch code",
+   "method": "drive.R codex create10 4 1 (x3, 6,066 rows) and create30 3 1 (x3, 18,199 rows); scripts/phases_inside.py; peak RSS 2.1 GB and 5.1 GB",
+   "result": "10%: per-call pre-gate 0.47 s, gate 0.43 s, checkpoint_after (request 1) 0.83 s, agent_end env_view_snapshot (request 1) 0.565 s, post-turn (request 1) 0.73 s. 30%: pre-gate 1.25 s, gate 1.35-1.43 s, checkpoint_after 1.78 s, agent_end snapshot 1.11 s, post-turn 1.28 s. Transport unchanged at both scales: hop-in 0.011-0.012 s, hop-out 0.0076-0.0078 s, relay spawn to initialize 0.33-0.37 s, handshake 0.06-0.08 s."
+  },
+  {
+   "what": "Rprof of a create10 run (3 requests)",
+   "method": "utils::Rprof(interval=0.005), summaryRprof by.total (scripts/rprof_summary.R)",
+   "result": "Sampled 11.52 s. mcp_serve_exec 7.78 s; env_snap_size 2.60 s (env_size_walk 2.14, env_size_strings 1.16); risk_classify_r 2.16 s; risk_binding_info/leaf 1.61 s; perm_decide 0.98 s (call_risk 0.87); checkpoint_after 0.77 s; pcli_probe 0.73 s (first request); reactor_io 0.66 s (mostly waiting); pcli_codex_event plus stream_push 0.27 s; proc_tree 0.30 s (probe cleanup)."
+  },
+  {
+   "what": "ps::ps_find_tree cost (run at each CLI child exit and in kill_all)",
+   "method": "scripts/ps_tree_cost.R, n=10",
+   "result": "0.0425 s median with 1,489 processes."
+  },
+  {
+   "what": "Published T03 traces: per-request phases, A1 (gptr + codex exec) vs C1 (codex app-server)",
+   "method": "python3 -I scripts/bench_trace_phases.py and inline scripts over replay/*/trace.jsonl; medians over 3 trials",
+   "result": "Pre-turn (request_start to turn start): A1 2.792/1.689/0.949 s, C1 0.086/0.024/0.021 s. Post-turn (final message to request_end): A1 17.980/1.085/0.725 s (request 1 trials 29.34/15.02/17.98), C1 0.007/0.013/0.019 s. Turn start to first R execution: A1 18.70/16.34/31.76 s, C1 22.97/15.91/35.48 s. Last tool end to reply: A1 3.47/2.62/2.72 s, C1 3.23/2.24/4.47 s. Token use per request comparable (A1 input+cache 72-230k, C1 115-238k)."
+  },
+  {
+   "what": "Authors' offline replay evidence (no CLI transport), recomputed from evidence/events.jsonl and profile.jsonl",
+   "method": "Merged timeline of tool events and traced function entry/exit",
+   "result": "Request-1 tool end to request-2 tool start: 15.267 s with no model and no CLI; request 2 to 3: 1.565 s. env_snapshot inside request-1 checkpoint_after: 13.069 s."
+  },
+  {
+   "what": "Benchmark driver settings (source reading)",
+   "method": "Read aws/peter.R, run.py, shared/execute.py, shared/codex_app.py, codex_policy.py, config.json, metadata/manifest.json",
+   "result": "A1: model codex/gpt-6.1-sol via gptr's `codex` provider (cli-codex adapter, route plan-cli), mode auto (Codex sandbox workspace-write), tools minimal, envir home, checkpoint default on. Budget: tokens token_limit (1e6), cost 5, turns 100 at session scope. gptr.cli_turn_timeout = timeout (1800 in manifest); egress codex ack. `codex` on PATH is a Python wrapper that adds -c model_reasoning_effort=\"low\" and --ignore-rules to exec. C1: one `codex -c model_reasoning_effort=\"low\" app-server --listen stdio://` per trial; thread/start with sandbox workspace-write, approvalPolicy never, developerInstructions = one-shot Rscript policy; turn/start per request; R through ./instrumentation/bench-rscript --vanilla FILE.R (one Rscript per execution, stdin closed)."
+  },
+  {
+   "what": "Contention",
+   "method": "uptime during runs",
+   "result": "Load average 7.7-17 on 16 cores throughout. Rscript startup (0.41 s) is probably inflated compared with an idle machine. Per-call hop numbers depend on poll intervals, not CPU."
+  }
+ ],
+ "artifacts": [
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/drive.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/fake_codex.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/fake_claude.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/analyze.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/phases_inside.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/relay_bench.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/cli_startup.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/claude_init.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/bench_trace_phases.py",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/rprof_summary.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/ps_tree_cost.R",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/run_raw.sh",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/scripts/run_raw30.sh",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/cli_startup.jsonl",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/relay_bench.jsonl",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/claude_init.jsonl",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/analysis-codex-trivial.json",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/analysis-claude-trivial.json",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/analysis-codex-create10.json",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/analysis-codex-create30.json",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/phases-create10.json",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/phases-create30.json",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/bench_trace_phases.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/bench_first_r.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/bench_tokens.csv",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/rprof-create10-summary.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/ps_tree_cost.txt",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/python_wrapper_startup.json",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/codex-trivial-1.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/claude-trivial-1.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/codex-create10-1.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/logs/codex-create30-1.log",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/codex-trivial-1",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/claude-trivial-1",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/codex-create10-1",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/codex-create10-rprof",
+  "/private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/cli-transport/out/codex-create30-1"
+ ],
+ "open_questions": [
+  "Real `codex exec` start-up cannot be measured offline: config and auth loading, thread rollout resume, MCP connection manager and model TLS setup. Whether Codex waits for the required gptr MCP server (about 0.4 s of relay start-up) before its first model request is inferred, not confirmed. The A1-vs-C1 time-to-first-R comparison bounds the whole per-request spawn chain to well under about 1 s.",
+  "Request 1's 15-29 s post-turn is attributed to the agent_end env_view_snapshot re-sizing the new `raw` (duplicating checkpoint_after's 13.07 s env_snapshot). This rests on source reading, the replay's 15.27 s no-CLI gap and 10%/30%-scale runs (0.57/1.11 s). A full-scale run (about 10+ GB RSS) would confirm the split between that snapshot, ckpt_objects_budget and GC.",
+  "Benchmark request-2 pre-turn (1.69 s median) is larger than the 0.41-0.52 s seen here at 10-30% scale; I did not attribute it in detail.",
+  "Possible transport fixes, not tested: (a) point Codex at gptr's existing in-session loopback HTTP MCP server (gptr_mcp_serve, mcp_servers.gptr.url plus a bearer env var) instead of the per-request Rscript relay and file mailbox. That would save about 0.35-0.45 s per request and about 25 ms per call. Currently R/mcp-server.R:681 says the codex route does not use it. (b) Shorten the 10 ms and 20 ms polls. (c) Keep one CLI process across requests: codex app-server as in C1, or for Claude stop retiring the child just because the default cost budget adds --max-budget-usd. All of these are second-order next to the in-session gate (about 27 s per call) and snapshot (about 15 s in request 1) costs."
+ ]
+}

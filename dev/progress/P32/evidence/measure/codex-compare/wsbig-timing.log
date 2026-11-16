@@ -1,0 +1,15 @@
+### round 1
+ws :read-only {"n": 9, "median_ms": 79.39, "rc": 0}
+ws :workspace {"n": 9, "median_ms": 68.74, "rc": 0}
+ws_big :read-only {"n": 9, "median_ms": 68.35, "rc": 0}
+ws_big :workspace {"n": 9, "median_ms": 69.15, "rc": 0}
+### round 2
+ws :read-only {"n": 9, "median_ms": 62.18, "rc": 0}
+ws :workspace {"n": 9, "median_ms": 83.81, "rc": 0}
+ws_big :read-only {"n": 9, "median_ms": 60.85, "rc": 0}
+ws_big :workspace {"n": 9, "median_ms": 66.21, "rc": 0}
+### round 3
+ws :read-only {"n": 9, "median_ms": 60.05, "rc": 0}
+ws :workspace {"n": 9, "median_ms": 65.72, "rc": 0}
+ws_big :read-only {"n": 9, "median_ms": 58.9, "rc": 0}
+ws_big :workspace {"n": 9, "median_ms": 66.12, "rc": 0}

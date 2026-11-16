@@ -1,0 +1,28 @@
+[1] FALSE
+workspace small built in 0.0s, object.size total 0.001 GB, 1000 bindings
+requests:
+  req    label  k     t0     t1  wall  gc_s
+1   1     warm 10  1.280  5.590 4.310 0.345
+2   2     warm 10  5.591  7.737 2.146 0.109
+3   3 measured 10  7.754  9.483 1.729 0.084
+4   4 measured 10  9.483 11.202 1.719 0.086
+5   5 measured 10 11.202 13.007 1.805 0.173
+done L_small_lm_3 
+       13.15 real        11.67 user         0.20 sys
+           362790912  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               25760  page reclaims
+                  27  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 192  voluntary context switches
+                1448  involuntary context switches
+        187977727540  instructions retired
+         47123107628  cycles elapsed
+           343917432  peak memory footprint

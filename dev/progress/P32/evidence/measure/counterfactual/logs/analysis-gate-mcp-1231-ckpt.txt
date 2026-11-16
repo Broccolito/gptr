@@ -1,0 +1,28 @@
+
+====== gate-mcp-1231-ckpt ======
+ [1] code           variant        reps           errors         wall_s         outer_s        internal_s     gap_s          post_tool_s    save_outer     save_gap       save_wall      save_outer_pct
+<0 rows> (or 0-length row.names)
+
+phase medians (s):
+ [1] code            variant         pre_gate        gate            classify_pre    classify_gate   n_classify      size_in_tool    n_size_in_tool  ckpt_before     ckpt_after      size_after_tool agent_end      
+<0 rows> (or 0-length row.names)
+
+per-rep outer / gap (sorted):
+   variant code           outer_s             gap_s
+       all   a2 1.175/1.186/1.198 0.051/0.052/0.056
+ all_files   a2 1.522/1.546/1.568 0.381/0.385/0.392
+   all_off   a2 1.179/1.189/1.556 0.046/0.051/0.382
+       all   a3 1.412/1.425/1.502 0.446/0.449/0.454
+ all_files   a3 1.319/1.322/1.417 0.405/0.408/0.419
+   all_off   a3 0.972/0.983/1.021 0.074/0.081/0.083
+
+warm-up / create / rep-0 rows:
+   variant code rep wall_s outer_s internal_s gap_s post_tool_s ckpt_after size_in_tool size_after_tool agent_end
+      warm    w   1  2.319   0.646      0.085 0.561       0.595      0.001        0.000           0.000         0
+      warm    w   2  0.623   0.260      0.138 0.122       0.169      0.004        0.000           0.000         0
+    create   c1   1 13.776   9.315      8.804 0.511       4.410      5.288        4.866           3.852         0
+       all   a2   0  1.984   1.623      1.208 0.415       0.322      0.065        0.002           0.000         0
+ all_files   a2   0  1.870   1.523      1.141 0.382       0.313      0.012        0.004           0.000         0
+   all_off   a2   0  1.617   1.545      1.174 0.371       0.038      0.003        0.000           0.001         0
+
+max RSS sampled after requests: 13.75 GB; load1 range 7.6-9.82

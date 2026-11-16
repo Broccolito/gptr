@@ -1,0 +1,9 @@
+"tag","route","kind","n","mode","variant","rep","wall_s","outer_s","internal_s","gap_s","is_error","refused","raw_object_size_gb"
+"fix-reuse-chrS-1231","mcp","chr",1231,"trace","warm",1,2.315,0.611999999999998,0.093,0.518999999999998,FALSE,"",15.236609552
+"fix-reuse-chrS-1231","mcp","chr",1231,"trace","warm",2,0.921999999999997,0.546999999999997,0.375,0.171999999999997,FALSE,"",15.236609552
+"fix-reuse-chrS-1231","mcp","chr",1231,"trace","a2",1,8.431,8.327,1.379,6.948,FALSE,"",15.236609552
+"fix-reuse-chrS-1231","mcp","chr",1231,"trace","a2",2,4.961,4.843,1.293,3.55,FALSE,"",15.236609552
+"fix-reuse-chrS-1231","mcp","chr",1231,"trace","a2",3,4.763,4.66,1.232,3.428,FALSE,"",15.236609552
+"fix-reuse-chrS-1231","mcp","chr",1231,"trace","a3",1,4.724,4.579,1.058,3.521,FALSE,"",15.236609552
+"fix-reuse-chrS-1231","mcp","chr",1231,"trace","a3",2,4.754,4.597,1.03,3.567,FALSE,"",15.236609552
+"fix-reuse-chrS-1231","mcp","chr",1231,"trace","a3",3,4.795,4.63,1.07799999999999,3.55200000000001,FALSE,"",15.236609552

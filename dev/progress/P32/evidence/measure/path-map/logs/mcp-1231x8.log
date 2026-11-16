@@ -1,0 +1,9 @@
+route mcp files 1231 rows 8 
+request wall s: 4.128 2.734 1.649 
+tool internal elapsed s: 0.903 0.419 0.064 
+tool outer s: 2.159 1.272 1.009 
+tool outer minus internal s: 1.256 0.853 0.945 
+objects in home: files, gene_detected_files, gene_max_counts, gene_rows, gene_summary, gene_totals, input_audit, raw, reference_gene_ids, research_report, sample_summary, total_gene_counts, zero_gene_values 
+reactor waits ms (sum, n): 48 9 
+rpc errors: FALSE FALSE FALSE 
+session entries: 11  status: idle 

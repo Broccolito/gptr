@@ -1,0 +1,27 @@
+workspace big built in 2.3s, object.size total 6.189 GB, 2 bindings
+requests:
+  req    label  k     t0     t1  wall
+1   1     warm 10  5.173 12.653 7.480
+2   2     warm 10 12.653 14.865 2.212
+3   3 measured 10 14.883 16.794 1.911
+4   4 measured 10 16.794 18.891 2.097
+5   5 measured 10 18.892 20.975 2.083
+done big_minimal_default 
+       21.21 real        18.88 user         0.67 sys
+          4816437248  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              297595  page reclaims
+                  27  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 232  voluntary context switches
+                7781  involuntary context switches
+        243705313425  instructions retired
+         76176942336  cycles elapsed
+          3968503864  peak memory footprint

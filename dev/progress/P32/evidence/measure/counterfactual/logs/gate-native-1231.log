@@ -1,0 +1,126 @@
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   1  2.434   0.685      0.136 0.549       0.373    FALSE 0.3780365
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   2  0.781   0.316        0.2 0.116       0.194    FALSE 0.3980103
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+  create   c1   1 13.604   9.326      8.818 0.508       4.177    FALSE 7.860748
+home: files, gene_rows, input_audit, raw, reference_gene_ids, total_gene_counts, zero_gene_values
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a2   0  8.982   8.499      1.353 7.146       0.383    FALSE 9.253922
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   reuse   a2   0  5.322   4.831      1.226 3.605       0.386    FALSE 9.260284
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   cache   a2   0  2.133   1.644      1.222 0.422        0.38    FALSE 9.284561
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   bound   a2   0  2.179   1.666       1.21 0.456       0.392    FALSE 9.287323
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    skip   a2   0  2.421   1.897      1.238 0.659       0.397    FALSE 9.287384
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+      rc   a2   0  2.167   1.644      1.242 0.402       0.393    FALSE 9.287537
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   0  2.141   1.674       1.27 0.404       0.352    FALSE 8.287689
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a2   1  9.067   8.545      1.264 7.281        0.38    FALSE 8.892395
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a3   1  8.607   8.062      1.053 7.009       0.409    FALSE 8.500061
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   reuse   a2   1  5.575    5.04      1.277 3.763       0.388    FALSE 10.15091
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   reuse   a3   1  5.499   4.721      1.068 3.653       0.629    FALSE 10.15105
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   cache   a2   1  2.161   1.611      1.198 0.413       0.396    FALSE 10.15518
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   cache   a3   1  2.108   1.548      1.047 0.501       0.402    FALSE 10.85577
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   bound   a2   1  2.217   1.655      1.201 0.454       0.395    FALSE 10.85626
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   bound   a3   1  2.191   1.607      1.033 0.574       0.412    FALSE 8.854919
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    skip   a2   1   2.19   1.616      1.205 0.411       0.397    FALSE 8.855377
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    skip   a3   1  2.062   1.458      0.983 0.475       0.422    FALSE 8.856125
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+      rc   a2   1   2.23   1.625      1.232 0.393       0.408    FALSE 8.856766
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+      rc   a3   1  2.155   1.512      1.065 0.447       0.445    FALSE 8.534241
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   1  2.174   1.656      1.258 0.398       0.361    FALSE 8.534576
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error  rss_gb
+     all   a3   1  1.936   1.461      0.996 0.465       0.345    FALSE 8.53479
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a2   2  9.192   8.535      1.239 7.296       0.443    FALSE 11.17896
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a3   2  9.244   8.582      1.031 7.551       0.443    FALSE 11.18036
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   reuse   a2   2  5.442   4.798      1.235 3.563       0.431    FALSE 10.18065
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   reuse   a3   2  5.385   4.719      1.065 3.654       0.443    FALSE 11.18095
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   cache   a2   2   2.25   1.613      1.197 0.416       0.423    FALSE 11.18097
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   cache   a3   2   2.25   1.567      1.063 0.504       0.456    FALSE 10.76041
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   bound   a2   2  2.286   1.637      1.195 0.442       0.426    FALSE 10.76082
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   bound   a3   2  2.285   1.599      1.001 0.598       0.454    FALSE 11.14445
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    skip   a2   2  2.302   1.616      1.202 0.414       0.455    FALSE 9.143814
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error  rss_gb
+    skip   a3   2  2.232   1.534      1.032 0.502       0.456    FALSE 9.49678
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+      rc   a2   2  2.491    1.59      1.212 0.378       0.672    FALSE 9.497025
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+      rc   a3   2   2.15   1.451      1.007 0.444       0.455    FALSE 9.497223
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   2  2.111   1.601      1.221  0.38       0.348    FALSE 9.497681
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a3   2  2.031   1.545       1.11 0.435       0.348    FALSE 9.499054
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a2   3  9.109   8.391      1.232 7.159       0.466    FALSE 11.78835
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   a3   3      9   8.263      1.135 7.128       0.478    FALSE 11.26714
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   reuse   a2   3  5.658   4.937      1.209 3.728       0.466    FALSE 12.23689
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   reuse   a3   3  5.817   5.089      1.125 3.964       0.468    FALSE 12.83888
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   cache   a2   3  2.379   1.646      1.233 0.413       0.475    FALSE 12.83894
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   cache   a3   3   2.26   1.513      1.028 0.485       0.485    FALSE 12.83974
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   bound   a2   3  2.419   1.681      1.229 0.452       0.475    FALSE 12.19368
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   bound   a3   3  2.334   1.564      0.991 0.573       0.485    FALSE 12.19516
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    skip   a2   3  2.352   1.607      1.196 0.411       0.478    FALSE 12.19534
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    skip   a3   3  2.276    1.51      1.015 0.495       0.491    FALSE 12.19569
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+      rc   a2   3  2.381   1.608      1.228  0.38       0.473    FALSE 10.87257
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+      rc   a3   3  2.237   1.466      1.017 0.449       0.493    FALSE 10.87282
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   a2   3  2.093   1.585      1.203 0.382       0.335    FALSE 10.87332
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error  rss_gb
+     all   a3   3  2.145   1.651      0.986 0.665       0.345    FALSE 10.8743
+DONE
+Error: unexpected '=' in "="
+Execution halted
+      215.60 real       197.60 user        10.80 sys
+         13786808320  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1698151  page reclaims
+                 548  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                1963  voluntary context switches
+               38456  involuntary context switches
+       3916228566586  instructions retired
+        846456954784  cycles elapsed
+          9622429568  peak memory footprint

@@ -1,0 +1,25 @@
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   1  2.377   0.667      0.089 0.578       0.605    FALSE 0.3661346
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   2  0.647    0.26       0.14  0.12       0.176    FALSE 0.3929749
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    base   c1   1  1.118   0.789      0.489   0.3       0.278    FALSE 0.6483002
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    base    e   1  0.794   0.568      0.231 0.337       0.169    FALSE 0.7461243
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+   share   c1   1  0.498   0.393      0.235 0.158       0.051    FALSE 0.7479553
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   share    e   1  0.656   0.549      0.319  0.23       0.048    FALSE 0.774292
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+   files   c1   1   0.54   0.185      0.059 0.126        0.29    FALSE 0.7753906
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+   files    e   1  0.471   0.246      0.008 0.238       0.153    FALSE 0.8050232
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+     off   c1   1  0.397   0.123      0.042 0.081       0.205    FALSE 0.8406982
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+     off    e   1  0.469   0.243      0.008 0.235       0.152    FALSE 0.8527374
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+     all   c1   1  0.406    0.31        0.2  0.11       0.033    FALSE 0.8854218
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+     all    e   1  0.323   0.247      0.229 0.018       0.034    FALSE 0.8855743
+DONE

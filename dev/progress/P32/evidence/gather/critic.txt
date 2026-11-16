@@ -1,0 +1,222 @@
+COMPLETENESS CRITIC REPORT: gptr per-call and per-turn slowness vs Codex (T03)
+
+Scope: I checked all 6 findings and the what-if experiments against each other and against the source at 5e2992b1. The gptr checkout was not modified (git status is clean). I ran two new experiments on the byte-compiled install at work/gate-measure/lib. The machine had load average 8-18 while they ran.
+- File-scan valley (native loop). Script: /private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/critic/valley.R. Log: /private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/critic/valley.log
+- File scans on the Codex CLI route (real cli-codex adapter and relay, fake codex). Script: /private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/critic/cliscan.R. Logs: /private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/critic/cli0.log, /private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/critic/cli1231.log, /private/tmp/claude-501/-Users-wgu--claude-spares-spare-n02ZLD/6fb98ae7-bd14-4c28-8b44-cc52b94423a1/scratchpad/work/critic/cli1231t.log
+
+============================================================
+1. CONTRADICTIONS AND WHICH SIDE THE EVIDENCE SUPPORTS
+============================================================
+
+1.1 Do project files cost anything?
+- loop-measure says thousands of project files cost nothing measurable. ckpt-measure and path-map say each scan costs 0.3-0.45 s.
+- Verdict: ckpt-measure and path-map are right for any call that can write files. loop-measure's runs (loop5.R, summary_files.csv) all used the code "1 + 1". That code is a pure read, so ckpt_pure_read (R/ckpt-rewind.R:37-41) skips every checkpointer.
+- My valley test settles it. Code `y = i; writeLines(..., "out.txt")`, 10 calls per request, median of 30 calls:
+
+  | Project files | Per call (outer) | Request wall |
+  |---:|---:|---:|
+  | 0 | 0.067 s | 1.67 s |
+  | 200 | 0.232 s | 3.33 s |
+  | 400 | 0.343 s | 4.45 s |
+  | 600 | 0.441 s | 5.34 s |
+  | 900 | 0.063 s (first call of request 0.333 s) | 2.16 s |
+  | 1,500 | 0.062 s (first call of request 0.429 s) | 2.37 s |
+
+- The write tool behaves the same: 0.026 s at 0 files, 0.292 s at 400, 0.019 s at 1,500.
+- File-free code (`y = i`) at 400 files: 0.033 s. Pure read at 400 files: 0.028 s.
+- So the cost is non-monotonic, and nobody reported that (see 3.1).
+
+1.2 Is the CLI route's per-request startup negligible?
+- cli-transport says "lost in model noise" and "well under ~1 s per request"; bench-data C7 says "no measurable penalty".
+- Neither claim is resolved by the evidence. C1's time to first R varies by 15-38 s across request positions, so the traces cannot see anything below a few seconds per request. The sub-second figure comes only from local fakes on a loaded Mac and is unmeasured on AWS.
+- Separately, cli-transport left A1's pre-turn time (1.69 / 0.95 s in requests 2 and 3) unattributed. Source plus my measurement show part of it is a file scan that the CLI hooks start (see 3.2).
+
+1.3 What is in replay checkpoint_before (1.44 / 0.82 s in requests 2 and 3)?
+- path-map C4 attributes it to file scans.
+- The replay profile (mcp-replay-analysis/evidence/profile.jsonl) splits request 2 into ckpt_files_before 0.517 s plus ckpt_objects_before 0.891 s, with env_snapshot inside the latter at only 0.003 s. Request 3: 0.710 + 0.099 s.
+- So about 0.9 s in request 2 is neither a file scan nor sizing. ckpt-measure did not reproduce it (0.02-0.03 s locally). It remains unexplained; GC on a 5-6 GB string-heavy heap is a guess.
+
+1.4 Request-1 post-provider time (15-29 s)
+- bench-data C2 calls the mechanism unverified; cli-transport T7 marks it inferred.
+- It has since been measured at full local scale by the what-if (c1 base: 4.29 s after the tool, 3.95 s of it re-sizing raw; the shared-size fix brings that to 0.34 s) and by ckpt-measure C10 (4.43-5.97 s, still there with checkpointing off).
+- The mechanism is confirmed in source. env_on_agent_end (R/env-snapshot.R:485-490) reuses a size only against its own previous snapshot (env_snap_rows :157-172), separate from ck$snap.
+- Only the AWS share is still inferred, by the 2.4-3.5x machine factor.
+
+1.5 Does A1-1's kept `tables` really double the cost?
+- bench-data infers that keeping `tables` doubles the cost, even though `tables` and `raw$tables` share the same data.tables. The source supports this.
+- env_snap_size builds a new `seen` set on every call (R/utils-size.R:18-44), and each binding is sized by its own call. Shared contents are therefore walked again for every binding the code assigns.
+
+1.6 Local per-walk times
+- Agents report 3.7 s (what-if, shared numeric columns, 1.81e9 bytes), 4.2-4.7 s (codex-compare), 4.4 s (gate-measure), 5.0-5.65 s (ckpt-measure), and an extrapolated 4-6 s (path-map).
+- These do not contradict each other. The spread is within contention noise and differences in how the workspaces were built.
+- The AWS-to-Mac factor (2.2x minimal replay, 2.4x checkpoint, 2.9-3.5x gate) is still unexplained (see 3.9).
+
+1.7 Is the fix about the dead branch?
+- codex-compare G4/P7 and parts of bench-data frame the trigger as the dead `if (!exists("raw"))` branch.
+- Measurements show the general trigger is any assignment to an existing large, string-heavy binding. That includes the normal R idiom `obj = f(obj)` and `raw$x = ...`: gate-measure variant e had a 10.6 s gap plus 5.0 s checkpoint_after plus 5.2 s at agent_end; ckpt-measure's reassign took 3.98 s.
+- A dead-branch special case (P7) would fix T03 but not real iterative use.
+
+1.8 Minor misstatements
+- gate-measure says "Auto mode allows any non-control level below 4 (perm-gate.R:127)". In fact perm_policy_mode allows every non-control level in auto, level 4 included (the auto return comes before the `lvl >= 4` line). Level-4 asks in auto come from other policies.
+- loop-measure C2 cites agent-dispatch.R:105 for the first call_risk; it is at :96.
+- Neither changes a conclusion.
+
+1.9 Classify-once guard
+- gate-measure says an identical() input check keeps the safety guarantee. codex-compare P2 also asks to revalidate the addresses and fingerprints of risk$assigned.
+- The what-if implemented only the input check. That is safe against input rewrites (the battery proves it), but not against a tool_call hook that changes bindings in the session home between the two classifications. This is a small residual risk and is untested.
+
+============================================================
+2. CLAIMS STATED AS MEASURED THAT THE ARTIFACTS DO NOT BACK
+============================================================
+
+1. loop-measure: "thousands of project files cost nothing". Valid only for pure-read code (see 1.1).
+2. cli-transport: "per-request spawn well under ~1 s" and "lost in model noise". Neither is resolvable from the AWS traces; the bound is a local fake measurement (see 1.2). Its T1 evidence is "measured" for proxies only: real codex exec auth, rollout resume and TLS are unmeasured.
+3. path-map C4 attributes the replay's whole checkpoint_before to file scans. The profile shows about 0.9 s of request 2 is objects-side and unexplained (see 1.3).
+4. what-if: "T03-like run 30.05 -> 10.63 s on this Mac".
+   - It is assembled from separate create.R and gate.R medians, not one end-to-end session.
+   - It ran on the non-CLI fake route, so it leaves out the CLI-hook scans (+0.55 s per request at 1,231 entries, see 3.2) and transport.
+   - "47-56 s per run on AWS" is a scaling inference.
+5. what-if 4a: "checkpoint.note 0.33 -> 0.01 s". Single samples.
+6. codex-compare G2 ("measured" double sizing per served call) comes from one run at N=300 (n=1). It agrees with gate-measure's full-scale medians, so the conclusion stands.
+7. bench-data C3 (request-1 excess about 17.6 s is checkpoint_after) is correctly marked inferred. Only the replay's 13.87 s is measured.
+8. The source comment R/utils-size.R:46 says env_size_budget is "about 0.07 s". Measured: 4.2-5.6 s on T03-shaped lists, because the budget counts parts, not string elements. This is a documentation and design defect, not an investigator error.
+
+============================================================
+3. SLOW PATHS NO ONE EXAMINED (OR EXAMINED ONLY PARTLY)
+============================================================
+
+3.1 File-scan valley for many small writing calls (new; measured, see 1.1)
+- Below the per-scan budget, every writing call does two full scans: a sync before (ckpt_files_before, R/ckpt-files.R:444-450) and a step after (ckpt_files_after :517-528).
+- Only a single scan slower than gptr.checkpoint_scan_budget (0.25 s) switches the session to per-request scanning.
+- Worst case is about 0.5 s per call, which this Mac hits at about 400-700 project entries. On slower disks, Windows or AWS it would hit at fewer entries.
+- Per-turn mode is per peter() request, not per model turn: ckpt_turn = session_data(s)$turns, incremented once per prompt (R/agent-run.R:1099).
+
+3.2 CLI-route file scans every request (new; measured)
+- On codex and claude routes (provider type "cli"), ckpt_on_cli (R/ckpt-rewind.R:213-231) runs a full sync scan at agent_start of every request, even when the request only reads. It also runs a turn scan at turn_end after any request that could write.
+- Measured with 1,231 entries and 5 writing calls per request:
+  - agent_start sync 0.31-0.35 s plus turn_end scan 0.29-0.30 s per request.
+  - Request wall 1.76-1.78 s, against 1.20-1.23 s with no files.
+  - Request 1: 0.53 s sync plus two in-call scans (0.35 + 0.31 s) plus 0.32 s turn scan.
+- Pure-read requests still pay the agent_start sync: 0.31-0.49 s.
+- These scans land in A1's pre-provider and post-provider time. They likely explain part of the unattributed AWS 1.6-1.7 / 0.85-1.07 s pre-turn and 0.7-1.3 s post-turn in requests 2 and 3 (inference, assuming a 2.4-3x AWS factor).
+
+3.3 Scans re-hash unchanged files (source, R/ckpt-scan.R:142-156; R/ckpt-files.R:47-50)
+- Every non-baseline scan calls ckpt_store_put, which runs hash_file over the whole file, on up to 256 regular files of at most 50 MB each and at most 1e8 bytes in total. There is no skip for files whose stat is unchanged.
+- A project with data files of 50 MB or less therefore re-reads up to 100 MB per scan, and the first time gzips new contents into the blob store.
+- If T03's inputs were real files in the project root rather than symlinks, about 23 of the 4.2 MB TSVs would be hashed per scan. Unknown for the formal runs: the AWS T03 driver that staged the inputs is not in the bench repo. The replay links them (replay.R:9).
+- Measured only for links: ckpt-measure's hard-link case added about 0.1-0.15 s per scan.
+
+3.4 Interactive use: disk images before every predicted in-place modify (measured by ckpt-measure C3, but nobody ranked it)
+- ckpt_spill_allowed() is TRUE whenever a person is present or .gptr/ exists (R/ckpt-objects.R:371-373). The main console use case therefore serializes a full image of any 100 MB-2 GB object that the code is predicted to modify in place (`df$x = ...`), before each such call.
+- Cost: 0.87-0.95 s and about 705 MB written per call at 0.46 GB; ckpt_write_image takes 1.8-3.4 s at 0.92 GB.
+- The benchmark is non-interactive with no .gptr/, so it never exercised this.
+
+3.5 Big objects passed as arguments (source, R/gptr-capture.R:18)
+- `peter(raw, "...")` runs dot_facts, which calls env_snap_size(x) fresh on every call with no cache.
+- Expect one full walk (4-6 s locally, about 13 s on AWS for T03's raw) per peter() call that passes a large string-heavy object. Not measured; path-map measured only the session object.
+
+3.6 First call of a session with objects already loaded
+- First-request sizing in the workspace block (loop C4: 2.4 s at 2.2 GB) and the first cold checkpoint snapshot (gate-measure rep 1: 3.7-4.7 s; codex-compare G3) were each measured.
+- Their combination with the two classifier walks was not: up to 4 walks on the first writing call.
+- The what-if shared-size fix covers it in principle; that was not tested on this path.
+- The benchmark's JIT warm-up from load_all was measured (+1.7-2 s on the first request). Installed CRAN users do not pay it.
+
+3.7 Many objects and modify-heavy loops (examined, but missing from the fix ranking)
+- After every tested fix (what-if experiment 6), a call that modifies or rebinds a large string-heavy object still pays one cold walk in checkpoint_after: 3.35 s for raw$note, 4.4-4.5 s for create.
+- Below 1 GB, the capture plan adds a second walk (ckpt_unshared_bytes).
+- No one tested a bounded or threshold size in the checkpointer. The capture plan only compares against 1e8 / 1e9 / 2e9, but held-byte accounting needs real numbers.
+- ckpt-measure also measured: an O(n^2) settle (match per binding) and a call-stack walk per sized binding (env_size_top, about 70 frames), giving 7.3 s on the first call at 10,000 objects.
+
+3.8 Not examined at all
+- Rewind and undo cost: restoring spilled images, file restores from blobs, the session_tree re-snapshot, ckpt_gc of a large blob store at the first agent_end.
+- Worker and background agents: IC-53 item 5 says the parent re-classifies forwarded input, which may be a third classification per call. Unverified.
+- Nested peter$ calls from inside r code: the nested gate's call_risk path.
+- Other tools: peter$sh / bridge-sh classification, bg jobs.
+- HTTP providers: per-delta redaction and message_update events with real streaming.
+- Compaction.
+- Document recording on large workspaces: the bench README says a default-checkpoint gptr_doc replay hit the memory guard.
+- Claude Code's own native tools (Bash/Edit) gated through gptr. The Claude route was tested only with a fake child, which showed a respawn on every request under the default cost budget (0.34 s start plus 0.3 s retire).
+
+3.9 Platform differences
+- AWS (Linux x86, R 4.3.3, 2 vCPU, 16 GiB) is 2.2-3.5x slower than this Mac for the same sizing step. No one tested why.
+- Candidates:
+  - CPU speed.
+  - R 4.3.3 vs 4.6.1.
+  - Memory pressure: A1 peaked at 10.5-11.6 GiB RSS on AWS, and each sizing adds 3.4-4.5 GB transient (measured locally, gc max used 10 GB for 6 GB live), so a sizing could push the host near 16 GiB.
+- Cheap test: run probe-size.R on Linux x86 with R 4.3.3, with and without a memory cap.
+- Windows is entirely unmeasured:
+  - Per-entry scan syscalls (path_info, Sys.readlink, ps_fs_stat, file.access) are slower there, which moves the valley to fewer files.
+  - Mailbox rename with antivirus, Rscript relay start (typically 1 s or more) and ps_find_tree are all slower.
+- Case-insensitive file systems (macOS, Windows) add the absent() parent-listing checks in each scan (R/ckpt-scan.R:116).
+
+3.10 T08 per-call gap is unexplained
+- T08 (gptr 1.0.0, numeric peak matrices) shows 1.7-2.75 s gaps per call in requests 2 and 3 on AWS. Locally the comparable fixed cost is 0.06-0.4 s, and numeric data sizes cheaply.
+- Nobody explained it. It suggests the AWS per-call floor under load_all is about 1-2 s, not about 0.2 s. The A1 code for T08 is not published.
+
+3.11 A correctness gap found while checking (affects fix design)
+- On the MCP route, call$risk keeps the classification made before the hook and before any policy modify (R/mcp-server.R:269-299). Only approved_level uses d$risk.
+- The checkpointers read call$risk: ckpt_file_free and ckpt_pure_read (R/ckpt-rewind.R:37-49).
+- So if a hook or policy rewrites the input into code that writes files, the files checkpointer can be skipped. The native route sets call$risk = dec$risk (R/agent-dispatch.R:100), so it is not affected.
+- Any classify-once fix must set call$risk to the final risk on both routes.
+- tool_result hooks (taint tracking) also never run on the MCP route; path-map noted this.
+
+============================================================
+4. RANKED CAUSES BY MEASURED SECONDS
+============================================================
+
+4A. T03 (AWS figures are per run for A1-2, the median run; A1-3 is similar and A1-1 is roughly doubled by the kept `tables`)
+
+1. Size walk of the existing `raw` inside the two risk classifications (requests 2 and 3)
+   - AWS: 65.9 s of gap (29.9 + 36.0); 57.3 s for A1-3; 112.4 s for A1-1. About 95-97% of it is env_snap_size.
+   - Replay split per call: 12.8-13.3 s before the gate (1a, about 31 s per run) and 13.4 s inside the gate (1b, re-classification in perm_decide, about 32 s per run).
+   - Local: 7.9-9.5 s per call. Tested fixes bring it to 0.4-0.6 s (cached or lower-bound size); classify-once alone halves it.
+   - In auto mode the computed size changes no decision.
+   - Confidence: high.
+2. Request-1 re-sizing of the new raw at agent_end (separate workspace-memory cache)
+   - AWS: the post-provider window is 15.0 s (18.0 s A1-3, 29.3 s A1-1); about 13-15 s of it is attributed to this walk (inference).
+   - Local: 3.95-5.97 s; the shared-size fix brings it to 0.34 s.
+   - Confidence: medium-high (window measured on AWS, mechanism measured locally).
+3. Request-1 checkpoint_after sizing of the new raw
+   - AWS replay: 13.87 s (env_snapshot 13.07 s). The original runs show about 17.6 s excess, inferred.
+   - Local: 4.4-5.65 s. Not removed by any tested fix except checkpoint "files" or "off", which lose object undo.
+   - Confidence: high.
+4. Project-folder file scans (1,231 entries)
+   - In-call scans (replay): 0.92 + 0.52 + 0.71 = 2.15 s.
+   - CLI-hook scans (agent_start plus turn_end): about 0.6 s per request locally (measured here), an estimated 1.5-2 s per request on AWS.
+   - Total: an estimated 4-8 s per run.
+   - Confidence: medium (in-call part measured on AWS; CLI part measured locally, AWS figure inferred).
+5. Rest of the pre-provider time (6.3 s per run measured)
+   - JIT from load_all (request-1 classifications took 0.87 + 0.85 s on AWS, against 0.03 s warm locally), CLI probes, run_freeze.
+   - Excluding the CLI-hook scans counted in cause 4: an estimated 3-5 s.
+   - Confidence: medium-low on the split.
+6. Startup outside requests: 4.4 s per run (load_all, session setup). This is a benchmark artifact. Confidence: medium.
+7. Unexplained ckpt_objects_before of 0.89 s in request 2 (replay). Confidence: low.
+8. Fixed gate, parse, policy and checkpoint work that is not sizing: 0.06-0.4 s per call locally, an estimated 1-2 s per run on AWS. Confidence: medium.
+9. CLI transport: 0.75-0.9 s per request plus 26 ms per call locally, an estimated 2-3 s or less per run. Cannot be resolved from the traces. Confidence: low-medium.
+10. Per-turn request building, events, persistence and reactor: under 0.5 s per run on the CLI route, where gptr builds one request per peter() call. Confidence: high that it is negligible here.
+
+Causes 1-6 sum to about 108 s, which matches A1's measured overhead over C1. Causes 1-3 (about 92 s) are an informational byte count, computed 3-4 times without a cache. The safety logic itself (parse, rules, policies, secret scan) costs about 0.1-0.4 s per call.
+
+4B. Many small tool calls (local, per call unless noted; for reference, C1 pays 0.63-0.78 s per Rscript launch on AWS)
+
+1. A call that assigns or modifies an existing large string-heavy object: 7-15 s per call at T03 scale (2 classifier walks, a checkpoint_after walk, plus an unshared-bytes walk if 1 GB or less). After all tested fixes, 3.3-4.5 s per call remains. Confidence: high.
+2. Interactive session with a predicted modify of a 0.1-2 GB object: 0.9-3.4 s per call, plus about 0.7-1.4 GB written to disk per call. Confidence: high (measured; not in the benchmark).
+3. Many bindings: +2.1-2.3 s per call warm at 10,000 bindings, +7.3 s on the first call; +0.17 s per call at 1,000. Confidence: high.
+4. File scans:
+   - Projects in the valley (about 150-700 entries on this Mac): +0.17-0.37 s per writing call (r or write tool), capped near 0.5 s. Confidence: high, measured here.
+   - Above the valley: +0.3-0.45 s once per request plus a turn scan per request.
+   - CLI routes: +0.3-0.5 s agent_start sync per request even for pure reads.
+5. Long code: 0.06-0.4 s per call for 25-line code (2 classifications, code_targets x2, eval_guard x2, 6 policies); about 35 ms per call for one-liners. Confidence: high.
+6. Transcript growth, native/HTTP route only: +0.54-0.59 ms per message per model turn (+0.11-0.13 s per turn at about 300 messages, so quadratic over a session). The cache patch brings it to about 0.1 s per turn. Confidence: high.
+7. Fixed native per-turn cost: about 135 ms (request build 45-49 ms, dispatch 35 ms, reactor sleep 22 ms, response accounting 21 ms, settings 3-7 ms). Confidence: high.
+8. CLI transport: 26 ms per call plus 0.75-0.9 s per request (Codex). The Claude route restarts its child every request (0.34 s plus 0.3 s retire). Confidence: medium (fakes).
+9. GC on a large heap: about +50 ms per request at 2.2 GB. Confidence: medium; low priority.
+
+On AWS-class hosts, the per-call floor may be about 1-2 s (T08 data, unexplained, see 3.10).
+
+Fix candidates nobody tested, implied by the gaps above:
+- A threshold or bounded size inside the checkpointer's capture plan (removes the remaining walk in 4B.1 and 4A.3).
+- Switching to per-request scanning by cumulative scan time or entry count, not a single scan over 0.25 s (closes the valley).
+- Stat-based skip of re-hashing unchanged files.
+- A lighter agent_start sync on CLI routes.
+- Setting the final risk on call$risk on the MCP route.

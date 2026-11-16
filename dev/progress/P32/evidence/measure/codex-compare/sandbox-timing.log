@@ -1,0 +1,27 @@
+### round 1
+direct_true {"n": 9, "median_ms": 13.21, "min_ms": 12.4, "max_ms": 14.87, "rc": 0, "stderr_tail": ""}
+sandbox_exec_allow_default_true {"n": 9, "median_ms": 30.32, "min_ms": 29.12, "max_ms": 31.57, "rc": 0, "stderr_tail": ""}
+sandbox_exec_deny_default_true {"n": 9, "median_ms": 38.38, "min_ms": 23.39, "max_ms": 46.44, "rc": 0, "stderr_tail": ""}
+codex_version {"n": 9, "median_ms": 100.43, "min_ms": 93.57, "max_ms": 109.09, "rc": 0, "stderr_tail": ""}
+codex_sandbox_readonly_true {"n": 9, "median_ms": 148.61, "min_ms": 140.27, "max_ms": 188.4, "rc": 0, "stderr_tail": ""}
+codex_sandbox_workspace_true {"n": 9, "median_ms": 153.7, "min_ms": 149.99, "max_ms": 157.65, "rc": 0, "stderr_tail": ""}
+codex_sandbox_workspace_sh_echo {"n": 9, "median_ms": 167.37, "min_ms": 160.82, "max_ms": 190.61, "rc": 0, "stderr_tail": ""}
+codex_sandbox_readonly_denied_write {"n": 9, "median_ms": 158.89, "min_ms": 154.83, "max_ms": 165.86, "rc": 1, "stderr_tail": "/bin/sh: ./denied.txt: Operation not permitted\n"}
+### round 2
+direct_true {"n": 9, "median_ms": 13.39, "min_ms": 12.5, "max_ms": 13.79, "rc": 0, "stderr_tail": ""}
+sandbox_exec_allow_default_true {"n": 9, "median_ms": 31.55, "min_ms": 30.06, "max_ms": 32.47, "rc": 0, "stderr_tail": ""}
+sandbox_exec_deny_default_true {"n": 9, "median_ms": 31.15, "min_ms": 30.09, "max_ms": 32.99, "rc": 0, "stderr_tail": ""}
+codex_version {"n": 9, "median_ms": 100.0, "min_ms": 93.69, "max_ms": 118.12, "rc": 0, "stderr_tail": ""}
+codex_sandbox_readonly_true {"n": 9, "median_ms": 149.69, "min_ms": 143.24, "max_ms": 160.67, "rc": 0, "stderr_tail": ""}
+codex_sandbox_workspace_true {"n": 9, "median_ms": 149.76, "min_ms": 146.04, "max_ms": 196.67, "rc": 0, "stderr_tail": ""}
+codex_sandbox_workspace_sh_echo {"n": 9, "median_ms": 163.29, "min_ms": 158.69, "max_ms": 170.52, "rc": 0, "stderr_tail": ""}
+codex_sandbox_readonly_denied_write {"n": 9, "median_ms": 165.08, "min_ms": 153.48, "max_ms": 193.7, "rc": 1, "stderr_tail": "/bin/sh: ./denied.txt: Operation not permitted\n"}
+### round 3
+direct_true {"n": 9, "median_ms": 12.27, "min_ms": 9.91, "max_ms": 14.27, "rc": 0, "stderr_tail": ""}
+sandbox_exec_allow_default_true {"n": 9, "median_ms": 30.72, "min_ms": 28.77, "max_ms": 33.35, "rc": 0, "stderr_tail": ""}
+sandbox_exec_deny_default_true {"n": 9, "median_ms": 32.21, "min_ms": 30.42, "max_ms": 40.21, "rc": 0, "stderr_tail": ""}
+codex_version {"n": 9, "median_ms": 101.38, "min_ms": 95.1, "max_ms": 122.65, "rc": 0, "stderr_tail": ""}
+codex_sandbox_readonly_true {"n": 9, "median_ms": 148.01, "min_ms": 142.8, "max_ms": 172.88, "rc": 0, "stderr_tail": ""}
+codex_sandbox_workspace_true {"n": 9, "median_ms": 153.24, "min_ms": 145.85, "max_ms": 165.59, "rc": 0, "stderr_tail": ""}
+codex_sandbox_workspace_sh_echo {"n": 9, "median_ms": 162.95, "min_ms": 159.22, "max_ms": 169.67, "rc": 0, "stderr_tail": ""}
+codex_sandbox_readonly_denied_write {"n": 9, "median_ms": 162.18, "min_ms": 157.91, "max_ms": 184.12, "rc": 1, "stderr_tail": "/bin/sh: ./denied.txt: Operation not permitted\n"}

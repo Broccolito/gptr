@@ -1,0 +1,11 @@
+rwrite nfiles=0 K=10: per-call outer median 0.067 s, internal 0.029 s, gap 0.038 s; first call of request median 0.065 s; request wall median 1.67 s; errors? n=30
+rwrite nfiles=200 K=10: per-call outer median 0.232 s, internal 0.111 s, gap 0.119 s; first call of request median 0.226 s; request wall median 3.33 s; errors? n=30
+rwrite nfiles=400 K=10: per-call outer median 0.343 s, internal 0.168 s, gap 0.175 s; first call of request median 0.350 s; request wall median 4.45 s; errors? n=30
+rwrite nfiles=900 K=10: per-call outer median 0.063 s, internal 0.027 s, gap 0.036 s; first call of request median 0.333 s; request wall median 2.16 s; errors? n=30
+rwrite nfiles=1500 K=10: per-call outer median 0.062 s, internal 0.026 s, gap 0.035 s; first call of request median 0.429 s; request wall median 2.37 s; errors? n=30
+rwrite nfiles=600 K=10: per-call outer median 0.441 s, internal 0.216 s, gap 0.224 s; first call of request median 0.438 s; request wall median 5.34 s; errors? n=30
+write nfiles=0 K=10: per-call outer median 0.026 s, internal 0.012 s, gap 0.014 s; first call of request median 0.026 s; request wall median 1.19 s; errors? n=30
+write nfiles=1500 K=10: per-call outer median 0.019 s, internal 0.008 s, gap 0.011 s; first call of request median 0.377 s; request wall median 1.87 s; errors? n=30
+write nfiles=400 K=10: per-call outer median 0.292 s, internal 0.144 s, gap 0.147 s; first call of request median 0.302 s; request wall median 3.85 s; errors? n=30
+robj nfiles=400 K=10: per-call outer median 0.033 s, internal 0.023 s, gap 0.010 s; first call of request median 0.034 s; request wall median 1.29 s; errors? n=30
+read nfiles=400 K=10: per-call outer median 0.028 s, internal 0.018 s, gap 0.009 s; first call of request median 0.030 s; request wall median 1.20 s; errors? n=30

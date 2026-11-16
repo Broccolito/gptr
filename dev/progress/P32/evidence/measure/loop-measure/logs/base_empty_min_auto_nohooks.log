@@ -1,0 +1,30 @@
+[1] FALSE
+workspace empty built in 0.0s, object.size total 0.000 GB, 0 bindings
+requests:
+  req    label  k     t0     t1  wall  gc_s
+1   1     warm 10  1.398  5.213 3.815 0.322
+2   2     warm 10  5.213  7.065 1.852 0.082
+3   3 measured 10  7.083  8.662 1.579 0.078
+4   4 measured 10  8.662 10.365 1.703 0.078
+5   5 measured 10 10.365 12.299 1.934 0.100
+6   6 measured 10 12.300 14.445 2.145 0.226
+7   7 measured 10 14.445 16.724 2.279 0.140
+done base_empty_min_auto_nohooks 
+       16.96 real        14.66 user         0.40 sys
+           364920832  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               25892  page reclaims
+                  27  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 300  voluntary context switches
+                6561  involuntary context switches
+        214341303047  instructions retired
+         58728608666  cycles elapsed
+           346145728  peak memory footprint

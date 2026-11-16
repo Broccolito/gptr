@@ -1,0 +1,23 @@
+k 100 object.size MB 1240 
+Tracing function "env_size_walk" in package "namespace:gptr"
+[1] "env_size_walk"
+Tracing function "env_size_strings" in package "namespace:gptr"
+[1] "env_size_strings"
+Untracing function "env_size_walk" in package "namespace:gptr"
+Untracing function "env_size_strings" in package "namespace:gptr"
+bytes reported: 445623384  data.tables walked: 100 of 100  env_size_strings calls: 1 
+env_snap_size elapsed s: 0.48 0.475 0.499  median: 0.48 
+[1] 445623384
+                 self.time self.pct total.time total.pct
+"unique.default"     0.390    92.86      0.390     92.86
+"unlist"             0.020     4.76      0.025      5.95
+"env_size_items"     0.005     1.19      0.135     32.14
+"mget"               0.005     1.19      0.005      1.19
+                   total.time total.pct self.time self.pct
+"unique.default"        0.390     92.86     0.390    92.86
+"env_size_strings"      0.285     67.86     0.000     0.00
+"unique"                0.285     67.86     0.000     0.00
+"env_size_items"        0.135     32.14     0.005     1.19
+"env_size_walk"         0.135     32.14     0.000     0.00
+"unlist"                0.025      5.95     0.020     4.76
+"mget"                  0.005      1.19     0.005     1.19

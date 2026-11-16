@@ -1,0 +1,7 @@
+route native files 40 rows 2004 
+request wall s: 3.422 1.566 0.809 
+tool internal elapsed s: 0.359 0.331 0.106 
+objects in home: files, gene_detected_files, gene_max_counts, gene_rows, gene_summary, gene_totals, input_audit, raw, reference_gene_ids, research_report, sample_summary, total_gene_counts, zero_gene_values 
+reactor waits ms (sum, n): 93 18 
+rpc errors:  
+session entries: 17  status: idle 

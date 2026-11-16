@@ -1,0 +1,12 @@
+* installing *source* package ‘gptr’ ...
+** this is package ‘gptr’ version ‘1.0.1’
+** using staged installation
+** R
+** inst
+** byte-compile and prepare package for lazy loading
+** help
+*** installing help indices
+*** copying figures
+** building package indices
+** installing vignettes
+* DONE (gptr)

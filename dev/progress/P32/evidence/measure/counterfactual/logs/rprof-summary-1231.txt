@@ -1,0 +1,198 @@
+=== out/rprof-gate-mcp-1231-rprof-all-a2-1.out
+sampled 1.085 s
+                    total.time total.pct self.time
+"<Anonymous>"            1.085       100         0
+"ctx_with_source"        1.085       100         0
+"doTryCatch"             1.085       100         0
+"ev_call"                1.085       100         0
+"ev_dispatch"            1.085       100         0
+"ev_try"                 1.085       100         0
+"expr_fun"               1.085       100         0
+"fn"                     1.085       100         0
+"fun"                    1.085       100         0
+"gateway_dispatch"       1.085       100         0
+"gateway_run"            1.085       100         0
+"lapply"                 1.085       100         0
+"mcp_dispatch_impl"      1.085       100         0
+"mcp_dispatch"           1.085       100         0
+"mcp_serve_call"         1.085       100         0
+"mcp_serve_exec"         1.085       100         0
+"mcp_tool_content"       1.085       100         0
+"one"                    1.085       100         0
+-- self
+              self.time self.pct
+"startsWith"      0.110    10.14
+"=="              0.110    10.14
+"FUN"             0.100     9.22
+"floor"           0.090     8.29
+"proc.time"       0.085     7.83
+"all"             0.065     5.99
+">"               0.055     5.07
+">="              0.055     5.07
+"file.exists"     0.055     5.07
+"identical"       0.040     3.69
+=== out/rprof-gate-mcp-1231-rprof-all-a3-1.out
+sampled 1.2 s
+                    total.time total.pct self.time
+"<Anonymous>"              1.2       100     0.035
+"tryCatchOne"              1.2       100     0.005
+"ctx_with_source"          1.2       100     0.000
+"doTryCatch"               1.2       100     0.000
+"ev_call"                  1.2       100     0.000
+"ev_dispatch"              1.2       100     0.000
+"ev_try"                   1.2       100     0.000
+"expr_fun"                 1.2       100     0.000
+"fn"                       1.2       100     0.000
+"fun"                      1.2       100     0.000
+"gateway_dispatch"         1.2       100     0.000
+"gateway_run"              1.2       100     0.000
+"lapply"                   1.2       100     0.000
+"mcp_dispatch_impl"        1.2       100     0.000
+"mcp_dispatch"             1.2       100     0.000
+"mcp_serve_call"           1.2       100     0.000
+"mcp_tool_content"         1.2       100     0.000
+"one"                      1.2       100     0.000
+-- self
+                self.time self.pct
+"eval"              0.155    12.92
+"+"                 0.145    12.08
+"pmax"              0.105     8.75
+"floor"             0.080     6.67
+">="                0.075     6.25
+"proc.time"         0.065     5.42
+"=="                0.060     5.00
+">"                 0.055     4.58
+"file.exists"       0.055     4.58
+"normalizePath"     0.050     4.17
+=== out/rprof-gate-mcp-1231-rprof-base-a2-1.out
+sampled 5.705 s
+                    total.time total.pct self.time
+"<Anonymous>"            5.705       100     0.015
+"ctx_with_source"        5.705       100     0.000
+"doTryCatch"             5.705       100     0.000
+"ev_call"                5.705       100     0.000
+"ev_dispatch"            5.705       100     0.000
+"ev_try"                 5.705       100     0.000
+"expr_fun"               5.705       100     0.000
+"fn"                     5.705       100     0.000
+"fun"                    5.705       100     0.000
+"gateway_dispatch"       5.705       100     0.000
+"gateway_run"            5.705       100     0.000
+"lapply"                 5.705       100     0.000
+"mcp_dispatch_impl"      5.705       100     0.000
+"mcp_dispatch"           5.705       100     0.000
+"mcp_serve_call"         5.705       100     0.000
+"mcp_serve_exec"         5.705       100     0.000
+"mcp_tool_content"       5.705       100     0.000
+"one"                    5.705       100     0.000
+-- self
+                 self.time self.pct
+"unique.default"     3.675    64.42
+"unlist"             0.645    11.31
+"startsWith"         0.195     3.42
+"=="                 0.105     1.84
+"FUN"                0.085     1.49
+"identical"          0.075     1.31
+"all"                0.075     1.31
+"sum"                0.075     1.31
+"env_size_walk"      0.065     1.14
+"floor"              0.065     1.14
+=== out/rprof-gate-mcp-1231-rprof-base-a3-1.out
+sampled 5.935 s
+                    total.time total.pct self.time
+"<Anonymous>"            5.935       100      0.04
+"ctx_with_source"        5.935       100      0.00
+"doTryCatch"             5.935       100      0.00
+"ev_call"                5.935       100      0.00
+"ev_dispatch"            5.935       100      0.00
+"ev_try"                 5.935       100      0.00
+"expr_fun"               5.935       100      0.00
+"fn"                     5.935       100      0.00
+"fun"                    5.935       100      0.00
+"gateway_dispatch"       5.935       100      0.00
+"gateway_run"            5.935       100      0.00
+"lapply"                 5.935       100      0.00
+"mcp_dispatch_impl"      5.935       100      0.00
+"mcp_dispatch"           5.935       100      0.00
+"mcp_serve_call"         5.935       100      0.00
+"mcp_serve_exec"         5.935       100      0.00
+"mcp_tool_content"       5.935       100      0.00
+"one"                    5.935       100      0.00
+-- self
+                 self.time self.pct
+"unique.default"     3.655    61.58
+"unlist"             0.765    12.89
+"eval"               0.210     3.54
+"+"                  0.205     3.45
+"pmax"               0.140     2.36
+"file.exists"        0.085     1.43
+"=="                 0.085     1.43
+"floor"              0.080     1.35
+"assign"             0.075     1.26
+">="                 0.060     1.01
+=== out/rprof-gate-mcp-1231-rprof-create-c1-1.out
+sampled 7.17 s
+                    total.time total.pct self.time
+"<Anonymous>"             7.17       100     0.015
+"lapply"                  7.17       100     0.005
+"ctx_with_source"         7.17       100     0.000
+"doTryCatch"              7.17       100     0.000
+"ev_call"                 7.17       100     0.000
+"ev_dispatch"             7.17       100     0.000
+"ev_try"                  7.17       100     0.000
+"expr_fun"                7.17       100     0.000
+"fn"                      7.17       100     0.000
+"fun"                     7.17       100     0.000
+"gateway_dispatch"        7.17       100     0.000
+"gateway_run"             7.17       100     0.000
+"mcp_dispatch_impl"       7.17       100     0.000
+"mcp_dispatch"            7.17       100     0.000
+"mcp_serve_call"          7.17       100     0.000
+"mcp_serve_exec"          7.17       100     0.000
+"mcp_tool_content"        7.17       100     0.000
+"one"                     7.17       100     0.000
+-- self
+                 self.time self.pct
+"unique.default"     2.850    39.75
+"FUN"                1.760    24.55
+"unlist"             0.690     9.62
+"eval"               0.310     4.32
+"*"                  0.200     2.79
+"=="                 0.135     1.88
+"file.exists"        0.095     1.32
+"setalloccol"        0.090     1.26
+">="                 0.085     1.19
+"floor"              0.080     1.12
+=== out/rprof-gate-mcp-1231-rprof-warm-w-1.out
+sampled 0.45 s
+                    total.time total.pct self.time
+"<Anonymous>"             0.45       100     0.005
+"tryCatch"                0.45       100     0.005
+"ctx_with_source"         0.45       100     0.000
+"doTryCatch"              0.45       100     0.000
+"ev_call"                 0.45       100     0.000
+"ev_dispatch"             0.45       100     0.000
+"ev_try"                  0.45       100     0.000
+"expr_fun"                0.45       100     0.000
+"fn"                      0.45       100     0.000
+"fun"                     0.45       100     0.000
+"gateway_dispatch"        0.45       100     0.000
+"gateway_run"             0.45       100     0.000
+"lapply"                  0.45       100     0.000
+"mcp_dispatch_impl"       0.45       100     0.000
+"mcp_dispatch"            0.45       100     0.000
+"mcp_serve_call"          0.45       100     0.000
+"mcp_serve_exec"          0.45       100     0.000
+"mcp_tool_content"        0.45       100     0.000
+-- self
+              self.time self.pct
+"%in%"            0.075    16.67
+"findCenvVar"     0.070    15.56
+"putconst"        0.025     5.56
+"cmpCall"         0.020     4.44
+"cb$putcode"      0.020     4.44
+"h"               0.015     3.33
+"c"               0.015     3.33
+"exists"          0.015     3.33
+"cmp"             0.010     2.22
+"cb$putconst"     0.010     2.22

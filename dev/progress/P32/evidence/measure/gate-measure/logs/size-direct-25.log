@@ -1,0 +1,39 @@
+   n kind rep env_snap_size_s env_snap_size_gb object_size_s object_size_gb
+1 25  chr   1           0.134       0.09978389         0.049      0.3094338
+2 25  chr   2           0.098       0.09978389         0.049      0.3094338
+3 25  chr   3           0.096       0.09978389         0.136      0.3094338
+  classify_s risk_level raw_sized_gb live_mb_raw max_used_mb_during
+1      0.497          2   0.09978389         132              522.9
+2      0.413          2   0.09978389         132              522.9
+3      0.126          2   0.09978389         132              522.9
+flags:
+                                                                              call
+1                                                      data.table::setDTthreads(1)
+2                                                 overwrites `raw` <list, 95.2 MB>
+3                                                                       rm(tables)
+4                                       data.table::setorder(sample_summary, file)
+5 data.table::fwrite(sample_summary, file = "sample-summary.csv", row.names = F...
+  level     category
+1     1     unlisted
+2     2 object_write
+3     2 object_write
+4     2 object_write
+5     2   file_write
+        4.24 real         3.67 user         0.12 sys
+           660815872  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               50001  page reclaims
+                  27  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  17  voluntary context switches
+                1712  involuntary context switches
+         48315023761  instructions retired
+         14935546347  cycles elapsed
+           642417792  peak memory footprint

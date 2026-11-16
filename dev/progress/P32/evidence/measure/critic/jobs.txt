@@ -1,0 +1,11 @@
+nfiles=0 kind=rwrite
+nfiles=200 kind=rwrite
+nfiles=400 kind=rwrite
+nfiles=600 kind=rwrite
+nfiles=900 kind=rwrite
+nfiles=1500 kind=rwrite
+nfiles=400 kind=write
+nfiles=1500 kind=write
+nfiles=0 kind=write
+nfiles=400 kind=robj
+nfiles=400 kind=read

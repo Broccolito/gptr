@@ -1,0 +1,24 @@
+[N1231_R60664] env_snap_size (gptr, exact by D-247)         median   5.9320 s  value 4498206084
+[N1231_R60664] size_exceeds(1e8) lower bound, early exit    median   0.0010 s  value TRUE
+[N1231_R60664] size_exceeds(Inf) lower bound, full walk     median   0.0270 s  value FALSE
+[N1231_R60664] fingerprint (cache key)                      median   0.0000 s  value 9d05ecbfa9694758b4c8fbca9db2e4db36f5c8371160ff304c451d483978703d
+[N1231_R60664] utils::object.size (no string dedupe)        median   2.2430 s  value 15135076672
+[N1231_R60664] done
+       19.66 real        18.23 user         0.85 sys
+         10962747392  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              672737  page reclaims
+                  27  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 261  voluntary context switches
+                9909  involuntary context switches
+        249339369179  instructions retired
+         73773319749  cycles elapsed
+         10593329576  peak memory footprint

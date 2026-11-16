@@ -1,0 +1,29 @@
+{
+  "cfg": {
+    "scenario": "small",
+    "tools": "minimal",
+    "mode": "auto",
+    "K": 10,
+    "reps": 3,
+    "warm": 2,
+    "ntab": 300,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 0,
+    "trace": 0,
+    "tag": "L_small_all_3",
+    "hooks": 1,
+    "hcode": "x = rnorm(100); summary(x)",
+    "patch": "json,est,settings,model,shape",
+    "cf": "reuse,size_cache,share,reactor"
+  },
+  "ws_gb": 0.0006,
+  "ws_build_s": 0.019,
+  "entries": 112,
+  "turns": 5,
+  "mode": "auto",
+  "preset": "minimal",
+  "text": "Done.",
+  "maxrss_gb": null
+}

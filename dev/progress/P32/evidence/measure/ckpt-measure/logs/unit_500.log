@@ -1,0 +1,68 @@
+                   self.time self.pct total.time total.pct
+"unique.default"       4.055    88.73      4.055     88.73
+"unlist"               0.380     8.32      0.380      8.32
+"env_size_walk"        0.075     1.64      2.350     51.42
+"structure"            0.015     0.33      0.015      0.33
+"assign"               0.010     0.22      2.235     48.91
+"seq"                  0.010     0.22      0.010      0.22
+"env_size_strings"     0.005     0.11      2.220     48.58
+"env_compact_seq"      0.005     0.11      0.015      0.33
+"is_missing"           0.005     0.11      0.005      0.11
+"is.na"                0.005     0.11      0.005      0.11
+"length"               0.005     0.11      0.005      0.11
+                     total.time total.pct self.time self.pct
+"<Anonymous>"             4.570    100.00     0.000     0.00
+"raw_size"                4.570    100.00     0.000     0.00
+"unique.default"          4.055     88.73     4.055    88.73
+"env_size_walk"           2.350     51.42     0.075     1.64
+"env_size_items"          2.350     51.42     0.000     0.00
+"assign"                  2.235     48.91     0.010     0.22
+"env_size_strings"        2.220     48.58     0.005     0.11
+"unique"                  2.210     48.36     0.000     0.00
+"unlist"                  0.380      8.32     0.380     8.32
+"structure"               0.015      0.33     0.015     0.33
+"env_compact_seq"         0.015      0.33     0.005     0.11
+"env_size_code"           0.015      0.33     0.000     0.00
+"utils::object.size"      0.015      0.33     0.000     0.00
+"seq"                     0.010      0.22     0.010     0.22
+"is_missing"              0.005      0.11     0.005     0.11
+"is.na"                   0.005      0.11     0.005     0.11
+"length"                  0.005      0.11     0.005     0.11
+"maybe_missing"           0.005      0.11     0.000     0.00
+"rlang::obj_address"      0.005      0.11     0.000     0.00
+List of 16
+ $ n                  : int 500
+ $ build_s            : num 3.33
+ $ env_snap_size_s    : num 2.3
+ $ env_snap_size_all  : num [1:3] 3.28 2.2 2.3
+ $ env_snap_size_bytes: num 1.83e+09
+ $ object_size_bytes  : num 6.14e+09
+ $ object_size_s      : num 0.959
+ $ fingerprint_s      : num 0
+ $ env_snapshot_cold_s: num 2.42
+ $ env_snapshot_warm_s: num 0
+ $ one_table_size_s   : num 0.008
+ $ one_table_bytes    : num 12273920
+ $ unshared_s         : num 2.37
+ $ unshared_bytes     : num 184
+ $ rss_gb             : num 5.27
+ $ gc                 : Named num [1:2] 3.01e+06 5.49e+08
+  ..- attr(*, "names")= chr [1:2] "Ncells" "Vcells"
+       41.69 real        39.88 user         0.76 sys
+          5654249472  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              348728  page reclaims
+                  28  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                 914  signals received
+                  31  voluntary context switches
+               15638  involuntary context switches
+        519714080514  instructions retired
+        158472739656  cycles elapsed
+          5286777392  peak memory footprint

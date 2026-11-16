@@ -1,0 +1,83 @@
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   1  2.336   0.644      0.088 0.556       0.582    FALSE 0.3614044
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error    rss_gb
+    warm    w   2  0.622   0.251      0.136 0.115        0.17    FALSE 0.3978729
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   c1   1 14.206   9.462      8.951 0.511       4.694    FALSE 7.942047
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base    e   1 14.168  10.547       3.47 7.077        3.57    FALSE 8.437943
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   share   c1   1  6.868   6.467      6.028 0.439       0.344    FALSE 9.595978
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   share    e   1 10.763  10.651      3.359 7.292       0.048    FALSE 9.596848
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   files   c1   1  7.196   1.929      1.451 0.478       5.205    FALSE 9.775864
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   files    e   1  10.45   6.938      0.009 6.929        3.45    FALSE 10.06012
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     off   c1   1  6.143   1.499       1.42 0.079       4.579    FALSE 10.63675
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     off    e   1 10.551   6.818      0.008  6.81        3.67    FALSE 10.63728
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   c1   1  6.712   6.329      5.937 0.392       0.331    FALSE 10.63849
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all    e   1   3.61   3.534      3.517 0.017       0.033    FALSE 10.28497
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   c1   2 10.685    6.32      5.912 0.408       4.294    FALSE 10.61049
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base    e   2 13.814  10.325      3.546 6.779       3.418    FALSE 10.61104
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   share   c1   2  6.773   6.359      5.941 0.418        0.34    FALSE 10.96536
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error  rss_gb
+   share    e   2 10.182  10.056      3.507 6.549       0.049    FALSE 10.9655
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   files   c1   2  6.594   1.899      1.499   0.4       4.616    FALSE 10.64436
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   files    e   2 11.112   7.147      0.009 7.138       3.886    FALSE 11.65501
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     off   c1   2  4.838   1.331       1.25 0.081       3.425    FALSE 11.65637
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     off    e   2 10.414   6.545      0.008 6.537       3.779    FALSE 11.65648
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   c1   2  6.928   6.543       6.15 0.393       0.326    FALSE 11.01315
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all    e   2   3.45   3.366      3.348 0.018       0.032    FALSE 11.01321
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base   c1   3 10.636    6.35      5.921 0.429       4.193    FALSE 11.01376
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+    base    e   3  14.05   10.51      3.382 7.128       3.444    FALSE 11.66017
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   share   c1   3  5.588   5.132      4.705 0.427       0.354    FALSE 11.40051
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   share    e   3 11.123  10.971       3.93 7.041       0.049    FALSE 11.04869
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   files   c1   3  6.657   1.766       1.37 0.396       4.791    FALSE 11.04964
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+   files    e   3 10.223   6.808      0.008   6.8       3.312    FALSE 11.04971
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     off   c1   3  6.088   1.428      1.349 0.079       4.553    FALSE 11.04999
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error  rss_gb
+     off    e   3 10.444   7.057      0.008 7.049       3.278    FALSE 11.3719
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error   rss_gb
+     all   c1   3  6.578   6.194      5.777 0.417       0.314    FALSE 11.37222
+ variant code rep wall_s outer_s internal_s gap_s post_tool_s is_error  rss_gb
+     all    e   3  3.322   3.223      3.205 0.018       0.033    FALSE 11.3725
+DONE
+      274.28 real       264.81 user         6.23 sys
+         13588250624  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1979606  page reclaims
+                 188  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                2495  voluntary context switches
+               45316  involuntary context switches
+       4778321283535  instructions retired
+       1106202034503  cycles elapsed
+          8357354648  peak memory footprint

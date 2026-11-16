@@ -1,0 +1,29 @@
+{
+  "cfg": {
+    "scenario": "small",
+    "tools": "minimal",
+    "mode": "auto",
+    "K": 3,
+    "reps": 1,
+    "warm": 1,
+    "ntab": 300,
+    "nobj": 1000,
+    "hist": 50,
+    "code": "1 + 1",
+    "rprof": 0,
+    "trace": 1,
+    "tag": "smoke_patch",
+    "hooks": 1,
+    "hcode": "x = rnorm(100); summary(x)",
+    "src": "src-patched/gptr",
+    "patch": "json,est,settings,model,shape"
+  },
+  "ws_gb": 0.0006,
+  "ws_build_s": 0.022,
+  "entries": 18,
+  "turns": 2,
+  "mode": "auto",
+  "preset": "minimal",
+  "text": "Done.",
+  "maxrss_gb": null
+}

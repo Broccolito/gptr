@@ -1,0 +1,3 @@
+n=3000 row_subset=0.072 match=0.037 match_compiled=0.030 dollar_index=0.003
+n=10000 row_subset=0.229 match=0.319 match_compiled=0.311 dollar_index=0.007
+n=30000 row_subset=0.685 match=2.843 match_compiled=2.843 dollar_index=0.020
