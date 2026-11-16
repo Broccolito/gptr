@@ -289,6 +289,69 @@ test_that("a call served to a CLI route is checkpointed; each change is undone o
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
 })
 
+test_that("a served call binds the risk of its final input, with a pump and idle (D-358)", {
+  proj = local_project()
+  off = gptr_register(gptr_hook("tool_call", function(event, ctx) {
+    if (identical(event$input$code, "sum(1)")) {
+      list(decision = "modify", input = list(code = "writeLines(\"a\", \"out.txt\")"))
+    }
+  }))
+  withr::defer(off())
+  seen = new.env()
+  before = checkpoint_before
+  local_mocked_bindings(checkpoint_before = function(run, call, ctx) {
+    seen$categories = call$risk$categories
+    before(run, call, ctx)
+  })
+  for (pumped in c(TRUE, FALSE)) {
+    seen$categories = NULL
+    x = serve_in_run(function(event, ctx) {
+      if (!pumped) local_mocked_bindings(mcp_pumped = function(run) FALSE)
+      list(res = mcp_dispatch_local(r_call("sum(1)"), ctx$session)$result, s = ctx$session)
+    })
+    expect_false(x$out$res$isError)
+    expect_true("file_write" %in% seen$categories)
+    ck = Filter(function(e) identical(e$custom_type, "gptr.checkpoint"),
+                session_data(x$out$s)$entries)
+    files = unlist(lapply(ck, function(e) e$data$fragments$files$files), recursive = FALSE)
+    expect_identical(vapply(files, function(f) f$path, ""), "out.txt")
+    expect_true(file.exists(file.path(proj, "out.txt")))
+    gptr_rewind(x$out$s, 0)
+    expect_false(file.exists(file.path(proj, "out.txt")))
+  }
+})
+
+test_that("a served tool whose risk record is invalid or fails is gated at level 3 (D-358)", {
+  box = new.env()
+  odd = gptr_tool("oddrisk", "Has an odd risk record.",
+                  parameters = list(type = "object", properties = json_obj()),
+                  risk = function(input, ctx) box$risk %||% stop("no record"),
+                  execute = function(input, ctx) "ran")
+  seen = new.env()
+  offs = list(gptr_register(odd), gptr_register(gptr_policy("probe", function(call, ctx) {
+    if (identical(call$name, "oddrisk")) seen$levels = c(seen$levels, call$risk$level %||% NA)
+    NULL
+  })))
+  withr::defer(for (off in offs) off())
+  msg = mcp_test_msg("tools/call", list(name = "oddrisk", arguments = json_obj()))
+  serve = function(s) mcp_dispatch_local(msg, s)$result$content[[1L]]$text
+  s = peter("hello", model = local_fake_provider(list("ok")), envir = new.env(), mode = "auto")
+  for (risk in list(list(), NULL)) {
+    box$risk = risk
+    seen$levels = NULL
+    out = serve(s)
+    for (pumped in c(TRUE, FALSE)) {
+      x = serve_in_run(function(event, ctx) {
+        if (!pumped) local_mocked_bindings(mcp_pumped = function(run) FALSE)
+        serve(ctx$session)
+      })
+      out = c(out, x$out)
+    }
+    expect_identical(out, rep("ran", 3L))
+    expect_identical(seen$levels, rep(3L, 3L))
+  }
+})
+
 test_that("IC-53 covers a call served to a CLI route: control guard and one-shot grants (D-192)", {
   guarded = gptr_tool("guarded", "Reaches a control export the way model code can.",
                       parameters = list(type = "object", properties = json_obj()),

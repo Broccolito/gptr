@@ -10837,3 +10837,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (layering): utils-size.R (L0) finds `env_snap_leaf()` and `ckpt_predict()` with `ns_fun()`,
   as doc-replay.R finds gptr-tailor.R. ckpt-rewind.R needed no change.
 - Contract-visible: none beyond D-357. Tests: as D-357. Evidence: progress/P32.md Task 3.
+
+## D-358 - P32 Served calls bind the final risk (2026-11-16)
+- Rule: `mcp_serve_exec()` classifies a served call with `call_risk()`, so an invalid or failing
+  risk record is level 3 ("unknown") as on the native route; only `r` with no run keeps the
+  classifier in the served environment (`call_risk()` reads the run's). When a `tool_call` hook
+  changed the input and the idle gate decides, the input is classified again before
+  `mcp_gate_idle()` reads it. After the gate `call$risk = d$risk %||% call$risk`, as
+  `dispatch_steps()` binds `dec$risk`: the checkpointers, the approved level and the nested gates
+  read the final risk.
+- Rule (extent): the plan names a run; a non-r tool served with no run is classified by
+  `call_risk()` too (it needs no run), so no served record is gated unchecked.
+- Why: the checkpointers read the pre-hook risk, so a hook that rewrote a read into file-writing
+  code skipped the files checkpointer and `gptr_rewind()` left the file; the idle gate read it
+  too, a record without a level was gated at 2 and a failing one ended the request with an
+  internal error. IC-53 items 5 and 7.
+- Contract-visible: none (the served route meets IC-53 items 5 and 7).
+- Tests: test-mcp-server "a served call binds the risk of its final input, with a pump and idle
+  (D-358)", "a served tool whose risk record is invalid or fails is gated at level 3 (D-358)";
+  perm-battery unchanged; helper-arch.R admits the edge mcp -> `call_risk()`. Evidence:
+  progress/P32.md Task 4.

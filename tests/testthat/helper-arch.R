@@ -163,8 +163,9 @@ arch_kernel_sdk = function() {
 # arch_kernel_sdk() stays exactly the IC-33 list (contract section 12.2). P16's ckpt_predict() wraps
 # P11's code_targets() (IC-31, sections 7.11 and 7.16); P19's sub-agents (section 7.6 consumers) and
 # the dedicated session of P18's gptr_mcp_serve() (section 6.3) create sessions with P06's
-# session_new(); a served MCP call runs P06's tool_call_hook(), its tool and the checkpointers as
-# the loop does (tool_run(), tool_execute_frame(), checkpoint_before(), checkpoint_after()), words a
+# session_new(); a served MCP call is classified with P06's call_risk() (D-358) and runs its
+# tool_call_hook(), its tool and the checkpointers as the loop does (tool_run(),
+# tool_execute_frame(), checkpoint_before(), checkpoint_after()), words a
 # denial and why it did not run as the loop does (perm_denial_text(), perm_refused()) and binds
 # P10's r-call marker for a served `r` call (r_call_new()); P19 chooses a backend with P06's
 # model_canonical() before starting a child (section 7.19), and its worker freezes P05's
@@ -194,13 +195,13 @@ arch_contract_edges = function() {
                  "rule_hit", "rule_glob_re", "risk_table", "walk_tree", "skill_discover")
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp",
-                    "mcp", "console", "console", "console", "console", "console", "subagent",
+                    "mcp", "mcp", "console", "console", "console", "console", "console", "subagent",
                     "subagent", "s1", "s1", "s1", "console", "s1", "subagent", "subagent",
                     rep("gptr", length(gptr_child)), "mcp", "mcp", rep("catalog", 4L), "console",
                     "auth", "auth"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
                "tool_execute_frame", "checkpoint_before", "checkpoint_after", "perm_denial_text",
-               "perm_refused", "r_call_new", "model_canonical", "pcli_default_model",
+               "perm_refused", "r_call_new", "call_risk", "model_canonical", "pcli_default_model",
                "session_unqueue", "compact_threshold", "prompt_model", "route_refuse_s1_args",
                "model_canonical", "usage_add_durable", "budget_check", "usage_row_store",
                "kernel_model_ref", "session_by_id", "model_default", "s1_charge_row",

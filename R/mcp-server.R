@@ -226,11 +226,14 @@ mcp_serve_call = function(target, name, args, id, schema) {
 }
 
 #' Run one served tool call, validated against its served `schema`, through the tool_call hooks of
-#' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result. A tool other than `r` runs
-#' as the agent loop runs it (tool_run(): its record's source, the result check), a reported one
-#' (`st`, which marks the start of its execution) in the run's tool frame (tool_execute_frame()).
-#' A reported call runs between the checkpointers' before and after, as dispatch_steps() runs one.
-#' Its child waits cannot reenter later callbacks or sibling tools, even when entered at idle.
+#' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result. Its risk is call_risk()'s
+#' (for `r` without a run, the classifier's in the served environment), classified again when a
+#' hook changed the input and the idle gate decides, then the gate's (D-358). A tool other than
+#' `r` runs as the agent loop runs it (tool_run(): its record's source, the result check), a
+#' reported one (`st`, which marks the start of its execution) in the run's tool frame
+#' (tool_execute_frame()). A reported call runs between the checkpointers' before and after, as
+#' dispatch_steps() runs one. Its child waits cannot reenter later callbacks or sibling tools,
+#' even when entered at idle.
 #' @noRd
 mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   s = target$session
@@ -266,18 +269,19 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     return(gptr_tool_result("This session has no environment to evaluate R code in.",
                             is_error = TRUE))
   }
-  risk = if (identical(name, "r")) {
-    ext_service_get("risk.classify")(input$code, envir = env, root = project_root(), kind = "r")
-  } else if (is.function(spec$risk)) {
-    spec$risk(input, ctx)
-  }
   call = list(id = paste0("mcp_", id), name = name, input = input, tool = spec, nested = FALSE,
-              risk = risk, envir = env)
-  if (!is.null(run)) call = tool_call_hook(run, call, risk)
+              envir = env)
+  call$risk = if (is.null(run) && identical(name, "r")) {
+    ext_service_get("risk.classify")(input$code, envir = env, root = project_root(), kind = "r")
+  } else {
+    call_risk(call, ctx, run)
+  }
+  if (!is.null(run)) call = tool_call_hook(run, call, call$risk)
   if (!is.null(call$blocked)) {
     if (!is.null(st)) st$refused = call$refused
     return(gptr_tool_result(call$blocked, is_error = TRUE))
   }
+  if (!identical(call$input, input) && !mcp_pumped(run)) call$risk = call_risk(call, ctx, run)
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
     if (!is.null(st)) st$refused = perm_refused(d) %||% "not allowed"
@@ -285,6 +289,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
                             is_error = TRUE))
   }
   if (is.list(d$input)) call$input = d$input
+  call$risk = d$risk %||% call$risk
   tokens = NULL
   if (!is.null(st)) {
     tokens = checkpoint_before(run, call, ctx)
@@ -296,7 +301,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     reactor$tool_depth = reactor$tool_depth - 1L
   }, add = TRUE)
   res = if (identical(name, "r")) {
-    call$approved_level = as.integer((d$risk %||% call$risk)$level %||% 2L)
+    call$approved_level = as.integer(call$risk$level %||% 2L)
     mcp_serve_r(call, env, run, s, ctx)
   } else if (is.null(st)) {
     # nothing follows the tool here (no checkpoint tokens): forget at this frame's exit
