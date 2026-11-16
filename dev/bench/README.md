@@ -27,10 +27,18 @@ plan that owns its fixture, never to make a regression pass.
 P32's hot-path gates (PERF-3 to PERF-9; plan P32, "Performance gates") install the tree byte
 compiled into a temporary library and run each gate in three `Rscript --vanilla` children of
 `dev/bench/perf/workload.R`, which load that build and replay the investigation's workloads (T03's
-workspace and inputs at 300 tables; `--full` 1,231, about 12 GB). A row is the children's median;
-counts are hard bars, times are barred as ratios within the run, and a time with bar NA prints
-until the task named sets it. `--only=PERF-4` checks one gate; the size-walk prototypes and their
-logs are in `dev/bench/perf/p32/`.
+workspace and inputs at 300 tables; `--full` 1,231, about 12 GB). A row is the children's median.
+Hard bars: PERF-3 one classification per call; PERF-4 no walk of an unchanged binding and gap(300)
+/ gap(50) at most 1.3; PERF-5 exact sizes byte-identical to 5e2992b, sampled ones at least 98% of
+the budget-off walk, time(N) / time(N / 4) at most 1.5; PERF-6 one plain walk per version of
+`raw`, at most one shared walk; PERF-7 at most 4 scans per ten-call request at 600 entries, scan
+seconds at most the budget plus two scans, no scan in calls 4-10, whose time at 600 entries is at
+most 1.3 times the 0-entry time; PERF-8 no walk of an unchanged binding, one settle `match()` per
+call; PERF-9 no message encoded again, turn(300) / turn(0) at most 1.3 (D-364 for the details).
+Times are barred at about twice a task's median in PERF-3 (T5), PERF-6 (T3, 300 tables only) and
+PERF-8 (T8); PERF-7's scan times and PERF-9's turn and relay times print without a bar.
+`--only=PERF-4` checks one gate; the size-walk prototypes and their logs are in
+`dev/bench/perf/p32/`.
 
 `dev/bench/cache-sim/baseline.csv` holds for the machine that recorded it (T1's `<r_env>` and the
 `<environment>` block are measured live): on another machine, run `--update` on the unchanged tree

@@ -4871,8 +4871,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: rewind item names and `gptr_rewind(preview = TRUE)` items in per-turn mode; no
   section amended.
 - Tests: test-ckpt-files.R (the per-turn and FIFO rows expect `R/b.R` and `supervisor_stdin`; the
-  outside-project row stays absolute); test-ckpt-rewind.R "a file is one /undo item when slow walks
-  switch to one scan per turn (#37)" (budget -1) and the #37 test in walk mode (budget `Inf`).
+  outside-project row stays absolute); test-ckpt-rewind.R "a file is one /undo item when the
+  request's scan budget is spent (#37)" (budget -1) and the #37 test in walk mode (budget `Inf`).
   Evidence: progress/fixes.md Task CI-43.
 
 ## D-229 - P22 the Windows cmd route runs its line in a cmd started after chcp 65001 (2026-10-18)
@@ -4942,8 +4942,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   not scanned is recorded together with the write; a detached copy of a session shell records the
   write at its next scan; a block written into a dirty IDE buffer is saved later as a user edit.
 - Contract-visible: 04 sections 7.0 and 7.16 (`checkpoint.own_write`, added with the fix).
-- Tests: test-ckpt-rewind.R "a turn's file scan never records gptr's own block writes (per-turn
-  mode, CLI route)"; test-ckpt-files.R "gptr's own writes are no turn's change; an edit the tracker
+- Tests: test-ckpt-rewind.R "a turn's file scan never records gptr's own block writes (spent
+  budget, CLI route)"; test-ckpt-files.R "gptr's own writes are no turn's change; an edit the tracker
   has not seen still is"; test-doc-io.R (the RStudio save runs inside the service). Evidence:
   progress/fixes.md Task CI-54.
 
@@ -9871,8 +9871,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-ckpt-scan.R "the time budget stops a scan between entries and keeps what it
   completed", "a zero budget scans nothing and invalid budgets are refused", "an interrupt the
   person continues from stops the scan and keeps its records", "scans never capture protected
-  paths, startup files, links or FIFOs"; test-ckpt-files.R "a scan slower than
-  gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
+  paths, startup files, links or FIFOs"; test-ckpt-files.R "a request that spends
+  gptr.checkpoint_scan_budget says so once per root". Evidence:
   progress/fixes-1.0.1/lane-A.md.
 
 ## D-311 - P16 A sync's observations replace the tracker's (2026-11-02)
@@ -9965,8 +9965,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   filled rendered Quarto, R Markdown and notebook output.
 - Contract-visible: 04 sections 1.5 and 7.16.
 - Tests: test-ckpt-files.R "the coverage notice is a console line for the person, once per root",
-  "the coverage notice stays out of tool results, documents and notebooks", "a scan slower than
-  gptr.checkpoint_scan_budget switches to per-turn scans once". Evidence:
+  "the coverage notice stays out of tool results, documents and notebooks", "a request that
+  spends gptr.checkpoint_scan_budget says so once per root". Evidence:
   progress/fixes-1.0.1/lane-A.md.
 
 ## D-345 - Fixes 1.0.1 lane I Output lines reach the model whole (2026-11-02)
@@ -10709,8 +10709,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   04 section 7.16 (the notice); the question and the notices are console wording.
 - Tests: ckpt-rewind "/undo's question lists what it restores after what it cannot (D-354)",
   "/undo's question shows ten items: unrestorable, left as is, then restored (D-354)";
-  ckpt-files "the coverage notice is a console line for the person, once per root", "a scan
-  slower than gptr.checkpoint_scan_budget switches to per-turn scans once"; ckpt-scan "the entry
+  ckpt-files "the coverage notice is a console line for the person, once per root", "a request
+  that spends gptr.checkpoint_scan_budget says so once per root"; ckpt-scan "the entry
   cap leaves undiscovered files unknown", the time-limit and interrupt cases. Evidence:
   progress/fixes-1.0.1/round2-Y.md.
 
@@ -10751,20 +10751,39 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   weight, summed by distinct byte length (no table as long as the longest string);
   `env_size_strings()` is gone. Allocations, pointers, attributes and D-247's part sampling stay
   exact. A walk that sampled returns its bytes with attribute `about` (TRUE).
-- Rule: `about` reaches the snapshot (logical column `about` after `bytes`, reused with
-  `previous`), `env_fmt_bytes()` (an `about` argument, by default the attribute) and so the
+- Rule: `about` reaches the snapshot (logical column `about` after `bytes`, kept in the size
+  store, D-357), `env_fmt_bytes()` (an `about` argument, by default the attribute) and so the
   `<workspace>` and `<workspace_changes>` lines and every `gptr_describe()` header, and
   `risk_bytes()` (the overwrite note, "about 99.2 MB"). Risk `sizes`, checkpoint records and
   `gptr_checkpoints()` stay plain numbers.
 - Why: at 8 bytes a pointer the exact part of a sampled object is at least 1e8 bytes, the default
   `gptr.protect_size` and `gptr.undo_capture_max`, so at the defaults no gate or capture decision
-  rests on an estimate. A sampled string counts n / m times, so with repeats the estimate is at or
-  above the truth in expectation (factor w(1 - (1 - 1/w)^c) for multiplicity c), bounded by "every
-  string distinct"; it reads far high where a vocabulary is much smaller than its vector but larger
-  than the sample (prototype: +62%, +187%). T03's list at 300 tables: 1.42 s to 0.3 s, same bytes.
+  rests on an estimate. T03's list at 300 tables: 1.42 s to 0.27-0.39 s, same bytes (T2).
+- Error direction: a sampled string counts n / m times, so with repeats inside a vector or between
+  sampled vectors the estimate is at or above the truth in expectation (factor
+  w(1 - (1 - 1/w)^c) for weight w and multiplicity c), bounded by "every string distinct". It
+  reads far high where a vocabulary is much smaller than its vector but larger than the sample,
+  so such an object can ask or miss an in-RAM undo where its true size would not.
+- Prototype (Mac, sourced code; dev/bench/perf/p32/ `log-c-1.25e7.txt`, `log-ident.txt`):
+
+| Case | 5e2992b | Budget 1.25e7 | Bytes against the unsampled walk |
+|---|---|---|---|
+| 15 objects under the budget, with and without `shared`, a 1e8-byte string | | | `identical()` to main |
+| T03 list, 1,231 tables / its `shared` walk | 3.78 / 2.99 s | 0.40 / 0.42 s | equal |
+| 4e6 distinct strings | 0.90 s | 0.30 s | identical |
+| one vector of 5e7 strings | 10.6-14.0 s | 1.7 s | -0.00% |
+| 3e7 strings of mixed length | 8.8 s | 1.8 s | +0.00% |
+| 300 vectors of 2e4 or 2e6 strings, skewed | 12.0 s | 1.0 s | -0.01% |
+| 3 x 2.5e7 data frame with a 1e6-value column | 8.2 s | 2.0 s | +62% |
+| 300 vectors drawn from a growing vocabulary | 8.3 s | 0.8 s | +187% |
+
 - Rejected: estimating a vocabulary from collisions in the sample (Chao): reads low on skewed data.
-- Contract-visible: the `env_snapshot()` row gains `about`; size texts above the budget say
-  "about" (the `04` and `03` amendments are T11's).
+  A budget of 4e6 strings (0.25, 0.6 and 0.7 s for the T03 list, the vectors and the data frame):
+  its estimates start at 32 MB of pointers, below the default `gptr.protect_size`.
+- Contract-visible: 04 section 7.9 (`env_snapshot()` gains `about`; an estimate reads "about" in
+  the workspace and change lines, the overwrite note and the describe header) and the
+  `gptr.protect_size` row of section 3.1; 03 section 3.2 `utils-size.R` row; `?gptr_checkpoints`
+  (`held_mb` and `disk_mb` are estimates above the budget).
 - Tests: utils-size (new: main's bytes for 17 objects and 4 `shared` cases, a 1e8-byte string with
   no large allocation, the read counter at a budget of 1e5, accuracy over the budget, the note and
   the describe header, two no-copy rows); env-snapshot "a sampled size is marked about in its row,
@@ -10786,9 +10805,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   starts an epoch after an `unknown` target, a by-reference call (`code_targets()$inplace`: "by
   reference" rows and `[` with `:=`; `byref` unchanged) or a tool not read-only other than write,
   edit, sh, bg, script, jobs (no code in this R process).
-- Contract-visible: `code_targets()`/`ckpt_predict()` gain `inplace` (IC-31); the gate's size is
-  stored (`gptr.protect_size` row): stale after an in-place edit no call shows as by reference
-  (console `:=` on a nested table; a user or unlisted function editing by reference). T11.
+- Staleness (the `gptr.protect_size` row): the gate's size of an object that holds no
+  environment, closure or compact sequence is the size at its last walk. It is stale only after an
+  edit in place that keeps the address and the fingerprint and that no agent call's code shows: a
+  person at the console running `data.table::set()` or `:=` on a table nested inside a list, an
+  in-place assignment past a list's first 1,000 elements, a user or unlisted function editing by
+  reference. Then the stored size (what-if: 156.7 against 178.5 MB) is used until the name is
+  rebound, an agent call targets it, or a call starts an epoch (D-365). Main's gate re-walked and
+  saw it; main's snapshot sizes (`previous`) already had this exposure. An address reused by a new
+  object within two snapshots must also match class, shape and fingerprint to hit.
+- Contract-visible: 04 section 3.1 `gptr.protect_size` row (the stored size, the staleness), IC-04,
+  IC-31, section 7.9 (`env_snapshot()` and `env_view_snapshot()` lose `previous`), sections 7.11
+  and 7.16 (`code_targets()` and `ckpt_predict()` gain `inplace`); 03 section 3.2 `utils-size.R`.
 - Tests: utils-size (6), env-snapshot (3), agent-dispatch (3), copy-ckpt (1), perm-classify,
   ckpt-objects (`inplace`); perm-battery unchanged. Evidence: progress/P32.md Task 3.
 
@@ -10823,7 +10851,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (extent): the idle served gate classifies again after any other hook, not only after a
   changed input (D-358), so a hook that assigns into the home is not gated on the pre-hook risk.
 - Why: each call was classified twice on the same input and state (PERF-3: 2 to 1 per call).
-- Contract-visible: `perm_check()` gains `risk` (`04` line 2762, IC-04 wording; T11).
+- Contract-visible: `perm_check()` gains `risk` (04 section 7.6 `perm_check()` row; IC-04).
 - Tests: test-agent-dispatch (2 tests, the forwarded request's count), test-mcp-server (1);
   perm-battery unchanged. Evidence: progress/P32.md Task 5.
 
@@ -10839,10 +10867,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   per-turn switch, `walk_secs` and `scanned_turn` go; the notice keeps its once-per-root key.
 - Why: 150-700 entries paid two full scans per writing call (0.44 s a call at 600, critic valley
   log), and one slow scan switched the whole session.
-- Trade-off: past the budget, the person's edit between two calls of the request is recorded by
-  its end scan as the turn's change, as in a project over the budget before.
-- Contract-visible: 04 line 394 and section 7.16; 03 section 6.16 Files; G7 section 3.7;
-  `?gptr_options`, `?gptr_rewind`; the console notice. T11 writes the amendments.
+- Trade-off (per request, not per scan): small projects keep per-call scans and exact attribution
+  of the person's edits; the 150-700 entry valley costs at most the budget plus two scans per
+  request, not two scans per call (ten-call request at 600 entries: 20 to 3 scans, 4.1-4.7 to
+  0.62 s, T6). Past the budget, the person's edit between two calls of the request is recorded by
+  its end scan as the turn's change, so undoing the turn reverts it, as in a project over the
+  budget before; within it the edit stays theirs.
+- Contract-visible: 04 section 3.1 (the checkpoint options row) and section 7.16; 03 section 6.16
+  Files; G7 sections 3.5 and 3.7; `?gptr_options`, `?gptr_rewind`; the console notice.
 - Tests: ckpt-files "a request spends the scan budget, then scans once at its end (D-360)", "while
   the scan budget lasts, every writing call scans twice (D-360)", "an incomplete scan ends a
   request's per-call scans without a budget notice"; ckpt-rewind "while the scan budget lasts, the
@@ -10879,7 +10911,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Why: Rscript attached stats, graphics, grDevices, utils, datasets and methods, which the relay
   never uses, once per request on the Codex route: relay spawn to `initialize` answered went from
   0.329 to 0.131 s (median of 10, interleaved, instant responder, load 490).
-- Contract-visible: IC-79's argv (`04` lines 3450, 5380, 5858; T11 writes it).
+- Contract-visible: the relay argv in 04 section 8.5, IC-65 and IC-79; 03 section 8.3 (the argv
+  and the relay's start-up time).
 - Tests: cli-codex "the codex argv starts gptr's stdio relay; the resume form uses -c
   sandbox_mode=" and the exact-argv tests through `codex_relay_args()`; "without httpuv, later and
   openssl a fake codex evaluates R in the live session" (the relay started with base alone answers
@@ -10916,7 +10949,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-common "bench_args() parses --check, --update, --full and --only". Evidence:
   progress/P32.md Task 1.
 
-## D-TBD-T3 - P32 T3: an epoch, not an empty store; PERF-4; describe; layering (2026-11-16)
+## D-365 - P32 An epoch, not an empty store; PERF-4; describe; layering (2026-11-16)
 - Rule (epoch): where the plan empties the store, a new epoch makes every stored size
   snapshot-only (as main's `previous` reuse) until the gate or a dot walks it. Emptying made the
   next snapshot walk the whole workspace after each `:=`, `setorder()` or write call, where main
@@ -10932,7 +10965,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   as doc-replay.R finds gptr-tailor.R. ckpt-rewind.R needed no change.
 - Contract-visible: none beyond D-357. Tests: as D-357. Evidence: progress/P32.md Task 3.
 
-## D-TBD-T7 - P32 A scan checks a folder's entries with one call of each check (2026-11-16)
+## D-366 - P32 A scan checks a folder's entries with one call of each check (2026-11-16)
 - Rule (design 6): `ckpt_scan_run()` takes each check once for a folder's entries, and once for
   the known paths: links of the parent folders, case-exact absence, link, stat, regular type, path
   class, read access, each on the entries the checks before it pass. `inspect()` then decides per
@@ -10947,7 +10980,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Trade-off: a file deleted between a folder's stat call and its type call stops the scan ("an
   error stopped it", as before). Main kept the entries before it in that folder; now none of that
   folder's entries are kept.
-- Contract-visible: none (identical results). T11 updates the scan numbers in the floor paragraph.
+- Contract-visible: none (identical results); the plan's floor paragraph carries the new scan
+  numbers.
 - Tests: ckpt-scan "a scan's rows, captures and reasons equal main's on a tree of every entry
   kind", "a scan checks each folder's entries with one call per check", "an entry or folder
   swapped for a link after its folder's checks is never read". Evidence: progress/P32.md Task 7.

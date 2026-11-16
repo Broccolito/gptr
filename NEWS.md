@@ -1,3 +1,50 @@
+# gptr 1.1.0
+
+Tool calls spend less time in gptr itself. Every permission rule, guard, checkpoint and secret
+check stays; each is paid once per call or per version of an object, at a cost that does not grow
+with the data. Times below are medians against 1.0.1 with a fake provider on one Mac (arm64,
+R 4.6.1) under a load average of 70-500, so they are approximate; the large-object numbers use a
+workspace shaped like task T03 of the gptr-bench benchmark, a list of 300 tables.
+
+## Faster tool calls
+
+* The size of an object is computed once per version of it and shared by the permission gate,
+  the checkpoints and the workspace summary, which each computed it before. Around the T03
+  workspace's second and third requests gptr now adds 0.67-0.75 s, against 5.0-5.7 s; the request
+  that creates the list takes 1.8 s instead of 4.7 s, and a call that adds one element to it
+  0.56 s instead of 5.8 s.
+* Sizing an object reads at most 12.5 million strings; longer character data is sampled and the
+  size is shown as an estimate (`about 3.4 GB`) in the workspace summary, object descriptions and
+  the permission question about overwriting it. Objects with fewer strings keep their exact
+  sizes. A vector of 50 million strings is sized in 1.7 s instead of 10.6-14 s. An estimate is at
+  or above the true size on average, and at the default `gptr.protect_size` and
+  `gptr.undo_capture_max` no permission or undo decision rests on one.
+* Each tool call's input is classified once, not twice: a 25-line `r` call takes 123 ms instead
+  of 142 ms, 110 ms instead of 132 ms over MCP.
+* `gptr.checkpoint_scan_budget` (0.25 s) now limits the project scan time of a whole request.
+  While it lasts, every writing call scans the project before and after it, as before; past it,
+  calls back up the files they name and one scan at the end of the request records the rest. A
+  ten-call request in a project of 600 entries scans 3 times instead of 20 (0.62 s instead of
+  4.1-4.7 s). Past the budget, an edit you make to a project file while the request runs is
+  recorded as part of it, so undoing the request reverts that edit too, as in large projects
+  before. A slow scan no longer switches the whole session to one scan per turn.
+* A project scan checks each folder's entries in one pass: 1,231 linked input files take 0.04 s
+  instead of 0.21-0.26 s, and 1,231 regular files 0.19-0.21 s instead of 0.36 s.
+* A call in a workspace of 1,000 objects costs 141-152 ms more than in an empty one (was 285 ms),
+  and in one of 10,000 objects 1.7-1.8 s more (was 3.9 s).
+* A request reuses the encoding of the messages it sent before, and the agent loop no longer
+  waits 5 ms after each step: at about 300 messages a turn takes 151 ms of gptr's time instead
+  of 350 ms.
+* The Codex route starts gptr's relay with only the base package attached: 0.13 s instead of
+  0.33 s per request.
+
+## Bug fixes
+
+* Calls served over MCP or to a command-line route (Claude Code, Codex) are gated and
+  checkpointed with the risk of their final input: after a `tool_call` hook rewrites a call into
+  code that writes a file, the file is backed up and `gptr_rewind()` removes it. A served tool
+  whose risk function fails or returns no level is treated as level 3, as on the native route.
+
 # gptr 1.0.1
 
 gptr 1.0.0 is on CRAN: `install.packages("gptr")`. The development version installs with

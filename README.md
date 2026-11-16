@@ -35,7 +35,7 @@ if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak")
 pak::pak("Broccolito/gptr")
 ```
 
-This README describes gptr 1.0.1; `packageVersion("gptr")` shows yours.
+This README describes gptr 1.1.0; `packageVersion("gptr")` shows yours.
 After installation, load the package:
 
 ``` r

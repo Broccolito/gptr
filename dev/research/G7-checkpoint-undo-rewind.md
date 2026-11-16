@@ -503,8 +503,9 @@ Rules:
 4. After the call: walk and diff against the tracker (size, mtime, racy-clean hash check), giving created,
    modified and deleted paths. Post-images are ingested (at most `gptr.checkpoint_capture_max`) and pre-images come
    from the tracker. Links are recorded as not restorable, and files without a pre-image as not restorable.
-5. Adaptive scanning: if a walk exceeds `gptr.checkpoint_scan_budget` (250 ms), switch that session to scanning
-   once per turn plus the predicted paths, and say so once.
+5. Adaptive scanning: once a request's scans exceed `gptr.checkpoint_scan_budget` (250 ms), its later calls back
+   up the predicted paths and one scan at the request's end records the rest; the next request scans per call
+   again, and the person is told once (D-360).
 6. `edit`, `write` and `apply_patch` already hold the old bytes. They ingest the pre-image directly (no walk
    needed for their own paths), within the same cap.
 
@@ -538,7 +539,7 @@ Rules:
 | `gptr.checkpoint_track_file_max` | `1e6` | baseline per-file cap (opencode tracks non-ignored untracked files up to 2 MiB each; Codex ignored untracked files over 10 MiB) |
 | `gptr.checkpoint_track_total` | `1e8` | baseline total |
 | `gptr.checkpoint_capture_max` | `5e7` | pre-images of predicted paths and post-images |
-| `gptr.checkpoint_scan_budget` | `0.25` s | switch to per-turn scanning above this walk time |
+| `gptr.checkpoint_scan_budget` | `0.25` s | scan time of one request: its writing calls scan while the request's scans stay within it; past it they back up predicted paths and one scan at the request's end records the rest (D-360) |
 | `gptr.checkpoint_rng` | `TRUE` | restore `.Random.seed` (3-way) when `envir` is the global environment |
 | `gptr.checkpoint_close_devices` | `FALSE` | close devices opened by an undone turn |
 

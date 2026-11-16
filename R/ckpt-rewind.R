@@ -644,7 +644,8 @@ ckpt_ext_state = function(s = NULL) {
 #' - `gptr.checkpoint_track_total` (`1e8`): bytes one automatic scan stores in all.
 #' - `gptr.checkpoint_capture_max` (`5e7`): bytes; a larger changed file gets no stored copy.
 #' - `gptr.checkpoint_scan_budget` (`0.25`): seconds of project scans per request; past them,
-#'   its calls back up the files they name and one scan at its end records the rest.
+#'   its calls back up the files they name and one scan at its end records the rest, edits you
+#'   made to the project meanwhile included.
 #' - `gptr.checkpoint_scan_timeout` (`2`): seconds; the longest an automatic scan runs. An
 #'   incomplete scan also spends its request's scan budget.
 #' - `gptr.checkpoint_rng` (`TRUE`): report changes of the random-number state.
@@ -745,7 +746,8 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
 #' abandoned branches): `turn`; `id`, the last entry of the turn (pass it as `to` to
 #' `gptr_rewind()`); `time`, when the prompt was sent (local time); `prompt` (its first 60
 #' characters); `objects` and `files`, `"changed/restorable"` counts; `held_mb` and `disk_mb`,
-#' megabytes (2^20 bytes) of object pre-images held in memory and on disk; and `branch`
+#' megabytes (2^20 bytes) of object pre-images held in memory and on disk (for an object with
+#' more than 12.5 million strings an estimate, at or above the truth on average); and `branch`
 #' (`"active"` or `"abandoned"`).
 #' @param all Also list the turns of abandoned branches.
 #' @rdname gptr_rewind

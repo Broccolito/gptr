@@ -52,7 +52,7 @@ made to `03` and `05` so that the three documents agree.
 | IC-01 | **Exports**: those of `03` section 4.4 plus the S3 generic `gptr_preimage()` (P16); NAMESPACE holds the count. | `03` sections 6.16 and 11.1 promise "plugins add `gptr_preimage()` S3 methods"; delayed registration `S3method(gptr::gptr_preimage, cls)` from a package that only Suggests gptr needs an exported, documented generic, exactly like `gptr_describe()` [G7 section 4.6, G1 section 3.1 row 13]. |
 | IC-02 | (amended by IC-34/IC-69: 38 kinds in all, P02 defines 37 and P22 adds `interpreter`; §10.2.) A 31st registry kind, **`route`** [experimental], carries the gateway routes (classifier, nested, console, team, fan-out, document, continue, new). P02 defines 30 kinds (the 29 of `03` §11.1 other than `interpreter`, plus `route`); P22 defines `interpreter` through the `kind` meta-kind. | `03` §2.2 rule 1 and 05 "Registration without shared lists" require routes to be registry records contributed by their owning plans; no kind existed for them. |
 | IC-03 | Event names follow D-25's rule (Pi-derived where the semantics match): **`session_shutdown`** replaces `session_end`, **`session_before_compact`** / **`session_compact`** replace `pre_compact` / `post_compact`. | D-25, G1 §3.2 (Pi's names); `03` §5.4 used Claude-style names that D-25 reserves for the v1.x importer. |
-| IC-04 | The permission **combination** `perm_check()` (policies, `permission_request` hooks, UI, non-interactive stop) lives in `agent-dispatch.R` (P06); `perm-gate.R` (P11) owns the built-in **policies** (mode table, rules, critical guard, secret guard, protect size) and `builtin:permissions`; the UI's `permission()` method (console prompt) is in `console-ui.R` (P11). | `03` §3.2 gave "policy combination" to P11 while P06's dispatcher must already gate fail-closed at M1; the split keeps the kernel complete and the policies pluggable (S-11). |
+| IC-04 | The permission **combination** `perm_check()` (policies, `permission_request` hooks, UI, non-interactive stop) lives in `agent-dispatch.R` (P06); `perm-gate.R` (P11) owns the built-in **policies** (mode table, rules, critical guard, secret guard, protect size) and `builtin:permissions`; the UI's `permission()` method (console prompt) is in `console-ui.R` (P11). Each final input is classified once: `perm_check()` takes the dispatcher's classification when only built-in `tool_call` hooks ran (D-359). The protect size policy reads the object's stored size, walked once per object version (D-357): stale only after an in-place edit no agent call's code shows, such as a console `:=` on a table nested in a list. | `03` §3.2 gave "policy combination" to P11 while P06's dispatcher must already gate fail-closed at M1; the split keeps the kernel complete and the policies pluggable (S-11). |
 | IC-05 | `gptr_usage()` is defined in `session-budget.R` (P06), not `provider-usage.R` (P05). | layering: an L1 file may not reach sessions (L3) (`03` §2.2). P05 keeps usage rows, prices and the process System 1 log. |
 | IC-06 | `gptr_permissions()` is defined in `perm-rules.R` (P11); `gptr-config.R` (P08) provides only the settings I/O it uses. | `03` §3.2 and `05` gave it to both P08 and P11. |
 | IC-07 | `knit_print` methods (sessions, System 1 vectors) exist only in `doc-knitr.R` (P15). | `03` §3.2 gave them to both P06 and P15. |
@@ -80,7 +80,7 @@ made to `03` and `05` so that the three documents agree.
 | IC-29 | `egress_check()` lives in `gptr-config.R` (P08), next to the acknowledgement it records; P05 only reads acknowledgements through `setting_get()`. | the check needs the settings writer (P08); `03` §3.2 listed it for both files. |
 | IC-30 | Replay mode is resolved by `replay_mode()` in P08, and `replay_guard()` refuses non-`offline` providers in replay mode; `gptr_fake_provider()` specs are `offline = TRUE`, so `GPTR_REPLAY=replay` in `tests/testthat/setup.R` blocks real models but not the fake. | `03` §3.4 sets `GPTR_REPLAY=replay` for every test while every test drives the fake provider. |
 | IC-32..IC-73 | Review amendments (load order, layering allowlist, services, replay, safety kernel, store, processes, RNG, encoding, CLI routes, budgets, prompt composition, extension-API additions, release). | §15; `06-review-resolution.md`. |
-| IC-31 | The classifier's parse walk `code_targets()` is P11's; P16's `ckpt_predict()` wraps it. Prompt templates become `command` specs registered by P17, so the console (P14) only dispatches commands. | the shared walk of G7 §3.4 needs one owner earlier than both users. |
+| IC-31 | The classifier's parse walk `code_targets()` is P11's; P16's `ckpt_predict()` wraps it, for the checkpointers and the size store's `env_size_forget()` (`inplace`, D-357). Prompt templates become `command` specs registered by P17, so the console (P14) only dispatches commands. | the shared walk of G7 §3.4 needs one owner earlier than both users. |
 
 ### 0.4 Type notation
 
@@ -374,7 +374,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `gptr.helper_output_tokens` | `int(1)` | `1500L` | P10/P22 | print budget of `peter$` members |
 | `gptr.read_max_tokens` | `int(1)` | `12000L` | P10 | `read` cap (also 2,000 lines and 50 KB) |
 | `gptr.plot_width`, `gptr.plot_height`, `gptr.plot_res` | `int(1)` | `768L`, `512L`, `120L` | P09 | PNG sent to the model |
-| `gptr.protect_size` | `num(1)` | `1e8` | P11 | bytes; overwriting a larger object is level 3 |
+| `gptr.protect_size` | `num(1)` | `1e8` | P11 | bytes; overwriting a larger object is level 3. The size is the object's stored size (`env_size_of()`, one walk per object version, D-357), stale only after an in-place edit that keeps the address and fingerprint and that no agent call's code shows (a console `:=` or `data.table::set()` on a table nested in a list, an in-place assignment past a list's first 1,000 elements); an object holding an environment, a closure or a compact sequence is walked at every gate. Above 12.5 million strings it is an estimate, at or above the truth in expectation (D-356) |
 | `gptr.noninteractive_ask` | `chr(1)` | `"stop"` | P06 | `"stop"` or `"deny"` (IC-14) |
 | `gptr.critical_guard` | `lgl(1)` | `TRUE` | P11 | level 4 asks even in `auto` |
 | `gptr.secret_guard` | `lgl(1)` | `TRUE` | P03/P11 | guarded secret reads ask even in `auto` |
@@ -391,7 +391,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `gptr.undo_spill_max` | `num(1)` | `2e9` | P16 | G7 §3.7 |
 | `gptr.undo_turns` | `int(1)` | `20L` | P16 | G7 §3.7 |
 | `gptr.checkpoint` | `chr(1)` | `"on"` | P16 | `"on"`, `"files"`, `"off"` |
-| `gptr.checkpoint_disk_bytes`, `gptr.checkpoint_days`, `gptr.checkpoint_turns`, `gptr.checkpoint_track_file_max`, `gptr.checkpoint_track_total`, `gptr.checkpoint_capture_max`, `gptr.checkpoint_scan_budget`, `gptr.checkpoint_rng`, `gptr.checkpoint_close_devices` | as G7 §3.7 | `2e9`, `30`, `100`, `1e6`, `1e8`, `5e7`, `0.25`, `TRUE`, `FALSE` | P16 | G7 §3.7 |
+| `gptr.checkpoint_disk_bytes`, `gptr.checkpoint_days`, `gptr.checkpoint_turns`, `gptr.checkpoint_track_file_max`, `gptr.checkpoint_track_total`, `gptr.checkpoint_capture_max`, `gptr.checkpoint_scan_budget`, `gptr.checkpoint_rng`, `gptr.checkpoint_close_devices` | as G7 §3.7 | `2e9`, `30`, `100`, `1e6`, `1e8`, `5e7`, `0.25`, `TRUE`, `FALSE` | P16 | G7 §3.7; `gptr.checkpoint_scan_budget` is the scan time of one request (§7.16, D-360) |
 | `gptr.checkpoint_scan_timeout` | `num(1)` | `2` | P16 | longest run in seconds of an automatic file scan, checked between entries and before each capture; partial coverage and fixed entry/file limits are described in §7.16 |
 | `gptr.redact_min_chars` | `int(1)` | `8L` | P03 | shortest value-redacted secret |
 | `gptr.redact_patterns` | `lgl(1)` | `TRUE` | P03 | pattern layer (values are always redacted) |
@@ -2759,7 +2759,7 @@ transcript assembly includes the blocks in token estimates, request views and ca
 | `dispatch_tools(run, calls)` | executes a turn's tool calls in source order; for each: lookup (unknown, or not in the tools the session offered the model, the frozen array and every `tool_change` addition -> error result `Tool <name> not found`; D-248), `tool_validate()`, `tool_call` hooks, `perm_check()`, checkpointers' `before`, execute (sequential tools through `reactor_enqueue_tool()`; concurrent ones as reactor work), checkpointers' `after`, `tool_result` hooks; never throws; a `length`/`refusal` stop fails every call unrun; returns `list(results = list(<gptr_tool_result>), terminate = lgl(1))` | P06 |
 | `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78) and reads no registered secret the outer analysis did not show (a member's `env` handing one to a child, D-267), runs without a second prompt; otherwise `perm_check()`; the command of a `sh` or `bg` call (in its `wd`) or the path of a `script` call, as the `r` code that runs it, and the input of a `write` or `edit` call meet the deny and ask rules first, whatever their level, as the literal call would, with the registered secrets its `env` hands the child (review round 6): `nested_rules()` asks every policy named `rules`, `coaching`, `harness_rules` or `fence` and keeps the strictest answer (`perm_strictest()`; allow answers are not applied; D-280, D-281, D-284, IC-89), an ask rule asked in `perm_check()`'s one question with the call's other reasons (its `extra`, D-267), offering no `[a]lways` rule (D-251); records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
 | `tool_validate(tool, input)` | `schema_validate()` of the tool's `parameters`; `{"INVALID_JSON": raw}` when the final strict parse failed | P06, P18 |
-| `perm_check(call, run, extra = NULL)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)`, and `extra`, an opinion decided for the call elsewhere (a nested call's ask rule, D-267) (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`, which names where the run's mode came from, `opts$mode_from`, and while knitting says knitting cannot ask instead of "run interactively"), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
+| `perm_check(call, run, extra = NULL, risk = NULL)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)` on `risk %||% call_risk()`, and `extra`, an opinion decided for the call elsewhere (a nested call's ask rule, D-267); `risk` is the classification of the same input made for the `tool_call` payload, which the dispatcher and `mcp_serve_exec()` pass only when every `tool_call` hook record the session sees has a `builtin:` source and none returned `modify`; nested calls, `opts$gate` and forwarded worker requests pass none (one classification per final input, D-359) (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`, which names where the run's mode came from, `opts$mode_from`, and while knitting says knitting cannot ask instead of "run interactively"), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
 | `tool_result_message(result, call)` | the `tool_result` message of §4.4 | P06, P20 (through the injected `opts$tool_result`, IC-33) |
 
 Example calls:
@@ -2864,10 +2864,10 @@ v = call_value(call, 1L)
 | `eval_guard(exprs, envir = NULL)` | `eval-guard.R` | `list(blocked = chr, reason = chr(1) \| NULL)` for `q`, `quit`, `readline`, `menu`, `browser`, ... [12 §3.6]; the symbols `q` and `quit` are flagged in any position (a value, a `FUN` argument, `match.fun`, `get`, `do.call`, `base::`; IC-67), a value unless the code assigns it or, looked up from `envir` as R looks up a value, it is bound to data (not a function, promise or active binding; `eval_r()` passes its `envir`, D-252); a literal `[secret:` marker is blocked with the `Sys.getenv()` hint | P09, P18 |
 | `gptr_shim(exprs, envir)` | `eval-guard.R` | rewrites calls headed by `peter`, `gptr_return` to `gptr::` when the symbol `peter` is not visible from `envir`, without binding anything; the recorded code keeps the original text | P09 |
 | `plot_png(recorded, width = gptr.plot_width, height = gptr.plot_height, res = gptr.plot_res)` | `eval-plots.R` | an image block (ragg when installed, else `grDevices::png()`) | P09, P10 (`peter$plot()`) |
-| `env_snapshot(envir, previous = NULL)` [R4] | `env-snapshot.R` | df `name`, `kind` (`value`, `promise`, `active`), `address`, `class`, `bytes` (`env_snap_size(x, envir)`, reused while address, class, shape and `fp` hold; `NA` only for promises, active bindings and missing arguments; D-247), `shape`, `fp` (`fingerprint()`); never forces promises or calls active bindings; `.Random.seed` and `.Last.value` excluded | P09, P16 |
-| `env_view_snapshot(envir, previous = NULL, sizes = TRUE)` [R2][R4] | `env-snapshot.R` | the `env_snapshot()` rows of what code in `envir` reads, plus lgl `own` (bound in `envir` itself): for an overlay (attribute `gptr_overlay`) its own rows, then each lower overlay's and the first non-overlay environment's (the walk of `binding_env()`), a nearer binding shadowing a farther; the `<workspace>` and `<workspace_changes>` blocks and their baselines use it, and the evaluator's object diff (`sizes = FALSE`) marks a modified row whose old binding was not `own` and whose new binding is not `own` or shares that object `(in the source workspace)` (D-252) | P09 |
+| `env_snapshot(envir)` [R4] | `env-snapshot.R` | df `name`, `kind` (`value`, `promise`, `active`), `address`, `class`, `bytes` (`env_size_of(x, envir, facts)`: the store's size of that object version, which the gate and dot facts share, else one `env_snap_size(x, envir)` walk (D-357); `NA` only for promises, active bindings and missing arguments; D-247), `about` (lgl: `bytes` is an estimate, the walk sampled strings past 12.5 million, D-356), `shape`, `fp` (`fingerprint()`); never forces promises or calls active bindings; `.Random.seed` and `.Last.value` excluded; a sized snapshot ends a store generation, so a size unused for two sized snapshots is dropped | P09, P16 |
+| `env_view_snapshot(envir, sizes = TRUE)` [R2][R4] | `env-snapshot.R` | the `env_snapshot()` rows of what code in `envir` reads, plus lgl `own` (bound in `envir` itself): for an overlay (attribute `gptr_overlay`) its own rows, then each lower overlay's and the first non-overlay environment's (the walk of `binding_env()`), a nearer binding shadowing a farther; the `<workspace>` and `<workspace_changes>` blocks and their baselines use it, and the evaluator's object diff (`sizes = FALSE`) marks a modified row whose old binding was not `own` and whose new binding is not `own` or shares that object `(in the source workspace)` (D-252) | P09 |
 | `env_diff(old, new, assigned = character())` | `env-snapshot.R` | `list(added, modified, removed)` (chr each): address, kind or fingerprint changed, or a static assignment target | P09, P16 |
-| `workspace_lines(snapshot, budget = 600L)` | `env-snapshot.R` | chr: at most 12 lines `name  class  shape  size`, largest first, ties by name (promises and active bindings last; D-247), then `(+ n smaller objects: use ls())` | P09 (block), P14 (banner) |
+| `workspace_lines(snapshot, budget = 600L)` | `env-snapshot.R` | chr: at most 12 lines `name  class  shape  size`, largest first, ties by name (promises and active bindings last; D-247; an estimate reads `about 3.4 GB`, as do the change lines, the overwrite note and the `gptr_describe()` header, D-356), then `(+ n smaller objects: use ls())` | P09 (block), P14 (banner) |
 | `changes_lines(diff, snapshot, user_ran, budget = 300L)` | `env-snapshot.R` | chr lines `+ name class shape size`, `~ name`, `- name`, `user ran: <expr>` | P09, P16 |
 | `describe_binding(name, envir, budget = 150L)` [R4] | `env-describe.R` | `gptr_describe()` of a binding looked up in a leaf, never forcing promises (`<promise>`/`<active>`), errors caught (default method) | P09, P14 (`@object`), P13 (state labels) |
 | `user_expr_log(since = NULL, n = 20L)` | `env-history.R` | chr of top-level expressions the user evaluated since `since` (task callback registered while a session with a kept home is live), deparsed and cut to 120 characters | P09 |
@@ -2921,7 +2921,7 @@ diff_lines(c("a", "b"), c("a", "c"))
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `gptr_risk()` (service `risk.classify`) | `perm-classify.R` | §6.6; `kind = "command"` uses `inst/extdata/risk-commands.csv` (G5 levels), `"sql"` and `"python"` keyword classifiers; tables are data (`risk_table(kind)`) extendable by plugins through `setting` specs | P10 (through the service), P22, P23 |
-| `code_targets(code)` | `perm-classify.R` | the one parse walk shared by the classifier and the checkpointer [G7 §3.4]: `list(assign, modify, byref, remove, super, files, unknown, process, calls = df(fn, package, line))` (chr each, never evaluating) | P11, P16 |
+| `code_targets(code)` | `perm-classify.R` | the one parse walk shared by the classifier and the checkpointer [G7 §3.4]: `list(assign, modify, byref, remove, super, files, unknown, process, inplace, calls = df(fn, package, line))` (chr each, never evaluating; `inplace`: the function of every call whose risk row is noted "by reference" and every `[` holding `:=`, whatever it edits, D-357) | P11, P16 |
 | `rule_parse(rule)` | `perm-rules.R` | `list(tool, kind = "any" \| "glob" \| "level" \| "fn" \| "category" \| "sh" \| "sql" \| "secret", value)` or `gptr_error_invalid_argument` | P11, P14 (`/permissions`) |
 | `rule_match(rules, call)` | `perm-rules.R` | `list(deny = chr, ask = chr, allow = chr)`: matched rules; allow `r(fn:..)`/`r(category:..)` match only if **every** flagged call (level >= 1) is covered; deny/ask match if **any** flagged row is, level 0 included; `sh:` and `sql:` specs read a row's command without the `via f(): ` labels of the functions read on the way, and an `sh:` glob ending in ` *` also matches the command alone (D-267) | P11 |
 | `rule_suggest(call)` | `perm-rules.R` | chr(1) rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`), or `NULL` (never for level 4) | P11, P14 |
@@ -3065,7 +3065,7 @@ doc_upsert(site, doc_block_lines(s, 1L, site, 1L))
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `builtin_checkpoints(gptr)` | `ckpt-rewind.R` | registers `checkpointer` specs `objects`, `files`, `state`; command specs `/undo`, `/redo`, `/rewind`, `/checkpoints`; the services `checkpoint.note` and `checkpoint.own_write` | P02 load |
-| `ckpt_predict(code)` | `ckpt-objects.R` | `list(assign, modify, byref, remove, super, files, unknown, process)` (chr each): P11's `code_targets()` reduced to what the object and file checkpointers need | P16 |
+| `ckpt_predict(code)` | `ckpt-objects.R` | `list(assign, modify, byref, remove, super, files, unknown, process, inplace)` (chr each): P11's `code_targets()` reduced to what the object and file checkpointers and `env_size_forget()` need | P16 |
 | `ckpt_store_put(path)` / `ckpt_store_get(hash, dest)` | `ckpt-files.R` | content-addressed blobs `<root>/checkpoints/blobs/<2hex>/<xxh128>[.gz]` | P16, P23 (artifact records) |
 
 The `checkpointer` contract used by the dispatcher (P06) is §10.2.
@@ -3076,13 +3076,21 @@ also ends one, and a scan keeps the records it completed; a filesystem call that
 cut short (D-310). Limits are 2,000 inspected entries and 256 captured files, plus the existing per-file
 and total byte limits. Apply this policy to initial baselines, tool scans and CLI/turn/agent
 boundary scans. There is no unlimited catch-up
-scan. Completed observations distinguish known contents, verified absence and unknown paths;
-a recording scan keeps the unvisited observations of the turn's sync, while a sync (which records
-nothing) replaces the tracker's observations, so only what it observed gives a pre-image or
+scan. `gptr.checkpoint_scan_budget` (0.25 s) is the scan time of one request (prompt turn;
+D-360): the sync that starts a request (its first writing call, which always syncs, or a CLI
+child's `agent_start`) restarts the count, and each scan adds its seconds. Later writing calls
+sync and scan around themselves while the count is within the budget; past it they back up the
+paths they name, and one scan at `agent_end` records the rest when a call skipped its scan, so a
+person's edit between two calls of that request is recorded as the turn's change, as in a
+project over the budget. An incomplete scan spends its request's budget at once, without the
+budget notice. The next request scans per call again. Completed observations distinguish known
+contents, verified absence and unknown paths; a recording scan keeps the unvisited observations
+of the turn's sync, while a sync (which records nothing) replaces the tracker's observations, so
+only what it observed gives a pre-image or
 proves an absence (D-311). A partial inventory is never evidence that an unseen file was created
 or deleted. Discovered changes without valid pre-images are not
 restorable, and coverage notices explain that other changes may not be listed or undoable.
-The coverage notice (and the per-turn scan notice) is for the person, once per project root and
+The coverage notice (and the scan budget notice) is for the person, once per project root and
 process: a console line through `gptr_message_write()`, never a message condition, so it enters
 no tool result (IC-77, D-188); none is shown while knitting or in a Jupyter kernel, where it
 would fill the rendered output (D-314). It names the project folder, not its absolute path, and
@@ -3090,7 +3098,7 @@ says in plain words why the scan stopped (D-354).
 A fragment's coverage is `"partial"` only when a scan of its interval stopped early (time,
 entries, an interrupt, an unreadable directory or path); a capture limit leaves it complete and
 its uncaptured changes are rows without a pre-image. The files checkpointer skips R code whose
-classified effects are only reads and object writes, and a per-turn scan follows only a turn
+classified effects are only reads and object writes, and an `agent_end` scan follows only a turn
 that could write files: a file-capable call or, on a CLI route in `auto` or `yolo`, a step
 outside R (an informational tool event; below `auto` Codex's sandbox is read-only, §8.5). So
 R-only and text-only turns carry no coverage item on every route (D-312, D-353).
@@ -3447,7 +3455,7 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   `kill_all()` after the grace period [07 §3.9-3.10].
 - **`cli-codex`** (provider `codex`, aliases `codex`, `codex-cli`). One `codex exec --json --ignore-user-config
   --skip-git-repo-check -m <full id> -C <wd> -c mcp_servers.gptr.command="<Rscript>" -c
-  mcp_servers.gptr.args=["--vanilla","<mcp_relay.R>","<mailbox>","<seconds>"] -c
+  mcp_servers.gptr.args=["--vanilla","--default-packages=base","<mcp_relay.R>","<mailbox>","<seconds>"] -c
   mcp_servers.gptr.default_tools_approval_mode="approve" -c mcp_servers.gptr.required=true -c
   mcp_servers.gptr.startup_timeout_sec=60 -c mcp_servers.gptr.tool_timeout_sec=3600 --sandbox <read-only |
   workspace-write> -` per turn (resume: `codex exec resume <thread> --json ... -c sandbox_mode=<mode> -`, IC-65), the
@@ -5377,7 +5385,7 @@ document are exact.
   `gptr_error_cli_version`. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with
   `gptr_error_billing`. The wire log is per session (`cache/tmp/wire-<session id>.jsonl`).
 - **codex** argv per turn: `codex exec --json --ignore-user-config --skip-git-repo-check -m <full id> -C <wd>
-  -c mcp_servers.gptr.command="<Rscript>" -c mcp_servers.gptr.args=["--vanilla","<mcp_relay.R>","<mailbox>","<seconds>"]
+  -c mcp_servers.gptr.command="<Rscript>" -c mcp_servers.gptr.args=["--vanilla","--default-packages=base","<mcp_relay.R>","<mailbox>","<seconds>"]
   -c mcp_servers.gptr.default_tools_approval_mode="approve" -c mcp_servers.gptr.required=true
   -c mcp_servers.gptr.startup_timeout_sec=60 -c mcp_servers.gptr.tool_timeout_sec=3600 --sandbox <mode> -` (P26
   IC-79: the stdio relay replaced `mcp_servers.gptr.url`, `bearer_token_env_var` and `GPTR_MCP_TOKEN`); resume: `codex exec resume <thread> --json ...
@@ -5855,8 +5863,9 @@ totals line names the model and the context left.
 
 **IC-79 Codex stdio relay and the CLI tool set** (P26 Task 9).
 
-- Codex reaches gptr only through `inst/gptr/mcp_relay.R` (base R): Codex starts `Rscript --vanilla <relay>
-  <mailbox> <seconds>` (IC-65 argv; paths as TOML basic strings with `\` and `"` escaped; `<seconds>` is
+- Codex reaches gptr only through `inst/gptr/mcp_relay.R` (base R): Codex starts `Rscript --vanilla
+  --default-packages=base <relay> <mailbox> <seconds>` (IC-65 argv; base alone attached, as the relay
+  calls base functions only, D-362; paths as TOML basic strings with `\` and `"` escaped; `<seconds>` is
   `gptr.cli_turn_timeout`). Each exec gets a fresh 0700 mailbox under `tempdir()`. The relay copies one stdin line
   to `<mailbox>/req` and waits for `<mailbox>/resp` (both appear by a rename; an empty line answers a notification
   and prints nothing); it is sequential and exits at stdin EOF, when the mailbox is gone, or when an answer takes

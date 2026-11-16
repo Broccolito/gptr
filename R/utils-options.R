@@ -635,7 +635,11 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.critical_guard` (logical, `TRUE`): level-4 actions ask even in `auto` mode.
 #' - `gptr.secret_guard` (logical, `TRUE`): reads of registered secrets ask even in `auto`
 #'   mode; [gptr_security] lists the reads.
-#' - `gptr.protect_size` (bytes, `1e8`): overwriting a larger object is a level-3 action.
+#' - `gptr.protect_size` (bytes, `1e8`): overwriting a larger object is a level-3 action. Each
+#'   version of an object is sized once and the size reused, so an edit in place made outside
+#'   Peter's calls (a console `:=` on a table inside a list) counts once the object is rebound or
+#'   Peter's code changes it. An object with more than 12.5 million strings is sized from a
+#'   sample of them: an estimate, at or above its true size on average.
 #' - `gptr.plan_handoff` (logical, `TRUE`): hand the plan a `plan` run proposes, once, to the next
 #'   top-level `peter()` call from the same environment, within an hour and in another mode;
 #'   another `peter()` call first, or a next call inside a loop or a run, discards it.
@@ -668,7 +672,8 @@ s3_register = function(generic, class, method = NULL) {
 #'   `1e8`): the largest file the first scan stores, and what one scan stores in all.
 #' - `gptr.checkpoint_capture_max` (bytes, `5e7`): a larger changed file gets no stored copy.
 #' - `gptr.checkpoint_scan_budget` (seconds, `0.25`): project scan time per request; past it,
-#'   its calls back up the files they name and one scan at its end records the rest.
+#'   its calls back up the files they name and one scan at its end records the rest, edits you
+#'   made to the project meanwhile included. An incomplete scan spends the budget at once.
 #' - `gptr.checkpoint_scan_timeout` (seconds, `2`): the longest an automatic file scan runs.
 #'   Scans inspect at most 2,000 entries and back up at most 256 files within the byte limits
 #'   above. Incomplete scans are reported; unvisited files have no automatic undo coverage.

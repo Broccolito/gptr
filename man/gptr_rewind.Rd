@@ -55,7 +55,8 @@ session.
 abandoned branches): \code{turn}; \code{id}, the last entry of the turn (pass it as \code{to} to
 \code{gptr_rewind()}); \code{time}, when the prompt was sent (local time); \code{prompt} (its first 60
 characters); \code{objects} and \code{files}, \code{"changed/restorable"} counts; \code{held_mb} and \code{disk_mb},
-megabytes (2^20 bytes) of object pre-images held in memory and on disk; and \code{branch}
+megabytes (2^20 bytes) of object pre-images held in memory and on disk (for an object with
+more than 12.5 million strings an estimate, at or above the truth on average); and \code{branch}
 (\code{"active"} or \code{"abandoned"}).
 }
 \details{
@@ -97,7 +98,8 @@ restored.
 \item \code{gptr.checkpoint_track_total} (\code{1e8}): bytes one automatic scan stores in all.
 \item \code{gptr.checkpoint_capture_max} (\code{5e7}): bytes; a larger changed file gets no stored copy.
 \item \code{gptr.checkpoint_scan_budget} (\code{0.25}): seconds of project scans per request; past them,
-its calls back up the files they name and one scan at its end records the rest.
+its calls back up the files they name and one scan at its end records the rest, edits you
+made to the project meanwhile included.
 \item \code{gptr.checkpoint_scan_timeout} (\code{2}): seconds; the longest an automatic scan runs. An
 incomplete scan also spends its request's scan budget.
 \item \code{gptr.checkpoint_rng} (\code{TRUE}): report changes of the random-number state.

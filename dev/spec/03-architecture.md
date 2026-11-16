@@ -331,7 +331,7 @@ declares, if any.
 | `utils-paths.R` | L0 | project root (with the `gptr.project_root` override), `gptr_user_dir(which)` = `tools::R_user_dir("gptr", which)`, `user_home()`, `app_config_dir()` [IC-63], `path_key()`, `rscript_path()` [IC-60], workspace root (`.gptr` or `tempdir()/gptr`), atomic write (temp + `file.rename` with retries and an in-place fallback), the leaf `save_rds()`/`serialize_leaf()` wrappers that always pass `ascii = FALSE` (R7), path classes (incl. `control`, `instructions` [IC-54]), Windows reserved names | - | P01 |
 | `utils-text.R` | L0 | head 40% / tail 60% truncation to a token budget, spill files, the `out(id)` store (per session, last 20 results each [IC-71]), ANSI/OSC and carriage-return cleanup (lines kept whole; a cut continues lines over 400 characters as pieces, D-345, and a helper view's cut shows their first 400, D-348) | - | P01 |
 | `utils-tokens.R` | L0 | class-aware estimator `est_tokens(x, class)` (G2 constants), image-token formulas, per-session EWMA multiplier | - | P01 |
-| `utils-size.R` | L0 | `env_snap_size(x, home, shared)`, the one size rule (each part and string once; code, top-level environments, the home and running frames 0; long lists and environments sampled) and `env_compact_seq()` [D-247] | - | P09 |
+| `utils-size.R` | L0 | `env_snap_size(x, home, shared)`, the one size rule (each part and string once; code, top-level environments, the home and running frames 0; long lists and environments sampled; a walk reads at most 12.5 million strings, then samples each character vector's strings and marks the size `about` [D-356]) and `env_compact_seq()` [D-247]; the size store, one size per object version shared by the snapshot, the gate and dot facts: `env_size_of(x, home, facts, fresh)` and `env_size_forget(call, envir)` on exit of every tool execution [D-357] | - | P09 |
 | `json-encode.R` | L0 | `json_encode()`, once-serialised entries (`json_verbatim`), bodies assembled by concatenation | - | P01 |
 | `json-partial.R` | L0 | incremental partial-JSON scanner for streamed tool arguments (throttled previews) | - | P01 |
 | `json-schema.R` | L0 | argument validation and explicit coercion (INFRA-09); one-line R-signature rendering of schemas | - | P01 |
@@ -2123,10 +2123,15 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   cannot be cut short [D-310]. Limits are 2,000 inspected entries and 256 captured files plus the
   existing per-file and total byte caps. The
   same policy applies before and after tools and at CLI, turn and agent boundaries; there is no
-  unlimited catch-up scan. A recording scan keeps the unvisited observations of the turn's sync
-  and never infers creation or deletion from an unobserved path; a sync's observations replace the
-  tracker's, so a path it did not reach has no pre-image or proven absence from before it
-  [D-311]. Automatic file undo covers only changes with sufficient observations and valid
+  unlimited catch-up scan. `gptr.checkpoint_scan_budget` (0.25 s) is the scan time of one
+  request: writing calls scan around themselves while the request's scans stay within it (small
+  projects keep per-call scans and exact attribution of the person's edits); past it they back up
+  the paths they name and one scan at the request's end records the rest; an incomplete scan
+  spends the budget at once; the next request starts again [D-360]. A recording scan keeps the
+  unvisited observations of the turn's sync and never infers creation or deletion from an
+  unobserved path; a sync's observations replace the tracker's, so a path it did not reach has
+  no pre-image or proven absence from before it [D-311]. Automatic file undo covers only changes
+  with sufficient observations and valid
   pre-images; coverage is partial only where a scan stopped early, and R code that can write no
   file and turns without a file-capable call or, on a CLI route in auto or yolo, a step outside R
   get no file record [D-312, D-353]. Predicted
@@ -2805,7 +2810,7 @@ Anthropic before advertising the route (policy status UNCERTAIN) [07, J-cran].
 ```text
 codex exec --json --ignore-user-config --skip-git-repo-check -m <full id> -C <wd>
       -c mcp_servers.gptr.command="<Rscript>"
-      -c mcp_servers.gptr.args=["--vanilla","<mcp_relay.R>","<mailbox>","<seconds>"]
+      -c mcp_servers.gptr.args=["--vanilla","--default-packages=base","<mcp_relay.R>","<mailbox>","<seconds>"]
       -c mcp_servers.gptr.default_tools_approval_mode="approve"
       -c mcp_servers.gptr.required=true
       -c mcp_servers.gptr.startup_timeout_sec=60
@@ -2825,7 +2830,8 @@ stdio relay `inst/gptr/mcp_relay.R` (base R, so in every installation), which pa
 private mailbox under `tempdir()` to a reactor task of the turn's run; the session's frozen tools answer through
 the claude route's dispatcher, `tools/call` on the run's tool FIFO, so Codex evaluates R in the live session through
 the permission gate, which can prompt at the console because the call arrives in R [IC-79]. Each exec starts a
-relay (an Rscript start-up of about 0.3-1 s; each message adds about 30 ms). (Evidence level: the verified
+relay (an Rscript start-up with base alone attached, 0.13-0.24 s to `initialize` answered under load
+[D-362]; each message adds about 30 ms). (Evidence level: the verified
 model-driven MCP call used an Rscript stdio server under `--sandbox read-only`,
 `default_tools_approval_mode = "approve"` and `required = true` [08 §2.G]; a `GPTR_LIVE_TESTS` test runs Codex in a
 non-git temporary directory and requires it to call the gptr `r` tool.) Permission mapping (headless exec cannot prompt) [IC-65]: `plan`,

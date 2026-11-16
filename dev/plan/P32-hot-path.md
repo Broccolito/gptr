@@ -55,7 +55,7 @@ IC-53 (all items) and the mode x level table of `03` section 6.8.1 do not change
 `gptr.protect_size` keeps its rule and default; what changes is which walk supplies the number
 (D-357), and that is written into its row. Next free decision: D-356 (D-355 is the last used).
 
-**Depends on:** P28, P30 (merged); main at 5e2992b or later. **Milestone:** 1.0.2. T1-T4 remove
+**Depends on:** P28, P30 (merged); main at 5e2992b or later. **Milestone:** 1.1.0. T1-T4 remove
 about 92 of the 108 s and fix the served-route risk binding; they may ship alone.
 
 ## Global constraints
@@ -220,10 +220,11 @@ than 12.5 million strings costs one bounded walk: 0.4 s for the T03 list, up to 
 The gate reads code because in-process R cannot be sandboxed (`03` line 1562): 1.5-8 ms for a
 one-liner, 30-50 ms for 25 lines, where Codex's prefix match costs about 1 ms and its sandboxed
 spawn 63 ms. R has no write barrier: two snapshots per writing call at about 30 us a binding.
-One project scan costs 0.3-0.45 ms per entry before item 6: at most the scan budget plus two
-scans per writing request, and one scan at the start of every CLI-route request, pure reads
-included. On the Codex route each request starts a new `codex exec` and relay; a call's
-transport is 26 ms.
+One project scan cost 0.3-0.45 ms per entry before item 6 and costs about 0.035 ms per entry of
+linked inputs (T03's root) and 0.15-0.17 ms per regular file after it (T7, D-366): at most the
+scan budget plus two scans per writing request, and one scan at the start of every CLI-route
+request, pure reads included. On the Codex route each request starts a new `codex exec` and
+relay; a call's transport is 26 ms.
 
 **Not in this plan** (each with the reason):
 
