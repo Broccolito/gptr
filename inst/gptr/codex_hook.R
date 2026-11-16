@@ -1,13 +1,14 @@
 # codex_hook.R -- gptr's Codex hook for coaching sessions (08 section 3.7).
 #
-# Codex runs `Rscript --vanilla codex_hook.R <mode> <log> <lib>` for its SessionStart and
-# PreToolUse events, with the event's JSON on stdin. SessionStart appends a start line to <log>.
-# PreToolUse allows a tool only in mode "run" and only when its name starts with mcp__gptr__.
-# Anything else is denied: a line with the tool's name and the time is appended to <log>, and
-# Codex's PreToolUse decision "deny" with its reason goes to stdout with exit status 0, which no
-# shell changes (Windows PowerShell, Codex's shell there, reports a status of 2 as 1, which does
-# not block). The input is parsed with jsonlite, loaded from <lib>, and never evaluated; input
-# that cannot be read is denied with no tool name, so a hook that cannot work fails closed.
+# Codex runs `Rscript --vanilla --default-packages=base codex_hook.R <mode> <log> <lib>` for its
+# SessionStart and PreToolUse events, with the event's JSON on stdin. SessionStart appends a start
+# line to <log>. PreToolUse allows a tool only in mode "run" and only when its name starts with
+# mcp__gptr__. Anything else is denied: a line with the tool's name and the time is appended to
+# <log>, and Codex's PreToolUse decision "deny" with its reason goes to stdout with exit status 0,
+# which no shell changes (Windows PowerShell, Codex's shell there, reports a status of 2 as 1,
+# which does not block). The input is parsed with jsonlite, loaded from <lib>, and never
+# evaluated; input that cannot be read is denied with no tool name, so a hook that cannot work
+# fails closed. Other than jsonlite, the script calls base functions only.
 
 args = commandArgs(trailingOnly = TRUE)
 mode = args[1L]

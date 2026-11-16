@@ -1544,8 +1544,8 @@ test_that("a confined exec is ephemeral, read-only, without Codex's own tools, a
   expect_identical(utils::tail(coach, 3L), c("--output-schema", "/r/schema.json", "-"))
   hook = codex_hook_command(coach, "PreToolUse")
   expect_identical(codex_hook_command(coach, "SessionStart"), hook)
-  expect_match(hook, "codex_hook.R", fixed = TRUE)
-  expect_match(hook, "'coach' '/r/hook.log'", fixed = TRUE)
+  expect_match(hook,
+               "'--vanilla' '--default-packages=base' '[^']*codex_hook.R' 'coach' '/r/hook.log'")
   expect_true(any(grepl("timeout=30}]}]$", coach)))
   run = pcli_codex_args("gpt-5.5", "/w", "workspace-write", "/r", role = "run")
   relay = codex_relay_args("/r")
@@ -1662,8 +1662,8 @@ run_codex_hook = function(input, mode = "run", log = tempfile("hook-", fileext =
   inp = tempfile("hook-in-")
   writeBin(charToRaw(input), inp)
   hook = system.file("gptr", "codex_hook.R", package = "gptr", mustWork = TRUE)
-  res = processx::run(rscript_path(), c("--vanilla", hook, mode, log, lib), stdin = inp,
-                      error_on_status = FALSE)
+  res = processx::run(rscript_path(), c("--vanilla", "--default-packages=base", hook, mode, log,
+                                        lib), stdin = inp, error_on_status = FALSE)
   rows = if (file.exists(log)) lapply(readLines(log, warn = FALSE), json_decode) else list()
   out = if (nzchar(trimws(res$stdout))) json_decode(res$stdout)$hookSpecificOutput
   list(status = res$status, stdout = res$stdout, rows = rows, decision = out)
@@ -1759,7 +1759,8 @@ test_that("on Windows the hook command holds no quote: short paths, or a refusal
                         pcli_cmd_paths = function(paths) if (length(paths) == 4L) short)
   hook = codex_hook_command(pcli_codex_hooks("coach", "C:/Users/Jane Doe/T/gptr-codex-1"),
                             "PreToolUse")
-  expect_identical(hook, paste(short[[1L]], "--vanilla", short[[2L]], "coach",
+  expect_identical(hook, paste(short[[1L]], "--vanilla", "--default-packages=base", short[[2L]],
+                               "coach",
                                file.path(short[[3L]], "hook.log"), short[[4L]]))
   local_mocked_bindings(pcli_cmd_paths = function(paths) NULL)
   expect_error(pcli_codex_hooks("run", "C:/Users/Jane Doe/T/gptr-codex-1"),

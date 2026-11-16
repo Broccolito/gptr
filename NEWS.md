@@ -36,7 +36,8 @@ workspace shaped like task T03 of the gptr-bench benchmark, a list of 300 tables
   waits 5 ms after each step: at about 300 messages a turn takes 151 ms of gptr's time instead
   of 350 ms.
 * The Codex route starts gptr's relay with only the base package attached: 0.13 s instead of
-  0.33 s per request.
+  0.33 s per request. A coaching session's Codex hook starts the same way: 0.25 s instead of
+  0.5 s per Codex tool call.
 
 ## Bug fixes
 

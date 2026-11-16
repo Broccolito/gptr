@@ -10908,6 +10908,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   --default-packages=base <mcp_relay.R> <mailbox> <seconds>`. The relay calls base functions only
   (`codetools::findGlobals()`), so attaching no other package changes nothing it does; a later
   edit that needs another package calls it as `pkg::f()`.
+- Rule (`pcli_codex_hooks()`, review fix): a coaching exec's hook, which Codex runs on
+  SessionStart and every PreToolUse, starts the same way (`... --default-packages=base
+  <codex_hook.R> <role> <log> <lib>`); besides `jsonlite`, loaded by namespace, it calls base
+  functions only. One hook run: 0.48-0.52 to 0.25-0.28 s (median of 10, interleaved, load 63-167),
+  the same allow and deny.
 - Why: Rscript attached stats, graphics, grDevices, utils, datasets and methods, which the relay
   never uses, once per request on the Codex route: relay spawn to `initialize` answered went from
   0.329 to 0.131 s (median of 10, interleaved, instant responder, load 490).
@@ -10916,8 +10921,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: cli-codex "the codex argv starts gptr's stdio relay; the resume form uses -c
   sandbox_mode=" and the exact-argv tests through `codex_relay_args()`; "without httpuv, later and
   openssl a fake codex evaluates R in the live session" (the relay started with base alone answers
-  initialize, tools/list and the call); the relay script test starts it the same way. Evidence:
-  progress/P32.md Task 10.
+  initialize, tools/list and the call); the relay script test starts it the same way; the hook
+  tests "a confined exec is ephemeral, read-only, without Codex's own tools, and hooked", "the
+  Codex hook writes its start line and lets a run use only gptr's tools" (run with base alone) and
+  the Windows argv test. Evidence: progress/P32.md Task 10 and "Review fixes - loop".
 
 ## D-363 - P32 Decision battery: condensed T03 inputs, the 13-million-string object in one mode (2026-11-16)
 - Rule: `t03_r2` and `t03_r3` are condensed T03-shaped codes (the dead branch that would build

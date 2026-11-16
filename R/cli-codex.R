@@ -99,11 +99,12 @@ pcli_codex_args = function(model_id, wd, sandbox, relay, resume = NULL, role = N
 }
 
 #' gptr's hook (inst/gptr/codex_hook.R) for SessionStart, which writes the start line, and
-#' PreToolUse, which allows only gptr's tools in a run and nothing for a coach; its log is in the
-#' exec's private folder. The command runs through Codex's shell (`$SHELL -c`; PowerShell or
-#' cmd.exe on Windows, where a line with quotes does not run as written, so there it has none:
-#' short paths), and the hook denies on stdout with status 0, which no shell changes; the bypass
-#' flag runs it without Codex's persisted hook trust (08 3.7).
+#' PreToolUse, which allows only gptr's tools in a run and nothing for a coach; it attaches base
+#' alone, like the relay (D-362), and its log is in the exec's private folder. The command runs
+#' through Codex's shell (`$SHELL -c`; PowerShell or cmd.exe on Windows, where a line with quotes
+#' does not run as written, so there it has none: short paths), and the hook denies on stdout with
+#' status 0, which no shell changes; the bypass flag runs it without Codex's persisted hook trust
+#' (08 3.7).
 #' @noRd
 pcli_codex_hooks = function(role, dir) {
   hook = system.file("gptr", "codex_hook.R", package = "gptr", mustWork = TRUE)
@@ -118,8 +119,8 @@ pcli_codex_hooks = function(role, dir) {
                         "one."),
                  "model_refused", reason = "cli_preflight", cli = "codex")
   }
-  argv = c(paths[[1L]], "--vanilla", paths[[2L]], role, file.path(paths[[3L]], "hook.log"),
-           paths[[4L]])
+  argv = c(paths[[1L]], "--vanilla", "--default-packages=base", paths[[2L]], role,
+           file.path(paths[[3L]], "hook.log"), paths[[4L]])
   cmd = paste(if (win) argv else shQuote(argv, "sh"), collapse = " ")
   value = paste0("=[{hooks=[{type=\"command\",command=", pcli_toml(cmd), ",timeout=30}]}]")
   c("-c", paste0("hooks.SessionStart", value), "-c", paste0("hooks.PreToolUse", value),
