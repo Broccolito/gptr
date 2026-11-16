@@ -166,6 +166,24 @@ test_that("gptr_user_dir() is tools::R_user_dir() and is created only on request
   expect_error(gptr_user_dir("home"), class = "gptr_error_invalid_argument")
 })
 
+test_that("gptr_user_dir() asks R_user_dir() again only when a variable it reads changes (P32)", {
+  n = 0L
+  real = tools::R_user_dir
+  local_mocked_bindings(R_user_dir = function(...) {
+    n <<- n + 1L
+    real(...)
+  }, .package = "tools")
+  base = withr::local_tempdir()
+  withr::local_envvar(R_USER_CONFIG_DIR = file.path(base, "one"))
+  expect_identical(gptr_user_dir(), file.path(base, "one", "R", "gptr"))
+  gptr_user_dir()
+  expect_identical(n, 1L)
+  withr::local_envvar(R_USER_CONFIG_DIR = file.path(base, "two"))
+  expect_identical(gptr_user_dir(), file.path(base, "two", "R", "gptr"))
+  expect_identical(gptr_user_dir("cache"), tools::R_user_dir("gptr", "cache"))
+  expect_identical(n, 4L)
+})
+
 test_that("path_norm() resolves symlinked ancestors, '..' and '~' for missing paths", {
   dir = path_norm(withr::local_tempdir())
   expect_identical(path_norm(file.path(dir, "a", "..", "b", "c.txt")), file.path(dir, "b", "c.txt"))

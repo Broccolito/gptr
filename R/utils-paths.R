@@ -143,12 +143,21 @@ app_config_dir = function(app) {
   file.path(gsub("\\", "/", base, fixed = TRUE), app)
 }
 
-#' gptr's R_user_dir() folder; created only when `create = TRUE`
+#' gptr's R_user_dir() folder; created only when `create = TRUE`. R_user_dir() resolves "~" on
+#' each call, so its answer is kept until a variable it reads changes.
 #' @noRd
 gptr_user_dir = function(which = c("config", "cache", "data"), create = FALSE) {
   which = check_choice(which, c("config", "cache", "data"), "which")
   check_flag(create, "create")
-  dir = tools::R_user_dir("gptr", which)
+  key = c(path.expand("~"), Sys.getenv(c("R_USER_CONFIG_DIR", "R_USER_CACHE_DIR",
+                                         "R_USER_DATA_DIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
+                                         "XDG_DATA_HOME", "APPDATA", "LOCALAPPDATA")))
+  kept = the$user_dir[[which]]
+  if (!identical(kept$key, key)) {
+    kept = list(key = key, dir = tools::R_user_dir("gptr", which))
+    the$user_dir[[which]] = kept
+  }
+  dir = kept$dir
   if (create) dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   dir
 }
