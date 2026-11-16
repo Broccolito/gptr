@@ -357,6 +357,37 @@ test_that("path_class() classes a vector as it classes each path alone, in bound
   expect_identical(path_class(c(p, bytes), root), rep(c("workspace", "protected"), 2L))
 })
 
+test_that("path_norm() of a vector equals path_norm_one() of each path (P32 review)", {
+  raw = withr::local_tempdir()
+  dir.create(file.path(raw, "sub"))
+  writeLines("x", file.path(raw, "f.txt"))
+  writeLines("x", fs_path(file.path(raw, "caf\u00e9")))
+  p = c(file.path(raw, "f.txt"), file.path(raw, "F.TXT"), paste0(raw, "/sub/"),
+        gsub("/", "\\", file.path(raw, "sub"), fixed = TRUE), file.path(raw, "sub", "..", "f.txt"),
+        file.path(raw, "no", "..", "x"), file.path(raw, "caf\u00e9"), "/", "~", "~/x", "rel.R",
+        "C:/x", "C:\\", "//host/share")
+  if (!is_windows()) {
+    file.symlink(file.path(raw, "f.txt"), file.path(raw, "ln"))
+    file.symlink(file.path(raw, "gone"), file.path(raw, "dl"))
+    p = c(p, file.path(raw, "ln"), file.path(raw, "dl"), file.path(raw, "ln", ".."))
+  }
+  expect_identical(path_norm(p), vapply(p, path_norm_one, "", USE.NAMES = FALSE))
+  local_name_locale()
+  expect_identical(path_norm(p), vapply(p, path_norm_one, "", USE.NAMES = FALSE))
+})
+
+test_that("path_class() resolves existing paths with no call per path (P32 review)", {
+  root = local_project()
+  calls = function(k) {
+    full = file.path(root, sprintf("f%03d.R", seq_len(k)))
+    file.create(full)
+    n = local_calls(c("path_norm_one", "path_lexical"))
+    expect_identical(unique(path_class(full, root)), "workspace")
+    n()
+  }
+  expect_identical(calls(2L), calls(40L))
+})
+
 test_that("path_class protects local credential directories and env files", {
   root = path_norm(withr::local_tempdir())
   paths = c(".secrets", ".secrets/jev-key.env", "keys/llm-passwords.env")

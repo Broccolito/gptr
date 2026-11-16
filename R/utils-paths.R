@@ -253,11 +253,19 @@ path_sans_ext = function(path) {
   path
 }
 
-#' Normalised absolute paths (vectorised)
+#' Normalised absolute paths (vectorised): an existing absolute path climbs no ancestor in
+#' path_norm_one(), so one normalizePath() call resolves them all; a result ending in "/" is
+#' left to path_norm_one(), which trims it
 #' @noRd
 path_norm = function(path) {
   check_strings(path, "path")
-  vapply(path, path_norm_one, "", USE.NAMES = FALSE)
+  p = gsub("\\", "/", fs_path(path), fixed = TRUE)
+  out = rep(NA_character_, length(p))
+  fast = is_abs_path(p) & file.exists(p)
+  out[fast] = normalizePath(p[fast], winslash = "/", mustWork = FALSE)
+  slow = is.na(out) | endsWith(out, "/")
+  out[slow] = vapply(path[slow], path_norm_one, "", USE.NAMES = FALSE)
+  as_utf8(out)
 }
 
 #' Key for comparing paths: normalised, lower-cased on Windows and macOS (IC-51)
@@ -443,8 +451,11 @@ path_class = function(path, root = project_root()) {
   rel = !is_abs_path(expanded) & !startsWith(expanded, "~")
   expanded[rel] = file.path(root, expanded[rel])
   resolved = path_class_key(path_key(expanded), context)
-  # Both the requested pathname and its symlink target carry policy authority.
-  lexical = vapply(expanded, path_lexical, "", USE.NAMES = FALSE)
+  # Both the requested pathname and its symlink target carry policy authority. A path with no
+  # empty, "." or ".." part is lexical already.
+  lexical = as_utf8(expanded)
+  odd = grepl("//|/$|(^|/)[.][.]?(/|$)", lexical)
+  lexical[odd] = vapply(lexical[odd], path_lexical, "", USE.NAMES = FALSE)
   if (is_windows() || is_macos()) lexical = tolower(lexical)
   guarded = c("control", "critical", "protected", "instructions")
   rank = pmin(match(path_class_key(lexical, context), guarded), match(resolved, guarded),

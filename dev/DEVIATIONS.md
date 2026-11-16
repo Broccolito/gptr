@@ -10972,8 +10972,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   entry in main's order. A file is still checked for a link, linked parents and its type
   immediately before it is read.
 - Bar: T03's 1,231-entry root (linked inputs) 4.9-6.0x a scan. Trees of regular files gain
-  1.6-1.95x, held back by `path_class()`'s per-path cost and by hashing, neither changed here.
-  The code went ahead on the T03 tree.
+  1.6-1.95x, held back by `path_class()`'s per-path cost and by hashing. The code went ahead on
+  the T03 tree. Review fix: `path_norm()` resolves existing absolute paths in one
+  `normalizePath()` call and `path_class()` gives a path with no empty, "." or ".." part to
+  `path_lexical()` no more (results identical); a scan of 1,231 regular files 0.16 -> 0.12 s.
 - Counts: one `ckpt_regular()` call per folder plus one per captured file (the check before
   reading). `ckpt_is_link()` calls are a fixed number per folder plus three per captured file.
   The plan's "one call per directory" is read as "no call per entry".
