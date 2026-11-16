@@ -10962,7 +10962,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (PERF-5): the time ratio pairs N / 4 and N tables, both over the 12.5 million string
   budget: 75 and 300 by default, 307 and 1,231 with `--full`. The plan's 300 and 1,231 need the
   1,231-table list, about 6 GB to walk on 5e2992b. The exact cases (the T03 list at 50 tables, 4e6
-  strings) are compared with bytes recorded from 5e2992b in `run.R`.
+  strings) are compared with bytes recorded from 5e2992b in `run.R`. Past 10,000 parts (1,231
+  tables, not 300) D-247's list sampling reads its samples' strings again to extrapolate, so the
+  `--full` ratio was 1.7-2.5 in T2's prototype against the bar of 1.5; that read is D-247's
+  arithmetic (dropping it changes bytes under the budget, the `many` case of test-utils-size), so
+  it stays and the `--full` bar waits for a run of about 12 GB (review item K3).
 - Rule (PERF-7): the ten-call request also runs at 300 entries, and "scan seconds at most the
   budget plus two scans" holds at every size. Under load a 600-entry scan passes the 0.25 s
   budget, 5e2992b switches to per-turn scans for the session, and its valley moves to smaller
