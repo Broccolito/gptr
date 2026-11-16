@@ -96,9 +96,10 @@ restored.
 \item \code{gptr.checkpoint_track_file_max} (\code{1e6}): bytes; the largest file the first scan stores.
 \item \code{gptr.checkpoint_track_total} (\code{1e8}): bytes one automatic scan stores in all.
 \item \code{gptr.checkpoint_capture_max} (\code{5e7}): bytes; a larger changed file gets no stored copy.
-\item \code{gptr.checkpoint_scan_budget} (\code{0.25}): seconds; slower scans switch to one scan per turn.
+\item \code{gptr.checkpoint_scan_budget} (\code{0.25}): seconds of project scans per request; past them,
+its calls back up the files they name and one scan at its end records the rest.
 \item \code{gptr.checkpoint_scan_timeout} (\code{2}): seconds; the longest an automatic scan runs. An
-incomplete scan also switches to one scan per turn.
+incomplete scan also spends its request's scan budget.
 \item \code{gptr.checkpoint_rng} (\code{TRUE}): report changes of the random-number state.
 \item \code{gptr.checkpoint_close_devices} (\code{FALSE}): close graphics devices an undone turn opened.
 }

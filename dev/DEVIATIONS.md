@@ -10792,6 +10792,63 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: utils-size (6), env-snapshot (3), agent-dispatch (3), copy-ckpt (1), perm-classify,
   ckpt-objects (`inplace`); perm-battery unchanged. Evidence: progress/P32.md Task 3.
 
+## D-358 - P32 Served calls bind the final risk (2026-11-16)
+- Rule: `mcp_serve_exec()` classifies a served call with `call_risk()`, so an invalid or failing
+  risk record is level 3 ("unknown") as on the native route; only `r` with no run keeps the
+  classifier in the served environment (`call_risk()` reads the run's). When a `tool_call` hook
+  changed the input and the idle gate decides, the input is classified again before
+  `mcp_gate_idle()` reads it. After the gate `call$risk = d$risk %||% call$risk`, as
+  `dispatch_steps()` binds `dec$risk`: the checkpointers, the approved level and the nested gates
+  read the final risk.
+- Rule (extent): the plan names a run; a non-r tool served with no run is classified by
+  `call_risk()` too (it needs no run), so no served record is gated unchecked.
+- Why: the checkpointers read the pre-hook risk, so a hook that rewrote a read into file-writing
+  code skipped the files checkpointer and `gptr_rewind()` left the file; the idle gate read it
+  too, a record without a level was gated at 2 and a failing one ended the request with an
+  internal error. IC-53 items 5 and 7.
+- Contract-visible: none (the served route meets IC-53 items 5 and 7).
+- Tests: test-mcp-server "a served call binds the risk of its final input, with a pump and idle
+  (D-358)", "a served tool whose risk record is invalid or fails is gated at level 3 (D-358)";
+  perm-battery unchanged; helper-arch.R admits the edge mcp -> `call_risk()`. Evidence:
+  progress/P32.md Task 4.
+
+## D-359 - P32 One classification per final input (2026-11-16)
+- Rule: `perm_check(call, run, extra = NULL, risk = NULL)`; `perm_decide()` uses `risk %||%
+  call_risk()`. `tool_call_hook()` keeps the payload's risk as `call$risk` only when every
+  `tool_call` hook record the session sees has a `builtin:` source (`ev_builtin_only()`, read
+  before the chain runs; lazy and non-matching records count) and none returned `modify`, else
+  NULL; `dispatch_steps()` passes it, `mcp_serve_exec()` classifies a NULL one again for both
+  gates. A policy `modify`, nested calls, `opts$gate` and forwarded worker requests classify as
+  before. No counter, no state.
+- Rule (extent): the idle served gate classifies again after any other hook, not only after a
+  changed input (D-358), so a hook that assigns into the home is not gated on the pre-hook risk.
+- Why: each call was classified twice on the same input and state (PERF-3: 2 to 1 per call).
+- Contract-visible: `perm_check()` gains `risk` (`04` line 2762, IC-04 wording; T11).
+- Tests: test-agent-dispatch (2 tests, the forwarded request's count), test-mcp-server (1);
+  perm-battery unchanged. Evidence: progress/P32.md Task 5.
+
+## D-360 - P32 The scan budget is per request (2026-11-16)
+- Rule (amends D-310's "the scan's own time", D-312's per-turn scan, D-353):
+  `gptr.checkpoint_scan_budget` (0.25 s) is the scan time of one request (prompt turn). The
+  tracker adds each scan's seconds to `spent`, restarted by the sync that starts a request (its
+  first writing call, which always syncs, or a CLI child's `agent_start`). Later calls sync and
+  scan while `spent` is within the budget; past it they back up the paths they name and, when a
+  call skipped its scan, one scan at `agent_end` records the rest. The next request scans per call
+  again. An incomplete scan spends its request's budget at once, without the budget notice
+  (per-call scans of a stopped inventory would mark every call partial, D-312). The sticky
+  per-turn switch, `walk_secs` and `scanned_turn` go; the notice keeps its once-per-root key.
+- Why: 150-700 entries paid two full scans per writing call (0.44 s a call at 600, critic valley
+  log), and one slow scan switched the whole session.
+- Trade-off: past the budget, the person's edit between two calls of the request is recorded by
+  its end scan as the turn's change, as in a project over the budget before.
+- Contract-visible: 04 line 394 and section 7.16; 03 section 6.16 Files; G7 section 3.7;
+  `?gptr_options`, `?gptr_rewind`; the console notice. T11 writes the amendments.
+- Tests: ckpt-files "a request spends the scan budget, then scans once at its end (D-360)", "while
+  the scan budget lasts, every writing call scans twice (D-360)", "an incomplete scan ends a
+  request's per-call scans without a budget notice"; ckpt-rewind "while the scan budget lasts, the
+  person's edit between two calls stays theirs (D-360)", "once the scan budget is spent, the
+  request's end scan records that edit (D-360)". Evidence: progress/P32.md Task 6.
+
 ## D-363 - P32 Decision battery: condensed T03 inputs, the 13-million-string object in one mode (2026-11-16)
 - Rule: `t03_r2` and `t03_r3` are condensed T03-shaped codes (the dead branch that would build
   `raw`, setDTthreads, fread, rm, setorder by reference, fwrite and writeLines into the project),
@@ -10837,38 +10894,3 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (layering): utils-size.R (L0) finds `env_snap_leaf()` and `ckpt_predict()` with `ns_fun()`,
   as doc-replay.R finds gptr-tailor.R. ckpt-rewind.R needed no change.
 - Contract-visible: none beyond D-357. Tests: as D-357. Evidence: progress/P32.md Task 3.
-
-## D-358 - P32 Served calls bind the final risk (2026-11-16)
-- Rule: `mcp_serve_exec()` classifies a served call with `call_risk()`, so an invalid or failing
-  risk record is level 3 ("unknown") as on the native route; only `r` with no run keeps the
-  classifier in the served environment (`call_risk()` reads the run's). When a `tool_call` hook
-  changed the input and the idle gate decides, the input is classified again before
-  `mcp_gate_idle()` reads it. After the gate `call$risk = d$risk %||% call$risk`, as
-  `dispatch_steps()` binds `dec$risk`: the checkpointers, the approved level and the nested gates
-  read the final risk.
-- Rule (extent): the plan names a run; a non-r tool served with no run is classified by
-  `call_risk()` too (it needs no run), so no served record is gated unchecked.
-- Why: the checkpointers read the pre-hook risk, so a hook that rewrote a read into file-writing
-  code skipped the files checkpointer and `gptr_rewind()` left the file; the idle gate read it
-  too, a record without a level was gated at 2 and a failing one ended the request with an
-  internal error. IC-53 items 5 and 7.
-- Contract-visible: none (the served route meets IC-53 items 5 and 7).
-- Tests: test-mcp-server "a served call binds the risk of its final input, with a pump and idle
-  (D-358)", "a served tool whose risk record is invalid or fails is gated at level 3 (D-358)";
-  perm-battery unchanged; helper-arch.R admits the edge mcp -> `call_risk()`. Evidence:
-  progress/P32.md Task 4.
-
-## D-359 - P32 One classification per final input (2026-11-16)
-- Rule: `perm_check(call, run, extra = NULL, risk = NULL)`; `perm_decide()` uses `risk %||%
-  call_risk()`. `tool_call_hook()` keeps the payload's risk as `call$risk` only when every
-  `tool_call` hook record the session sees has a `builtin:` source (`ev_builtin_only()`, read
-  before the chain runs; lazy and non-matching records count) and none returned `modify`, else
-  NULL; `dispatch_steps()` passes it, `mcp_serve_exec()` classifies a NULL one again for both
-  gates. A policy `modify`, nested calls, `opts$gate` and forwarded worker requests classify as
-  before. No counter, no state.
-- Rule (extent): the idle served gate classifies again after any other hook, not only after a
-  changed input (D-358), so a hook that assigns into the home is not gated on the pre-hook risk.
-- Why: each call was classified twice on the same input and state (PERF-3: 2 to 1 per call).
-- Contract-visible: `perm_check()` gains `risk` (`04` line 2762, IC-04 wording; T11).
-- Tests: test-agent-dispatch (2 tests, the forwarded request's count), test-mcp-server (1);
-  perm-battery unchanged. Evidence: progress/P32.md Task 5.

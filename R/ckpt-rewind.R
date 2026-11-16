@@ -230,9 +230,9 @@ ckpt_on_cli = function(st, event, ctx) {
   NULL
 }
 
-#' agent_end hook: the memory budget, the per-turn scan (once walks are slow, and on a CLI route
-#' after a turn that could write files: an aborted run has no `turn_end`) and one blob collection
-#' per session
+#' agent_end hook: the memory budget, the end scan (of a request whose calls stopped scanning,
+#' D-360, and on a CLI route after a turn that could write files: an aborted run has no
+#' `turn_end`) and one blob collection per session
 #' @noRd
 ckpt_on_agent_end = function(st, ctx) {
   s = ctx$session
@@ -643,9 +643,10 @@ ckpt_ext_state = function(s = NULL) {
 #' - `gptr.checkpoint_track_file_max` (`1e6`): bytes; the largest file the first scan stores.
 #' - `gptr.checkpoint_track_total` (`1e8`): bytes one automatic scan stores in all.
 #' - `gptr.checkpoint_capture_max` (`5e7`): bytes; a larger changed file gets no stored copy.
-#' - `gptr.checkpoint_scan_budget` (`0.25`): seconds; slower scans switch to one scan per turn.
+#' - `gptr.checkpoint_scan_budget` (`0.25`): seconds of project scans per request; past them,
+#'   its calls back up the files they name and one scan at its end records the rest.
 #' - `gptr.checkpoint_scan_timeout` (`2`): seconds; the longest an automatic scan runs. An
-#'   incomplete scan also switches to one scan per turn.
+#'   incomplete scan also spends its request's scan budget.
 #' - `gptr.checkpoint_rng` (`TRUE`): report changes of the random-number state.
 #' - `gptr.checkpoint_close_devices` (`FALSE`): close graphics devices an undone turn opened.
 #' @export

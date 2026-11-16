@@ -748,7 +748,7 @@ test_that("restores never write into .git or gptr's user directories; control pa
   expect_true(ctl$ask)
 })
 
-test_that("slow walks switch the session to one scan per turn plus predicted paths", {
+test_that("past the scan budget a request backs up predicted paths and scans once at its end", {
   local_gptr_options(checkpoint_scan_budget = -1, checkpoint_capture_max = 20,
                      checkpoint_scan_timeout = 15)
   proj = local_project(files = list("R/a.R" = "a = 1"))
@@ -758,7 +758,6 @@ test_that("slow walks switch the session to one scan per turn plus predicted pat
   writeLines("a = 2", file.path(proj, "R", "a.R"))
   frag = ckpt_files_after(ck, call, tok)
   expect_identical(names(paths_status(frag)), "R/a.R")
-  expect_true(ck$files$per_turn)
   call2 = list(id = "c2", name = "write", input = list(path = "R/b.R", content = "b = 1"))
   tok2 = ckpt_files_before(ck, call2, turn = 1L)
   writeLines("b = 1", file.path(proj, "R", "b.R"))
@@ -811,23 +810,68 @@ test_that("only the scan counts against gptr.checkpoint_scan_budget, not root lo
   })
   expect_identical(notices, character())
   expect_identical(readLines("out.txt"), "a")
-  ck = ckpt_ck_of(ckpt_ext_state(e$s), e$s, create = FALSE)
-  expect_false(isTRUE(ck$files$per_turn))
 })
 
-test_that("a scan slower than gptr.checkpoint_scan_budget switches to per-turn scans once", {
-  local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
-  proj = local_project(files = list("a.R" = "a = 1"))
+# Every scan takes `secs` seconds as far as gptr.checkpoint_scan_budget can tell
+local_scan_secs = function(secs, .env = parent.frame()) {
   scan = ckpt_scan_run
   local_mocked_bindings(ckpt_scan_run = function(...) {
     result = scan(...)
-    result$seconds = 0.3
+    result$seconds = secs
     result
+  }, .env = .env)
+}
+
+# Ten writing calls of request `turn` that each change a.R, then the request's end scan: the
+# fragment of each call and of the end scan (NULL when it recorded nothing)
+ten_calls = function(ck, root, turn) {
+  call = list(id = "c", name = "r", input = list(code = "source('job.R')"))
+  frags = lapply(1:10, function(i) {
+    tok = ckpt_files_before(ck, call, turn = turn)
+    writeLines(paste("a =", turn, i), file.path(root, "a.R"))
+    ckpt_files_after(ck, call, tok)
   })
+  c(frags, list(ckpt_files_turn_scan(ck, turn)))
+}
+
+test_that("a request spends the scan budget, then scans once at its end (D-360)", {
+  local_gptr_options(checkpoint_scan_budget = 0.25)
+  proj = local_project(files = list("a.R" = "a = 0"))
+  local_scan_secs(0.2)
+  n = local_calls("ckpt_scan_run")
+  ck = ckpt_ck_new("s0000000097")
+  recorded = c(TRUE, rep(FALSE, 9L), TRUE)
+  for (turn in 1:2) {
+    frags = ten_calls(ck, proj, turn)
+    # a sync and a step around the first call, then one scan at the end; the next request
+    # scans per call again
+    expect_identical(n()[["ckpt_scan_run"]], 3L * turn)
+    expect_identical(!vapply(frags, is.null, NA), recorded)
+    expect_identical(paths_status(frags[[11L]]), c(a.R = "modified"))
+  }
+  expect_true(all(ckpt_files_undo(ck, frags[[11L]])$ok))
+  expect_identical(readLines(file.path(proj, "a.R")), "a = 2 1")
+})
+
+test_that("while the scan budget lasts, every writing call scans twice (D-360)", {
+  local_gptr_options(checkpoint_scan_budget = 0.25)
+  proj = local_project(files = list("a.R" = "a = 0"))
+  local_scan_secs(0.01)
+  n = local_calls("ckpt_scan_run")
+  ck = ckpt_ck_new("s0000000098")
+  frags = ten_calls(ck, proj, 1L)
+  expect_identical(n()[["ckpt_scan_run"]], 20L)
+  expect_identical(!vapply(frags, is.null, NA), c(rep(TRUE, 10L), FALSE))
+})
+
+test_that("a request that spends gptr.checkpoint_scan_budget says so once per root", {
+  local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
+  proj = local_project(files = list("a.R" = "a = 1"))
+  local_scan_secs(0.3)
   ck = ckpt_ck_new("s0000000096")
   call = list(id = "c1", name = "r", input = list(code = "writeLines('a = 2', 'a.R')"))
-  notices = scan_notices(for (i in 1:2) {
-    tok = ckpt_files_before(ck, call, turn = 1L)
+  notices = scan_notices(for (turn in 1:2) for (i in 1:2) {
+    tok = ckpt_files_before(ck, call, turn = turn)
     writeLines(paste("a =", i + 1L), file.path(proj, "a.R"))
     ckpt_files_after(ck, call, tok)
   })
@@ -835,7 +879,6 @@ test_that("a scan slower than gptr.checkpoint_scan_budget switches to per-turn s
   expect_match(notices, paste0("Checkpoint scans of the project folder \"", basename(proj), "\" "),
                fixed = TRUE)
   expect_false(grepl(proj, notices, fixed = TRUE))
-  expect_true(ck$files$per_turn)
 })
 
 # A fresh tracker of `root` and a scan that reached every entry or ran out of time
@@ -846,6 +889,24 @@ notice_scan = function(complete) {
        reason = if (complete) "" else "it ran out of time (gptr.checkpoint_scan_timeout)",
        seconds = 0)
 }
+
+test_that("an incomplete scan ends a request's per-call scans without a budget notice", {
+  local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
+  proj = local_project(files = list("a.R" = "a = 1"))
+  local_mocked_bindings(ckpt_scan_run = function(...) notice_scan(FALSE))
+  n = local_calls("ckpt_scan_run")
+  ck = ckpt_ck_new("s0000000099")
+  call = list(id = "c1", name = "write", input = list(path = "a.R", content = "a"))
+  notices = scan_notices(for (i in 1:2) {
+    tok = ckpt_files_before(ck, call, turn = 1L)
+    writeLines(paste("a =", i + 1L), file.path(proj, "a.R"))
+    frag = ckpt_files_after(ck, call, tok)
+  })
+  expect_identical(notices, character())
+  expect_identical(n()[["ckpt_scan_run"]], 1L)
+  expect_identical(paths_status(frag), c(a.R = "modified"))
+  expect_identical(frag$coverage, "complete")
+})
 
 test_that("the coverage notice is a console line for the person, once per root", {
   root = file.path(local_project(), "my project")
@@ -1200,11 +1261,10 @@ test_that("checkpoint prediction preserves capture of a newly created regular fi
 test_that("checkpoint explicit paths reject FIFO and preserve regular size-cap semantics", {
   skip_on_os("windows")
   proj = local_project()
-  local_gptr_options(checkpoint_capture_max = 1)
+  local_gptr_options(checkpoint_capture_max = 1, checkpoint_scan_budget = -1)
   ck = ckpt_ck_new("s0000000095")
   tr = ckpt_files_tr(ck)
   ckpt_files_sync(tr)
-  tr$per_turn = TRUE
   pipe = file.path(proj, "supervisor_stdin")
   call = list(id = "explicit-fifo", name = "write", input = list(path = pipe, content = ""))
   token = ckpt_files_before(ck, call, 1L)

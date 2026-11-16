@@ -625,7 +625,7 @@ test_that("undone blocks in a bound document become inert; re-sourcing reproduce
   expect_bound_rewind()
 })
 
-test_that("a turn's file scan never records gptr's own block writes (per-turn mode, CLI route)", {
+test_that("a turn's file scan never records gptr's own block writes (spent budget, CLI route)", {
   skip_on_cran()
   local_gptr_options(checkpoint_scan_budget = -1)
   expect_bound_rewind()
@@ -804,7 +804,7 @@ test_that("/undo lists each item once, by its outcome after the whole undo (#37)
   expect_false(file.exists("a.txt"))
 })
 
-test_that("a file is one /undo item when slow walks switch to one scan per turn (#37)", {
+test_that("a file is one /undo item when the request's scan budget is spent (#37)", {
   skip_on_cran()
   local_project()
   local_gptr_options(checkpoint_scan_budget = -1)
@@ -894,4 +894,61 @@ test_that("builtin:checkpoints registers the four commands", {
   expect_setequal(mine, c("undo", "redo", "rewind", "checkpoints"))
   undo = registry_get("command", "undo")
   expect_match(undo$description, "Undo the last turn")
+})
+
+# A request of two writing calls in a project holding notes.txt and a.txt, the person editing
+# notes.txt between them, while each scan takes `secs` seconds as far as
+# gptr.checkpoint_scan_budget can tell
+budget_request = function(secs, .env = parent.frame()) {
+  local_project(files = list("notes.txt" = "mine", "a.txt" = "orig"), .env = .env)
+  scan = ckpt_scan_run
+  local_mocked_bindings(ckpt_scan_run = function(...) {
+    result = scan(...)
+    result$seconds = secs
+    result
+  }, .env = .env)
+  replies = list(fake_tool("r", code = "writeLines('b', 'b.txt')"),
+                 fake_tool("r", code = "writeLines('new', 'a.txt')"), "done")
+  local_fake_provider(function(req) {
+    if (req$n == 2L) writeLines("edited", "notes.txt")
+    replies[[min(req$n, 3L)]]
+  }, .env = .env)
+  peter("write b.txt, then a.txt", model = "fake/fake-1", mode = "auto", envir = new.env())
+}
+
+# The id of the entry holding each file row of a session's checkpoints, named by path
+file_row_ids = function(s) {
+  cps = Filter(function(e) identical(e$custom_type, "gptr.checkpoint"), session_data(s)$entries)
+  unlist(lapply(cps, function(e) {
+    rows = e$data$fragments$files$files
+    stats::setNames(rep(e$data$tool_call_id, length(rows)), vapply(rows, function(r) r$path, ""))
+  }))
+}
+
+test_that("while the scan budget lasts, the person's edit between two calls stays theirs (D-360)", {
+  skip_on_cran()
+  local_gptr_options(checkpoint_scan_budget = 0.25)
+  s = budget_request(0.01)
+  ids = file_row_ids(s)
+  expect_setequal(names(ids), c("b.txt", "a.txt"))
+  expect_false(any(startsWith(ids, "scan-")))
+  expect_no_warning(gptr_rewind(s, turn = -1))
+  expect_identical(readLines("notes.txt"), "edited")
+  expect_identical(readLines("a.txt"), "orig")
+  expect_false(file.exists("b.txt"))
+})
+
+test_that("once the scan budget is spent, the request's end scan records that edit (D-360)", {
+  skip_on_cran()
+  local_gptr_options(checkpoint_scan_budget = 0.25)
+  s = budget_request(0.2)
+  ids = file_row_ids(s)
+  expect_setequal(names(ids), c("b.txt", "a.txt", "notes.txt"))
+  # a.txt, named in the code, is backed up before its call; the end scan finds the edit
+  expect_false(startsWith(ids[["a.txt"]], "scan-"))
+  expect_true(startsWith(ids[["notes.txt"]], "scan-"))
+  expect_no_warning(gptr_rewind(s, turn = -1))
+  expect_identical(readLines("notes.txt"), "mine")
+  expect_identical(readLines("a.txt"), "orig")
+  expect_false(file.exists("b.txt"))
 })

@@ -162,8 +162,8 @@ before a change, even when the change was not predicted.
 \item \code{gptr.checkpoint_track_file_max} (bytes, \code{1e6}) and \code{gptr.checkpoint_track_total} (bytes,
 \code{1e8}): the largest file the first scan stores, and what one scan stores in all.
 \item \code{gptr.checkpoint_capture_max} (bytes, \code{5e7}): a larger changed file gets no stored copy.
-\item \code{gptr.checkpoint_scan_budget} (seconds, \code{0.25}): above this scan time the project is
-scanned once per turn.
+\item \code{gptr.checkpoint_scan_budget} (seconds, \code{0.25}): project scan time per request; past it,
+its calls back up the files they name and one scan at its end records the rest.
 \item \code{gptr.checkpoint_scan_timeout} (seconds, \code{2}): the longest an automatic file scan runs.
 Scans inspect at most 2,000 entries and back up at most 256 files within the byte limits
 above. Incomplete scans are reported; unvisited files have no automatic undo coverage.

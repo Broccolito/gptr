@@ -189,11 +189,13 @@ ckpt_is_link = function(path) {
 #' `stat`, the inventory of the last scans (relative path, size, mtime, link); `hash` and `mode`,
 #' the content hash and mode bits of each captured relative path; `absent`, relative paths proven
 #' absent; `complete`, the last scan reached every entry within the tracker's bound;
-#' `last_coverage`, the last recording scan's interval was complete at both ends; `walk_secs`, how
-#' long the last scan took; `explicit` and `explicit_mode`, the state ("" absent, "?" left to the
-#' recording scan or not capturable) and mode bits of every predicted absolute path; `per_turn`,
-#' one scan per turn (`scanned_turn`) once scans are slow or partial; `dirty`, a call or a step
-#' outside R that can write files ran since the last sync or per-turn scan
+#' `last_coverage`, the last recording scan's interval was complete at both ends; `explicit` and
+#' `explicit_mode`, the state ("" absent, "?" left to the recording scan or not capturable) and
+#' mode bits of every predicted absolute path; `turn`, the request (prompt turn) of the last
+#' writing call; `spent`, the seconds of that request's scans (`Inf` after an incomplete one);
+#' `skipped`, a request whose calls stopped scanning once `spent` passed
+#' gptr.checkpoint_scan_budget (D-360); `dirty`, a call or a step outside R that can write files
+#' ran since the last sync or end scan
 #' @noRd
 ckpt_files_tr = function(ck) {
   if (is.null(ck$files)) {
@@ -292,9 +294,9 @@ ckpt_files_observe = function(tr, s) {
   tr$stat = w
   tr$complete = isTRUE(s$complete) && fits
   tr$last_coverage = s$coverage %||% tr$complete
-  tr$walk_secs = s$seconds
+  # per-call scans of an inventory that stops early would mark every call partial
+  tr$spent = if (isTRUE(s$complete)) tr$spent + s$seconds else Inf
   if (!isTRUE(s$complete)) {
-    tr$per_turn = TRUE
     ckpt_notice(paste0("File undo covers only part of the project folder ",
                        encodeString(basename(tr$root), quote = "\""),
                        ": the automatic scan stopped early because ", s$reason, ", so changes to ",
@@ -375,9 +377,11 @@ ckpt_files_step = function(tr) {
 
 #' Bring the tracker up to date without recording (the baseline on first use): a scan whose
 #' changes (edits made outside gptr) a rewind never undoes. Its observations replace the tracker's,
-#' so a path it did not reach has no pre-image or proven absence from before it (D-311).
+#' so a path it did not reach has no pre-image or proven absence from before it (D-311). A sync
+#' that starts a request (`start`: its first writing call, a CLI child's start) restarts the
+#' request's scan time (D-360).
 #' @noRd
-ckpt_files_sync = function(tr) {
+ckpt_files_sync = function(tr, start = TRUE) {
   s = ckpt_scan_run(tr$root, tr$prune, old = tr$stat %||% ckpt_empty_walk(),
                     baseline = is.null(tr$stat))
   tr$stat = ckpt_empty_walk()
@@ -385,6 +389,7 @@ ckpt_files_sync = function(tr) {
   tr$mode = integer()
   tr$absent = character()
   tr$dirty = FALSE
+  if (start) tr$spent = 0
   ckpt_files_observe(tr, s)
   invisible(tr)
 }
@@ -433,21 +438,23 @@ ckpt_stat_refresh = function(tr, rel) {
 }
 
 #' Files checkpointer, before a mutating call: the baseline, or (`sync`) a scan that absorbs edits
-#' made outside gptr (once per turn in per-turn mode); predicted paths get explicit pre-images.
-#' A known path that changed since the tracker's scan is left to the recording scan ("?"), whose
-#' pre-image is the content at the start of the turn. A call served to a CLI route does not
-#' `sync`: the edits its child made since the turn's start are recorded, never absorbed (IC-65).
-#' On every route a known target must still hold what the last scan saw (ckpt_as_scanned()), and a
-#' target no scan observed gets its state just before the call (D-313).
+#' made outside gptr, at the first writing call of a request (`turn`) and at later ones while the
+#' request's scans took at most gptr.checkpoint_scan_budget seconds (D-360); predicted paths get
+#' explicit pre-images. A known path that changed since the tracker's scan is left to the
+#' recording scan ("?"), whose pre-image is the content that scan saw. A call served to a CLI
+#' route does not `sync`: the edits its child made since the turn's start are recorded, never
+#' absorbed (IC-65). On every route a known target must still hold what the last scan saw
+#' (ckpt_as_scanned()), and a target no scan observed gets its state just before the call (D-313).
 #' @return A token.
 #' @noRd
 ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
   tr = ckpt_files_tr(ck)
   turn = as.integer(turn)
-  if (is.null(tr$stat) || (sync && (!isTRUE(tr$per_turn) || !identical(tr$scanned_turn, turn)))) {
-    ckpt_files_sync(tr)
+  first = !identical(tr$turn, turn)
+  tr$turn = turn
+  if (is.null(tr$stat) || sync && (first || tr$spent <= gptr_opt("checkpoint_scan_budget"))) {
+    ckpt_files_sync(tr, first)
   }
-  tr$scanned_turn = turn
   tr$dirty = TRUE
   paths = ckpt_call_paths(call)
   for (p in paths) {
@@ -499,9 +506,9 @@ ckpt_files_explicit = function(tr, paths) {
   rows
 }
 
-#' Files checkpointer, after the call: a scan (when one takes longer than
-#' gptr.checkpoint_scan_budget seconds, the session switches to one scan per turn) and the
-#' explicit paths
+#' Files checkpointer, after the call: the explicit paths and, while the request's scans took at
+#' most gptr.checkpoint_scan_budget seconds, a scan; past it the request's end scan records what
+#' the call changed (D-360)
 #' @return `list(id, turn, root, files = list(<row>), coverage = "complete"|"partial")`, or NULL
 #'   when no row changed and coverage is complete.
 #' @noRd
@@ -509,34 +516,37 @@ ckpt_files_after = function(ck, call, token) {
   tr = ckpt_files_tr(ck)
   rows = ckpt_files_explicit(tr, token$paths)
   coverage = isTRUE(token$coverage)
-  scanned = !isTRUE(tr$per_turn)
-  if (!isTRUE(tr$per_turn)) {
+  if (tr$spent <= gptr_opt("checkpoint_scan_budget")) {
     rows = c(rows, ckpt_files_step(tr))
     coverage = coverage && isTRUE(tr$last_coverage)
-    # an incomplete scan already switched and told the person
-    if (!isTRUE(tr$per_turn) && tr$walk_secs > gptr_opt("checkpoint_scan_budget")) {
-      tr$per_turn = TRUE
+  } else {
+    tr$skipped = token$turn
+    # an incomplete scan already told the person
+    if (is.finite(tr$spent)) {
       ckpt_notice(paste0("Checkpoint scans of the project folder ",
                          encodeString(basename(tr$root), quote = "\""),
-                         " take longer than gptr.checkpoint_scan_budget; gptr now scans once ",
-                         "per turn plus the paths it can predict."), paste0("ckpt-scan:", tr$root))
+                         " take longer than gptr.checkpoint_scan_budget per request; once a ",
+                         "request has spent it, gptr backs up the files Peter's tools name and ",
+                         "scans the folder once at the end of the request."),
+                  paste0("ckpt-scan:", tr$root))
     }
+    if (call$name %in% c("write", "edit") && isTRUE(token$exact)) coverage = TRUE
   }
-  if (!scanned && call$name %in% c("write", "edit") && isTRUE(token$exact)) coverage = TRUE
   if (!length(rows) && coverage) return(NULL)
   list(id = token$frag, turn = token$turn, root = tr$root, files = rows,
        coverage = if (coverage) "complete" else "partial")
 }
 
-#' One scan recorded as its own fragment: at the end of a turn in per-turn mode whose calls could
-#' write files (`dirty`), and (`force`) after a turn of a CLI route whose child may have edited
-#' files itself (IC-65)
+#' One scan recorded as its own fragment: at the end of a request (`turn`) whose calls stopped
+#' scanning (D-360), and (`force`) after a turn of a CLI route whose child may have edited files
+#' itself (IC-65)
 #' @return A fragment (its `files` may be empty when `coverage` is "partial"), or NULL when
 #'   nothing changed and coverage is complete.
 #' @noRd
 ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
   tr = ckpt_files_tr(ck)
-  if (is.null(tr$stat) || !(isTRUE(tr$per_turn) && isTRUE(tr$dirty) || force)) return(NULL)
+  skipped = isTRUE(tr$dirty) && identical(tr$skipped, as.integer(turn))
+  if (is.null(tr$stat) || !(skipped || force)) return(NULL)
   tr$dirty = FALSE
   rows = ckpt_files_step(tr)
   if (!length(rows) && isTRUE(tr$last_coverage)) return(NULL)

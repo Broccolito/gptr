@@ -667,8 +667,8 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.checkpoint_track_file_max` (bytes, `1e6`) and `gptr.checkpoint_track_total` (bytes,
 #'   `1e8`): the largest file the first scan stores, and what one scan stores in all.
 #' - `gptr.checkpoint_capture_max` (bytes, `5e7`): a larger changed file gets no stored copy.
-#' - `gptr.checkpoint_scan_budget` (seconds, `0.25`): above this scan time the project is
-#'   scanned once per turn.
+#' - `gptr.checkpoint_scan_budget` (seconds, `0.25`): project scan time per request; past it,
+#'   its calls back up the files they name and one scan at its end records the rest.
 #' - `gptr.checkpoint_scan_timeout` (seconds, `2`): the longest an automatic file scan runs.
 #'   Scans inspect at most 2,000 entries and back up at most 256 files within the byte limits
 #'   above. Incomplete scans are reported; unvisited files have no automatic undo coverage.
