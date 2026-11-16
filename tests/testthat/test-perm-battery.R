@@ -1,7 +1,8 @@
 # P32 decision battery (plan T1): the gate's answers for twelve snippets in six permission
 # settings on both routes, sequenced size-change-overwrite rows, and checkpoint and rewind plans,
-# against fixtures/perm/ as main (5e2992b) gave them; dev/bench/perf/p32/record-battery.R records
-# them (GPTR_RECORD_BATTERY=true). Every hot-path task keeps them identical.
+# against fixtures/perm/ as main (5e2992b) gave them, but for the six `huge` rows, which T2's string
+# budget sizes (D-356); dev/bench/perf/p32/record-battery.R records them (GPTR_RECORD_BATTERY=true).
+# Every hot-path task keeps them identical.
 
 bat_record = identical(Sys.getenv("GPTR_RECORD_BATTERY"), "true")
 bat_dir = normalizePath(testthat::test_path("fixtures", "perm"))
@@ -283,7 +284,7 @@ test_that("the gate sizes each object again after a change, as main did (sequenc
 })
 
 # Only manual with r(level<=2) runs it: there its level decides (manual and edits ask at 2 and 3)
-test_that("an object of 13 million strings near gptr.protect_size is sized as main sized it", {
+test_that("an object of 13 million strings near gptr.protect_size is sized by sampling (D-356)", {
   skip_on_cran()
   local_project(gptr = FALSE)
   local_permission_rules()
