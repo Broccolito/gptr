@@ -10894,3 +10894,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (layering): utils-size.R (L0) finds `env_snap_leaf()` and `ckpt_predict()` with `ns_fun()`,
   as doc-replay.R finds gptr-tailor.R. ckpt-rewind.R needed no change.
 - Contract-visible: none beyond D-357. Tests: as D-357. Evidence: progress/P32.md Task 3.
+
+## D-TBD-T7 - P32 A scan checks a folder's entries with one call of each check (2026-11-16)
+- Rule (design 6): `ckpt_scan_run()` takes each check once for a folder's entries, and once for
+  the known paths: links of the parent folders, case-exact absence, link, stat, regular type, path
+  class, read access, each on the entries the checks before it pass. `inspect()` then decides per
+  entry in main's order. A file is still checked for a link, linked parents and its type
+  immediately before it is read.
+- Bar: T03's 1,231-entry root (linked inputs) 4.9-6.0x a scan. Trees of regular files gain
+  1.6-1.95x, held back by `path_class()`'s per-path cost and by hashing, neither changed here.
+  The code went ahead on the T03 tree.
+- Counts: one `ckpt_regular()` call per folder plus one per captured file (the check before
+  reading). `ckpt_is_link()` calls are a fixed number per folder plus three per captured file.
+  The plan's "one call per directory" is read as "no call per entry".
+- Trade-off: a file deleted between a folder's stat call and its type call stops the scan ("an
+  error stopped it", as before). Main kept the entries before it in that folder; now none of that
+  folder's entries are kept.
+- Contract-visible: none (identical results). T11 updates the scan numbers in the floor paragraph.
+- Tests: ckpt-scan "a scan's rows, captures and reasons equal main's on a tree of every entry
+  kind", "a scan checks each folder's entries with one call per check", "an entry or folder
+  swapped for a link after its folder's checks is never read". Evidence: progress/P32.md Task 7.

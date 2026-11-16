@@ -78,17 +78,28 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
     st$listed[path] = list(names)
     names
   }
-  # Missing stat results alone also mean unreadable. A readable parent must prove absence.
-  absent = function(rel, exact = FALSE) {
-    parent = root
-    for (part in strsplit(rel, "/", fixed = TRUE)[[1L]]) {
-      names = entries(parent)
-      if (is.null(names)) return(FALSE)
-      present = if (ic && !exact) tolower(part) %in% tolower(names) else part %in% names
-      if (!present) return(TRUE)
-      parent = file.path(parent, part)
+  # Missing stat results alone also mean unreadable. A readable parent must prove absence: each of
+  # `rels` is absent when a part is not listed in its folder, every folder above it listed.
+  absent = function(rels, exact = FALSE) {
+    out = logical(length(rels))
+    parts = strsplit(rels, "/", fixed = TRUE)
+    parent = rep(root, length(rels))
+    todo = seq_along(rels)
+    for (depth in seq_len(max(0L, lengths(parts)))) {
+      todo = todo[lengths(parts[todo]) >= depth]
+      part = vapply(parts[todo], `[[`, "", depth)
+      present = logical(length(todo))
+      for (p in unique(parent[todo])) {
+        k = parent[todo] == p
+        names = entries(p)
+        if (is.null(names)) next
+        present[k] = if (ic && !exact) tolower(part[k]) %in% tolower(names) else part[k] %in% names
+        out[todo[k]] = !present[k]
+      }
+      todo = todo[present]
+      parent[todo] = file.path(parent[todo], part[present])
     }
-    FALSE
+    out
   }
   ancestors_linked = function(rel) {
     parent = root
@@ -98,46 +109,77 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
     }
     FALSE
   }
-  # One entry: its row and, within the limits, its content; "dir" for a directory to descend
-  inspect = function(rel, class, known = FALSE) {
+  # What inspect() decides on for the entries `rels[at]`, one call of each check for them all; a
+  # check reads only the entries the checks before it pass, as inspect() decides them in turn
+  facts = function(rels, at, known = FALSE) {
+    n = length(rels)
+    f = list(known = known, rel = rels, full = rep(NA_character_, n), bad = rep(TRUE, n),
+             gone = logical(n), link = logical(n), isdir = rep(NA, n), size = rep(NA_real_, n),
+             mtime = rep(NA_real_, n), regular = logical(n), class = rep(NA_character_, n),
+             readable = logical(n))
+    f$full[at] = fs_path(file.path(root, rels[at]))
+    parts = strsplit(rels[at], "/", fixed = TRUE)
+    clean = at[!is_abs_path(rels[at]) &
+                 !vapply(parts, function(p) any(p %in% c("", ".", "..")), NA)]
+    parent = sub("/?[^/]*$", "", rels[clean])
+    up = unique(parent[nzchar(parent)])
+    above = lapply(strsplit(up, "/", fixed = TRUE), function(p) {
+      Reduce(function(a, b) paste0(a, "/", b), p, accumulate = TRUE)
+    })
+    linked = ckpt_is_link(file.path(root, unlist(above)))
+    clean = clean[!parent %in% up[rep(seq_along(up), lengths(above))[linked]]]
+    f$bad[clean] = FALSE
+    if (known && ic) f$gone[clean] = absent(rels[clean], exact = TRUE)
+    i = clean[!f$gone[clean]]
+    f$link[i] = ckpt_is_link(f$full[i])
+    info = path_info(f$full[i])
+    f$isdir[i] = info$isdir
+    f$size[i] = info$size
+    f$mtime[i] = as.numeric(info$mtime)
+    i = i[!f$link[i] & !is.na(f$mtime[i]) & !f$isdir[i] %in% TRUE]
+    f$regular[i] = ckpt_regular(f$full[i]) %in% TRUE
+    i = i[f$regular[i]]
+    f$class[i] = path_class(f$full[i], root)
+    i = i[!f$class[i] %in% c("protected", "control")]
+    f$readable[i] = file.access(f$full[i], 4L) == 0L
+    f
+  }
+  # Entry `i` of `f`: its row and, within the limits, its content; "dir" for a directory to descend
+  inspect = function(f, i) {
+    rel = f$rel[[i]]
     st$seen = c(st$seen, rel)
     st$visited = st$visited + 1L
-    if (is_abs_path(rel) || any(strsplit(rel, "/", fixed = TRUE)[[1L]] %in% c("", ".", "..")) ||
-          ancestors_linked(rel)) {
-      return(incomplete("a path could not be read"))
-    }
-    full = fs_path(file.path(root, rel))
-    if (known && ic && absent(rel, exact = TRUE)) {
+    if (f$bad[[i]]) return(incomplete("a path could not be read"))
+    if (f$gone[[i]]) {
       st$absent = c(st$absent, rel)
       return(NULL)
     }
-    link = ckpt_is_link(full)
-    info = path_info(full)
-    if (isTRUE(info$isdir) && !link) {
-      if (known) st$not_files = c(st$not_files, rel)
+    link = f$link[[i]]
+    if (isTRUE(f$isdir[[i]]) && !link) {
+      if (f$known) st$not_files = c(st$not_files, rel)
       return("dir")
     }
-    if (is.na(info$mtime) && !link) {
-      if (known && absent(rel)) {
+    if (is.na(f$mtime[[i]]) && !link) {
+      if (f$known && absent(rel)) {
         st$absent = c(st$absent, rel)
       } else {
         incomplete("a path could not be read")
       }
       return(NULL)
     }
-    size = pmax(info$size, 0, na.rm = TRUE)
+    full = f$full[[i]]
+    size = pmax(f$size[[i]], 0, na.rm = TRUE)
     st$path = c(st$path, rel)
     st$size = c(st$size, size)
-    st$mtime = c(st$mtime, pmax(as.numeric(info$mtime), 0, na.rm = TRUE))
+    st$mtime = c(st$mtime, pmax(f$mtime[[i]], 0, na.rm = TRUE))
     st$link = c(st$link, link)
-    if (is.na(class)) class = path_class(full, root)
     why = if (link) {
       "symbolic link"
-    } else if (!isTRUE(ckpt_regular(full))) {
+    } else if (!f$regular[[i]]) {
       "not a regular file"
-    } else if (class %in% c("protected", "control")) {
+    } else if (f$class[[i]] %in% c("protected", "control")) {
       "protected or control path"
-    } else if (file.access(full, 4L) != 0L) {
+    } else if (!f$readable[[i]]) {
       "unreadable file"
     } else if (size > file_max) {
       "file size limit"
@@ -160,20 +202,15 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
     if (nzchar(why)) st$uncaptured[rel] = why
     NULL
   }
-  # the path classes of the next entries, in one call (each costs the context of path_class())
-  classes = function(rels) {
-    path_class(fs_path(file.path(root, rels)), root)
-  }
   scan = function() {
     known = utils::head(old$path, ckpt_entry_max)
-    cls = classes(known)
+    dup = duplicated(known)
+    f = facts(known, which(!dup), known = TRUE)
     frontier = ""
     for (i in seq_along(known)) {
       if (halted()) return()
-      if (known[[i]] %in% st$seen) next
-      if (identical(inspect(known[[i]], cls[[i]], known = TRUE), "dir")) {
-        frontier = c(frontier, known[[i]])
-      }
+      if (dup[[i]]) next
+      if (identical(inspect(f, i), "dir")) frontier = c(frontier, known[[i]])
     }
     rules = ignore_compile(prune, "", ic)
     while (length(frontier) && !halted()) {
@@ -188,25 +225,29 @@ ckpt_scan_run = function(root, prune, old = ckpt_empty_walk(), baseline = FALSE)
       valid = validUTF8(names)
       rels = if (nzchar(parent)) paste(parent, names, sep = "/", recycle0 = TRUE) else names
       rels[valid] = as_utf8(rels[valid])
-      cls = rep(NA_character_, length(rels))
-      pick = utils::head(which(valid), ckpt_entry_max - st$visited)
-      cls[pick] = classes(rels[pick])
+      seen = valid & rels %in% st$seen
+      # the entries the loop can reach before the entry limit
+      at = utils::head(which(!seen), ckpt_entry_max - st$visited)
+      at = at[valid[at]]
+      ignored = logical(length(rels))
+      ignored[at] = ignore_eval(rules, rels[at], dir.exists(fs_path(file.path(root, rels[at]))),
+                                ic) %in% TRUE
+      f = facts(rels, at[!ignored[at]])
       for (i in seq_along(rels)) {
         if (halted()) return()
-        rel = rels[[i]]
-        if (valid[[i]] && rel %in% st$seen) next
+        if (seen[[i]]) next
         if (st$visited >= ckpt_entry_max) return(incomplete(too_many))
         if (!valid[[i]]) {
           st$visited = st$visited + 1L
           incomplete("a file name is not valid UTF-8")
           next
         }
-        if (isTRUE(ignore_eval(rules, rel, dir.exists(fs_path(file.path(root, rel))), ic))) {
-          st$seen = c(st$seen, rel)
+        if (ignored[[i]]) {
+          st$seen = c(st$seen, rels[[i]])
           st$visited = st$visited + 1L
           next
         }
-        if (identical(inspect(rel, cls[[i]]), "dir")) frontier = c(frontier, rel)
+        if (identical(inspect(f, i), "dir")) frontier = c(frontier, rels[[i]])
       }
       if (st$visited >= ckpt_entry_max && length(frontier)) return(incomplete(too_many))
     }

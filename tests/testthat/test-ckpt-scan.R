@@ -170,3 +170,98 @@ test_that("an interrupt the person continues from stops the scan and keeps its r
   # an interrupt that aborts keeps unwinding
   expect_identical(tryCatch(ckpt_scan_run(root, ckpt_prune(root)), interrupt = identity), interrupt)
 })
+
+# Two scans of a tree holding every kind of entry a scan decides on: a first one, then one from its
+# walk plus stale known paths after `swap.R` became a link out of the root. Their results without
+# the seconds, and without the sizes of directory links (a directory's size depends on the OS).
+scan_fixture_rows = function() {
+  root = local_project()
+  outside = withr::local_tempdir()
+  put = function(rel, text, dir = root) {
+    path = file.path(dir, rel)
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    writeBin(charToRaw(text), path)
+  }
+  files = c("source.R" = "x = 1\n", "notes.md" = "# notes\n", "readme.md" = "read me\n",
+            ".env" = "SYNTHETIC=1\n", "big.bin" = strrep("b", 200L), "swap.R" = "swap\n",
+            "sub/a.R" = "a = 1\n", "sub/deep/b.txt" = "b\n", "locked.txt" = "locked\n",
+            "closed/c.txt" = "c\n", ".git/HEAD" = "ref\n", "node_modules/m.js" = "m\n")
+  for (rel in names(files)) put(rel, files[[rel]])
+  put("known.R", "outside\n", outside)
+  put("swap.R", "outside swap\n", outside)
+  targets = c(file.path(root, c("source.R", "missing", "sub")), outside)
+  expect_true(all(file.symlink(targets, file.path(root, c("link.R", "dangling", "ldir", "out")))))
+  fifo = processx::conn_create_fifo(file.path(root, "pipe"), read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  expect_true(all(Sys.chmod(file.path(root, names(files)), "0644", use_umask = FALSE)))
+  stamped = c(file.path(root, c(names(files), "pipe", "sub", "sub/deep")), outside,
+              file.path(outside, c("known.R", "swap.R")))
+  expect_true(all(Sys.setFileTime(stamped, as.POSIXct(1e9, origin = "1970-01-01", tz = "UTC"))))
+  locked = file.path(root, c("locked.txt", "closed"))
+  withr::defer(Sys.chmod(locked, "0700", use_umask = FALSE))
+  expect_true(all(Sys.chmod(locked, "0000", use_umask = FALSE)))
+  skip_if(file.access(locked[[1L]], 4L) == 0L, "permissions do not prevent this user from reading")
+  local_gptr_options(checkpoint_scan_timeout = 30, checkpoint_track_file_max = 100)
+  first = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
+  unlink(file.path(root, "swap.R"))
+  expect_true(file.symlink(file.path(outside, "swap.R"), file.path(root, "swap.R")))
+  stale = c("README.md", "out/known.R", "gone.R", "sub", "closed/c.txt", ".git/HEAD", "../escape.R")
+  old = rbind(first$walk, data.frame(path = stale, size = 1, mtime = 1, link = FALSE))
+  second = ckpt_scan_run(root, ckpt_prune(root), old)
+  rows = function(s) {
+    s$seconds = NULL
+    s$walk$size[s$walk$path %in% c("ldir", "out")] = NA
+    s
+  }
+  list(first = rows(first), second = rows(second))
+}
+
+test_that("a scan's rows, captures and reasons equal main's on a tree of every entry kind", {
+  skip_on_os("windows")
+  expect_identical(scan_fixture_rows(), dget(test_path("fixtures", "ckpt-scan-rows.txt")))
+})
+
+test_that("a scan checks each folder's entries with one call per check", {
+  calls = function(k, ...) {
+    root = local_project()
+    for (d in c("a", "b", "c")) {
+      dir.create(file.path(root, d))
+      for (i in seq_len(k)) writeBin(charToRaw("x"), file.path(root, d, sprintf("f%02d.txt", i)))
+    }
+    local_gptr_options(checkpoint_scan_timeout = 30, ...)
+    n = local_calls(c("ckpt_is_link", "ckpt_regular"))
+    s = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
+    expect_true(s$complete)
+    c(n(), captured = length(s$hash))
+  }
+  few = calls(2L, checkpoint_track_total = 0)
+  many = calls(40L, checkpoint_track_total = 0)
+  expect_identical(few, many)
+  # the known paths, the root and its three folders; a capture checks its file again first
+  expect_identical(many[["ckpt_regular"]], 5L)
+  held = calls(40L)
+  expect_identical(held[["ckpt_regular"]], 5L + held[["captured"]])
+})
+
+test_that("an entry or folder swapped for a link after its folder's checks is never read", {
+  skip_on_os("windows")
+  root = local_project(files = list("b.R" = "b = 1", "sub/a.R" = "a = 1"))
+  outside = withr::local_tempdir()
+  writeLines("synthetic outside content", file.path(outside, "a.R"))
+  local_gptr_options(checkpoint_scan_timeout = 30)
+  # each swap runs as path_class() classes its entry, after the entry's link and type checks
+  swaps = list("b.R" = c(file.path(outside, "a.R"), "b.R"), "sub/a.R" = c(outside, "sub"))
+  classify = path_class
+  local_mocked_bindings(path_class = function(path, ...) {
+    for (rel in names(swaps)[file.path(root, names(swaps)) %in% path]) {
+      unlink(file.path(root, swaps[[rel]][[2L]]), recursive = TRUE)
+      expect_true(file.symlink(swaps[[rel]][[1L]], file.path(root, swaps[[rel]][[2L]])))
+    }
+    classify(path, ...)
+  })
+  s = ckpt_scan_run(root, ckpt_prune(root), baseline = TRUE)
+  expect_identical(s$uncaptured[c("b.R", "sub/a.R")],
+                   c(b.R = "symbolic link", `sub/a.R` = "not a regular file"))
+  expect_length(s$hash, 0L)
+  expect_null(ckpt_blob_find(hash_file(file.path(outside, "a.R")), ckpt_store_root(root)))
+})
