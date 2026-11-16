@@ -40,11 +40,13 @@ size_cases = function() {
 
 test_that("under the string budget every size is main's, with and without shared (D-356)", {
   cs = size_cases()
-  # recorded from main (5e2992b); identical() also says no size carries `about`
+  # recorded from main (5e2992b); identical() also says no size carries `about`. A compact
+  # sequence counts its serialized state, whose header names the locale's encoding (133 in UTF-8)
   expect_identical(lapply(cs, env_snap_size), list(
     mtcars = 7040, iris = 6976, letters = 1712, na_dup = 136, empty = 48, enc = 192,
-    num_chr = 6400048, compact = 133, named = 1944, rows = 768, many = 2480748.2802802804,
-    long = 14124104, mixed = 282344, df30 = 544040, fit = 15848, env = 1936, closure = 6616))
+    num_chr = 6400048, compact = as.numeric(length(serialize(1:1e6, NULL))), named = 1944,
+    rows = 768, many = 2480748.2802802804, long = 14124104, mixed = 282344, df30 = 544040,
+    fit = 15848, env = 1936, closure = 6616))
   x = cs$many
   y = x
   y[[3]]$id = "new"

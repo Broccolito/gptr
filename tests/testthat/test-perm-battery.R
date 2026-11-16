@@ -18,7 +18,11 @@ expect_fixture = function(rows, name) {
   succeed()
 }
 
-# Text with the project root and the temporary directory masked
+# The size of 1:1e6 here: its serialized state, whose header names the locale's encoding
+bat_seq = sprintf("\\b%d\\b", length(serialize(1:1e6, NULL)))
+
+# Text with the project root and the temporary directory masked, and the size of 1:1e6 as UTF-8
+# gives it (133 B; 136 B under LC_ALL=C on macOS)
 bat_text = function(x) {
   x = if (is.numeric(x)) format(x, scientific = FALSE, trim = TRUE, digits = 15) else
     as.character(x)
@@ -26,7 +30,7 @@ bat_text = function(x) {
   for (p in unique(c(project_root(), path_norm(tempdir()), tempdir()))) {
     x = gsub(p, "<tmp>", x, fixed = TRUE)
   }
-  x
+  gsub(bat_seq, "133", x)
 }
 
 # What the gate answered: perm_check()'s result, the question it asked (permission_request) and
