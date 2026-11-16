@@ -8,11 +8,17 @@ workspace shaped like task T03 of the gptr-bench benchmark, a list of 300 tables
 
 ## Faster tool calls
 
+* On the gptr-bench T03 replays, run back to back on one Mac against 1.0.1, the time gptr adds
+  around a tool call fell from 1.9-2.1 s to 0.03 s (minimal replay, installed builds), and around
+  the MCP route's second and third requests at 300 tables from 2.6-2.8 s to 0.4-0.6 s (MCP
+  profile, source builds).
 * The size of an object is computed once per version of it and shared by the permission gate,
   the checkpoints and the workspace summary, which each computed it before. Around the T03
   workspace's second and third requests gptr now adds 0.67-0.75 s, against 5.0-5.7 s; the request
   that creates the list takes 1.8 s instead of 4.7 s, and a call that adds one element to it
-  0.56 s instead of 5.8 s.
+  0.56 s instead of 5.8 s. `peter(x, ...)` no longer sizes `x` again for each request. Code you run
+  at the console between requests may change an object in place, so the next permission check
+  measures the objects it overwrites again.
 * Sizing an object reads at most 12.5 million strings; longer character data is sampled and the
   size is shown as an estimate (`about 3.4 GB`) in the workspace summary, object descriptions and
   the permission question about overwriting it. Objects with fewer strings keep their exact

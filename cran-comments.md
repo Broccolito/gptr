@@ -1,11 +1,13 @@
 ## Submission
 
-This is a patch update (1.0.0 -> 1.0.1). It fixes a long delay before the first agent response
-by bounding automatic file checkpoint scans across folder sizes and layouts. Incomplete undo
-coverage is reported; predicted targets are backed up separately before gptr's own write tools.
-It also fixes MCP waits and plugin setup diagnostics, corrects help pages, and adds model
-listings, sub-agent model selection, hidden credential entry and clearer console progress;
-NEWS.md lists each change. No exported function was removed or changed incompatibly.
+This is a minor update (1.0.0 -> 1.1.0); 1.0.1 was not released on CRAN, so this update carries
+its fixes too. 1.1.0 makes each agent tool call cheaper: an object's size is computed once per
+version of it, long character data is sized from a sample and shown as an estimate, each call is
+classified once, and project scans are bounded per request. 1.0.1 fixed a long delay before the
+first agent response by bounding automatic file checkpoint scans across folder sizes and layouts,
+fixed MCP waits and plugin setup diagnostics, corrected help pages, and added model listings,
+sub-agent model selection, hidden credential entry and clearer console progress. NEWS.md lists
+each change. No exported function was removed or changed incompatibly.
 
 The preceding major update (0.7.0 -> 1.0.0) was a complete rewrite by the same maintainer. gptr now
 runs language model agents in an existing R session, where generated code can inspect and modify
@@ -108,14 +110,13 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## R CMD check results
 
-Final checks of the 1.0.1 submission archive are pending. The submission comment will record
+Final checks of the 1.1.0 submission archive are pending. The submission comment will record
 the results for the archive actually uploaded, with archived logs identifying its checked bytes.
-An incoming-check NOTE for an update within seven days of 1.0.0 is expected; this patch fixes a
-substantial startup delay. Naur and Wason in the Description, which the spelling check may flag,
+Naur and Wason in the Description, which the spelling check may flag,
 are the surnames of Peter Naur and Peter Wason, for whom the package is named. Any other NOTE,
 warning or error still needs review before submission.
 The older local R 4.4.3 diagnostic and the earlier R-hub and win-builder archives are separate
-evidence and are not presented as checks of the 1.0.1 tarball.
+evidence and are not presented as checks of the 1.1.0 tarball.
 
 ## Installed size
 
