@@ -13,15 +13,24 @@ step stops for the maintainer; nothing is installed).
 | Live calibration (IC-73), at release (P25); paid requests | `GPTR_LIVE_TESTS=true dev/bench/tokens/live.R` after `run.R` | requests +2 and input 20% of the golden transcript (o200k x provider prior), in `live-<date>.csv` |
 | Polyglot tasks (G5); a task whose program or R package is missing is skipped | `dev/bench/polyglot/run.R [--check] [--update]` | B and C totals within 10% (at least 6 tasks in common) |
 | Cache economics (G4), before layout or TTL changes | `dev/bench/cache-sim/run.R [--check] [--update]` | simulated session cost +2% |
-| Performance (report 21), on demand | `dev/bench/perf/run.R [--check]` | grep, read, SSE and diff within their bars (200 ms typical, 1 s large); a `peter()` call over a fake 50 KB streamed reply under 3 s (PERF-2) |
+| Performance (report 21, plan P32), on demand | `dev/bench/perf/run.R [--check] [--full] [--only=PERF-n,...]` | PERF-1 grep, read, SSE and diff within their bars (200 ms typical, 1 s large); PERF-2 a `peter()` call over a fake 50 KB streamed reply under 3 s; PERF-3 to PERF-9 P32's hot-path gates |
 | INFRA-24 (architecture 6.18), CI bench job | `dev/bench/perf/infra-time.R` | the 29 INFRA acceptance files pass with `NOT_CRAN=false`; their INFRA-nn tests take under 60 s (D-178) |
 | Development tests | `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests")'` | green |
 
 `dev/bench/tokens/run.R`, its NS-2/NS-3 fixtures and `baseline.csv` belong to P07; P10, P13, P15,
-P18, P19, P22, P23 and P24 add fixtures and baseline rows; every other file here belongs to P24. A
-fixture without a baseline row fails `run.R --check`: review the replayed numbers, then run
+P18, P19, P22, P23 and P24 add fixtures and baseline rows; `perf/workload.R` and `perf/p32/`
+belong to P32; every other file here belongs to P24. A fixture without a baseline row fails
+`run.R --check`: review the replayed numbers, then run
 `Rscript --vanilla dev/bench/tokens/run.R --update <fixture id>`. A row is refreshed only by the
 plan that owns its fixture, never to make a regression pass.
+
+P32's hot-path gates (PERF-3 to PERF-9; plan P32, "Performance gates") install the tree byte
+compiled into a temporary library and run each gate in three `Rscript --vanilla` children of
+`dev/bench/perf/workload.R`, which load that build and replay the investigation's workloads (T03's
+workspace and inputs at 300 tables; `--full` 1,231, about 12 GB). A row is the children's median;
+counts are hard bars, times are barred as ratios within the run, and a time with bar NA prints
+until the task named sets it. `--only=PERF-4` checks one gate; the size-walk prototypes and their
+logs are in `dev/bench/perf/p32/`.
 
 `dev/bench/cache-sim/baseline.csv` holds for the machine that recorded it (T1's `<r_env>` and the
 `<environment>` block are measured live): on another machine, run `--update` on the unchanged tree

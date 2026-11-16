@@ -1,0 +1,9 @@
+# 5e2992b + plan (P32 T1), N = 300, B = 4e6; first line: machine load
+10:36  up 3 days, 17:24, 1 user, load averages: 502.78 363.83 304.53
+vec4e6     exact 2.8792e+08 (0.76s) | main 2.8792e+08 (+0.00%, 1.085s) | new 2.8792e+08 (+0.00%, 0.586s, rep 0.542s)
+small_many exact 2.4803e+06 (0.36s) | main 2.4807e+06 (+0.02%, 0.139s) | new 2.4807e+06 (+0.02%, 0.177s, rep 0.128s)
+big1str    exact 1.0006e+08 (0.00s) | main 1.0006e+08 (+0.00%, 0.000s) | new 1.0006e+08 (+0.00%, 0.000s, rep 0.001s)
+t03        exact 4.4677e+08 (1.35s) | main 4.4677e+08 (+0.00%, 1.763s) | new 4.4677e+08 (+0.00%, 0.174s, rep 0.152s)
+   shared walk: main 1.4602e+06 1.222s | new 1.4602e+06 0.141s
+het        exact 7.586e+08 (2.82s) | main 7.788e+08 (+2.66%, 3.267s) | new 7.788e+08 (+2.66%, 0.439s, rep 0.469s)
+(grow not run at 4e6: with it the 1.25e7 run peaked at 5.9 GB of resident memory)

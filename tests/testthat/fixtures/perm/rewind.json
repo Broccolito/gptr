@@ -1,0 +1,236 @@
+{
+  "native create checkpoint 1": {
+    "turn": "1",
+    "prompt": "battery",
+    "objects": "3/3",
+    "files": "1/1",
+    "held_mb": "0",
+    "disk_mb": "0",
+    "branch": "active"
+  },
+  "native create plan 1": {
+    "turn": "1",
+    "action": "undo",
+    "checkpointer": "files",
+    "item": "file input-audit.csv",
+    "restore": "TRUE",
+    "reason": "would be removed"
+  },
+  "native create plan 2": {
+    "turn": "1",
+    "action": "undo",
+    "checkpointer": "objects",
+    "item": "object raw",
+    "restore": "TRUE",
+    "reason": "would be removed"
+  },
+  "native create plan 3": {
+    "turn": "1",
+    "action": "undo",
+    "checkpointer": "objects",
+    "item": "object input_audit",
+    "restore": "TRUE",
+    "reason": "would be removed"
+  },
+  "native create plan 4": {
+    "turn": "1",
+    "action": "undo",
+    "checkpointer": "objects",
+    "item": "object files",
+    "restore": "TRUE",
+    "reason": "would be removed"
+  },
+  "native create object files": {
+    "name": "files",
+    "status": "created",
+    "how": "created",
+    "class": "character",
+    "bytes": "320",
+    "restorable": "TRUE",
+    "reason": "",
+    "where": "",
+    "held_bytes": "-1"
+  },
+  "native create object input_audit": {
+    "name": "input_audit",
+    "status": "created",
+    "how": "created",
+    "class": "data.frame",
+    "bytes": "568",
+    "restorable": "TRUE",
+    "reason": "",
+    "where": "",
+    "held_bytes": "-1"
+  },
+  "native create object raw": {
+    "name": "raw",
+    "status": "created",
+    "how": "created",
+    "class": "list",
+    "bytes": "24736",
+    "restorable": "TRUE",
+    "reason": "",
+    "where": "",
+    "held_bytes": "-1"
+  },
+  "native create file input-audit.csv": {
+    "path": "input-audit.csv",
+    "status": "created",
+    "restorable": "TRUE",
+    "reason": ""
+  },
+  "native modify checkpoint 1": {
+    "turn": "1",
+    "prompt": "battery",
+    "objects": "3/3",
+    "files": "1/1",
+    "held_mb": "0",
+    "disk_mb": "0",
+    "branch": "active"
+  },
+  "native modify checkpoint 2": {
+    "turn": "2",
+    "prompt": "battery",
+    "objects": "1/1",
+    "files": "0/0",
+    "held_mb": "0",
+    "disk_mb": "0",
+    "branch": "active"
+  },
+  "native modify plan 1": {
+    "turn": "2",
+    "action": "undo",
+    "checkpointer": "objects",
+    "item": "object raw",
+    "restore": "TRUE",
+    "reason": "would be restored"
+  },
+  "native modify object raw": {
+    "name": "raw",
+    "status": "changed",
+    "how": "ref",
+    "class": "list",
+    "bytes": "24736",
+    "restorable": "TRUE",
+    "reason": "",
+    "where": "memory",
+    "held_bytes": "184"
+  },
+  "served create checkpoint 1": {
+    "turn": "1",
+    "prompt": "battery",
+    "objects": "3/3",
+    "files": "1/1",
+    "held_mb": "0",
+    "disk_mb": "0",
+    "branch": "active"
+  },
+  "served create plan 1": {
+    "turn": "1",
+    "action": "undo",
+    "checkpointer": "files",
+    "item": "file input-audit.csv",
+    "restore": "TRUE",
+    "reason": "would be removed"
+  },
+  "served create plan 2": {
+    "turn": "1",
+    "action": "undo",
+    "checkpointer": "objects",
+    "item": "object raw",
+    "restore": "TRUE",
+    "reason": "would be removed"
+  },
+  "served create plan 3": {
+    "turn": "1",
+    "action": "undo",
+    "checkpointer": "objects",
+    "item": "object input_audit",
+    "restore": "TRUE",
+    "reason": "would be removed"
+  },
+  "served create plan 4": {
+    "turn": "1",
+    "action": "undo",
+    "checkpointer": "objects",
+    "item": "object files",
+    "restore": "TRUE",
+    "reason": "would be removed"
+  },
+  "served create object files": {
+    "name": "files",
+    "status": "created",
+    "how": "created",
+    "class": "character",
+    "bytes": "320",
+    "restorable": "TRUE",
+    "reason": "",
+    "where": "",
+    "held_bytes": "-1"
+  },
+  "served create object input_audit": {
+    "name": "input_audit",
+    "status": "created",
+    "how": "created",
+    "class": "data.frame",
+    "bytes": "568",
+    "restorable": "TRUE",
+    "reason": "",
+    "where": "",
+    "held_bytes": "-1"
+  },
+  "served create object raw": {
+    "name": "raw",
+    "status": "created",
+    "how": "created",
+    "class": "list",
+    "bytes": "24736",
+    "restorable": "TRUE",
+    "reason": "",
+    "where": "",
+    "held_bytes": "-1"
+  },
+  "served create file input-audit.csv": {
+    "path": "input-audit.csv",
+    "status": "created",
+    "restorable": "TRUE",
+    "reason": ""
+  },
+  "served modify checkpoint 1": {
+    "turn": "1",
+    "prompt": "battery",
+    "objects": "3/3",
+    "files": "1/1",
+    "held_mb": "0",
+    "disk_mb": "0",
+    "branch": "active"
+  },
+  "served modify checkpoint 2": {
+    "turn": "2",
+    "prompt": "battery",
+    "objects": "1/1",
+    "files": "0/0",
+    "held_mb": "0",
+    "disk_mb": "0",
+    "branch": "active"
+  },
+  "served modify plan 1": {
+    "turn": "2",
+    "action": "undo",
+    "checkpointer": "objects",
+    "item": "object raw",
+    "restore": "TRUE",
+    "reason": "would be restored"
+  },
+  "served modify object raw": {
+    "name": "raw",
+    "status": "changed",
+    "how": "ref",
+    "class": "list",
+    "bytes": "24736",
+    "restorable": "TRUE",
+    "reason": "",
+    "where": "memory",
+    "held_bytes": "184"
+  }
+}

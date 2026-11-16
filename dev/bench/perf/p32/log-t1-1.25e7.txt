@@ -1,0 +1,11 @@
+# 5e2992b + plan (P32 T1), N = 300, B = 1.25e7; first line: machine load
+10:34  up 3 days, 17:22, 1 user, load averages: 265.27 285.76 272.12
+vec4e6     exact 2.8792e+08 (0.79s) | main 2.8792e+08 (+0.00%, 1.054s) | new 2.8792e+08 (+0.00%, 0.545s, rep 0.523s)
+small_many exact 2.4803e+06 (0.53s) | main 2.4807e+06 (+0.02%, 0.155s) | new 2.4807e+06 (+0.02%, 0.237s, rep 0.145s)
+big1str    exact 1.0006e+08 (0.00s) | main 1.0006e+08 (+0.00%, 0.000s) | new 1.0006e+08 (+0.00%, 0.000s, rep 0.000s)
+t03        exact 4.4677e+08 (1.65s) | main 4.4677e+08 (+0.00%, 2.102s) | new 4.4677e+08 (+0.00%, 0.330s, rep 0.360s)
+   shared walk: main 1.4602e+06 1.361s | new 1.4602e+06 0.419s
+het        exact 7.586e+08 (5.26s) | main 7.788e+08 (+2.66%, 3.431s) | new 7.788e+08 (+2.66%, 1.265s, rep 1.873s)
+grow       exact 8.2169e+08 (10.15s) | main 8.2169e+08 (+0.00%, 11.349s) | new 2.3541e+09 (+186.50%, 1.564s, rep 1.260s)
+      126.62 real       103.35 user         2.59 sys
+          5869191168  maximum resident set size

@@ -10740,3 +10740,33 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   gives way before a long source and model refs (D-355)"; provider-model-discovery
   "the models footer is one line at 120 columns and two at 80 (D-355)". Evidence:
   progress/fixes-1.0.1/round2-Y.md.
+
+## D-363 - P32 Decision battery: condensed T03 inputs, the 13-million-string object in one mode (2026-11-16)
+- Rule: `t03_r2` and `t03_r3` are condensed T03-shaped codes (the dead branch that would build
+  `raw`, setDTthreads, fread, rm, setorder by reference, fwrite and writeLines into the project),
+  not the recorded calls.json inputs, over data-frame tables: no battery row needs data.table.
+- Rule: the 1.3e7-string object (104 MB of pointers, default `gptr.protect_size`) runs only in
+  manual + `r(level<=2)`, where its level decides; the R6 row's object is built as R6 builds one.
+- Rule: rows are perm_check()'s answers, recorded by a wrapper (nothing a row asks about runs),
+  with an ask's question reason and `how_to_allow`; the rewind fixture adds the last turn's object
+  and file checkpoint records. The file skips on CRAN.
+- Why: the benchmark's inputs are not in the repository; each sizing of that object costs
+  0.16-0.3 s; `R6::` in a test is an undeclared dependency (R6 is on the never list).
+- Contract-visible: none. Tests: perm-battery (4 blocks). Evidence: progress/P32.md Task 1.
+
+## D-364 - P32 gate details the plan leaves open (2026-11-16)
+- Rule (PERF-5): the time ratio pairs N / 4 and N tables, both over the 12.5 million string
+  budget: 75 and 300 by default, 307 and 1,231 with `--full`. The plan's 300 and 1,231 need the
+  1,231-table list, about 6 GB to walk on 5e2992b. The exact cases (the T03 list at 50 tables, 4e6
+  strings) are compared with bytes recorded from 5e2992b in `run.R`.
+- Rule (PERF-7): the ten-call request also runs at 300 entries, and "scan seconds at most the
+  budget plus two scans" holds at every size. Under load a 600-entry scan passes the 0.25 s
+  budget, 5e2992b switches to per-turn scans for the session, and its valley moves to smaller
+  projects. Calls 4-10 at 600 entries are barred at 1.3 times the 0-entry call, as PERF-4 and
+  PERF-9 bar their ratios.
+- Rule (PERF-9): "messages encoded per build = new messages only" is barred as equal encodings
+  for the same ten-call request after about 44 and about 300 messages.
+- Contract-visible: none (development benchmark).
+- Tests: dev/bench/tests test-perf "the T03 workload passes the checks of T03's request inputs",
+  test-common "bench_args() parses --check, --update, --full and --only". Evidence:
+  progress/P32.md Task 1.

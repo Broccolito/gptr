@@ -3,12 +3,13 @@ test_that("bench_root() finds the repository from a sub-directory", {
   expect_error(bench_root(tempdir()), "cannot find the gptr repository root")
 })
 
-test_that("bench_args() parses --check, --update and --only", {
+test_that("bench_args() parses --check, --update, --full and --only", {
   a = bench_args(c("--check", "--only=T1_git,T2_script"))
   expect_true(a$check)
   expect_false(a$update)
   expect_identical(a$only, c("T1_git", "T2_script"))
   expect_null(bench_args(character())$only)
+  expect_true(bench_args("--full")$full)
 })
 
 test_that("bench_utf8() marks valid UTF-8 without re-encoding it", {

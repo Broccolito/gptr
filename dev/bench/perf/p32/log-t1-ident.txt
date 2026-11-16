@@ -1,0 +1,11 @@
+# 5e2992b + plan (P32 T1); first line: machine load
+10:34  up 3 days, 17:22, 1 user, load averages: 260.59 285.20 271.84
+ [1] TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE
+[1] TRUE
+[1] TRUE
+           used  (Mb) gc trigger  (Mb) limit (Mb) max used  (Mb)
+Ncells  4927576 263.2   14230577 760.0         NA  4927576 263.2
+Vcells 31071493 237.1   72520707 553.3     131072 31071493 237.1
+[1] 31083890
+        6.22 real         5.49 user         0.29 sys
+          1648361472  maximum resident set size

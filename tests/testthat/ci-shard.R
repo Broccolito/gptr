@@ -117,6 +117,7 @@ mcp-server,25,33,49
 mcp-stop-rng,1,1,2
 mcp-waits,7,9,10
 northstar,19,24,34
+perm-battery,25,30,45
 perm-classify,29,23,51
 perm-gate,52,38,86
 perm-plan,6,6,9

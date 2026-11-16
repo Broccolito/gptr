@@ -15,7 +15,7 @@ bench_root = function(start = getwd()) {
 
 bench_args = function(args = commandArgs(TRUE)) {
   only = sub("^--only=", "", args[startsWith(args, "--only=")])
-  list(check = "--check" %in% args, update = "--update" %in% args,
+  list(check = "--check" %in% args, update = "--update" %in% args, full = "--full" %in% args,
        only = if (length(only)) strsplit(only[[1L]], ",", fixed = TRUE)[[1L]] else NULL)
 }
 
@@ -50,19 +50,40 @@ tok_count = function(x) {
   as.integer(rtiktoken::get_token_count(bench_utf8(x), "o200k_base"))
 }
 
-# Loads the gptr source tree in a runner's own process (internals visible): every user directory
-# and the project root move to a temporary home, and GPTR_REPLAY=replay refuses any provider that
-# is not offline (IC-30), so a runner neither reads the user's state nor calls a model.
-bench_load_gptr = function(root) {
+# Every user directory and the project root move to a temporary home, and GPTR_REPLAY=replay
+# refuses any provider that is not offline (IC-30), so a runner neither reads the user's state nor
+# calls a model.
+bench_isolate = function() {
   vars = c("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME",
            "R_USER_CONFIG_DIR", "R_USER_DATA_DIR", "R_USER_CACHE_DIR", "GPTR_PROJECT_ROOT")
   dirs = file.path(tempfile("gptr-bench-"), vars)
   for (d in dirs) dir.create(d, recursive = TRUE)
   do.call(Sys.setenv, as.list(c(stats::setNames(dirs, vars), GPTR_REPLAY = "replay")))
+  invisible()
+}
+
+# Loads the gptr source tree in a runner's own process (internals visible), isolated.
+bench_load_gptr = function(root) {
+  bench_isolate()
   bench_require("pkgload", "loading the gptr source tree")
   pkgload::load_all(root, quiet = TRUE, export_all = TRUE, helpers = FALSE,
                     attach_testthat = FALSE)
   invisible()
+}
+
+# Installs the gptr tree into a new temporary library, byte compiled as users get it, and returns
+# the library's path.
+bench_install_gptr = function(root) {
+  lib = tempfile("gptr-lib-")
+  dir.create(lib)
+  log = suppressWarnings(system2(file.path(R.home("bin"), "R"),
+                                 c("CMD", "INSTALL", "--no-docs", "--no-test-load",
+                                   paste0("--library=", shQuote(lib)), shQuote(root)),
+                                 stdout = TRUE, stderr = TRUE))
+  if (!is.null(attr(log, "status"))) {
+    stop("R CMD INSTALL failed:\n", paste(utils::tail(log, 20L), collapse = "\n"))
+  }
+  lib
 }
 
 bench_read_csv = function(path) {
