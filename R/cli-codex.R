@@ -40,12 +40,14 @@ pcli_codex_models = function() {
 pcli_toml = function(x) paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x), "\"")
 
 #' The `-c` overrides that make gptr's stdio relay Codex's `gptr` MCP server (IC-65, IC-79):
-#' `Rscript --vanilla <mcp_relay.R> <mailbox> <seconds>`, the paths as TOML basic strings; the
-#' relay waits for an answer no longer than the turn's wall clock
+#' `Rscript --vanilla --default-packages=base <mcp_relay.R> <mailbox> <seconds>`, the paths as
+#' TOML basic strings; the relay attaches base alone (D-362) and waits for an answer no longer
+#' than the turn's wall clock
 #' @noRd
 pcli_codex_mcp_args = function(dir) {
   relay = system.file("gptr", "mcp_relay.R", package = "gptr", mustWork = TRUE)
-  argv = pcli_toml(c("--vanilla", relay, dir, as.character(pcli_turn_seconds())))
+  argv = pcli_toml(c("--vanilla", "--default-packages=base", relay, dir,
+                     as.character(pcli_turn_seconds())))
   c("-c", paste0("mcp_servers.gptr.command=", pcli_toml(rscript_path())),
     "-c", paste0("mcp_servers.gptr.args=[", paste(argv, collapse = ","), "]"),
     "-c", "mcp_servers.gptr.default_tools_approval_mode=\"approve\"",

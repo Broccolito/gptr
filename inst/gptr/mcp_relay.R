@@ -1,11 +1,12 @@
 # mcp_relay.R -- gptr's stdio MCP server for Codex (contract IC-65, IC-79). Base R only.
 #
-# Codex starts `Rscript --vanilla mcp_relay.R <dir> <seconds>`. Each JSON-RPC line on stdin goes
-# to the live R session as the file <dir>/req; the session answers with <dir>/resp (an empty line
-# for a notification), which goes to stdout. Both files appear by a rename, one message at a time.
-# The relay exits at the end of stdin, when <dir> is gone (the session's turn is over), or when an
-# answer takes longer than <seconds> (the R session died). --vanilla keeps a user profile from
-# printing into the JSON-RPC stream; lines pass through as bytes.
+# Codex starts `Rscript --vanilla --default-packages=base mcp_relay.R <dir> <seconds>`. Each
+# JSON-RPC line on stdin goes to the live R session as the file <dir>/req; the session answers
+# with <dir>/resp (an empty line for a notification), which goes to stdout. Both files appear by a
+# rename, one message at a time. The relay exits at the end of stdin, when <dir> is gone (the
+# session's turn is over), or when an answer takes longer than <seconds> (the R session died).
+# --vanilla keeps a user profile from printing into the JSON-RPC stream; lines pass through as
+# bytes.
 
 args = commandArgs(trailingOnly = TRUE)
 dir = args[[1L]]

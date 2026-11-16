@@ -7,8 +7,8 @@ source(testthat::test_path("fixtures", "cli", "local-fake-cli.R"), local = TRUE)
 codex_relay_args = function(dir, seconds = "3600") {
   relay = system.file("gptr", "mcp_relay.R", package = "gptr")
   c("-c", paste0("mcp_servers.gptr.command=\"", rscript_path(), "\""),
-    "-c", paste0("mcp_servers.gptr.args=[\"--vanilla\",\"", relay, "\",\"", dir, "\",\"",
-                 seconds, "\"]"),
+    "-c", paste0("mcp_servers.gptr.args=[\"--vanilla\",\"--default-packages=base\",\"", relay,
+                 "\",\"", dir, "\",\"", seconds, "\"]"),
     "-c", "mcp_servers.gptr.default_tools_approval_mode=\"approve\"",
     "-c", "mcp_servers.gptr.required=true",
     "-c", "mcp_servers.gptr.startup_timeout_sec=60",
@@ -33,7 +33,7 @@ test_that("the codex argv starts gptr's stdio relay; the resume form uses -c san
   # paths are TOML basic strings; the relay waits no longer than the turn's wall clock
   local_gptr_options(cli_turn_timeout = 90)
   args = pcli_codex_args("gpt-6-sol", "/w", "read-only", "C:\\Temp\\a\"b")
-  expect_true(paste0("mcp_servers.gptr.args=[\"--vanilla\",\"",
+  expect_true(paste0("mcp_servers.gptr.args=[\"--vanilla\",\"--default-packages=base\",\"",
                      system.file("gptr", "mcp_relay.R", package = "gptr"),
                      "\",\"C:\\\\Temp\\\\a\\\"b\",\"90\"]") %in% args)
 })
@@ -178,7 +178,8 @@ test_that("the relay script passes lines through its mailbox and exits when it s
   skip_on_cran()
   relay = system.file("gptr", "mcp_relay.R", package = "gptr", mustWork = TRUE)
   start = function(dir, seconds = 60, env = parent.frame()) {
-    p = processx::process$new(rscript_path(), c("--vanilla", relay, dir, seconds),
+    p = processx::process$new(rscript_path(),
+                              c("--vanilla", "--default-packages=base", relay, dir, seconds),
                               stdin = "|", stdout = "|", stderr = "|", encoding = "UTF-8")
     withr::defer(p$kill(), envir = env)
     p
@@ -980,7 +981,7 @@ test_that("an exec that ends in an internal error has its control files checked,
 codex_argv_relay = function(argv) {
   args = sub("^mcp_servers[.]gptr[.]args=", "", grep("^mcp_servers[.]gptr[.]args=", argv,
                                                      value = TRUE))
-  json_decode(args)[[3L]]
+  json_decode(args)[[4L]]
 }
 
 test_that("a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env", {
@@ -1101,12 +1102,15 @@ test_that("without httpuv, later and openssl a fake codex evaluates R in the liv
   expect_match(s$text, "55", fixed = TRUE)
   expect_false(any(grepl("files only", seen$text, fixed = TRUE)))
   expect_false("GPTR_MCP_TOKEN" %in% fake_env_names(f)[[1L]])
+  # the relay that answered initialize, tools/list and the call started with base alone (D-362)
+  argv = fake_argv(f)[[1L]]
+  dir = codex_argv_relay(argv)
+  expect_true(all(codex_relay_args(dir) %in% argv))
   # Codex is served the session's frozen tools, the array an API provider gets (IC-79); the
   # relay ends with Codex's stdin and the session removes the mailbox after the turn
   mcp = fake_log(f, "mcp")[[1L]]
   expect_identical(as.character(unlist(mcp$tools)), session_data(s)$frozen$tool_names)
   expect_identical(mcp$status, 0L)
-  dir = codex_argv_relay(fake_argv(f)[[1L]])
   expect_true(reactor_pump(until = function() !dir.exists(dir), timeout = 5))
   # the relayed call is checkpointed, so a rewind removes what it made (#24)
   expect_identical(gptr_checkpoints(s)$objects, "1/1")

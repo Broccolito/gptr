@@ -10871,6 +10871,21 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   parts are no longer than the transcript (D-361)"; agent-run "a run's step that advanced the
   loop is due now; a waiting run ticks at 5 ms". Evidence: progress/P32.md Task 9.
 
+## D-362 - P32 The Codex relay starts with base only (2026-11-16)
+- Rule (`pcli_codex_mcp_args()`): Codex starts gptr's stdio relay as `Rscript --vanilla
+  --default-packages=base <mcp_relay.R> <mailbox> <seconds>`. The relay calls base functions only
+  (`codetools::findGlobals()`), so attaching no other package changes nothing it does; a later
+  edit that needs another package calls it as `pkg::f()`.
+- Why: Rscript attached stats, graphics, grDevices, utils, datasets and methods, which the relay
+  never uses, once per request on the Codex route: relay spawn to `initialize` answered went from
+  0.329 to 0.131 s (median of 10, interleaved, instant responder, load 490).
+- Contract-visible: IC-79's argv (`04` lines 3450, 5380, 5858; T11 writes it).
+- Tests: cli-codex "the codex argv starts gptr's stdio relay; the resume form uses -c
+  sandbox_mode=" and the exact-argv tests through `codex_relay_args()`; "without httpuv, later and
+  openssl a fake codex evaluates R in the live session" (the relay started with base alone answers
+  initialize, tools/list and the call); the relay script test starts it the same way. Evidence:
+  progress/P32.md Task 10.
+
 ## D-363 - P32 Decision battery: condensed T03 inputs, the 13-million-string object in one mode (2026-11-16)
 - Rule: `t03_r2` and `t03_r3` are condensed T03-shaped codes (the dead branch that would build
   `raw`, setDTthreads, fread, rm, setorder by reference, fwrite and writeLines into the project),
