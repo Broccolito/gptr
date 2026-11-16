@@ -527,6 +527,11 @@ perf_gate_warm = function(k, n, full, self) {
     rm(d, home)
     gc()
   }
+  # each child's own ratio, so a child slowed by the machine's load slows both its sizes
+  for (m in setdiff(unique(c(300L, n)), 50L)) for (route in c("served", "native")) {
+    out[[sprintf("ratio_%s_n%d", route, m)]] =
+      out[[sprintf("gap_%s_2_n%d", route, m)]] / out[[sprintf("gap_%s_2_n50", route)]]
+  }
   out
 }
 
@@ -649,12 +654,18 @@ perf_gate_bindings = function(k, n, full, self) {
   out
 }
 
-# PERF-9: the native turn at about 0 and 300 messages and with 1,000 objects; the relay start
+# PERF-9: the native turn at about 0 and 300 messages and with 1,000 objects; the relay start.
+# A user settings file, which every setting lookup stats, is cached once 2 s old.
 perf_gate_turn = function(k, n, full, self) {
   turn = function(r) 1000 * (r$wall - sum(r$internal)) / (length(r$internal) + 1L)
+  cfg = tools::R_user_dir("gptr", "config")
+  dir.create(cfg, recursive = TRUE, showWarnings = FALSE)
+  writeLines("{\"context\": \"summary\"}", file.path(cfg, "settings.json"))
+  t0 = perf_clock()
   d = perf_session(new.env(parent = globalenv()), k)
   d$ask("1 + 1", 10L)
   d$ask("1 + 1", 10L)
+  Sys.sleep(max(0, 2.1 - (perf_clock() - t0)))
   r0 = d$ask("1 + 1", 10L)
   while (perf_messages(d$session) < 300L) d$ask("1 + 1", 10L)
   r300 = d$ask("1 + 1", 10L)

@@ -10901,6 +10901,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Plan text changed: the estimate is keyed on the estimator, not `registry_generation()`, which
   only `gptr_reload()` bumps (an estimator registered mid-session would keep stale estimates);
   the kept list holds the sha256, not the JSON element, which is only the hash's input.
+- Bar (review fixes): PERF-9's turn(300) / turn(0) is at most 1.6, not the plan's 1.3. With one
+  projection per build and a linear path walk the installed build gives 1.43-1.53 (turn 55 / 80
+  ms): each build still projects the whole path, estimates it and checks it for compaction, about
+  0.09 ms per message. An incremental projection is left open.
 - Contract-visible: none (context, view, `tokens_est` and components equal the uncached build).
 - Tests: prompt-cache "a request built from kept parts equals the uncached build (D-361)", "a
   build encodes and estimates only the messages that changed (D-361)", "after a rewind the kept
@@ -10955,7 +10959,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   projects. Calls 4-10 at 600 entries are barred at 1.3 times the 0-entry call, as PERF-4 and
   PERF-9 bar their ratios.
 - Rule (PERF-9): "messages encoded per build = new messages only" is barred as equal encodings
-  for the same ten-call request after about 44 and about 300 messages.
+  for the same ten-call request after about 44 and about 300 messages. The child's home has a
+  user settings file (2 s old, so cached), which every setting lookup checks.
+- Rule (times, review fixes): a time without a ratio is barred at twice the installed-build value
+  of the review-fix run (P32 progress), at least 0.01 s; PERF-4's ratio is each child's own, then
+  the median, so a child slowed by load slows both its sizes.
 - Contract-visible: none (development benchmark).
 - Tests: dev/bench/tests test-perf "the T03 workload passes the checks of T03's request inputs",
   test-common "bench_args() parses --check, --update, --full and --only". Evidence:
@@ -10970,7 +10978,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (PERF-4): "0 walks of an unchanged binding" cannot hold: T03's request 2 calls
   `data.table::setorder()`, so request 3's gate walks the names it overwrites (`raw` and, native,
   7 small objects) once. `a = raw$t[[2]]; set(a, ...)` must count, and no code shows that
-  `sample_summary` aliases nothing.
+  `sample_summary` aliases nothing. run.R bars request 2 at 0 walks and gap(300) / gap(50) at
+  most 1.3, and request 3 at 2 walks and twice its recorded gap (1.08 s served, 0.83 s native at
+  300 tables): its walk of `raw` puts its ratio at 1.5 served, 1.2 native.
 - Rule (describe): `peter(raw, ...)` walks `raw` once in `gptr_describe()` (env-describe.R, a
   not-reader by the plan); its dot facts walk none.
 - Rule (layering): utils-size.R (L0) finds `env_snap_leaf()` and `ckpt_predict()` with `ns_fun()`,

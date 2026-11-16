@@ -9,9 +9,9 @@
 # on its RCPP JUSTIFIED verdict, with a pure-R reference; conventions 9).
 # PERF-3 to PERF-9 (plan P32) install the tree byte compiled into a temporary library and run each
 # gate in three child processes (workload.R) that load that build; a row is the children's median.
-# Counts are hard bars; a time is barred as a ratio to a baseline of the same run; a time whose bar
-# is NA prints only, until the task that meets it sets the bar at twice the value that task records
-# in P32's progress log.
+# Counts are hard bars; a time is barred as a ratio to a baseline of the same run, or at twice the
+# installed-build value in P32's progress log (at least 0.01 s); with --full a time that depends on
+# the table count prints only.
 
 source(file.path("dev", "bench", "common.R"), local = TRUE)
 
@@ -114,8 +114,7 @@ perf_main_bytes = c(t03_50 = 83809728, vec4e6 = 287920056)
 # gptr.checkpoint_scan_budget's default, seconds
 perf_scan_budget = 0.25
 
-# The rows of one P32 gate from the children's medians `m` (plan P32, "Performance gates"; the
-# bars of times marked NA are set by the task named).
+# The rows of one P32 gate from the children's medians `m` (plan P32, "Performance gates")
 perf_p32_rows = function(gate, m, n) {
   row = function(...) perf_row(gate, ...)
   pick = function(pattern) m[grepl(pattern, names(m))]
@@ -132,21 +131,25 @@ perf_p32_rows = function(gate, m, n) {
         })))
     },
     "PERF-4" = {
-      gap = function(route, m_) sum(pick(sprintf("^gap_%s_[23]_n%d$", route, m_)))
-      big = setdiff(unique(c(300L, n)), 50L)
+      # D-365: request 2's setorder() may change `raw` through an alias, so request 3's gate walks
+      # it (served once, native twice); request 3 is barred by that count and its time
+      gap3 = c(served = 1.08, native = 0.83)
       rbind(
-        row("plain walks of an unchanged binding per request, requests 2-3",
-            max(pick("^walks_")), 0),
-        do.call(rbind, lapply(big, function(b) {
-          rbind(row(sprintf("gap(%d) / gap(50), served, requests 2+3", b),
-                    gap("served", b) / gap("served", 50L), 1.3),
-                row(sprintf("gap(%d) / gap(50), native, requests 2+3", b),
-                    gap("native", b) / gap("native", 50L), 1.3))
+        row("plain walks of an unchanged binding, request 2", max(pick("^walks_[a-z]+_2_")), 0),
+        row("plain walks of an unchanged binding, request 3", max(pick("^walks_[a-z]+_3_")), 2),
+        do.call(rbind, lapply(setdiff(unique(c(300L, n)), 50L), function(b) {
+          rbind(row(sprintf("gap(%d) / gap(50), served, request 2", b),
+                    m[[sprintf("ratio_served_n%d", b)]], 1.3),
+                row(sprintf("gap(%d) / gap(50), native, request 2", b),
+                    m[[sprintf("ratio_native_n%d", b)]], 1.3))
         })),
-        row(sprintf("gap s at %d, served, requests 2+3", n), gap("served", n)),
-        row(sprintf("gap s at %d, native, requests 2+3", n), gap("native", n)))
+        do.call(rbind, lapply(names(gap3), function(route) {
+          row(sprintf("gap s at %d, %s, request 3", n, route),
+              m[[sprintf("gap_%s_3_n%d", route, n)]], if (n == 300L) gap3[[route]] else NA)
+        })))
     },
     "PERF-5" = {
+      walk_s = c(t03_n = if (n == 300L) 0.52 else NA, vec4e6 = 0.64)
       sampled = setdiff(sub("^bytes_", "", names(pick("^bytes_"))), names(perf_main_bytes))
       rbind(
         do.call(rbind, lapply(names(perf_main_bytes), function(key) {
@@ -160,7 +163,9 @@ perf_p32_rows = function(gate, m, n) {
         row(sprintf("time(%d) / time(%d), the T03 list", n, n %/% 4L),
             m[["s_t03_n"]] / m[["s_t03_q"]], 1.5),
         do.call(rbind, lapply(setdiff(sub("^s_", "", names(pick("^s_"))), c("t03_50", "t03_q")),
-                              function(key) row(paste("walk s,", key), m[[paste0("s_", key)]]))))
+                              function(key) {
+          row(paste("walk s,", key), m[[paste0("s_", key)]], unname(walk_s[key]))
+        })))
     },
     "PERF-6" = rbind(
       row("plain walks of raw's version made by request 1", m[["walks_v1"]], 1, "=="),
@@ -170,19 +175,22 @@ perf_p32_rows = function(gate, m, n) {
       row(sprintf("request 1 wall s at %d", n), m[["wall_create"]], if (n == 300L) 3.7 else NA),
       row(sprintf("raw$note = \"x\" wall s at %d", n), m[["wall_modify"]],
           if (n == 300L) 1.1 else NA)),
-    "PERF-7" = rbind(
-      row("scans per ten-call writing request, 600 entries", m[["scans_ten_600"]], 4),
-      row("scan s per ten-call request less two scans, max of 0 to 1,500 entries",
-          max(pick("^scan_over_ten_")), perf_scan_budget),
-      row("scans in calls 4-10, 600 entries", m[["scans_4_10_ten_600"]], 0),
-      row("s per call 4-10, 600 / 0 entries", m[["call_4_10_ten_600"]] / m[["call_4_10_ten_0"]],
-          1.3),
-      do.call(rbind, lapply(c("one_native_0", "one_native_600", "one_native_1231",
-                              "one_codex_0", "one_codex_600", "one_codex_1231",
-                              "read_codex_1231"), function(key) {
-        row(paste("s per scan,", key, "(bar set by T7)"), m[[paste0("scan_one_", key)]])
-      })),
-      row("scans per pure-read request, codex, 1,231 entries", m[["scans_read_codex_1231"]])),
+    "PERF-7" = {
+      scan_s = c(one_native_0 = 0.01, one_native_600 = 0.19, one_native_1231 = 0.34,
+                 one_codex_0 = 0.01, one_codex_600 = 0.23, one_codex_1231 = 0.35,
+                 read_codex_1231 = 0.36)
+      rbind(
+        row("scans per ten-call writing request, 600 entries", m[["scans_ten_600"]], 4),
+        row("scan s per ten-call request less two scans, max of 0 to 1,500 entries",
+            max(pick("^scan_over_ten_")), perf_scan_budget),
+        row("scans in calls 4-10, 600 entries", m[["scans_4_10_ten_600"]], 0),
+        row("s per call 4-10, 600 / 0 entries",
+            m[["call_4_10_ten_600"]] / m[["call_4_10_ten_0"]], 1.3),
+        do.call(rbind, lapply(names(scan_s), function(key) {
+          row(paste("s per scan,", key), m[[paste0("scan_one_", key)]], scan_s[[key]])
+        })),
+        row("scans per pure-read request, codex, 1,231 entries", m[["scans_read_codex_1231"]], 1))
+    },
     "PERF-8" = rbind(
       row("plain walks of unchanged bindings in calls 2-5, 1,000 and 10,000 bindings",
           max(m[["walks_1000"]], m[["walks_10000"]]), 0),
@@ -195,11 +203,12 @@ perf_p32_rows = function(gate, m, n) {
     "PERF-9" = rbind(
       row("messages encoded by a request at 300 messages less at 0", m[["enc_300"]] - m[["enc_0"]],
           0, "=="),
-      row("turn(300) / turn(0)", m[["turn_ms_300"]] / m[["turn_ms_0"]], 1.3),
-      row("ms per turn, 0 messages (bar set in T9)", m[["turn_ms_0"]]),
-      row("ms per turn, 300 messages (bar set in T9)", m[["turn_ms_300"]]),
-      row("ms per turn, 1,000 objects (bar set in T9)", m[["turn_ms_objects"]]),
-      row("s from relay spawn to initialize answered (bar set in T10)", m[["relay_s"]])))
+      # D-361: each build still projects the whole path once
+      row("turn(300) / turn(0)", m[["turn_ms_300"]] / m[["turn_ms_0"]], 1.6),
+      row("ms per turn, 0 messages", m[["turn_ms_0"]], 113),
+      row("ms per turn, 300 messages", m[["turn_ms_300"]], 166),
+      row("ms per turn, 1,000 objects", m[["turn_ms_objects"]], 162),
+      row("s from relay spawn to initialize answered", m[["relay_s"]], 0.33)))
 }
 
 # TRUE when a value meets its bar, NA without a bar; a missing value misses it
