@@ -14,10 +14,14 @@ env_fmt_bytes = function(b, about = isTRUE(attr(b, "about"))) {
   paste0(if (about) "about ", txt, " ", units[i])
 }
 
-#' Format counts with thousands separators (the decimal mark fixed, whatever `OutDec` says)
+#' Format whole counts with thousands separators, whatever `OutDec` says; every snapshot formats
+#' each binding's shape, where format(big.mark) cost 20-70 us
 #' @noRd
 env_fmt_n = function(n) {
-  format(n, big.mark = ",", decimal.mark = ".", scientific = FALSE, trim = TRUE)
+  s = sprintf("%.0f", n)
+  big = nchar(s) > 3L
+  if (any(big)) s[big] = gsub("(?<=[0-9])(?=([0-9]{3})+$)", ",", s[big], perl = TRUE)
+  s
 }
 
 #' Display text of names, classes, shapes and expressions: UTF-8, with the bytes of invalid

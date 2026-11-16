@@ -494,26 +494,18 @@ ckpt_obj_row = function(name, status, how, class, bytes, pre, post, restorable, 
        image = image, where = where, held_bytes = ckpt_json_num(held))
 }
 
-#' Settle binding i of the token after the call: a fragment row, or NULL when unchanged.
-#' ckpt_settle() has already released the unchanged "ref" captures and indexed the others.
+#' The fragment row of binding i of the token, changed by the call; `j` is its row in `post`, NA
+#' when removed. ckpt_settle() has already released the unchanged "ref" captures and indexed the
+#' others.
 #' @noRd
-ckpt_settle_row = function(store, envir, token, i, post) {
+ckpt_settle_row = function(store, envir, token, i, j, post) {
   s0 = token$snap[i, , drop = FALSE]
   nm = s0$name
   how = token$how[i]
   key = token$key[i]
-  j = match(nm, post$name)
   removed = is.na(j)
   now = if (removed) "" else post$address[j]
   same = !removed && identical(now, s0$address)
-  changed = !same || !identical(post$fp[j], s0$fp)
-  # a held "ref" pre-image (never one of a by-reference edit) makes the address exact; others may
-  # change in place unseen (fingerprints sample), so every predicted target counts as changed
-  if (how != "ref") changed = changed || token$pred[i] != "none"
-  if (!changed) {
-    if (identical(how, "copy")) rm(list = key, envir = store$slots)
-    return(NULL)
-  }
   status = if (removed) "removed" else "changed"
   if (identical(how, "ref") && same) {
     return(ckpt_obj_row(nm, status, how, s0$class, s0$bytes, s0$address, now, FALSE,
@@ -550,22 +542,27 @@ ckpt_objects_after = function(ck, call, envir, token) {
   ckpt_settle(store, envir, data.frame(name = snap$name[refs], key = token$key[refs],
                                        address = snap$address[refs]),
               frag = token$frag, turn = token$turn)
+  j = match(snap$name, post$name)
+  # a held "ref" pre-image (never one of a by-reference edit) makes the address exact; others may
+  # change in place unseen (fingerprints sample), so every predicted target counts as changed
+  changed = is.na(j) | !env_same(snap$address, post$address[j]) |
+    !env_same(snap$fp, post$fp[j]) | (token$how != "ref" & token$pred != "none")
+  rm(list = token$key[!changed & token$how == "copy"], envir = store$slots)
   rows = list()
-  for (i in seq_len(nrow(snap))) {
-    row = ckpt_settle_row(store, envir, token, i, post)
-    if (!is.null(row)) rows[[length(rows) + 1L]] = row
+  for (i in which(changed)) {
+    rows[[length(rows) + 1L]] = ckpt_settle_row(store, envir, token, i, j[i], post)
   }
-  for (nm in setdiff(post$name, c(snap$name, token$others))) {
-    j = match(nm, post$name)
-    ckpt_mark(store, token$frag, nm, token$turn, post$address[j])
-    rows[[length(rows) + 1L]] = ckpt_obj_row(nm, "created", "created", post$class[j],
-                                             post$bytes[j], "", post$address[j], TRUE, "")
+  for (k in which(!post$name %in% c(snap$name, token$others))) {
+    nm = post$name[k]
+    ckpt_mark(store, token$frag, nm, token$turn, post$address[k])
+    rows[[length(rows) + 1L]] = ckpt_obj_row(nm, "created", "created", post$class[k],
+                                             post$bytes[k], "", post$address[k], TRUE, "")
   }
   pred = ckpt_predicted(token$others, token$tg)
-  for (k in seq_along(token$others)) {
-    gone = !token$others[k] %in% full$name
-    if (!gone && pred[k] == "none") next
-    rows[[length(rows) + 1L]] = ckpt_obj_row(token$others[k], if (gone) "removed" else "changed",
+  gone = !token$others %in% full$name
+  for (k in which(gone | pred != "none")) {
+    rows[[length(rows) + 1L]] = ckpt_obj_row(token$others[k],
+                                             if (gone[k]) "removed" else "changed",
                                              "none", "unknown", NA, "", "", FALSE,
                                              "a promise or an active binding (not captured)")
   }

@@ -402,6 +402,23 @@ test_that("counts and sizes keep their format under a comma decimal mark", {
   expect_equal(env_fmt_bytes(1.2 * 1024^2), "1.2 MB")
 })
 
+test_that("env_fmt_n() writes integer text without format()'s marks (P32 T8)", {
+  marks = 0L
+  pretty = base::prettyNum
+  local_mocked_bindings(prettyNum = function(x, ...) {
+    marks <<- marks + 1L
+    pretty(x, ...)
+  }, .package = "base")
+  n = list(0, 0L, 999, 999L, 1e3, 1000L, 2^31, 1e15, -1234567, c(4211L, 7L, NA))
+  plain = lapply(n, env_fmt_n)
+  comma = withr::with_options(list(OutDec = ","), lapply(n, env_fmt_n))
+  expect_identical(marks, 0L)
+  old = list("0", "0", "999", "999", "1,000", "1,000", "2,147,483,648", "1,000,000,000,000,000",
+             "-1,234,567", c("4,211", "7", "NA"))
+  expect_identical(plain, old)
+  expect_identical(comma, old)
+})
+
 test_that("object names that are not valid UTF-8 are shown with byte escapes", {
   skip_on_cran()
   e = new.env()

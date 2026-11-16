@@ -366,6 +366,37 @@ test_that("promises are never forced; a predicted rebinding of one is reported",
   expect_true(rows$x$restorable)
 })
 
+test_that("the settle step matches the names once, whatever the bindings (P32 T8)", {
+  skip_on_cran()
+  ck = ckpt_ck_new("s0000000019")
+  e = new.env()
+  for (i in 1:2000) assign(sprintf("v%04d", i), i, envir = e)
+  delayedAssign("lazy", stop("forced"), assign.env = e)
+  call = list(id = "c8", name = "r", input = list(code = "v0001 = 0; rm(v0002); new = 1; lazy = 2"))
+  tok = ckpt_objects_before(ck, call, e)
+  agent_eval(call$input$code, e)
+  matches = 0L
+  counted = new.env(parent = asNamespace("gptr"))
+  counted$match = function(...) {
+    matches <<- matches + 1L
+    base::match(...)
+  }
+  after = ckpt_objects_after
+  row = ckpt_settle_row
+  environment(after) = counted
+  environment(row) = counted
+  local_mocked_bindings(ckpt_objects_after = after, ckpt_settle_row = row)
+  frag = ckpt_objects_after(ck, call, e, tok)
+  expect_identical(matches, 1L)
+  rows = rows_by_name(frag)
+  expect_identical(vapply(rows, `[[`, "", "status"),
+                   c(v0001 = "changed", v0002 = "removed", new = "created", lazy = "changed"))
+  expect_identical(vapply(rows, `[[`, TRUE, "restorable"),
+                   c(v0001 = TRUE, v0002 = TRUE, new = TRUE, lazy = FALSE))
+  expect_identical(sort(ck$obj$index$name), c("new", "v0001", "v0002"))
+  expect_length(ls(ck$obj$slots), 2L)
+})
+
 test_that("the turn-end budget spills the largest image and drops images older than undo_turns", {
   skip_on_cran()
   dir = withr::local_tempdir()
