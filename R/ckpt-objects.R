@@ -140,9 +140,9 @@ ckpt_addr = function(envir, name) {
 #' @return df(name, key, address): the pending captures.
 #' @noRd
 ckpt_capture = function(store, envir, names) {
-  keys = character(length(names))
+  # one hash a call, not a binding; alphanumeric, as an image file's name must be
+  keys = sprintf("p%s%d", id_new("", 12L), seq_along(names))
   for (i in seq_along(names)) {
-    keys[i] = paste0("p", id_new("", 12L))
     assign(keys[i], get(names[i], envir = envir, inherits = FALSE), envir = store$slots)
   }
   addr = vapply(keys, \(k) ckpt_addr(store$slots, k), "", USE.NAMES = FALSE)

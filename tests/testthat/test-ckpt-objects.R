@@ -434,6 +434,16 @@ test_that("an image that cannot be spilled is dropped instead", {
   expect_length(ls(ck$obj$slots), 0L)
 })
 
+test_that("a capture by reference hashes one key for all its bindings", {
+  ck = ckpt_ck_new("s0000000010")
+  e = list2env(list(a = 1, b = 2, c = 3))
+  n = local_calls("id_new")
+  p = ckpt_capture(ck$obj, e, c("a", "b", "c"))
+  expect_identical(n()[["id_new"]], 1L)
+  expect_true(all(grepl("^p[[:alnum:]]+$", p$key)) && !anyDuplicated(p$key))
+  expect_identical(nrow(ckpt_capture(ck$obj, e, character())), 0L)
+})
+
 test_that("an image spilled at a turn end is found again by a new R process (force)", {
   skip_on_cran()
   dir = withr::local_tempdir()
