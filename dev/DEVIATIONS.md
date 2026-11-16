@@ -10795,7 +10795,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `volatile`, the home's address and an `epoch`, text and numbers only (R4). `env_size_of(x,
   home, facts, fresh)` returns it while class, shape and fingerprint match, else walks once and
   replaces it; a hit or walk lands in the current generation, the end of a sized snapshot drops
-  the older one. A walk that met a non-top environment, a closure or an unexpanded compact
+  the older one, and so does a `fresh = TRUE` read that finds 5,000 current entries (review fix:
+  a session that takes no sized snapshot, served or `.opts$context = "none"`, kept every size it
+  read; a snapshot never ages mid-loop, so a workspace of any size keeps its sizes). A walk that met a non-top environment, a closure or an unexpanded compact
   sequence is volatile, and so is a size of an older epoch: served only to a snapshot (`fresh =
   FALSE`) of its home. Readers: `env_snap_rows()`, `risk_binding_leaf()` and `dot_facts()`
   (`fresh = TRUE`); `previous` and `ck$snap` are gone.

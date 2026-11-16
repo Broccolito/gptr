@@ -59,7 +59,8 @@ env_size_store = function() {
 
 on_load(env_size_store())
 
-#' End of a sized snapshot: entries neither read nor written since the one before are dropped
+#' End of a sized snapshot, or a read outside one that finds 5,000 current entries: entries
+#' neither read nor written since the age before are dropped
 #' @noRd
 env_size_age = function() {
   the$size_old = the$size_cur
@@ -83,6 +84,7 @@ env_size_epoch = function() {
 #' pass `fresh = TRUE` and walk it again.
 #' @noRd
 env_size_of = function(x, home, facts = ns_fun("env_snap_leaf")(x), fresh = FALSE) {
+  if (fresh && length(the$size_cur) > 5000L) env_size_age()  # a session that takes no snapshot
   at = if (is.environment(home)) rlang::obj_address(home) else NA_character_
   key = facts$address
   e = the$size_cur[[key]] %||% the$size_old[[key]]

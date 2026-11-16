@@ -268,6 +268,14 @@ test_that("code the person runs makes the gate and dots walk again (D-357)", {
   expect_length(walked(), 1L)
 })
 
+test_that("reads outside a snapshot keep at most two generations of 5,000 sizes (D-357)", {
+  env_size_store()
+  withr::defer(env_size_store())
+  xs = lapply(1:10003, function(i) i + 0)
+  for (x in xs) env_size_of(x, NULL, fresh = TRUE)
+  expect_identical(length(the$size_cur) + length(the$size_old), 5002L)
+})
+
 test_that("the size store holds text and numbers only (R4, D-357)", {
   env_size_store()
   e = new.env()
