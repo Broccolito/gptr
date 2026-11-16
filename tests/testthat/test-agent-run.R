@@ -698,6 +698,48 @@ test_that("runtime identity changes append once and preserve the actual request 
                 session_data(s)$id)$total)
 })
 
+test_that("a build projects the transcript once; its note reads what the projection keeps", {
+  skip_on_cran()
+  local_fake_provider(list("x"))
+  s = test_session()
+  run = test_run(s)
+  freeze_fallback(s)
+  session_append(s, entry_message(msg_user("Who are you?")))
+  target = run_target(run)
+  n = 0L
+  project = project_messages
+  local_mocked_bindings(project_messages = function(...) {
+    n <<- n + 1L
+    project(...)
+  })
+  notes = function(req) {
+    ops = Filter(function(m) identical(m$role, "operator"), req$context$messages)
+    vapply(ops, function(m) m$content[[1L]]$text, "")
+  }
+  expect_length(notes(run_build(run, target)), 1L)
+  expect_identical(n, 1L)
+  turn = function(model, stop) {
+    session_append(s, entry_message(msg_assistant("a", api = target$api,
+      provider = target$provider, model = target$id, response_model = model,
+      stop_reason = stop)))
+  }
+  turn("kept-model", "stop")
+  turn("failed-model", "error")
+  reported = notes(run_build(run, target))
+  expect_length(reported, 2L)
+  expect_match(reported[[2L]], "kept-model", fixed = TRUE)
+  # a compaction that cuts both notes away brings the note back, with no prior response_model
+  kept = session_append(s, entry_message(msg_user("Next.")))
+  session_append(s, list(type = "compaction", summary = "short", first_kept_entry_id = kept,
+                         tokens_before = 600,
+                         gptr = list(blocks = list(block_context("checkpoint", "short")),
+                                     state = list(), n = 1L)))
+  after = notes(run_build(run, target))
+  expect_length(after, 1L)
+  expect_match(after, "Prior completed response_model: not reported", fixed = TRUE)
+  expect_identical(n, 3L)
+})
+
 test_that("older images are elided above the model's image limit, once (IC-67)", {
   skip_on_cran()
   s = test_session()

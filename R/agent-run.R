@@ -626,7 +626,7 @@ path_model_ref = function(path) {
 run_build = function(run, target) {
   s = run$shell
   d = session_data(s)
-  messages = project_messages(d$entries, d$leaf, target)
+  messages = path_context(d$entries, d$leaf)
   block = run_identity(run, target, messages)
   previous = NULL
   for (m in rev(messages)) {
@@ -660,6 +660,9 @@ run_build = function(run, target) {
 
 #' Small current-request identity context: configuration and reported metadata have separate
 #' labels. Changes append an operator entry so the request remains an append-only history.
+#' `messages` are the path's context messages (`path_context()`): the projection keeps their
+#' operator messages in order and drops only failed turns, which the search skips, so both reach
+#' the projected request's note and response model.
 #' @noRd
 run_identity = function(run, target, messages) {
   quote = function(x) encodeString(substr(x %||% "unknown", 1L, 200L), quote = '"')
@@ -753,6 +756,7 @@ images_elide = function(s, messages, target) {
 #' A copy attached after the elision (by peter$plot(<id>)) is sent.
 #' @noRd
 images_omit = function(messages, ids, info = images_scan(messages)) {
+  if (!length(ids)) return(messages)
   for (r in seq_len(nrow(info))) {
     k = match(info$id[r], ids)
     if (is.na(k)) next

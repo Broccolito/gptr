@@ -252,12 +252,19 @@ id_alnum9_normaliser = function() {
 #' operator messages until pending results are complete, then `handoff_transform()`.
 #' @noRd
 project_messages = function(entries, leaf, target) {
-  path = entry_compaction_cut(entry_path(entries, leaf))
-  msgs = unlist(lapply(path, entry_messages), recursive = FALSE) %||% list()
-  handoff_transform(project_structure(msgs), target)
+  handoff_transform(project_structure(path_context(entries, leaf)), target)
 }
 
-#' Entries on the path root -> `leaf` (a missing parent re-parents to the previous entry)
+#' The context messages of the path root -> `leaf` from its newest compaction on, before
+#' `project_structure()` and `handoff_transform()`
+#' @noRd
+path_context = function(entries, leaf) {
+  path = entry_compaction_cut(entry_path(entries, leaf))
+  unlist(lapply(path, entry_messages), recursive = FALSE) %||% list()
+}
+
+#' Entries on the path root -> `leaf` (a missing parent re-parents to the previous entry); one
+#' match() finds every parent
 #' @noRd
 entry_path = function(entries, leaf) {
   if (is.null(leaf)) return(list())
@@ -267,6 +274,9 @@ entry_path = function(entries, leaf) {
     gptr_abort(paste0("The leaf entry ", leaf, " is not in the transcript."), "internal",
                detail = "project_messages: unknown leaf")
   }
+  parents = vapply(entries, function(e) as.character(e[["parent_id"]] %||% NA_character_)[1L],
+                   "")
+  up = match(parents, ids)
   chain = integer(length(entries))
   seen = logical(length(entries))
   k = 0L
@@ -274,9 +284,8 @@ entry_path = function(entries, leaf) {
     seen[pos] = TRUE
     k = k + 1L
     chain[k] = pos
-    parent = entries[[pos]][["parent_id"]]
-    if (is.null(parent) || is.na(parent[1])) break
-    nxt = match(parent, ids)
+    if (is.na(parents[pos])) break
+    nxt = up[pos]
     if (is.na(nxt)) nxt = if (pos > 1L) pos - 1L else NA_integer_
     pos = nxt
   }

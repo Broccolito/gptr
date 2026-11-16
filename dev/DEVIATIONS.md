@@ -10892,6 +10892,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (`run_drive()`, `reactor_next_due()`): the run's task returns 0 after a step that changed
   the loop's state, and a task that returned a number is due at that time instead of at the
   5 ms tick; a task that returned TRUE or NULL (one that waits) keeps the tick.
+- Rule (`run_build()`, `entry_path()`, review fix): the runtime note's search reads the path's
+  context messages (`path_context()`), so a build projects once: the projection keeps their
+  operator messages in order and drops only failed turns, which the search skips.
+  `entry_path()` matches every parent at once (linear, was quadratic in the transcript).
 - Why: every request re-encoded, hashed and estimated every message (0.55 ms per message per
   turn), and each loop step waited 5 ms for the next (about 22 ms of a 135 ms turn).
 - Plan text changed: the estimate is keyed on the estimator, not `registry_generation()`, which
@@ -10901,7 +10905,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: prompt-cache "a request built from kept parts equals the uncached build (D-361)", "a
   build encodes and estimates only the messages that changed (D-361)", "after a rewind the kept
   parts are no longer than the transcript (D-361)"; agent-run "a run's step that advanced the
-  loop is due now; a waiting run ticks at 5 ms". Evidence: progress/P32.md Task 9.
+  loop is due now; a waiting run ticks at 5 ms", "a build projects the transcript once; its note
+  reads what the projection keeps". Evidence: progress/P32.md Task 9 and "Review fixes - loop".
 
 ## D-362 - P32 The Codex relay starts with base only (2026-11-16)
 - Rule (`pcli_codex_mcp_args()`): Codex starts gptr's stdio relay as `Rscript --vanilla
