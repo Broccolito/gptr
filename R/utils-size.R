@@ -80,8 +80,8 @@ env_size_epoch = function() {
 #' address, class, shape and fingerprint (`facts`, env_snap_leaf(), env-snapshot.R, a higher layer,
 #' so found at call time) hold, else a walk that replaces it. A volatile size (env_snap_size()'s
 #' `st$volatile`: contents the facts cannot see) or one taken before an epoch (env_size_epoch())
-#' serves only a snapshot (`fresh = FALSE`) of the home it was taken in; the gate and dot facts
-#' pass `fresh = TRUE` and walk it again.
+#' serves only a snapshot (`fresh = FALSE`) of the home it was taken in; the gate, dot facts and
+#' descriptions pass `fresh = TRUE` and walk it again.
 #' @noRd
 env_size_of = function(x, home, facts = ns_fun("env_snap_leaf")(x), fresh = FALSE) {
   if (fresh && length(the$size_cur) > 5000L) env_size_age()  # a session that takes no snapshot

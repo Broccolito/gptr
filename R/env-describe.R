@@ -141,7 +141,7 @@ describe_default = function(box, budget, why) {
 
 # ---------------------------------------------------------------- leaves (bind the object)
 
-#' Core facts of any object (a leaf)
+#' Core facts of any object (a leaf); the size is the stored one (env_size_of(), D-357)
 #' @noRd
 dsc_leaf_core = function(x) {
   env = is.environment(x)
@@ -149,7 +149,7 @@ dsc_leaf_core = function(x) {
   df = inherits(x, "data.frame")
   list(class = class(x), type = typeof(x), length = length(x), dim = attr(x, "dim"),
        df = df, nrow = if (df) .row_names_info(x, 2L) else NA_integer_, s4 = isS4(x),
-       env = env, fun = fun, atomic = is.atomic(x), size = env_snap_size(x))
+       env = env, fun = fun, atomic = is.atomic(x), size = env_size_of(x, NULL, fresh = TRUE))
 }
 
 #' Evenly spaced sample indices (at most 1e5; report 12 section 3.5)

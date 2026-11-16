@@ -236,16 +236,14 @@ test_that("a session opened on a loaded object walks it once before its first ca
   expect_identical(sum(walked() == a0), 1L)
 })
 
-test_that("peter(raw, ...) after a snapshot walks raw only to describe it (D-357)", {
+test_that("peter(raw, ...) after a snapshot walks raw neither for its dots nor to describe it", {
   raw = list(ids = paste0("id", 1:2e4))
   s = env_snapshot(environment())
   fake = local_fake_provider(list("done"))
   walked = local_walks()
   expect_identical(dot_facts(raw)$bytes, s$bytes[s$name == "raw"])
-  expect_identical(sum(walked() == rlang::obj_address(raw)), 0L)
-  # gptr_describe() sizes for display on request, one walk outside the store
   peter(raw, "Describe.", model = fake, .run = FALSE)
-  expect_identical(sum(walked() == rlang::obj_address(raw)), 1L)
+  expect_identical(sum(walked() == rlang::obj_address(raw)), 0L)
 })
 
 test_that("code the person runs makes the gate and dots walk again (D-357)", {

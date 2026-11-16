@@ -10991,6 +10991,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   300 tables): its walk of `raw` puts its ratio at 1.5 served, 1.2 native.
 - Rule (describe): `peter(raw, ...)` walks `raw` once in `gptr_describe()` (env-describe.R, a
   not-reader by the plan); its dot facts walk none.
+
+  `sample_summary` aliases nothing.
+- Rule (describe): `gptr_describe()`'s core facts read the store (`dsc_leaf_core()`, `fresh =
+  TRUE`), where the plan named env-describe.R 152 a not-reader: `peter(raw, ...)` walked `raw`
+  once a request to describe it (review fix); now neither its dots nor its description walk it.
+  The ggplot, function, formula and model methods size their objects directly: those hold an
+  environment, so a stored size would be walked again anyway.
 - Rule (layering): utils-size.R (L0) finds `env_snap_leaf()` and `ckpt_predict()` with `ns_fun()`,
   as doc-replay.R finds gptr-tailor.R. ckpt-rewind.R needed no change.
 - Contract-visible: none beyond D-357. Tests: as D-357. Evidence: progress/P32.md Task 3.
