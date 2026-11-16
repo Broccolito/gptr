@@ -146,8 +146,8 @@ port_candidates = function(n = 20L) {
 
 #' Cheap content fingerprint of an object (a leaf function)
 #'
-#' Hashes the type, length, the object's address, attribute and column addresses and up to 64
-#' sampled values, without copying the object, expanding compact row names or materialising
+#' Hashes the type, length, the object's address, attribute (S4 slot) and column addresses and up
+#' to 64 sampled values, without copying the object, expanding compact row names or materialising
 #' ALTREP sequences. Returns one 64-hex string. Code called inside its loops makes no replacement
 #' call (`x[i] = v`): R's byte code would leave `x` referenced after return, so the user's next edit
 #' would copy it (FIX-14).
@@ -159,7 +159,7 @@ fingerprint = function(x) {
     for (name in c("names", "class")) {
       parts = c(parts, name, rlang::obj_address(attr(x, name, exact = TRUE)))
     }
-  } else if (!is.environment(x) && !isS4(x)) {
+  } else if (!is.environment(x)) {
     attrs = attributes(x)
     for (name in names(attrs)) {
       parts = c(parts, name, rlang::obj_address(attrs[[name]]))

@@ -92,6 +92,20 @@ test_that("a removed object's size lives two snapshots; promises stay unsized (D
   expect_true(rlang::env_binding_are_lazy(e, "lazy"))
 })
 
+test_that("an S4 object's slots are in its fingerprint: a slot assigned in place misses (D-357)", {
+  w = s4_where()
+  methods::setClass("SizeBox", methods::representation(d = "numeric"), where = w)
+  withr::defer(methods::removeClass("SizeBox", where = w))
+  e = new.env()
+  e$b = methods::new(methods::getClass("SizeBox", where = w), d = numeric(10))
+  a0 = rlang::obj_address(e$b)
+  s1 = env_snapshot(e)
+  e$b@d = numeric(1e5)
+  expect_identical(rlang::obj_address(e$b), a0)
+  expect_identical(env_snapshot(e)$bytes, env_snap_size(e$b))
+  expect_gt(env_snap_size(e$b), s1$bytes + 7e5)
+})
+
 test_that("a compact integer sequence counts its state, a changed one its elements (D-247)", {
   e = new.env()
   e$alt = 1:1e9

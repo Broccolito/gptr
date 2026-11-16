@@ -10821,7 +10821,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   stored size (what-if: 156.7 against 178.5 MB) is used until the name is rebound, an agent call
   targets it, or an epoch starts (D-365). Main's gate re-walked and saw it; main's snapshot sizes
   (`previous`) already had this exposure, and a snapshot keeps it. An address reused by a new
-  object within two snapshots must also match class, shape and fingerprint to hit.
+  object within two snapshots must also match class, shape and fingerprint to hit; an S4 object's
+  fingerprint holds its slots' addresses (review fix: with type, length and address only, `obj@d
+  = big`, which keeps the address, and a new object of the class at a reused address hit).
 - Contract-visible: 04 section 3.1 `gptr.protect_size` row (the stored size, the staleness), IC-04,
   IC-31, section 7.9 (`env_snapshot()` and `env_view_snapshot()` lose `previous`), sections 7.11
   and 7.16 (`code_targets()` and `ckpt_predict()` gain `inplace`); 03 section 3.2 `utils-size.R`.
