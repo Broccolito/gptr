@@ -2307,13 +2307,14 @@ risk_binding_safe = function(name, envir, inherits) {
            error = function(e) list(class = "<unknown>", bytes = NA_real_))
 }
 
-#' A byte count for display
+#' A byte count for display ("about 3.4 GB" for an estimate)
 #' @noRd
 risk_bytes = function(b) {
   if (is.na(b)) return("size unknown")
   u = c("B", "KB", "MB", "GB", "TB")
   i = if (b < 1) 1L else min(length(u), floor(log(b, 1024)) + 1L)
-  paste(format(round(b / 1024^(i - 1L), 1), trim = TRUE), u[i])
+  paste0(if (isTRUE(attr(b, "about"))) "about ", format(round(b / 1024^(i - 1L), 1), trim = TRUE),
+         " ", u[i])
 }
 
 # ---- arguments and paths -------------------------------------------------------------------

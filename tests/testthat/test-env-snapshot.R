@@ -28,7 +28,8 @@ test_that("env_snapshot lists bindings with facts and never forces promises", {
   makeActiveBinding("act", function() stop("called!"), e)
   e[[".Random.seed"]] = 1:3
   s = env_snapshot(e)
-  expect_named(s, c("name", "kind", "address", "class", "bytes", "shape", "fp"))
+  expect_named(s, c("name", "kind", "address", "class", "bytes", "about", "shape", "fp"))
+  expect_false(any(s$about))
   expect_equal(s$name, c("act", "df", "f", "lazy", "v"))
   expect_equal(s$kind, c("active", "value", "value", "promise", "value"))
   expect_equal(s$class[s$name == "df"], "data.frame")
@@ -98,6 +99,7 @@ test_that("workspace_lines aligns columns, sorts largest first and caps at 12 li
     kind = "value", address = NA_character_,
     class = c("Seurat", "data.table", "character", "data.frame", "data.frame", "list"),
     bytes = c(5.1 * 1024^3, 96 * 1024^2, 2.1 * 1024^2, 1.2 * 1024^2, 3 * 1024, 2 * 1024),
+    about = FALSE,
     shape = c("3,012,448 cells x 33,538 features", "3,012,448 x 5", "length 33,538",
               "4,211 x 7", "12 x 4", "length 6"),
     fp = NA_character_, stringsAsFactors = FALSE
@@ -141,6 +143,20 @@ test_that("every value has a size; promises and active bindings rank last (D-247
   expect_match(lines[3], "^plt +pkg::plot +length 0 +78[0-9] KB$")
   expect_false(any(grepl("^lazy ", lines)))
   expect_true(rlang::env_binding_are_lazy(e, "lazy"))
+})
+
+test_that("a sampled size is marked about in its row, workspace line and change line (D-356)", {
+  local_mocked_bindings(env_size_strings_max = 1000)
+  e = new.env()
+  e$x = rep(c("a", "b"), 5000)
+  e$y = letters
+  s1 = env_snapshot(e)
+  expect_identical(s1$about, c(TRUE, FALSE))
+  expect_identical(env_snapshot(e, previous = s1)$about, c(TRUE, FALSE))
+  expect_identical(workspace_lines(s1),
+                   c("x  character  length 10,000  about 79 KB", "y  character  length 26  1.7 KB"))
+  expect_identical(changes_lines(list(added = "x"), s1, character()),
+                   "+ x character length 10,000 about 79 KB")
 })
 
 test_that("a snapshot re-sizes a list edited in place (its fingerprint changed)", {
@@ -266,8 +282,8 @@ test_that("six objects cost at most 600 tokens and promises stay unforced", {
 test_that("changes_lines renders the workspace_changes grammar within budget", {
   snap = data.frame(name = c("markers", "pbmc"), kind = "value", address = NA_character_,
                     class = c("data.frame", "Seurat"), bytes = c(1.2 * 1024^2, NA),
-                    shape = c("4,211 x 7", "3,000 cells x 200 features"), fp = NA_character_,
-                    stringsAsFactors = FALSE)
+                    about = FALSE, shape = c("4,211 x 7", "3,000 cells x 200 features"),
+                    fp = NA_character_, stringsAsFactors = FALSE)
   d = list(added = "markers", modified = "pbmc", removed = "old")
   expect_equal(changes_lines(d, snap, user_ran = "pbmc = subset(pbmc)"), c(
     "+ markers data.frame 4,211 x 7 1.2 MB", "~ pbmc", "- old", "user ran: pbmc = subset(pbmc)"

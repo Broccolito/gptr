@@ -13,7 +13,9 @@
 #' (global, base, empty, namespaces, packages), `home` and the frames of running calls with their
 #' enclosures, and an S7 class copy's environments. With `shared` (a checkpoint image against the
 #' current value) the parts and strings `shared` reaches count 0. Long lists and environments are
-#' sampled (env_size_items()); past 100 levels or ten budgets a part counts object.size().
+#' sampled (env_size_items()); past 100 levels or ten budgets a part counts object.size(). Past
+#' env_size_strings_max strings a walk samples each character vector's strings: the size is then
+#' an estimate, at or above the truth in expectation, with attribute `about` (TRUE).
 #' @noRd
 env_snap_size = function(x, home = NULL, shared = NULL) {
   st = new.env(parent = emptyenv())
@@ -21,6 +23,7 @@ env_snap_size = function(x, home = NULL, shared = NULL) {
   st$s7 = new.env(hash = TRUE, parent = emptyenv())
   st$cls = FALSE
   st$depth = 0L
+  st$about = FALSE
   i = sys.nframe()
   e = home
   while (i >= 0L) {  # one frame at a time: a list of frames would keep them referenced
@@ -35,13 +38,19 @@ env_snap_size = function(x, home = NULL, shared = NULL) {
   if (!is.null(shared)) {
     env_size_reset(st, TRUE)
     env_size_walk(shared, st)
-    keep = env_size_strings(st, seq_len(st$nstr))
+    keep = unlist(mget(as.character(seq_len(st$nstr)), envir = st$strs), use.names = FALSE)
   }
   env_size_reset(st, FALSE)
-  b = env_size_walk(x, st)
-  u = env_size_strings(st, seq_len(st$nstr))
-  b + env_size_chars(u[!u %in% keep])
+  b = env_size_walk(x, st) + env_size_chars(st, seq_len(st$nstr), keep)
+  if (st$about) attr(b, "about") = TRUE
+  b
 }
+
+#' Strings a walk reads before it samples (D-356): at 8 bytes a pointer a sampled object holds at
+#' least 1e8 bytes, the default gptr.protect_size and gptr.undo_capture_max, so at the defaults no
+#' gate or capture decision rests on an estimate
+#' @noRd
+env_size_strings_max = 1.25e7
 
 #' Parts a long list or environment walks before it is sampled (about 0.07 s)
 #' @noRd
@@ -51,21 +60,16 @@ env_size_budget = 10000
 #' @noRd
 env_size_small = c(0, 1, 2, 4, 4, 6, 6, 8, 8, rep(16, 8))
 
-#' A fresh part count and string store; `mark`: a cut list or environment marks its other items
-#' seen (the walk of `shared`)
+#' A fresh part count, string store, string weights and count of strings read; `mark`: a cut
+#' list or environment marks its other items seen (the walk of `shared`)
 #' @noRd
 env_size_reset = function(st, mark) {
   st$parts = 0
   st$mark = mark
   st$strs = new.env(hash = TRUE, parent = emptyenv())
   st$nstr = 0L
-}
-
-#' The distinct strings of store entries `idx` (NA left out)
-#' @noRd
-env_size_strings = function(st, idx) {
-  u = unique(unlist(mget(as.character(idx), envir = st$strs), use.names = FALSE))
-  u[!is.na(u)]
+  st$w = numeric()
+  st$read = 0
 }
 
 #' R's allocation for n elements of `per` bytes: a 48-byte header and the small-vector classes
@@ -76,9 +80,33 @@ env_size_vec = function(n, per) {
   48 + 8 * (w * (w > 16) + env_size_small[w * (w <= 16) + 1])
 }
 
-#' Bytes of the strings (CHARSXPs) u
+#' Bytes of the strings (CHARSXPs) of store entries `idx` not in `keep`, NA left out: each
+#' distinct string of a fully read vector once, then each sampled string not met before at its
+#' vector's weight (its length over its sample's)
 #' @noRd
-env_size_chars = function(u) sum(env_size_vec(nchar(u, type = "bytes") + 1, 1))
+env_size_chars = function(st, idx, keep = character()) {
+  l = mget(as.character(idx), envir = st$strs)
+  w = st$w[idx]
+  ex = w == 1
+  u = unique(unlist(l[ex], use.names = FALSE))
+  u = u[!is.na(u) & !u %in% keep]
+  b = env_size_strbytes(u)
+  if (all(ex)) return(b)
+  s = unlist(l[!ex], use.names = FALSE)
+  ok = !duplicated(s) & !is.na(s) & !s %in% u & !s %in% keep
+  b + env_size_strbytes(s[ok], rep(w[!ex], lengths(l[!ex]))[ok])
+}
+
+#' Bytes of strings u, each counted `w` times (1 when NULL), summed by distinct byte length so no
+#' table is as long as the longest string
+#' @noRd
+env_size_strbytes = function(u, w = NULL) {
+  n = nchar(u, type = "bytes")
+  k = unique(n)
+  g = match(n, k)
+  cnt = if (is.null(w)) tabulate(g, length(k)) else as.vector(rowsum(w, g, reorder = FALSE))
+  sum(env_size_vec(k + 1, 1) * cnt)
+}
 
 #' Is e shared by every object (global, base, empty, a namespace or a package environment)?
 #' @noRd
@@ -130,10 +158,17 @@ env_size_walk = function(x, st) {
     } else {
       env_size_code(x, an)
     },
-    character = {  # the pointers; the distinct strings go to the store, counted once at the end
+    character = {  # the pointers; the store gets the distinct strings, sampled past the budget
+      n = length(x)
+      m = min(n, max(env_size_strings_max - st$read, 1000))
+      st$read = st$read + m
+      st$about = st$about || m < n
       st$nstr = st$nstr + 1L
-      assign(as.character(st$nstr), unique.default(x), envir = st$strs)
-      env_size_vec(length(x), 8)
+      st$w[st$nstr] = if (m < n) n / m else 1
+      assign(as.character(st$nstr),
+             unique.default(if (m < n) .subset(x, round(seq(1, n, length.out = m))) else x),
+             envir = st$strs)
+      env_size_vec(n, 8)
     },
     list = , expression = {
       n = env_size_len(x)
@@ -206,7 +241,7 @@ env_size_items = function(x, keys, st) {
     j = j + 1L
   }
   idx = s1 + seq_len(st$nstr - s1)
-  b + (n - i + 1L) * (nb + env_size_chars(env_size_strings(st, idx[!idx %in% cut]))) / k
+  b + (n - i + 1L) * (nb + env_size_chars(st, idx[!idx %in% cut])) / k
 }
 
 #' Bytes of an environment: itself, a cell per binding, the bindings' values (not promises or

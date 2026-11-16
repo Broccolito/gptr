@@ -3,15 +3,15 @@
 # closure, tryCatch() or list holds one, and a function-frame home lives only in a box binding
 # reset on exit (fresh-process tracemem runs, test-copy-eval.R).
 
-#' Format a byte count for model-facing text ("3 KB", "1.2 MB", "5.1 GB")
+#' Format a byte count for model-facing text ("3 KB", "1.2 MB", "about 5.1 GB" for an estimate)
 #' @noRd
-env_fmt_bytes = function(b) {
+env_fmt_bytes = function(b, about = isTRUE(attr(b, "about"))) {
   if (is.null(b) || length(b) != 1L || is.na(b)) return("")
   units = c("B", "KB", "MB", "GB", "TB")
   i = max(1L, min(length(units), floor(log(max(b, 1), 1024)) + 1L))
   v = b / 1024^(i - 1L)
   txt = if (i == 1L || v >= 10) sprintf("%.0f", v) else sub("\\.0$", "", sprintf("%.1f", v))
-  paste(txt, units[i])
+  paste0(if (about) "about ", txt, " ", units[i])
 }
 
 #' Format counts with thousands separators (the decimal mark fixed, whatever `OutDec` says)
@@ -145,6 +145,7 @@ env_snap_rows = function(box, previous, sizes) {
   address = rep(NA_character_, n)
   cls = rep(NA_character_, n)
   bytes = rep(NA_real_, n)
+  about = rep(FALSE, n)
   shape = rep(NA_character_, n)
   fp = rep(NA_character_, n)
   if (n) {
@@ -165,20 +166,22 @@ env_snap_rows = function(box, previous, sizes) {
     reuse = !is.na(j) && identical(previous$address[j], f$address) &&
       identical(previous$class[j], f$class) && identical(previous$shape[j], f$shape) &&
       identical(previous$fp[j], f$fp)
-    bytes[i] = if (reuse) {
+    b = if (reuse) {
       previous$bytes[j]
     } else {
       env_snap_size(get(nms[i], envir = box$envir, inherits = FALSE), box$envir)
     }
+    bytes[i] = b
+    about[i] = isTRUE(if (reuse) previous$about[j] else attr(b, "about"))
   }
   data.frame(name = nms, kind = kind, address = address, class = cls, bytes = bytes,
-             shape = shape, fp = fp, stringsAsFactors = FALSE)
+             about = about, shape = shape, fp = fp, stringsAsFactors = FALSE)
 }
 
 #' Copy-safe snapshot of an environment, forcing no promise and calling no active binding (R4)
 #' One row per binding: name, kind (value, promise, active), address, class, bytes (reused from
-#' `previous` while address, class, shape and fp hold), shape, fp; missing arguments are
-#' `<missing>`.
+#' `previous` while address, class, shape and fp hold), about (bytes is an estimate), shape, fp;
+#' missing arguments are `<missing>`.
 #' @noRd
 env_snapshot = function(envir, previous = NULL) {
   check_env(envir, "envir")
@@ -261,11 +264,10 @@ workspace_lines = function(snapshot, budget = 600L) {
   value = s$kind == "value"
   cls = ifelse(value, s$class, paste0("<", s$kind, ">"))
   shape = ifelse(value, s$shape, "")
-  size_txt = vapply(s$bytes, env_fmt_bytes, "")
   k = min(n, 12L)
   top = seq_len(k)
   lines = env_align(env_text(s$name[top]), env_text(cls[top]), env_text(shape[top]),
-                    size_txt[top])
+                    mapply(env_fmt_bytes, s$bytes[top], s$about[top]))
   more = function(m) if (n - k + m > 0L) sprintf("(+ %d smaller objects: use ls())", n - k + m)
   shown = utils::head(lines, max(1L, lines_fit(lines, budget, "describe", more)))
   c(shown, more(k - length(shown)))
@@ -280,7 +282,8 @@ changes_lines = function(diff, snapshot, user_ran, budget = 300L) {
   added = character()
   if (length(i)) {
     added = paste("+", env_text(snapshot$name[i]), env_text(snapshot$class[i]),
-                  env_text(snapshot$shape[i]), vapply(snapshot$bytes[i], env_fmt_bytes, ""))
+                  env_text(snapshot$shape[i]),
+                  mapply(env_fmt_bytes, snapshot$bytes[i], snapshot$about[i]))
   }
   lines = sub("\\s+$", "", c(
     added,

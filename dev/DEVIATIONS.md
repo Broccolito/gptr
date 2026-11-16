@@ -10741,6 +10741,36 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   "the models footer is one line at 120 columns and two at 80 (D-355)". Evidence:
   progress/fixes-1.0.1/round2-Y.md.
 
+## D-356 - P32 A walk reads at most 12.5 million strings (2026-11-16)
+- Rule: `env_snap_size()` reads at most `env_size_strings_max` (1.25e7) strings a walk (the walk
+  of `shared` has its own): a character vector of length n reads m = min(n, max(budget - read,
+  1000)) strings, all while the budget lasts (weight 1, `unique.default(x)` as before), else the
+  evenly spaced sample `.subset(x, round(seq(1, n, length.out = m)))` at weight n / m.
+  `env_size_chars(st, idx, keep)` counts the distinct strings of fully read vectors once, then each
+  sampled string not met before (not among them, not in `keep`, not in an earlier sample) at its
+  weight, summed by distinct byte length (no table as long as the longest string);
+  `env_size_strings()` is gone. Allocations, pointers, attributes and D-247's part sampling stay
+  exact. A walk that sampled returns its bytes with attribute `about` (TRUE).
+- Rule: `about` reaches the snapshot (logical column `about` after `bytes`, reused with
+  `previous`), `env_fmt_bytes()` (an `about` argument, by default the attribute) and so the
+  `<workspace>` and `<workspace_changes>` lines and every `gptr_describe()` header, and
+  `risk_bytes()` (the overwrite note, "about 99.2 MB"). Risk `sizes`, checkpoint records and
+  `gptr_checkpoints()` stay plain numbers.
+- Why: at 8 bytes a pointer the exact part of a sampled object is at least 1e8 bytes, the default
+  `gptr.protect_size` and `gptr.undo_capture_max`, so at the defaults no gate or capture decision
+  rests on an estimate. A sampled string counts n / m times, so with repeats the estimate is at or
+  above the truth in expectation (factor w(1 - (1 - 1/w)^c) for multiplicity c), bounded by "every
+  string distinct"; it reads far high where a vocabulary is much smaller than its vector but larger
+  than the sample (prototype: +62%, +187%). T03's list at 300 tables: 1.42 s to 0.3 s, same bytes.
+- Rejected: estimating a vocabulary from collisions in the sample (Chao): reads low on skewed data.
+- Contract-visible: the `env_snapshot()` row gains `about`; size texts above the budget say
+  "about" (the `04` and `03` amendments are T11's).
+- Tests: utils-size (new: main's bytes for 17 objects and 4 `shared` cases, a 1e8-byte string with
+  no large allocation, the read counter at a budget of 1e5, accuracy over the budget, the note and
+  the describe header, two no-copy rows); env-snapshot "a sampled size is marked about in its row,
+  workspace line and change line (D-356)"; perm-battery's six `huge` rows re-recorded (decision and
+  level unchanged). Evidence: progress/P32.md Task 2; progress/P32/evidence/prototype/.
+
 ## D-363 - P32 Decision battery: condensed T03 inputs, the 13-million-string object in one mode (2026-11-16)
 - Rule: `t03_r2` and `t03_r3` are condensed T03-shaped codes (the dead branch that would build
   `raw`, setDTthreads, fread, rm, setorder by reference, fwrite and writeLines into the project),
