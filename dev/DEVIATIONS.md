@@ -10857,3 +10857,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (D-358)", "a served tool whose risk record is invalid or fails is gated at level 3 (D-358)";
   perm-battery unchanged; helper-arch.R admits the edge mcp -> `call_risk()`. Evidence:
   progress/P32.md Task 4.
+
+## D-359 - P32 One classification per final input (2026-11-16)
+- Rule: `perm_check(call, run, extra = NULL, risk = NULL)`; `perm_decide()` uses `risk %||%
+  call_risk()`. `tool_call_hook()` keeps the payload's risk as `call$risk` only when every
+  `tool_call` hook record the session sees has a `builtin:` source (`ev_builtin_only()`, read
+  before the chain runs; lazy and non-matching records count) and none returned `modify`, else
+  NULL; `dispatch_steps()` passes it, `mcp_serve_exec()` classifies a NULL one again for both
+  gates. A policy `modify`, nested calls, `opts$gate` and forwarded worker requests classify as
+  before. No counter, no state.
+- Rule (extent): the idle served gate classifies again after any other hook, not only after a
+  changed input (D-358), so a hook that assigns into the home is not gated on the pre-hook risk.
+- Why: each call was classified twice on the same input and state (PERF-3: 2 to 1 per call).
+- Contract-visible: `perm_check()` gains `risk` (`04` line 2762, IC-04 wording; T11).
+- Tests: test-agent-dispatch (2 tests, the forwarded request's count), test-mcp-server (1);
+  perm-battery unchanged. Evidence: progress/P32.md Task 5.

@@ -66,9 +66,9 @@ test_that("SDK-dispatched successful R uses approved code and the existing secre
   secret_register(secret, "MCP_RECORD_TEST_KEY", "test")
   permitted = paste0('key = "', secret, '"\nanswer = 42\nanswer')
   check = perm_check
-  local_mocked_bindings(perm_check = function(call, run) {
+  local_mocked_bindings(perm_check = function(call, run, ...) {
     if (identical(call$name, "r")) return(list(decision = "allow", input = list(code = permitted)))
-    check(call, run)
+    check(call, run, ...)
   })
   fake = local_fake_provider(list(fake_tool("record_probe", code = "answer = -1"), "Done."))
   path = file.path(root, "sdk.R")

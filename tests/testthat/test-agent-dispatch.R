@@ -714,9 +714,12 @@ test_that("a forwarded request is re-classified from its raw input (IC-53)", {
   })
   forged = a_call("rm_all", tool = spec)
   forged$risk = list(level = 0L)
+  n = local_calls("call_risk")
   dec = perm_check(forged, run)
   expect_identical(dec$decision, "deny")
   expect_identical(dec$risk$level, 3L)
+  # the gate of a forwarded request (run$gate, worker_on_line()) classifies it itself (D-359)
+  expect_identical(n()[["call_risk"]], 1L)
 })
 
 # ---------------------------------------------------------------- never throws, fail closed
@@ -740,7 +743,7 @@ test_that("a risk record without a level from 0 to 4 counts as level 3 and never
 test_that("an internal failure of the pipeline becomes an error result with paired events", {
   local_permissive()
   local_tool("w", function(input, ctx) "written")
-  local_mocked_bindings(perm_check = function(call, run) stop("kernel bug"))
+  local_mocked_bindings(perm_check = function(...) stop("kernel bug"))
   s = test_session()
   ev = local_events(c("tool_execution_start", "tool_execution_end"))
   x = dispatch(s, list(tc("w"), tc("w", id = "c2")))
@@ -1290,4 +1293,76 @@ test_that("a nested peter$ call forgets as a call of its own (D-357)", {
   n = local_calls("env_snap_size")
   env_size_of(home$keep, home, fresh = TRUE)
   expect_identical(n()[["env_snap_size"]], 1L)
+})
+
+# --------------------------------------------------------------- one classification (P32 T5, D-359)
+
+test_that("an r call is classified once with built-in hooks only, again otherwise (D-359)", {
+  local_project()
+  local_permission_rules()
+  local_gptr_options(protect_size = 5e4)
+  home = new.env()
+  s = test_session(home = home)
+  seen = new.env()
+  local_policy("probe", function(call, ctx) {
+    seen$levels = c(seen$levels, call$risk$level)
+    NULL
+  })
+  local_policy("fix", function(call, ctx) {
+    if (identical(call$input$code, "x = 1")) {
+      list(decision = "modify", reason = "fix", input = list(code = "x = 2"))
+    }
+  })
+  hooks = list(
+    none = NULL,
+    modify = list(handler = function(event, ctx) {
+      list(decision = "modify", input = list(code = "rm(list = ls())"))
+    }),
+    assign = list(handler = function(event, ctx) {
+      home$keep = numeric(1e5)
+      NULL
+    }),
+    matcher = list(handler = function(event, ctx) NULL, matcher = "sh"),
+    policy = NULL)
+  n = local_calls("call_risk")
+  out = list()
+  for (nm in names(hooks)) {
+    home$keep = 1
+    seen$levels = NULL
+    h = hooks[[nm]]
+    id = if (!is.null(h)) {
+      hook_add("tool_call", h$handler, matcher = h$matcher, rank = 0L, source = "session",
+               session = session_data(s)$id)
+    }
+    n0 = n()[["call_risk"]]
+    x = dispatch(s, list(tc("r", list(code = if (nm == "policy") "x = 1" else "keep = 2"))))
+    if (!is.null(id)) hook_remove(id)
+    out[[nm]] = list(n = n()[["call_risk"]] - n0, levels = seen$levels,
+                     text = msg_text(x$msgs[[length(x$msgs)]]), keep = home$keep)
+  }
+  expect_identical(vapply(out, function(r) r$n, 0L),
+                   c(none = 1L, modify = 2L, assign = 2L, matcher = 2L, policy = 2L))
+  # the rewritten code is gated as what it is: level 4, denied, nothing removed
+  expect_identical(out$modify$levels, 4L)
+  expect_match(out$modify$text, "^Permission denied")
+  expect_identical(out$modify$keep, 1)
+  # the hook made `keep` big, so overwriting it is level 3, not the payload's 2
+  expect_identical(out$assign$levels, 3L)
+  expect_identical(out$assign$keep, 2)
+  expect_identical(home$x, 2)
+})
+
+test_that("a nested call's gate classifies its own input (D-359)", {
+  local_project()
+  local_permission_rules()
+  local_tool("inner", function(input, ctx) "x")
+  local_tool("outer", function(input, ctx) {
+    dispatch_nested("inner", json_obj(), ctx)
+    "ok"
+  }, annotations = list(read_only = TRUE))
+  n = local_calls(c("call_risk", "perm_check"))
+  x = dispatch(test_session(), list(tc("outer")))
+  expect_identical(msg_text(x$msgs[[1L]]), "ok")
+  # the outer call once, reused by its gate; the member its own risk and its gate's
+  expect_identical(n(), c(call_risk = 3L, perm_check = 2L))
 })

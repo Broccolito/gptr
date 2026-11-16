@@ -252,6 +252,15 @@ ev_hooks = function(reg, event, sid) {
   registry_sort(registry_enabled(reg, reg$hooks, event, sid, activate = TRUE))
 }
 
+#' Are all the hook records ev_hooks() picks for an event, matching or not, built-in ones (TRUE
+#' for none)? A lazy record counts by its source, unactivated
+#' @noRd
+ev_builtin_only = function(event, sid) {
+  reg = registry_env()
+  all(vapply(registry_enabled(reg, reg$hooks, event, sid),
+             function(r) startsWith(r$source, "builtin:"), NA))
+}
+
 #' Does a hook's matcher accept the event (NULL, a tool-name glob, or a predicate)?
 #' @noRd
 ev_matches = function(matcher, ev) {

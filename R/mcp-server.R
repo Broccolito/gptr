@@ -184,12 +184,12 @@ mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
                     if (!person) paste0(" or to allow it with ", rule), "."))
 }
 
-#' The gate of a served call (IC-57): perm_check() with the session's run only while a pump runs
-#' (the request is served inside a blocking gptr call, where a person may be asked); otherwise
-#' (no run, or a run left in progress by gptr_step()) mcp_gate_idle()
+#' The gate of a served call on its final risk (IC-57): perm_check() with the session's run only
+#' while a pump runs (the request is served inside a blocking gptr call, where a person may be
+#' asked); otherwise (no run, or a run left in progress by gptr_step()) mcp_gate_idle()
 #' @noRd
 mcp_serve_gate = function(call, run, ctx, sid = NULL) {
-  if (mcp_pumped(run)) return(perm_check(call, run))
+  if (mcp_pumped(run)) return(perm_check(call, run, risk = call$risk))
   mcp_gate_idle(call, ctx, sid)
 }
 
@@ -227,8 +227,8 @@ mcp_serve_call = function(target, name, args, id, schema) {
 
 #' Run one served tool call, validated against its served `schema`, through the tool_call hooks of
 #' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result. Its risk is call_risk()'s
-#' (for `r` without a run, the classifier's in the served environment), classified again when a
-#' hook changed the input and the idle gate decides, then the gate's (D-358). A tool other than
+#' (for `r` without a run, the classifier's in the served environment), classified again for the
+#' gate unless tool_call_hook() kept it (D-359), then the gate's (D-358). A tool other than
 #' `r` runs as the agent loop runs it (tool_run(): its record's source, the result check), a
 #' reported one (`st`, which marks the start of its execution) in the run's tool frame
 #' (tool_execute_frame()). A reported call runs between the checkpointers' before and after, as
@@ -281,7 +281,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     if (!is.null(st)) st$refused = call$refused
     return(gptr_tool_result(call$blocked, is_error = TRUE))
   }
-  if (!identical(call$input, input) && !mcp_pumped(run)) call$risk = call_risk(call, ctx, run)
+  call$risk = call$risk %||% call_risk(call, ctx, run)
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
     if (!is.null(st)) st$refused = perm_refused(d) %||% "not allowed"

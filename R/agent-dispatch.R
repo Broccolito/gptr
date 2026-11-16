@@ -96,7 +96,7 @@ dispatch_steps = function(run, call, st = NULL) {
   call = tool_call_hook(run, call, call_risk(call, ctx, run))
   if (!is.null(call$blocked)) return(refuse(call$refused, call$blocked))
   if (isTRUE(run$signal$aborted)) return(aborted())
-  dec = perm_check(call, run)
+  dec = perm_check(call, run, risk = call$risk)
   call$risk = dec$risk
   if (!identical(dec$decision, "allow")) {
     return(refuse(perm_refused(dec), paste(perm_denial_text(dec), "Nothing in this call ran.")))
@@ -113,9 +113,12 @@ dispatch_steps = function(run, call, st = NULL) {
 }
 
 #' The `tool_call` hook chain of a call: the call with a `modify` decision's input, or with
-#' `blocked` (the denial text) and `refused` (why it did not run) when a hook blocks it
+#' `blocked` (the denial text) and `refused` (why it did not run) when a hook blocks it. Its
+#' `risk` is the payload's `risk` when only built-in hooks are registered for the event and none
+#' changed the input (nothing else ran since it was classified), else NULL (D-359)
 #' @noRd
 tool_call_hook = function(run, call, risk = NULL) {
+  call$risk = if (ev_builtin_only("tool_call", run$session)) risk
   hk = run_emit(run, "tool_call", tool_name = call$name, tool_call_id = call$id, input = call$input,
                 nested = call$nested, parent_tool_call_id = call$parent_id, risk = risk)
   if (!is.list(hk)) return(call)
@@ -125,6 +128,7 @@ tool_call_hook = function(run, call, risk = NULL) {
     call$refused = paste0("blocked by a hook: ", why)
   } else if (identical(hk$decision, "modify") && is.list(hk$input)) {
     call$input = hk$input
+    call$risk = NULL
   }
   call
 }
@@ -574,24 +578,26 @@ nested_record = function(run, outer_id, name, res, level) {
 # ---------------------------------------------------------------------------- permissions
 
 #' The permission combination (IC-04, IC-53): policies, `permission_request` hooks (`ask`), the
-#' UI, the non-interactive stop; the risk is recomputed from the raw input. An allowed call gets
-#' the one-shot tokens of its control exports (IC-53 item 3).
+#' UI, the non-interactive stop; the risk is recomputed from the raw input unless `risk` is
+#' given. An allowed call gets the one-shot tokens of its control exports (IC-53 item 3).
 #' @param extra A decision decided elsewhere for the same call (a nested call's ask rule,
 #'   nested_rules()), combined with the policies' as one more opinion, or NULL.
+#' @param risk The risk of this very input in this state, from the call's pipeline
+#'   (tool_call_hook(): D-359), or NULL.
 #' @return `list(decision, reason, input, risk, rule, how)`; the dispatcher executes only "allow".
 #' @noRd
-perm_check = function(call, run, extra = NULL) {
-  res = perm_decide(call, run, extra)
+perm_check = function(call, run, extra = NULL, risk = NULL) {
+  res = perm_decide(call, run, extra, risk)
   if (identical(res$decision, "allow")) perm_grant_control(run, res$risk)
   res
 }
 
 #' perm_check() before the token grant
 #' @noRd
-perm_decide = function(call, run, extra = NULL) {
+perm_decide = function(call, run, extra = NULL, risk = NULL) {
   ctx = run_ctx(run)
   snap = run$opts$safety %||% list()
-  risk = call_risk(call, ctx, run)
+  risk = risk %||% call_risk(call, ctx, run)
   if (isTRUE(snap$unsafe_no_permissions)) {
     return(perm_result("allow", "gptr.unsafe_no_permissions is set", call$input, risk))
   }

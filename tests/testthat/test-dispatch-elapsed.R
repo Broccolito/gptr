@@ -6,7 +6,7 @@ test_that("reported tool duration excludes approval and includes execution", {
   clock = new.env(parent = emptyenv())
   clock$time = 100
   local_mocked_bindings(reactor_now = function() clock$time,
-                        perm_check = function(call, run) {
+                        perm_check = function(call, run, ...) {
                           clock$time = clock$time + 14
                           list(decision = "allow", risk = list(level = 0L))
                         })
@@ -30,7 +30,7 @@ test_that("an unexecuted tool has zero execution duration after a delayed denial
   clock$time = 100
   clock$ran = FALSE
   local_mocked_bindings(reactor_now = function() clock$time,
-                        perm_check = function(call, run) {
+                        perm_check = function(call, run, ...) {
                           clock$time = clock$time + 14
                           list(decision = "deny", reason = "declined", risk = list(level = 2L))
                         })
@@ -53,7 +53,7 @@ test_that("an interrupted tool reports execution duration without earlier approv
   clock = new.env(parent = emptyenv())
   clock$time = 100
   local_mocked_bindings(reactor_now = function() clock$time,
-                        perm_check = function(call, run) {
+                        perm_check = function(call, run, ...) {
                           clock$time = clock$time + 14
                           list(decision = "allow", risk = list(level = 0L))
                         })

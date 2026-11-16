@@ -120,14 +120,17 @@ perf_p32_rows = function(gate, m, n) {
   row = function(...) perf_row(gate, ...)
   pick = function(pattern) m[grepl(pattern, names(m))]
   switch(gate,
-    "PERF-3" = rbind(
-      row("classifications per call, native and served, one-line and 25-line",
-          max(pick("^classify_")), 1, "=="),
-      do.call(rbind, lapply(c("native_one", "native_lines25", "served_one", "served_lines25"),
-                            function(key) {
-        rbind(row(paste("parses per call,", key), m[[paste0("parse_", key)]]),
-              row(paste("ms per call,", key, "(bar set in T5)"), m[[paste0("ms_", key)]]))
-      }))),
+    "PERF-3" = {
+      # bars: twice T5's medians (P32 progress, Task 5)
+      ms = c(native_one = 58, native_lines25 = 246, served_one = 36, served_lines25 = 220)
+      rbind(
+        row("classifications per call, native and served, one-line and 25-line",
+            max(pick("^classify_")), 1, "=="),
+        do.call(rbind, lapply(names(ms), function(key) {
+          rbind(row(paste("parses per call,", key), m[[paste0("parse_", key)]]),
+                row(paste("ms per call,", key), m[[paste0("ms_", key)]], ms[[key]]))
+        })))
+    },
     "PERF-4" = {
       gap = function(route, m_) sum(pick(sprintf("^gap_%s_[23]_n%d$", route, m_)))
       big = setdiff(unique(c(300L, n)), 50L)

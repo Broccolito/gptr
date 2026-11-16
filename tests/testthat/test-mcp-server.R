@@ -352,6 +352,69 @@ test_that("a served tool whose risk record is invalid or fails is gated at level
   }
 })
 
+test_that("a served r call is classified once with built-in hooks only, pumped and idle (D-359)", {
+  local_project()
+  local_gptr_options(protect_size = 5e4)
+  hooks = list(
+    none = NULL,
+    modify = list(handler = function(event, ctx) {
+      list(decision = "modify", input = list(code = "rm(list = ls())"))
+    }),
+    assign = list(handler = function(event, ctx) {
+      assign("keep", numeric(1e5), envir = ctx$envir)
+      NULL
+    }),
+    matcher = list(handler = function(event, ctx) NULL, matcher = "sh"),
+    policy = NULL)
+  got = new.env()
+  offs = list(gptr_register(gptr_policy("probe", function(call, ctx) {
+    if (identical(call$name, "r")) got$levels = c(got$levels, call$risk$level)
+    NULL
+  })), gptr_register(gptr_policy("fix", function(call, ctx) {
+    if (identical(call$input$code, "x = 1")) {
+      list(decision = "modify", reason = "fix", input = list(code = "x = 2"))
+    }
+  })))
+  withr::defer(for (off in offs) off())
+  n = local_calls("call_risk")
+  out = list()
+  for (pumped in c(TRUE, FALSE)) for (nm in names(hooks)) {
+    if (nm == "policy" && !pumped) next
+    got$levels = got$row = NULL
+    # a denial blocks a pumped run, which then signals it
+    tryCatch(serve_in_run(function(event, ctx) {
+      if (!pumped) local_mocked_bindings(mcp_pumped = function(run) FALSE)
+      assign("keep", 1, envir = ctx$envir)
+      h = hooks[[nm]]
+      if (!is.null(h)) {
+        id = hook_add("tool_call", h$handler, matcher = h$matcher, rank = 0L, source = "session",
+                      session = session_data(ctx$session)$id)
+        on.exit(hook_remove(id), add = TRUE)
+      }
+      n0 = n()[["call_risk"]]
+      code = if (nm == "policy") "x = 1" else "keep = 2"
+      res = mcp_dispatch_local(r_call(code), ctx$session)$result
+      got$row = list(n = n()[["call_risk"]] - n0, text = res$content[[1L]]$text,
+                     keep = ctx$envir$keep, x = ctx$envir$x)
+    }), gptr_error_permission = function(e) NULL)
+    out[[paste(if (pumped) "pumped" else "idle", nm)]] = c(got$row, list(levels = got$levels))
+  }
+  expect_identical(vapply(out, function(r) r$n, 0L),
+                   c("pumped none" = 1L, "pumped modify" = 2L, "pumped assign" = 2L,
+                     "pumped matcher" = 2L, "pumped policy" = 2L, "idle none" = 1L,
+                     "idle modify" = 2L, "idle assign" = 2L, "idle matcher" = 2L))
+  for (route in c("pumped", "idle")) {
+    # the rewritten code is gated as what it is: level 4, denied, nothing removed
+    expect_identical(out[[paste(route, "modify")]]$levels, 4L)
+    expect_match(out[[paste(route, "modify")]]$text, "^Permission denied")
+    expect_identical(out[[paste(route, "modify")]]$keep, 1)
+    # the hook made `keep` big, so overwriting it is level 3, not the payload's 2
+    expect_identical(out[[paste(route, "assign")]]$levels, 3L)
+    expect_identical(out[[paste(route, "assign")]]$keep, 2)
+  }
+  expect_identical(out[["pumped policy"]]$x, 2)
+})
+
 test_that("IC-53 covers a call served to a CLI route: control guard and one-shot grants (D-192)", {
   guarded = gptr_tool("guarded", "Reaches a control export the way model code can.",
                       parameters = list(type = "object", properties = json_obj()),
@@ -520,7 +583,7 @@ test_that("a served call asks a person only while a pump runs (IC-57)", {
   seen = new.env()
   seen$perm = 0L
   local_mocked_bindings(
-    perm_check = function(call, run) {
+    perm_check = function(call, run, ...) {
       seen$perm = seen$perm + 1L
       list(decision = "allow", reason = "")
     },
