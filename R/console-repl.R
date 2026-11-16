@@ -681,6 +681,7 @@ repl_passthrough = function(rs, text) {
   # built-in eval_r() when builtin:workspace is filtered out
   evaluate = if (ext_service_has("eval.r")) ext_service_get("eval.r") else eval_r
   res = evaluate(code, repl_eval_env(rs), plots = "auto", tee = TRUE, guard = FALSE)
+  env_size_epoch()  # the code may have edited objects in place (D-357)
   margin = nzchar(console_pad())
   for (e in res$events) {
     if (identical(e$type, "error")) {

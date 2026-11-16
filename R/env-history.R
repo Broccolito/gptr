@@ -104,11 +104,13 @@ user_log_line = function(expr) {
   txt
 }
 
-#' Append one expression to the log (keeps the last 20)
+#' Append one expression to the log (keeps the last 20); it may have edited objects in place, so
+#' it starts a size epoch (env_size_epoch(), D-357)
 #' @noRd
 user_log_push = function(expr) {
   kind = user_log_scan(expr)
   if (identical(kind, "gptr")) return(invisible())
+  env_size_epoch()
   txt = if (identical(kind, "deep")) {
     "<expression nested more than 5000 calls deep>"
   } else {

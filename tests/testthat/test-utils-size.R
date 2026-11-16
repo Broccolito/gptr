@@ -246,6 +246,28 @@ test_that("peter(raw, ...) after a snapshot walks raw only to describe it (D-357
   expect_identical(sum(walked() == rlang::obj_address(raw)), 1L)
 })
 
+test_that("code the person runs makes the gate and dots walk again (D-357)", {
+  local_project()
+  user_log_stop()
+  withr::defer(user_log_stop())
+  e = new.env()
+  e$x = as.character(1:1000)
+  a0 = rlang::obj_address(e$x)
+  b = env_size_of(e$x, e, fresh = TRUE)
+  # in place, between the 64 sampled values: the address and the fingerprint hold
+  e$x[500] = strrep("a", 1e5)
+  expect_identical(rlang::obj_address(e$x), a0)
+  expect_identical(env_size_of(e$x, e, fresh = TRUE), b)
+  user_log_callback(str2lang("x[500] = strrep('a', 1e5)"), NULL, TRUE, FALSE)
+  expect_identical(env_size_of(e$x, e, fresh = TRUE), env_snap_size(e$x))
+  # the console's !code too; a snapshot keeps the stored size, as main's `previous` did
+  walked = local_walks()
+  utils::capture.output(repl_passthrough(repl_state(NULL, e), "!!n = 1"))
+  env_size_of(e$x, e)
+  env_size_of(e$x, e, fresh = TRUE)
+  expect_length(walked(), 1L)
+})
+
 test_that("the size store holds text and numbers only (R4, D-357)", {
   env_size_store()
   e = new.env()

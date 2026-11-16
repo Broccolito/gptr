@@ -10806,13 +10806,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   reference" rows and `[` with `:=`; `byref` unchanged) or a tool not read-only other than write,
   edit, sh, bg, script, jobs (no code in this R process).
 - Staleness (the `gptr.protect_size` row): the gate's size of an object that holds no
-  environment, closure or compact sequence is the size at its last walk. It is stale only after an
-  edit in place that keeps the address and the fingerprint and that no agent call's code shows: a
-  person at the console running `data.table::set()` or `:=` on a table nested inside a list, an
-  in-place assignment past a list's first 1,000 elements, a user or unlisted function editing by
-  reference. Then the stored size (what-if: 156.7 against 178.5 MB) is used until the name is
-  rebound, an agent call targets it, or a call starts an epoch (D-365). Main's gate re-walked and
-  saw it; main's snapshot sizes (`previous`) already had this exposure. An address reused by a new
+  environment, closure or compact sequence is the size at its last walk. Code the person runs
+  starts an epoch (`env_size_epoch()`): every top-level expression the history log records
+  (env-history.R: a session with a kept home and a workspace block) and every console `!code`, so
+  the next gate and dots walk again (review fix: `x[500] = strrep("a", 1e7)` at the console kept
+  the address and the 64 sampled values, and the gate read 64 KB for 10 MB). The size is stale
+  only after an edit in place that keeps the address and the fingerprint and that neither an agent
+  call's code nor such an epoch shows: code a callback runs, a top-level expression that failed or
+  ran while the history log is off, a user or unlisted function editing by reference. Then the
+  stored size (what-if: 156.7 against 178.5 MB) is used until the name is rebound, an agent call
+  targets it, or an epoch starts (D-365). Main's gate re-walked and saw it; main's snapshot sizes
+  (`previous`) already had this exposure, and a snapshot keeps it. An address reused by a new
   object within two snapshots must also match class, shape and fingerprint to hit.
 - Contract-visible: 04 section 3.1 `gptr.protect_size` row (the stored size, the staleness), IC-04,
   IC-31, section 7.9 (`env_snapshot()` and `env_view_snapshot()` lose `previous`), sections 7.11

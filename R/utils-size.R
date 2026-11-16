@@ -66,12 +66,21 @@ env_size_age = function() {
   the$size_cur = new.env(hash = TRUE, parent = emptyenv())
 }
 
+#' A new epoch: code may have edited objects in place, so every stored size serves only
+#' snapshots until walked again (env_size_of()). Started by env_size_forget(), by the person's
+#' top-level expressions (user_log_push(), env-history.R) and by a console `!code`
+#' (repl_passthrough(), console-repl.R).
+#' @noRd
+env_size_epoch = function() {
+  the$size_epoch = the$size_epoch + 1
+}
+
 #' Bytes of x (env_snap_size()) walked once per version (D-357): the stored size while the
 #' address, class, shape and fingerprint (`facts`, env_snap_leaf(), env-snapshot.R, a higher layer,
 #' so found at call time) hold, else a walk that replaces it. A volatile size (env_snap_size()'s
-#' `st$volatile`: contents the facts cannot see) or one taken before a call that may have edited
-#' objects in place (an older `epoch`, env_size_forget()) serves only a snapshot (`fresh = FALSE`)
-#' of the home it was taken in; the gate and dot facts pass `fresh = TRUE` and walk it again.
+#' `st$volatile`: contents the facts cannot see) or one taken before an epoch (env_size_epoch())
+#' serves only a snapshot (`fresh = FALSE`) of the home it was taken in; the gate and dot facts
+#' pass `fresh = TRUE` and walk it again.
 #' @noRd
 env_size_of = function(x, home, facts = ns_fun("env_snap_leaf")(x), fresh = FALSE) {
   at = if (is.environment(home)) rlang::obj_address(home) else NA_character_
@@ -96,8 +105,7 @@ env_size_of = function(x, home, facts = ns_fun("env_snap_leaf")(x), fresh = FALS
 #' time) the sizes of the values bound to its `modify` and `super` names, from `envir` up to the
 #' first top-level environment, are dropped. After an `unknown` target or a by-reference call
 #' (`inplace`), or a tool other than `r` that is not read-only and not a file or process tool
-#' (which run no code in this R process), every stored size serves only snapshots until walked
-#' again (a new `epoch`): a snapshot is as stale as before, the gate as fresh.
+#' (which run no code in this R process), a new epoch starts (env_size_epoch()).
 #' @noRd
 env_size_forget = function(call, envir) {
   if (!identical(call$name, "r")) {
@@ -120,7 +128,7 @@ env_size_forget = function(call, envir) {
       }
     }
   }
-  if (edits) the$size_epoch = the$size_epoch + 1
+  if (edits) env_size_epoch()
   invisible()
 }
 
