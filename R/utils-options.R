@@ -636,10 +636,12 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.secret_guard` (logical, `TRUE`): reads of registered secrets ask even in `auto`
 #'   mode; [gptr_security] lists the reads.
 #' - `gptr.protect_size` (bytes, `1e8`): overwriting a larger object is a level-3 action. Each
-#'   version of an object is sized once and the size reused, so an edit in place made outside
-#'   Peter's calls (a console `:=` on a table inside a list) counts once the object is rebound or
-#'   Peter's code changes it. An object with more than 12.5 million strings is sized from a
-#'   sample of them: an estimate, at or above its true size on average.
+#'   version of an object is sized once and the size reused: after code you run between requests
+#'   (at R's prompt once a request ran, a console `!` line, a notebook cell, a knitr chunk) the
+#'   next check sizes what it overwrites again; an edit in place made otherwise, by a callback
+#'   say, counts once the object is rebound or Peter's code changes it. An object with more than
+#'   12.5 million strings is sized from a sample of them: an estimate, at or above its true size
+#'   on average.
 #' - `gptr.plan_handoff` (logical, `TRUE`): hand the plan a `plan` run proposes, once, to the next
 #'   top-level `peter()` call from the same environment, within an hour and in another mode;
 #'   another `peter()` call first, or a next call inside a loop or a run, discards it.

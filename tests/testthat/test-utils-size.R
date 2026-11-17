@@ -268,6 +268,28 @@ test_that("code the person runs makes the gate and dots walk again (D-357)", {
   expect_length(walked(), 1L)
 })
 
+test_that("a request in a notebook or a knitted document walks what it overwrites (D-367)", {
+  local_project()
+  user_log_stop()
+  withr::defer(user_log_stop())
+  home = new.env()
+  home$x = as.character(1:1000)
+  a0 = rlang::obj_address(home$x)
+  fake = local_fake_provider(rep(list(fake_tool("r", code = "x = x"), "done"), 4L))
+  s = peter("Keep.", model = fake, mode = "auto", envir = home)
+  walked = local_walks()
+  # the console's requests keep their sizes: its code starts an epoch (D-357)
+  peter(s, "Keep.")
+  expect_identical(sum(walked() == a0), 0L)
+  # IRkernel and knitr run no task callbacks, so a cell's or chunk's in-place edit is unseen
+  withr::local_options(jupyter.in_kernel = TRUE)
+  peter(s, "Keep.")
+  expect_identical(sum(walked() == a0), 1L)
+  withr::local_options(jupyter.in_kernel = NULL, knitr.in.progress = TRUE)
+  peter(s, "Keep.")
+  expect_identical(sum(walked() == a0), 2L)
+})
+
 test_that("reads outside a snapshot keep at most two generations of 5,000 sizes (D-357)", {
   env_size_store()
   withr::defer(env_size_store())

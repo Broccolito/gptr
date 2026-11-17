@@ -953,6 +953,9 @@ run_start = function(s, input, opts = list()) {
   check_list(opts, "opts")
   input = run_input(input)
   outer = run_current()
+  # IRkernel and knitr run cells and chunks without R's task callbacks, so the history log
+  # (env-history.R) never starts the epoch of an in-place edit there (D-367)
+  if (is.null(outer) && front_end() %in% c("jupyter", "quarto", "knitr")) env_size_epoch()
   live = session_attach(s)
   d = session_data(s)
   if (!is.null(live$run) || identical(d$status, "running")) {

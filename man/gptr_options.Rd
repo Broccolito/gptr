@@ -123,10 +123,12 @@ to answer); \code{"deny"} returns a denial to the model.
 \item \code{gptr.secret_guard} (logical, \code{TRUE}): reads of registered secrets ask even in \code{auto}
 mode; \link{gptr_security} lists the reads.
 \item \code{gptr.protect_size} (bytes, \code{1e8}): overwriting a larger object is a level-3 action. Each
-version of an object is sized once and the size reused, so an edit in place made outside
-Peter's calls (a console \verb{:=} on a table inside a list) counts once the object is rebound or
-Peter's code changes it. An object with more than 12.5 million strings is sized from a
-sample of them: an estimate, at or above its true size on average.
+version of an object is sized once and the size reused: after code you run between requests
+(at R's prompt once a request ran, a console \code{!} line, a notebook cell, a knitr chunk) the
+next check sizes what it overwrites again; an edit in place made otherwise, by a callback
+say, counts once the object is rebound or Peter's code changes it. An object with more than
+12.5 million strings is sized from a sample of them: an estimate, at or above its true size
+on average.
 \item \code{gptr.plan_handoff} (logical, \code{TRUE}): hand the plan a \code{plan} run proposes, once, to the next
 top-level \code{peter()} call from the same environment, within an hour and in another mode;
 another \code{peter()} call first, or a next call inside a loop or a run, discards it.

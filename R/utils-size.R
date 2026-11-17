@@ -69,8 +69,8 @@ env_size_age = function() {
 
 #' A new epoch: code may have edited objects in place, so every stored size serves only
 #' snapshots until walked again (env_size_of()). Started by env_size_forget(), by the person's
-#' top-level expressions (user_log_push(), env-history.R) and by a console `!code`
-#' (repl_passthrough(), console-repl.R).
+#' top-level expressions (user_log_push(), env-history.R), by a console `!code`
+#' (repl_passthrough(), console-repl.R) and by a request's start in Jupyter or knitr (run_start()).
 #' @noRd
 env_size_epoch = function() {
   the$size_epoch = the$size_epoch + 1
