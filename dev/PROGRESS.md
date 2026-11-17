@@ -1,4 +1,34 @@
-## Current checkpoint — gptr 1.0.1, 2026-11-03
+## Current checkpoint — gptr 1.1.0, 2026-11-16
+
+gptr 1.0.0 is on CRAN (2026-11-01); 1.0.1 was not submitted, so 1.1.0 carries its fixes. `main` holds
+1.1.0 and is the only branch once this checkpoint lands: P32 was built as `claude/v1.1.0`, a straight
+line on 5e2992b1, and main was fast-forwarded to it (PR #113).
+
+- P32, the hot path ([plan](plan/P32-hot-path.md), [log](progress/P32.md), D-356..D-367), prompted
+  by the gptr-bench T03 benchmark (about 108 s of gptr's own time in a 244 s run): a size walk reads
+  at most 12.5 million strings (estimates say `about`); one size per object version, shared by the
+  gate, checkpoints, workspace and descriptions; served calls bind their final risk; one
+  classification per final input; the scan budget covers a request; one-pass folder scans;
+  linear settle; requests reuse encoded messages and project the transcript once; no reactor tick
+  after a step; the Codex relay and hook start with base only. Every gate is kept; the decision
+  battery (`tests/testthat/test-perm-battery.R`, recorded from 5e2992b) is unchanged apart from the
+  re-recorded estimate rows. T03 minimal replay: gptr's time around a call 1.9-2.1 s to 0.03 s.
+- One seven-lens review with verified findings and one fix pass by area; then final checks fixed
+  three flaky tests at their root (the P30 Ctrl-C tests under an ignored SIGINT, the steer take-back
+  race, FIX-35's Windows clock) and a live pass (Terminal, Claude Code and Codex CLI routes, Jupyter,
+  object fidelity, the live test files; RStudio not run: its access was declined) fixed the notebook
+  size epoch, notebook escape codes, the decision-only model refusal and the billing notice (D-367).
+- Checks at the release head: the offline suite FAIL 0; `R CMD check --as-cran` Status OK with no
+  note; lint clean; CRAN-mode check 166 s locally (main 169 s), CI CRAN-mode 249 s Linux / 520 s
+  Windows with manuals (budgets 480 / 600 s); every CI check green.
+- Ledger: JSONL-sink and child sessions classify twice per call (K14); the interactive disk image
+  before a predicted in-place modify (about 2.8 s for 427 MB, as in 1.0.1) is out of P32's scope;
+  gptr_coach's donttest example takes about 7 s; a gptr_user_dir() memo misses a retargeted
+  symlinked HOME; Windows timings and RStudio were not checked live.
+
+Next: submit 1.1.0 to CRAN (maintainer), recording the final check results in `cran-comments.md`.
+
+## Historical checkpoint — gptr 1.0.1, 2026-11-03
 
 gptr 1.0.0 is on CRAN (published 2026-11-01). `main` holds 1.0.1, a patch release ready to submit,
 and is the only branch once this checkpoint lands.
