@@ -435,6 +435,25 @@ test_that("without the classifier route a decision-only model is not_available (
   expect_identical(peter("Hello", model = "ollama/qwen3:1.7b"), "chatted")
 })
 
+test_that("an Ollama model its server reports decision-only is refused as one first (IC-74)", {
+  local_gw()
+  fx = ollama_fixture()
+  fx$`tev1:0.8b` = fx$`clef-flash:latest`
+  fx$`tev1:0.8b`$tag$name = "tev1:0.8b"
+  fx$`tev1:0.8b`$tag$model = "tev1:0.8b"
+  fx$`tev1:0.8b`$show$parameters = "num_ctx 2048"
+  local_ollama_server(fx)
+  settings_write("user", list(egress = list(ollama = "ack")))
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  # its type is known once the model is prepared, after the route was chosen; its window
+  # (2,048 tokens) is too small for the standard preset, which the run would refuse first
+  expect_identical(gateway_model_type("ollama/tev1:0.8b"), "chat")
+  cnd = expect_error(peter("Hello", model = "ollama/tev1:0.8b"),
+                     class = "gptr_error_not_available")
+  expect_match(conditionMessage(cnd), "decision-only (classifier) model", fixed = TRUE)
+})
+
 # ---- Task 9: gateway_run(), terminal conditions, builtin:gateway, router.call ---------------
 
 # The text of every content block of a message, context blocks included
