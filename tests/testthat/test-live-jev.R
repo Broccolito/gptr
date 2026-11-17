@@ -119,7 +119,11 @@ test_that("live: Jev answers decisions, choices and scores through peter()", {
   expect_identical(worker_meta$execution, "native")
   expect_length(worker_meta$request_ids, 2L)
   expect_false(any(worker_meta$cached))
-  expect_identical(nrow(session_data(team$screen)$usage), 1L)
+  # the worker's chat row and one System 1 row per decision request (D-321)
+  worker_rows = session_data(team$screen)$usage
+  expect_identical(sum(worker_rows$route != "system-one"), 1L)
+  expect_identical(sort(worker_rows$request_id[worker_rows$route == "system-one"]),
+                   sort(worker_meta$request_ids))
   expect_identical(gptr_usage(list(team, team$screen)), gptr_usage(team))
   expect_false(any(gptr_jobs()$kind == "worker"))
 
