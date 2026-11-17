@@ -10971,7 +10971,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   budget plus two scans" holds at every size. Under load a 600-entry scan passes the 0.25 s
   budget, 5e2992b switches to per-turn scans for the session, and its valley moves to smaller
   projects. Calls 4-10 at 600 entries are barred at 1.3 times the 0-entry call, as PERF-4 and
-  PERF-9 bar their ratios.
+  PERF-9 bar their ratios. The plan's "at most 4 scans per ten-call request at 600 entries" and
+  "calls 4-10 scan 0 times" print only: under D-360 the count is about the budget over a scan's
+  seconds plus two (3 at 0.2 s, T6; 5 at 0.078 s, after review item K5), so it grows as scans get
+  faster, and below about 0.042 s a scan calls 4-10 scan too; the seconds row bars both.
 - Rule (PERF-9): "messages encoded per build = new messages only" is barred as equal encodings
   for the same ten-call request after about 44 and about 300 messages. The child's home has a
   user settings file (2 s old, so cached), which every setting lookup checks.

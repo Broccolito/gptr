@@ -180,10 +180,11 @@ perf_p32_rows = function(gate, m, n) {
                  one_codex_0 = 0.01, one_codex_600 = 0.23, one_codex_1231 = 0.35,
                  read_codex_1231 = 0.36)
       rbind(
-        row("scans per ten-call writing request, 600 entries", m[["scans_ten_600"]], 4),
+        # D-364: the budget fits more scans as they get faster; the seconds row below bars both counts
+        row("scans per ten-call writing request, 600 entries", m[["scans_ten_600"]]),
         row("scan s per ten-call request less two scans, max of 0 to 1,500 entries",
             max(pick("^scan_over_ten_")), perf_scan_budget),
-        row("scans in calls 4-10, 600 entries", m[["scans_4_10_ten_600"]], 0),
+        row("scans in calls 4-10, 600 entries", m[["scans_4_10_ten_600"]]),
         row("s per call 4-10, 600 / 0 entries",
             m[["call_4_10_ten_600"]] / m[["call_4_10_ten_0"]], 1.3),
         do.call(rbind, lapply(names(scan_s), function(key) {
