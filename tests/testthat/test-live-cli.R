@@ -7,9 +7,11 @@
 # credential file.
 # setup.R's options(gptr.replay = "replay") would refuse these non-offline providers (P08's
 # replay_guard(); the option outranks GPTR_REPLAY), so the helper sets it to "live"; the calls pass
-# .opts = list(context = "none") to limit context. Existing single-route smokes require recorded
-# provider consent; the final two seed consent only in their private test configuration. Billing
-# variables are unset so the CLIs bill the plan and P03 has nothing to warn about.
+# .opts = list(context = "none") to limit context. Existing single-route smokes require the
+# provider consent recorded in GPTR_LIVE_HOME's default user configuration (tools::R_user_dir()
+# with R_USER_CONFIG_DIR and XDG_CONFIG_HOME unset), which they copy into a private one; the final
+# two seed consent only in their private test configuration. Billing variables are unset so the
+# CLIs bill the plan and P03 has nothing to warn about.
 #   GPTR_LIVE_TESTS=true GPTR_LIVE_HOME="$HOME" \
 #     Rscript --vanilla -e 'devtools::test(filter = "live-cli")'
 
@@ -28,8 +30,16 @@ skip_live_cli = function(cli, .env = parent.frame()) {
                                       live_billing_vars), .local_envir = .env)
   local_gptr_options(replay = "live", .env = .env)
   pid = if (identical(cli, "claude")) "claude-cli" else "codex"
-  skip_if_not(identical(settings_get("egress")[[pid]], "ack"),
-              paste("provider", pid, "has no previously recorded consent"))
+  if (!identical(settings_get("egress")[[pid]], "ack")) {
+    # setup.R hides the user configuration: carry the consent recorded there into a private one
+    recorded = withr::with_envvar(c(R_USER_CONFIG_DIR = NA, XDG_CONFIG_HOME = NA),
+                                  settings_get("egress")[[pid]])
+    skip_if_not(identical(recorded, "ack"),
+                paste("provider", pid, "has no previously recorded consent"))
+    withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir(.local_envir = .env),
+                        .local_envir = .env)
+    gptr_config(egress = stats::setNames(list("ack"), pid), .scope = "user")
+  }
   found = tryCatch(pcli_find(cli), gptr_error = function(e) NULL)
   skip_if(is.null(found), paste("the", cli, "CLI is not installed"))
   invisible(found)
