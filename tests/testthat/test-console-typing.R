@@ -1956,8 +1956,6 @@ test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (vi
 test_that("TERM=dumb: a Ctrl-C right after a run's footer keeps the console and the echo (P30)", {
   skip_on_cran()
   skip_on_os("windows")
-  # a child R that inherits an ignored SIGINT loses one sent while its stty runs
-  skip_if_sigint_ignored()
   # an stty that takes 2 s to set saved modes (an argument without a leading -), so the Ctrl-C
   # comes while the run's end restores them and kills it, as a terminal's Ctrl-C does (live
   # steering test: peter() was left and the echo stayed off)

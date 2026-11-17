@@ -187,8 +187,15 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
     if (length(m) && endsWith(m[[length(m)]], "h")) x = paste0("\033[200~", x, "\033[201~")
     p$write_input(x)
   }
-  pty$interrupt = function() p$interrupt()
-  pty$ctrl_c = function() system2("kill", c("-s", "INT", "--", paste0("-", p$get_pid())))
+  # a child that inherits an ignored SIGINT loses one sent while it runs a process (its stty)
+  pty$interrupt = function() {
+    skip_if_sigint_ignored()
+    p$interrupt()
+  }
+  pty$ctrl_c = function() {
+    skip_if_sigint_ignored()
+    system2("kill", c("-s", "INT", "--", paste0("-", p$get_pid())))
+  }
   pty$wait = function(x, timeout = 30) {
     deadline = Sys.time() + timeout
     repeat {
