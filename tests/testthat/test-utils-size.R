@@ -69,7 +69,8 @@ test_that("one string of 1e8 bytes is main's size, and no table as long as it is
   b = env_snap_size(x)
   utils::Rprofmem(NULL)
   expect_identical(b, 100064112)
-  expect_identical(readLines(prof), character())
+  # "new page:" lines are R's pages of small vectors, taken whenever its heap needs one
+  expect_identical(grep("^new page:", readLines(prof), value = TRUE, invert = TRUE), character())
 })
 
 test_that("with the budget at 1e5 a walk reads 1e5 strings, then 1,000 a vector (D-356)", {
