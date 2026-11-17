@@ -292,8 +292,16 @@ test_that("a steer taken back says so, naming it, a block of its own (Task 37, D
   withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE, cli.num_colors = 1L, cli.width = 80L)
   local_mocked_bindings(front_end = function() "terminal")
   f = local_fake_cli("claude", "toolstream")
-  local_keys(keys_once(c("use base R\r", "\033[A", "\025", "use dplyr\r"),
-                       function() length(fake_log(f, "turn")) == 1L))
+  # Enter as the CLI's turn starts, before or after its first rows; Up (the second batch) once the
+  # answer wrote a block under the receipt, since the person's lines right under it are its block
+  # (D-301); then Ctrl-U and a new steer
+  n = 0L
+  local_keys(keys_once(c("use base R\r", "\033[A", "\025", "use dplyr\r"), function() {
+    last = unlist(lapply(as.list(console_state()$active), function(r) r$last))
+    go = length(fake_log(f, "turn")) == 1L && (n != 1L || !("person" %in% last))
+    n <<- n + go
+    go
+  }))
   res = typing_console(f$model, c("go", "/exit"))
   local_cli_cleanup(res$s)
   rows = term_rows(paste(res$out, collapse = "\n"))
