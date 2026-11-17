@@ -235,9 +235,9 @@ child_env = function(profile, pass = character(), set = character(), provider = 
   billing = up %in% billing_up & !(up %in% c(pass_up, explicit))
   gone = sort(nm[billing & nzchar(env)])
   if (length(gone)) {
-    gptr_inform(paste0("Removed ", paste(gone, collapse = ", "), " from the environment of the ",
-                     sub("^cli-", "", profile), " CLI: these variables switch it to API billing ",
-                     "or to another account."),
+    gptr_inform(paste0("Removed ", paste(gone, collapse = ", "), " from the environment the ",
+                     sub("^cli-", "", profile), " CLI runs in, not from R's: these variables ",
+                     "switch it to API billing or to another account."),
               "billing_env", variables = gone,
               .once = paste0("billing_env:", profile, ":", paste(gone, collapse = ",")))
   }
