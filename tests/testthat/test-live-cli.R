@@ -99,10 +99,14 @@ test_that("a claude coach has no tools, answers in one turn and saves nothing", 
             tools = c("minimal", paste0("-", registry_names("tool"))),
             .opts = list(context = "none", returns = schema))
   withr::defer(pcli_hook_shutdown(list(reason = "exit"), list(session = list(id = s$id))))
+  # idle: the CLI's turn passed gptr's coach checks (no tool used, one turn). Whatever a small
+  # model writes, even a tool call spelled out as text, the session holds one reply and no call;
+  # its JSON wrapped in prose is refused by `returns`, and gptr_coach()'s coach retry asks again
   expect_identical(s$status, "idle")
-  # a small model may wrap its JSON in prose, which `returns` refuses; gptr_coach()'s coach
-  # retry asks again, so here the answer is checked in the text
-  expect_match(s$text, "42", fixed = TRUE)
+  replies = Filter(function(m) identical(m$role, "assistant"), s$messages)
+  expect_length(replies, 1L)
+  expect_false("tool_call" %in% vapply(replies[[1L]]$content, function(b) b$type, ""))
+  expect_true(nzchar(s$text))
   if (!is.null(s$value)) expect_equal(s$value$answer, 42)
   config = Sys.getenv("CLAUDE_CONFIG_DIR", file.path(Sys.getenv("HOME"), ".claude"))
   projects = list.files(file.path(config, "projects"))
