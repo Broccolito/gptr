@@ -16,9 +16,11 @@ workspace shaped like task T03 of the gptr-bench benchmark, a list of 300 tables
   the checkpoints and the workspace summary, which each computed it before. Around the T03
   workspace's second and third requests gptr now adds 0.67-0.75 s, against 5.0-5.7 s; the request
   that creates the list takes 1.8 s instead of 4.7 s, and a call that adds one element to it
-  0.56 s instead of 5.8 s. `peter(x, ...)` no longer sizes `x` again for each request. Code you run
-  at the console between requests may change an object in place, so the next permission check
-  measures the objects it overwrites again.
+  0.56 s instead of 5.8 s, in a non-interactive session. An interactive session first saves the
+  list to disk for undo, as 1.0.1 did (2.8 s at 300 tables). `peter(x, ...)` no longer sizes `x`
+  again for each request. Code you run at the console, in a notebook cell or in a knitr chunk
+  between requests may change an object in place, so the next permission check measures the
+  objects it overwrites again.
 * Sizing an object reads at most 12.5 million strings; longer character data is sampled and the
   size is shown as an estimate (`about 3.4 GB`) in the workspace summary, object descriptions and
   the permission question about overwriting it. Objects with fewer strings keep their exact
