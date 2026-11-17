@@ -11036,3 +11036,26 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   swapped for a link after its folder's checks is never read", "a file deleted between its
   folder's stat and type checks is unread, the rest kept". Evidence: progress/P32.md Task 7,
   Review fixes - checkpoint.
+
+## D-367 - P32 Live pass: notebook and knitr requests, plain notebook prompts (2026-11-16)
+- Rule (epoch): IRkernel and knitr run cells and chunks without R's top-level task callbacks, so
+  the history log (env-history.R) never started D-357's epoch there, and a cell's in-place edit
+  that keeps address and fingerprint left a stale size. `run_start()` of a run with no outer run
+  starts an epoch where `front_end()` is jupyter, quarto or knitr: each request's first gate walks
+  what it overwrites, as main did (one walk per object a request; R's prompt and the console keep
+  their sizes).
+- Rule (colours): `console_colors()` is 1 in a Jupyter kernel. IRkernel sets
+  `crayon.enabled = TRUE`, so the approval question reached the notebook's stream text with raw SGR
+  codes (as on main); the progress lines were plain already.
+- Rule (decision-only): `gateway_guards()` also refuses the prepared record (`stream_chat_model()`
+  of `provider_ready()`'s): an Ollama model's type is its server's, known after the route is
+  chosen, so `ollama/tev1:0.8b` was refused first for its 2,048-token window at freeze.
+- Rule (billing notice): the variables are removed "from the environment the <cli> CLI runs in,
+  not from R's".
+- Contract-visible: 04 section 3.1 `gptr.protect_size` row (also a request's start in Jupyter or
+  knitr; not amended here); `?gptr_options` (that, and the console `:=` example corrected).
+- Tests: utils-size "a request in a notebook or a knitted document walks what it overwrites
+  (D-367)"; console-jupyter-progress "a notebook's approval prompt is plain where IRkernel enables
+  colour"; gptr-gateway "an Ollama model its server reports decision-only is refused as one first
+  (IC-74)"; auth-billing-notice (the wording). Evidence: progress/P32.md Live pass fixes - package
+  code.
