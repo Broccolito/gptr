@@ -1,7 +1,9 @@
 # Live System 1 test against api.typesafe.ai (plan P13; opt-in with GPTR_LIVE_TESTS=true). The key
 # is read only through gptr_env() from the maintainer's key file (conventions section 1; override
 # the path with GPTR_JEV_KEY_FILE) and is never printed. About fourteen requests of about 300 input
-# tokens at $0.042 per million: well below a cent.
+# tokens at $0.042 per million: well below a cent. From a checkout without that file:
+#   GPTR_LIVE_TESTS=true NOT_CRAN=true GPTR_JEV_KEY_FILE=/path/to/.secrets/jev-key.env \
+#     Rscript --vanilla -e 'devtools::test(filter = "live-jev")'
 
 test_that("live: Jev answers decisions, choices and scores through peter()", {
   skip_if_not(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"))
