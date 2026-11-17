@@ -577,7 +577,7 @@ test_that("artifact browser close waits for its unmarked helpers before removing
 
 test_that("a recorded helper that cannot run is killed after the grace, in the deadline (FIX-35)", {
   # Under load the scheduler starved an orphaned Chrome renderer past the close deadline. A
-  # stopped child stands in for it: SIGTERM stays pending, so only the kill ends it.
+  # stopped child stands in for it: only the kill ends it.
   x = artifact_launch_fixture()
   x$scope$proc.time = base::proc.time
   helper = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(60)"),
@@ -592,10 +592,13 @@ test_that("a recorded helper that cannot run is killed after the grace, in the d
   environment(close) = x$scope
   started = proc.time()[["elapsed"]]
   seen = tryCatch(close(b = NULL, owner = owner, cached = FALSE), error = identity)
-  elapsed = proc.time()[["elapsed"]] - started
+  ended = proc.time()[["elapsed"]]
   expect_null(seen)
   expect_false(helper$is_alive())
-  expect_true(elapsed >= 2 && elapsed < 10)
+  # Compared as the grace reads its clock: where the kill is immediate (Windows, macOS), the
+  # close can end at the reading that ends the grace, and end - start may round below 2.
+  expect_true(ended >= started + 2 && ended < started + 10,
+    label = sprintf("a close of %.3f s within [2, 10) s", ended - started))
   expect_false(dir.exists(root))
 })
 
