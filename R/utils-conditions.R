@@ -137,9 +137,13 @@ console_pad = function() {
 }
 
 #' The colours of console output: inside an evaluation, whose options say 1 colour, those of the
-#' console it started from (D-245)
+#' console it started from (D-245); one in a Jupyter kernel, whose notebook may show escapes raw
+#' (IRkernel turns cli's colours on; D-367)
 #' @noRd
-console_colors = function() console_eval_value(".gptr_console_colors") %||% cli::num_ansi_colors()
+console_colors = function() {
+  console_eval_value(".gptr_console_colors") %||%
+    (if (isTRUE(getOption("jupyter.in_kernel"))) 1L else cli::num_ansi_colors())
+}
 
 #' The console's style table (IC-82, D-245): the glyphs of the logo's cursor vocabulary (the
 #' person's chevron, a tool call's thin strip, the agent's block), the logo's red and a darker

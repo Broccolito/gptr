@@ -135,3 +135,16 @@ test_that("notebook tool progress prints escaped input without interpreting brac
   expect_identical(captured$output, "gptr: r  x = '{not_an_expression}' # <U+001B>[31m")
   expect_identical(captured$messages, character())
 })
+
+test_that("a notebook's approval prompt is plain where IRkernel enables colour", {
+  jupyter_progress_session()
+  # IRkernel sets crayon.enabled = TRUE, so cli would colour a notebook's stream text
+  withr::local_options(cli.num_colors = NULL, crayon.enabled = TRUE)
+  withr::local_envvar(NO_COLOR = NA, R_CLI_NUM_COLORS = NA)
+  req = list(tool = "r", input = list(code = "x = 1"), risk = list(level = 1L), tier = "ask")
+  out = utils::capture.output({
+    ans = ui_console_permission(req, read = function(...) "y")
+  })
+  expect_identical(out, c("  | r  x = 1", "  ? Allow r?", "    y yes - n no - ? more"))
+  expect_identical(ans$decision, "allow")
+})
