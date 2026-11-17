@@ -975,9 +975,11 @@ test_that("Tab completes a trigger word; several show on the live row until a ke
   # the candidates replace the status words, the draft where it was, until the next key
   expect_match(bytes, paste0("\r", sym$agent, " /mode  /model   ", sym$person, " /mode\033[K"),
                fixed = TRUE)
-  # and the draft returns to its column after them, after the hint of a / draft (D-244)
-  expect_match(bytes, paste0("\r", sym$agent, " thinking 0s   runs after this answer   ",
-                             sym$person, " /model\033[K"), fixed = TRUE)
+  # and the draft returns to its column after them, after the hint of a / draft (D-244); the
+  # clock ticks to 1s when the keys come late in the answer's second
+  row = paste0("\r\\Q", sym$agent, "\\E thinking [01]s   runs after this answer   \\Q",
+               sym$person, " /model\033[K\\E")
+  expect_match(bytes, row, perl = TRUE)
   # completion never queues: one request, nothing kept
   expect_identical(res$kept, character())
 })
