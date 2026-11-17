@@ -1,16 +1,17 @@
 # Live test of the native Ollama System One adapter (plan P13, IC-74; 07-local-ollama.md section
 # 6). It runs only with GPTR_LIVE_TESTS=true and a local Ollama server (0.35.1 or later) on which
-# Clef Flash (and, for its own test, Clef) is already installed. It never starts, installs or
-# updates Ollama and never downloads a model; it sends only synthetic text and images, needs no
-# key and reads no project data. A pass shows the API works from gptr, not that the decisions are
-# accurate or calibrated.
+# Clef Flash (and, for its own test, Clef) is already installed as GGUF weights; otherwise a test
+# skips with the reason. It never starts, installs or updates Ollama and never downloads a model;
+# it sends only synthetic text and images, needs no key and reads no project data. A pass shows
+# the API works from gptr, not that the decisions are accurate or calibrated.
 
 source(testthat::test_path("fixtures", "jev", "harness.R"), local = TRUE)
 
-# The prepared model (P05's discovery on the loopback server), or a skip naming why not
+# The prepared model (P05's discovery on the loopback server) that a native call accepts (GGUF
+# weights), or a skip naming why not
 skip_unless_ollama = function(ref) {
   skip_if_not(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"), "GPTR_LIVE_TESTS is not true")
-  model = tryCatch(model_prepare(ref), error = function(e) e)
+  model = tryCatch(s1_ollama_ready(model_prepare(ref)), error = function(e) e)
   if (inherits(model, "error")) skip(paste0(ref, " is not available: ", conditionMessage(model)))
   model
 }
