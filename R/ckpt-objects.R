@@ -381,12 +381,14 @@ ckpt_spill_allowed = function() {
   !is.null(workspace_dir()) || gptr_has_human()
 }
 
-#' The object undo limits: the fields of the setting `undo` (D-370)
+#' The object undo limits: the fields of the setting `undo` (D-370), read once; a field a layer
+#' set to null takes its default
 #' @noRd
 ckpt_limits = function() {
+  lim = setting_get("undo")
   f = c("capture_max", "memory", "disk", "turns")
-  keys = paste0("undo.", f)
-  stats::setNames(lapply(keys, function(k) setting_get(k, default = gptr_option_defaults[[k]])), f)
+  stats::setNames(lapply(f, function(k) lim[[k]] %||% gptr_option_defaults[[paste0("undo.", k)]]),
+                  f)
 }
 
 #' Targets of R code for the checkpointers and the size store: P11's code_targets() reduced
