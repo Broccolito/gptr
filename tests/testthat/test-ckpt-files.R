@@ -687,6 +687,24 @@ test_that("undo and redo of a case-only rename preserve bytes on the observed fi
   expect_identical(readLines(file.path(proj, "README.md")), "hello")
 })
 
+test_that("a restored file the file system names in another case gets its recorded name", {
+  proj = local_project(files = list("readme.md" = "hello"))
+  skip_if_not(fs_case_insensitive(proj))
+  ck = ckpt_ck_new("s0000000032")
+  call = list(id = "c1", name = "r", input = list(code = "file.rename('readme.md', 'README.md')"))
+  tok = ckpt_files_before(ck, call, turn = 1L)
+  file.rename(file.path(proj, "readme.md"), file.path(proj, "README.md"))
+  frag = ckpt_files_after(ck, call, tok)
+  # a new file may get the name of the one just removed (the undo's README.md), as on Windows CI
+  write = write_atomic
+  local_mocked_bindings(write_atomic = function(path, ...) {
+    write(file.path(dirname(path), "README.md"), ...)
+  })
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
+  expect_identical(list.files(proj), "readme.md")
+  expect_identical(readLines(file.path(proj, "readme.md")), "hello")
+})
+
 test_that("a path outside the project and tempdir() is restored only after a human confirms", {
   proj = local_project()
   outside = withr::local_tempdir()

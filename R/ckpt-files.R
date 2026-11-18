@@ -620,6 +620,17 @@ ckpt_restore_guard = function(full, root = project_root()) {
   list(ok = TRUE, ask = nzchar(ask), reason = ask)
 }
 
+#' Is a file a restore created listed under its own name? A case-insensitive file system may give
+#' it the name of the file just removed (an undone case-only rename): a case-only rename fixes it.
+#' @noRd
+ckpt_name_restore = function(f) {
+  have = list.files(dirname(f), all.files = TRUE, no.. = TRUE)
+  if (basename(f) %in% have) return(TRUE)
+  other = have[tolower(have) == tolower(basename(f))]
+  length(other) == 1L && file_rename(file.path(dirname(f), other), f) &&
+    basename(f) %in% list.files(dirname(f), all.files = TRUE, no.. = TRUE)
+}
+
 #' Ask a human to confirm one restore the guard marks `ask` (an ask_human: only a UI whose has_ui()
 #' is TRUE answers; without one the file is not restored)
 #' @noRd
@@ -705,6 +716,7 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
       ok = unlink(f) == 0L
     } else {
       ok = tryCatch(ckpt_store_get(goal, full, store), error = function(e) FALSE)
+      if (ok && !exists) ok = ckpt_name_restore(f)
       if (ok && !exists && !redo && r$mode >= 0) {
         Sys.chmod(f, as.octmode(r$mode), use_umask = FALSE)
       }
