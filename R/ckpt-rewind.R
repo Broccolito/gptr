@@ -630,15 +630,15 @@ ckpt_ext_state = function(s = NULL) {
 #' @order 1
 #' @section Objects:
 #' Before a call that runs R code, gptr keeps a reference to every object up to
-#' `undo$capture_max` bytes and to every object the code is predicted to change up to
-#' `undo$memory` bytes. Nothing is copied or written to disk then: a kept object costs memory
+#' `undo.capture_max` bytes and to every object the code is predicted to change up to
+#' `undo.memory` bytes. Nothing is copied or written to disk then: a kept object costs memory
 #' only when it is edited in place, and the edit then copies what it touches: all of a vector or
 #' matrix, one column of a data frame, one element of a list. A `data.table` the code changes by
 #' reference (`:=`, `set()`) is copied with `data.table::copy()` first. After every call and at
-#' the end of each request the images in memory are held to `undo$memory` bytes: the largest is
-#' spilled to the checkpoint store while it fits `undo$disk`, else the oldest is dropped (a
+#' the end of each request the images in memory are held to `undo.memory` bytes: the largest is
+#' spilled to the checkpoint store while it fits `undo.disk`, else the oldest is dropped (a
 #' non-interactive run without a `.gptr/` workspace writes no image). Spilled images are held to
-#' `undo$disk` bytes per session, the oldest dropped first, and images older than `undo$turns`
+#' `undo.disk` bytes per session, the oldest dropped first, and images older than `undo.turns`
 #' turns are dropped. An object that cannot be undone is named with the reason (for its size, the
 #' limit to raise) when you are asked to approve the call, and in what the model is told after it.
 #'
@@ -649,8 +649,9 @@ ckpt_ext_state = function(s = NULL) {
 #' - `disk` (`2e9`): bytes of images spilled to disk per session.
 #' - `turns` (`20`): images older than this many turns are dropped.
 #'
-#' Change them with `gptr_config(undo = list(memory = 4e9), .scope = "user")` (the other fields
-#' keep their values) or, for this R process, `options(gptr.undo.memory = 4e9)`.
+#' Read them with `gptr_config()$undo`. Change them with
+#' `gptr_config(undo = list(memory = 4e9), .scope = "user")` (the other fields keep their values)
+#' or, for this R process, `options(gptr.undo.memory = 4e9)`.
 #'
 #' A change made after the turn is kept and reported as a conflict when it rebinds or removes the
 #' object, replaces a list element, a column or an attribute, or changes one of the values gptr
@@ -667,7 +668,9 @@ ckpt_ext_state = function(s = NULL) {
 #'   settings key `checkpoint`).
 #' - `gptr.undo.capture_max`, `gptr.undo.memory`, `gptr.undo.disk` and `gptr.undo.turns`: the
 #'   option layer of the setting `undo` (see Objects).
-#' - `gptr.checkpoint_disk_bytes` (`2e9`): bytes of blobs and spilled images before a notice.
+#' - `gptr.checkpoint_disk_bytes` (`2e9`): bytes of the checkpoint store (file blobs and the
+#'   spilled images of every session) before a notice; it deletes nothing, while `undo.disk`
+#'   holds one session's spilled images.
 #' - `gptr.checkpoint_days` (`30`): unreferenced blobs older than this many days are deleted.
 #' - `gptr.checkpoint_turns` (`100`): file checkpoints older than this many turns are not
 #'   restored.

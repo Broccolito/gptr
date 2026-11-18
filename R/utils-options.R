@@ -664,14 +664,14 @@ s3_register = function(generic, class, method = NULL) {
 #' @section Checkpoints and undo:
 #' - `gptr.checkpoint` (character, `"on"`): `"on"`, `"files"` or `"off"`.
 #' - `gptr.undo.capture_max` (bytes, *settings*, `1e8`), the option layer of the setting
-#'   `undo$capture_max` (see [gptr_rewind()]): every object up to this size is kept by reference
+#'   `undo.capture_max` (see [gptr_rewind()]): every object up to this size is kept by reference
 #'   before a call that runs R code.
-#' - `gptr.undo.memory` (bytes, *settings*, `1e9`), the option layer of `undo$memory`: an object
+#' - `gptr.undo.memory` (bytes, *settings*, `1e9`), the option layer of `undo.memory`: an object
 #'   the code is predicted to change is kept up to this size; the images of a session hold at
 #'   most this many bytes in memory.
-#' - `gptr.undo.disk` (bytes, *settings*, `2e9`), the option layer of `undo$disk`: bytes of
+#' - `gptr.undo.disk` (bytes, *settings*, `2e9`), the option layer of `undo.disk`: bytes of
 #'   images spilled to disk per session.
-#' - `gptr.undo.turns` (integer, *settings*, `20`), the option layer of `undo$turns`: images
+#' - `gptr.undo.turns` (integer, *settings*, `20`), the option layer of `undo.turns`: images
 #'   older than this many turns are dropped.
 #' - `gptr.checkpoint_disk_bytes` (bytes, `2e9`), `gptr.checkpoint_days` (days, `30`) and
 #'   `gptr.checkpoint_turns` (integer, `100`): retention of the checkpoint store.

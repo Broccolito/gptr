@@ -606,12 +606,12 @@ ckpt_objects_undo = function(ck, fragment, envir, force = FALSE, dry = FALSE) {
       out = ckpt_item(out, item, FALSE, paste0("not restored (", r$reason, ")"))
       next
     }
-    now = ckpt_fp(envir, nm)
     created = identical(r$status, "created")
     key = ckpt_index_find(store, frag, nm, if (created) "mark" else "pre")
     # the index follows the value to the fingerprint a restore from a copy or disk image gave it;
-    # another R process's address never equals one, so its rows conflict unless forced
+    # without a row (dropped by undo.turns, or another R process) the row's address is compared
     expect = if (is.na(key)) r$post_address else store$index$expect[match(key, store$index$key)]
+    now = if (is.na(key)) ckpt_addr(envir, nm) else ckpt_fp(envir, nm)
     if (created) {
       if (is.na(now)) {
         out = ckpt_item(out, item, TRUE, "already absent")

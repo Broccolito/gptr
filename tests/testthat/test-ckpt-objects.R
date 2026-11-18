@@ -291,6 +291,22 @@ test_that("undo keeps a binding changed after the turn (3-way) unless forced", {
   expect_identical(e$x, c(1, 2, 3))
 })
 
+test_that("a creation whose mark undo.turns dropped is undone by its address (D-369)", {
+  skip_on_cran()
+  local_gptr_options(undo.turns = 1L)
+  ck = ckpt_ck_new("s0000000031")
+  e = new.env()
+  call = list(id = "c1", name = "r", input = list(code = "new = 1"))
+  tok = ckpt_objects_before(ck, call, e, turn = 1L)
+  agent_eval(call$input$code, e)
+  frag = ckpt_objects_after(ck, call, e, tok)
+  ckpt_objects_budget(ck, 3L, e)
+  expect_identical(nrow(ck$obj$index), 0L)
+  u = ckpt_objects_undo(ck, frag, e)
+  expect_true(u$ok)
+  expect_false(exists("new", envir = e, inherits = FALSE))
+})
+
 test_that("reference objects and objects over the budget are reported with a model notice", {
   skip_on_cran()
   local_gptr_options(undo.capture_max = 100, undo.memory = 200, undo.disk = 150)
