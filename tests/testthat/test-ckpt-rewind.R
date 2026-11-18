@@ -66,7 +66,7 @@ test_that("the checkpointer specs undo and redo a recorded call", {
 test_that("an object changed without an undo copy adds a notice to the tool result (G7 3.9)", {
   skip_on_cran()
   local_project()
-  local_gptr_options(undo_capture_max = 10, undo_max_bytes = 10, undo_spill_max = 10)
+  local_gptr_options(undo.capture_max = 10, undo.memory = 10, undo.disk = 10)
   fake = local_fake_provider(list(fake_tool("r", code = "big[1] = 0"), "ok"))
   e = new.env()
   e$big = as.numeric(1:100)

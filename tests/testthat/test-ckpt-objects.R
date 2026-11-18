@@ -216,7 +216,7 @@ test_that("ckpt_predict() reduces code_targets() to the checkpointers' fields (I
 })
 
 test_that("the capture plan follows G7's budget rules", {
-  lim = list(capture_max = 100, max_bytes = 1000, spill_max = 5000)
+  lim = list(capture_max = 100, memory = 1000, disk = 5000)
   how = ckpt_capture_how(
     bytes = c(10, 500, 500, 500, 2000, 9000, NA, 10, 10),
     predicted = c("none", "assign", "modify", "none", "modify", "modify", "none", "byref",
@@ -285,7 +285,7 @@ test_that("undo keeps a binding changed after the turn (3-way) unless forced", {
 
 test_that("reference objects and objects over the budget are reported with a model notice", {
   skip_on_cran()
-  local_gptr_options(undo_capture_max = 100, undo_max_bytes = 200, undo_spill_max = 150)
+  local_gptr_options(undo.capture_max = 100, undo.memory = 200, undo.disk = 150)
   ck = ckpt_ck_new("s0000000003")
   e = new.env()
   e$cfg = new.env()
@@ -397,10 +397,10 @@ test_that("the settle step matches the names once, whatever the bindings (P32 T8
   expect_length(ls(ck$obj$slots), 2L)
 })
 
-test_that("the turn-end budget spills the largest image and drops images older than undo_turns", {
+test_that("the turn-end budget spills the largest image and drops images older than undo.turns", {
   skip_on_cran()
   dir = withr::local_tempdir()
-  local_gptr_options(undo_max_bytes = 1000, undo_spill_max = 1e6, undo_turns = 2L)
+  local_gptr_options(undo.memory = 1000, undo.disk = 1e6, undo.turns = 2L)
   ck = ckpt_ck_new("s0000000006", dir)
   st = ck$obj
   e = new.env()
@@ -421,7 +421,7 @@ test_that("the turn-end budget spills the largest image and drops images older t
 })
 
 test_that("an image that cannot be spilled is dropped instead", {
-  local_gptr_options(undo_max_bytes = 10, undo_spill_max = 5)
+  local_gptr_options(undo.memory = 10, undo.disk = 5)
   ck = ckpt_ck_new("s0000000007", withr::local_tempdir())
   e = new.env()
   e$a = as.numeric(1:50)
@@ -447,7 +447,7 @@ test_that("a capture by reference hashes one key for all its bindings", {
 test_that("an image spilled at a turn end is found again by a new R process (force)", {
   skip_on_cran()
   dir = withr::local_tempdir()
-  local_gptr_options(undo_max_bytes = 10)
+  local_gptr_options(undo.memory = 10)
   ck = ckpt_ck_new("s0000000009", dir)
   e = new.env()
   e$x = as.numeric(1:50)
@@ -476,7 +476,7 @@ test_that("a redo image spilled at a turn end is redone from disk and undone aga
   agent_eval(call$input$code, e)
   frag = ckpt_objects_after(ck, call, e, tok)
   expect_true(ckpt_objects_undo(ck, frag, e)$ok)
-  local_gptr_options(undo_max_bytes = 10)
+  local_gptr_options(undo.memory = 10)
   ckpt_objects_budget(ck, 2L, e)
   expect_identical(ck$obj$index$where, "disk")
   expect_true(ckpt_objects_redo(ck, frag, e)$ok)
@@ -497,7 +497,7 @@ agent_steps = function(ck, e, codes) {
 
 test_that("a rewind of several fragments of one object follows values restored from disk", {
   skip_on_cran()
-  local_gptr_options(undo_capture_max = 1000, undo_spill_max = 1e7)
+  local_gptr_options(undo.capture_max = 1000, undo.disk = 1e7)
   ck = ckpt_ck_new("s0000000014", withr::local_tempdir())
   e = new.env()
   frags = agent_steps(ck, e, c("big = seq_len(1e5) / 2", "big[2] = 0", "big[3] = 0"))
@@ -513,7 +513,7 @@ test_that("images spilled at turn ends keep a rewind of several fragments consis
   ck = ckpt_ck_new("s0000000015", withr::local_tempdir())
   e = new.env()
   frags = agent_steps(ck, e, c("x = as.numeric(1:50)", "x = x * 2"))
-  local_gptr_options(undo_max_bytes = 10)
+  local_gptr_options(undo.memory = 10)
   ckpt_objects_budget(ck, 2L, e)
   for (f in rev(frags)) expect_true(ckpt_objects_undo(ck, f, e)$ok)
   ckpt_objects_budget(ck, 2L, e)
@@ -526,7 +526,7 @@ test_that("images spilled at turn ends keep a rewind of several fragments consis
 
 test_that("a budget that cannot spill drops the oldest image and keeps the newest undo", {
   skip_on_cran()
-  local_gptr_options(undo_max_bytes = 1e6)
+  local_gptr_options(undo.memory = 1e6)
   ck = ckpt_ck_new("s0000000016")
   e = new.env()
   e$a = as.numeric(seq_len(5e4))
@@ -545,7 +545,7 @@ test_that("spilling an image the binding holds again raises no false conflict", 
   e$x = as.numeric(1:50)
   e$y = e$x
   frags = agent_steps(ck, e, c("x = x * 2", "x = y"))
-  local_gptr_options(undo_max_bytes = 10)
+  local_gptr_options(undo.memory = 10)
   ckpt_objects_budget(ck, 1L, e)
   for (f in rev(frags)) expect_true(ckpt_objects_undo(ck, f, e)$ok)
   expect_identical(e$x, as.numeric(1:50))
@@ -553,7 +553,7 @@ test_that("spilling an image the binding holds again raises no false conflict", 
 
 test_that("a predicted in-place edit keeps its disk image although the fingerprint misses it", {
   skip_on_cran()
-  local_gptr_options(undo_capture_max = 1000, undo_max_bytes = 2000, undo_spill_max = 1e7)
+  local_gptr_options(undo.capture_max = 1000, undo.memory = 2000, undo.disk = 1e7)
   ck = ckpt_ck_new("s0000000010", withr::local_tempdir())
   e = new.env()
   e$big = seq_len(1e5) / 2
@@ -586,7 +586,7 @@ test_that("an image key from a fragment never leaves the spill directory", {
 
 test_that("checkpoint.note names what cannot be undone", {
   skip_on_cran()
-  local_gptr_options(undo_capture_max = 100, undo_max_bytes = 200, undo_spill_max = 150)
+  local_gptr_options(undo.capture_max = 100, undo.memory = 200, undo.disk = 150)
   e = new.env()
   e$cfg = new.env()
   e$big = as.numeric(1:1000)
@@ -616,7 +616,7 @@ test_that("checkpoint.note names what cannot be undone", {
 test_that("a sampled size reads about in both undo notes (D-356)", {
   skip_on_cran()
   local_mocked_bindings(env_size_strings_max = 1e4)
-  local_gptr_options(undo_capture_max = 100, undo_max_bytes = 200, undo_spill_max = 150)
+  local_gptr_options(undo.capture_max = 100, undo.memory = 200, undo.disk = 150)
   e = new.env()
   e$big = paste0("s", 1:2e4)
   local_mocked_bindings(run_eval_env = function(run) run$envir, session_home = function(s) e)

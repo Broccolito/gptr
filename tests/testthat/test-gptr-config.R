@@ -167,8 +167,8 @@ test_that("the core setting specs cover contract 11.2 and validate their values 
     "version", "model", "small_model", "system1", "mode", "preset", "tools", "permissions",
     "context", "record", "replay", "transcript", "plugins", "filters", "skills", "mcp",
     "subagents", "output_tokens", "plot", "budget", "cache", "compactor", "compact_at",
-    "checkpoint", "doc", "cache_commit", "ui", "frontend", "type_ahead", "store", "evaluator",
-    "providers", "egress"))
+    "checkpoint", "undo", "doc", "cache_commit", "ui", "frontend", "type_ahead", "store",
+    "evaluator", "providers", "egress"))
   expect_true(all(vapply(specs, inherits, NA, what = "gptr_setting")))
   by_name = stats::setNames(specs, names)
   expect_identical(by_name$type_ahead$default, "steer")
@@ -656,6 +656,21 @@ test_that("dotted keys read nested objects and their own options", {
   withr::local_options(gptr.subagents.max_depth = 2L)
   expect_identical(settings_get("subagents.max_depth"), 2L)
   expect_identical(setting_get("subagents.max_depth"), 2L)
+})
+
+test_that("the undo setting holds the object undo limits, its fields in every layer (D-370)", {
+  skip_on_cran()
+  local_gw()
+  expect_identical(ckpt_limits(), list(capture_max = 1e8, memory = 1e9, disk = 2e9, turns = 20L))
+  withr::local_options(gptr.undo.memory = 7)
+  expect_identical(ckpt_limits()$memory, 7)
+  gptr_config(undo = list(memory = 5), .scope = "session")
+  expect_identical(ckpt_limits(), list(capture_max = 1e8, memory = 5, disk = 2e9, turns = 20L))
+  expect_output(print(gptr_config()),
+                "undo +\\{\"capture_max\":100000000,\"memory\":5,.* +\\[session\\]")
+  cnd = expect_error(gptr_config(undo = list(memory = -1), .scope = "session"),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "undo.memory")
 })
 
 test_that("settings_effective() reports each key with its layer and prints it", {

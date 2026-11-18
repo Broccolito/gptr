@@ -372,11 +372,12 @@ ckpt_spill_allowed = function() {
   !is.null(workspace_dir()) || gptr_has_human()
 }
 
-#' The object budgets (contract 3.1, options gptr.undo_*)
+#' The object undo limits: the fields of the setting `undo` (D-370)
 #' @noRd
 ckpt_limits = function() {
-  list(capture_max = gptr_opt("undo_capture_max"), max_bytes = gptr_opt("undo_max_bytes"),
-       spill_max = gptr_opt("undo_spill_max"), turns = gptr_opt("undo_turns"))
+  f = c("capture_max", "memory", "disk", "turns")
+  keys = paste0("undo.", f)
+  stats::setNames(lapply(keys, function(k) setting_get(k, default = gptr_option_defaults[[k]])), f)
 }
 
 #' Targets of R code for the checkpointers and the size store: P11's code_targets() reduced
@@ -413,8 +414,8 @@ ckpt_capture_how = function(bytes, predicted, mode, spill_ok, lim) {
   bytes[is.na(bytes)] = 0
   over = bytes > lim$capture_max
   how = ifelse(over, "skip", "ref")
-  how[over & predicted %in% c("assign", "remove") & bytes <= lim$max_bytes] = "ref"
-  how[over & predicted == "modify" & bytes <= lim$spill_max & spill_ok] = "disk"
+  how[over & predicted %in% c("assign", "remove") & bytes <= lim$memory] = "ref"
+  how[over & predicted == "modify" & bytes <= lim$disk & spill_ok] = "disk"
   how[mode == "copy"] = "copy"
   how[mode == "none"] = "none"
   how
@@ -431,7 +432,7 @@ ckpt_preimage_modes = function(store, envir, snap, pred, lim, dry = FALSE) {
   key = rep("", n)
   for (i in seq_len(n)) {
     pm = gptr_preimage(get(snap$name[i], envir = envir, inherits = FALSE), snap$name[i],
-                       list(predicted = pred[i], bytes = snap$bytes[i], budget = lim$max_bytes,
+                       list(predicted = pred[i], bytes = snap$bytes[i], budget = lim$memory,
                             dry = dry))
     if (pred[i] == "byref" && identical(pm$mode, "ref")) {
       pm = list(mode = "none", reason = "edited by reference")
@@ -734,9 +735,9 @@ ckpt_objects_budget = function(ck, turn, envir) {
   ckpt_drop(store, store$index$key[which(store$index$turn <= turn - lim$turns)])
   repeat {
     mem = store$index[store$index$where == "memory", , drop = FALSE]
-    if (sum(mem$bytes, na.rm = TRUE) <= lim$max_bytes) break
+    if (sum(mem$bytes, na.rm = TRUE) <= lim$memory) break
     big = which.max(mem$bytes)
-    if (mem$bytes[big] > lim$spill_max || is.null(ckpt_spill(store, mem$key[big], envir))) {
+    if (mem$bytes[big] > lim$disk || is.null(ckpt_spill(store, mem$key[big], envir))) {
       ckpt_drop(store, mem$key[1L])
     }
   }
