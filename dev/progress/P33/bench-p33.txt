@@ -1,0 +1,36 @@
+[undo] load 103.8 above 20; waiting a minute
+[undo] load 131.1 above 20; waiting a minute
+[undo] load 192.2 above 20; waiting a minute
+[undo] load 257.4 above 20; waiting a minute
+[undo] load 172.5 above 20; waiting a minute
+[undo] load 223.6 above 20; waiting a minute
+[undo] load 124.3 above 20; waiting a minute
+[undo] load 92.7 above 20; waiting a minute
+[undo] load 132.1 above 20; waiting a minute
+[undo] load 87.2 above 20; waiting a minute
+[undo] load 102.0 above 20; waiting a minute
+[undo] load 59.3 above 20; waiting a minute
+[undo] load 41.4 above 20; waiting a minute
+[undo] load 41.2 above 20; waiting a minute
+[undo] load 38.4 above 20; waiting a minute
+[undo] a done
+[undo] b done
+[undo] c done
+[undo] d done
+[undo] e done
+ scenario size_mb before eval after budget_end budget_in_after undo img_pre_mb img_post_mb img_end_mb held_mb disk_mb restored  rss_mb
+        a  416.02   0.01 0.04  1.27          0            0.01 0.71          0           0          0    0.08       0        1 1348.34
+        b  512.00   0.00 0.03  0.01          0            0.01 0.01          0           0          0   61.03       0        1  825.05
+        c  512.00   0.00 0.07  0.01          0            0.01 0.01          0           0          0  488.28       0        1 1450.41
+        d  520.00   0.00 0.11  0.01          0            0.01 0.01          0           0          0  495.91       0        1 1489.22
+        e  512.00   0.00 0.03  0.01          0            0.01 0.01          0           0          0   61.03       0        1  825.31
+
+seconds: before, eval, after = checkpointer before / R evaluation / checkpointer after; budget_end = agent_end budget; budget_in_after = budget inside after (P33). 
+img_*_mb: files under .gptr/checkpoints/objects at the end of before, of after, of the turn. 
+restored: 1 = identical() after the undo. medians of 3 children.
+a: list of 4e6 strings, element edit
+b: data frame of 8 numeric columns, df$a[1] = 0
+c: numeric matrix 8000 x 8000, m[1, 1] = 0
+d: numeric vector of 6.5e7, rebind x = x + 1
+e: scenario b without .gptr/ (non-interactive)
+load average before: { 34.26 70.36 103.88 }  after: { 61.34 72.59 101.83 } 
