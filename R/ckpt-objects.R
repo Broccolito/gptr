@@ -182,6 +182,14 @@ ckpt_settle = function(store, envir, pending, frag = "", turn = NA_integer_) {
              pre_address = pending$address, post_address = post)
 }
 
+#' Read a disk image through its connection, so R holds the object, not its bytes as well
+#' @noRd
+ckpt_read_image = function(file) {
+  con = file(file, "rb")
+  on.exit(close(con), add = TRUE)
+  unserialize(con)
+}
+
 #' Restore `name` from image `key` (memory or disk); the displaced value becomes a redo image
 #' held by reference. Callers apply the 3-way rule first (ckpt_expect_ok()).
 #' @return `list(ok, reason, redo, address)`.
@@ -204,7 +212,7 @@ ckpt_restore = function(store, envir, name, key, frag = "", turn = NA_integer_) 
     assign(redo, get(name, envir = envir, inherits = FALSE), envir = store$slots)
   }
   if (disk) {
-    assign(name, unserialize(readBin(f, "raw", file.size(f))), envir = envir)
+    assign(name, ckpt_read_image(f), envir = envir)
     unlink(f)
   } else {
     assign(name, get(key, envir = store$slots, inherits = FALSE), envir = envir)
@@ -265,6 +273,7 @@ ckpt_defuse = function(store, key) {
 
 #' Spill a memory image to disk and defuse it; NULL when it cannot be written. Rows expecting its
 #' value expect its key, unless the binding in `envir` (the session home) still holds that value.
+#' The image's bytes become its file's size.
 #' @noRd
 ckpt_spill = function(store, key, envir) {
   i = match(key, store$index$key)
@@ -279,6 +288,7 @@ ckpt_spill = function(store, key, envir) {
   ckpt_defuse(store, key)
   store$index$where[i] = "disk"
   store$index$file[i] = f
+  store$index$bytes[i] = file.size(f)
   invisible(f)
 }
 
@@ -554,7 +564,20 @@ ckpt_objects_after = function(ck, call, envir, token) {
                                              "none", "unknown", NA, "", "", FALSE,
                                              "a promise or an active binding (not captured)")
   }
+  ckpt_objects_budget(ck, token$turn, envir)
   if (!length(rows)) return(NULL)
+  # the rows say where the budget left their images
+  idx = store$index
+  img = vapply(rows, function(r) r$image, "")
+  at = match(img, idx$key)
+  for (k in which(nzchar(img) & !idx$where[at] %in% "memory")) {
+    rows[[k]]$held_bytes = 0
+    rows[[k]]$where = if (is.na(at[k])) "" else "disk"
+    if (is.na(at[k])) {
+      rows[[k]][c("restorable", "reason")] =
+        list(FALSE, "dropped to stay within undo.memory and undo.disk")
+    }
+  }
   list(id = token$frag, turn = token$turn, objects = rows)
 }
 
@@ -598,8 +621,9 @@ ckpt_objects_undo = function(ck, fragment, envir, force = FALSE, dry = FALSE) {
       ok = !is.null(store$dir) && grepl("^[[:alnum:]]+$", r$image)
       f = if (ok) ckpt_disk_file(store$dir, r$image) else ""
       if (!file.exists(f)) {
-        out = ckpt_item(out, item, FALSE, paste0("not restored (no pre-image: dropped over the ",
-                                                 "undo budget or made in another R process)"))
+        out = ckpt_item(out, item, FALSE, paste0("not restored (no pre-image: dropped to stay ",
+                                                 "within the undo limits, or made in another R ",
+                                                 "process)"))
         next
       }
       if (!force) {
@@ -708,9 +732,10 @@ ckpt_objects_describe = function(fragment) {
   }, "")
 }
 
-#' Enforce the in-memory budget at the end of a turn (G7 section 3.4 step 6, architecture 6.16):
-#' drop images older than gptr.undo_turns turns, then, while over gptr.undo_max_bytes, spill the
-#' largest image or, when it cannot be spilled, drop the oldest. `envir` is the session home.
+#' Enforce the undo limits after every call and at the end of a request (D-368): drop images
+#' older than undo.turns turns; while the memory images exceed undo.memory, spill the largest when
+#' it fits undo.disk, else drop the oldest; while the disk images exceed undo.disk, drop the
+#' oldest. `envir` is the session home.
 #' @noRd
 ckpt_objects_budget = function(ck, turn, envir) {
   store = ck$obj
@@ -724,6 +749,11 @@ ckpt_objects_budget = function(ck, turn, envir) {
     if (mem$bytes[big] > lim$disk || is.null(ckpt_spill(store, mem$key[big], envir))) {
       ckpt_drop(store, mem$key[1L])
     }
+  }
+  repeat {
+    disk = store$index[store$index$where == "disk", , drop = FALSE]
+    if (sum(disk$bytes, na.rm = TRUE) <= lim$disk) break
+    ckpt_drop(store, disk$key[1L])
   }
   invisible(store$index)
 }

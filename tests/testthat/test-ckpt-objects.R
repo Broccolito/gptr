@@ -374,7 +374,7 @@ test_that("promises are never forced; a predicted rebinding of one is reported",
   expect_true(rows$x$restorable)
 })
 
-test_that("the settle step matches the names once, whatever the bindings (P32 T8)", {
+test_that("the settle step matches the names and the images once, at any size (P32 T8)", {
   skip_on_cran()
   ck = ckpt_ck_new("s0000000019")
   e = new.env()
@@ -395,7 +395,7 @@ test_that("the settle step matches the names once, whatever the bindings (P32 T8
   environment(row) = counted
   local_mocked_bindings(ckpt_objects_after = after, ckpt_settle_row = row)
   frag = ckpt_objects_after(ck, call, e, tok)
-  expect_identical(matches, 1L)
+  expect_identical(matches, 2L)
   rows = rows_by_name(frag)
   expect_identical(vapply(rows, `[[`, "", "status"),
                    c(v0001 = "changed", v0002 = "removed", new = "created", lazy = "changed"))
@@ -452,7 +452,7 @@ test_that("a capture by reference hashes one key for all its bindings", {
   expect_identical(nrow(ckpt_capture(ck$obj, e, character())), 0L)
 })
 
-test_that("an image spilled at a turn end is found again by a new R process (force)", {
+test_that("an image spilled to disk is found again by a new R process (force)", {
   skip_on_cran()
   dir = withr::local_tempdir()
   local_gptr_options(undo.memory = 10)
@@ -533,18 +533,72 @@ test_that("images spilled at turn ends keep a rewind of several fragments consis
   expect_false(exists("x", envir = e, inherits = FALSE))
 })
 
-test_that("a budget that cannot spill drops the oldest image and keeps the newest undo", {
+test_that("after every call the largest image is spilled, else the oldest dropped (D-368)", {
   skip_on_cran()
   local_gptr_options(undo.memory = 1e6)
-  ck = ckpt_ck_new("s0000000016")
+  dir = withr::local_tempdir()
+  for (spill in c(TRUE, FALSE)) {
+    ck = ckpt_ck_new("s0000000016", if (spill) dir)
+    e = new.env()
+    e$a = seq_len(5e4) / 2
+    e$b = seq_len(1e5) / 2
+    frags = agent_steps(ck, e, c("a = a + 1", "b = b + 1"))
+    idx = ck$obj$index
+    if (spill) {
+      expect_identical(idx$where, c("memory", "disk"))
+      expect_identical(frags[[2]]$objects[[1]]$where, "disk")
+      expect_identical(idx$bytes[2], as.numeric(file.size(idx$file[2])))
+    } else {
+      expect_identical(idx$name, "b")
+      expect_match(ckpt_objects_undo(ck, frags[[1]], e)$action, "^not restored \\(no pre-image")
+    }
+    expect_true(ckpt_objects_undo(ck, frags[[2]], e)$ok)
+    expect_identical(e$b, seq_len(1e5) / 2)
+  }
+})
+
+test_that("an image dropped in its own call leaves a row that says so (D-368)", {
+  skip_on_cran()
+  local_gptr_options(undo.memory = 1000)
+  ck = ckpt_ck_new("s0000000023")
   e = new.env()
-  e$a = as.numeric(seq_len(5e4))
-  e$b = as.numeric(seq_len(1e5))
-  frags = agent_steps(ck, e, c("a = a + 1", "b = b + 1"))
-  ckpt_objects_budget(ck, 1L, e)
-  expect_identical(ck$obj$index$name, "b")
-  expect_true(ckpt_objects_undo(ck, frags[[2]], e)$ok)
-  expect_identical(e$b, as.numeric(seq_len(1e5)))
+  e$x = seq_len(1e4) / 2
+  row = agent_steps(ck, e, "x = x * 2")[[1L]]$objects[[1L]]
+  expect_false(row$restorable)
+  expect_identical(row$reason, "dropped to stay within undo.memory and undo.disk")
+  expect_identical(nrow(ck$obj$index), 0L)
+  expect_length(ls(ck$obj$slots), 0L)
+})
+
+test_that("disk images over undo.disk are dropped oldest first, their files deleted (D-368)", {
+  skip_on_cran()
+  local_gptr_options(undo.memory = 10, undo.disk = 1000)
+  dir = withr::local_tempdir()
+  ck = ckpt_ck_new("s0000000024", dir)
+  e = new.env()
+  e$x = sqrt(1:50)
+  frags = agent_steps(ck, e, rep("x = x + 1", 3L))
+  idx = ck$obj$index
+  expect_identical(idx$frag, c(frags[[2]]$id, frags[[3]]$id))
+  expect_identical(sort(list.files(dir, full.names = TRUE)), sort(idx$file))
+  expect_lte(sum(idx$bytes), 1000)
+})
+
+test_that("a value restored from disk is the original and stays editable in place (D-368)", {
+  skip_on_cran()
+  local_gptr_options(undo.memory = 10)
+  ck = ckpt_ck_new("s0000000025", withr::local_tempdir())
+  e = new.env()
+  e$x = seq_len(1e5) / 2
+  frag = agent_steps(ck, e, "x = x * 2")[[1L]]
+  expect_identical(frag$objects[[1L]]$where, "disk")
+  expect_true(ckpt_objects_undo(ck, frag, e)$ok)
+  a0 = ckpt_addr(e, "x")
+  agent_eval("x[4] = 0", e)
+  expect_identical(ckpt_addr(e, "x"), a0)
+  orig = seq_len(1e5) / 2
+  orig[4] = 0
+  expect_identical(e$x, orig)
 })
 
 test_that("spilling an image the binding holds again raises no false conflict", {
