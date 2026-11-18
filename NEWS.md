@@ -16,17 +16,16 @@ workspace shaped like task T03 of the gptr-bench benchmark, a list of 300 tables
   the checkpoints and the workspace summary, which each computed it before. Around the T03
   workspace's second and third requests gptr now adds 0.67-0.75 s, against 5.0-5.7 s; the request
   that creates the list takes 1.8 s instead of 4.7 s, and a call that adds one element to it
-  0.56 s instead of 5.8 s, in a non-interactive session. An interactive session first saves the
-  list to disk for undo, as 1.0.1 did (2.8 s at 300 tables). `peter(x, ...)` no longer sizes `x`
-  again for each request. Code you run at the console, in a notebook cell or in a knitr chunk
-  between requests may change an object in place, so the next permission check measures the
-  objects it overwrites again.
+  0.56 s instead of 5.8 s, in a non-interactive session. `peter(x, ...)` no longer sizes `x` again
+  for each request. Code you run at the console, in a notebook cell or in a knitr chunk between
+  requests may change an object in place, so the next permission check measures the objects it
+  overwrites again.
 * Sizing an object reads at most 12.5 million strings; longer character data is sampled and the
   size is shown as an estimate (`about 3.4 GB`) in the workspace summary, object descriptions and
   the permission question about overwriting it. Objects with fewer strings keep their exact
   sizes. A vector of 50 million strings is sized in 1.7 s instead of 10.6-14 s. An estimate is at
-  or above the true size on average, and at the default `gptr.protect_size` and
-  `gptr.undo_capture_max` no permission or undo decision rests on one.
+  or above the true size on average, and at the defaults of `gptr.protect_size` and
+  `undo.capture_max` no permission or undo decision rests on one.
 * Each tool call's input is classified once, not twice: a 25-line `r` call takes 123 ms instead
   of 142 ms, 110 ms instead of 132 ms over MCP.
 * `gptr.checkpoint_scan_budget` (0.25 s) now limits the project scan time of a whole request.
@@ -47,8 +46,33 @@ workspace shaped like task T03 of the gptr-bench benchmark, a list of 300 tables
   0.33 s per request. A coaching session's Codex hook starts the same way: 0.25 s instead of
   0.5 s per Codex tool call.
 
+## Undo of large objects
+
+* Undo keeps an object's old value by reference and writes nothing before a call. The 2.8 s an
+  interactive session spent saving the T03 list to disk before a call that edits it in place is
+  gone; the edit itself copies only what it touches: a whole vector or matrix, one column of a
+  data frame.
+* The memory and disk limits hold after every call, not only at the end of a turn. Images written
+  to disk count against `undo.disk`, which caps them per session, and a restore reads the file as
+  a stream, needing the object's size in memory instead of twice it.
+* The four undo options are now one setting, `undo`, changed like any other with `gptr_config()`,
+  for example `gptr_config(undo = list(memory = 4e9), .scope = "user")`. Its defaults are those of
+  1.0.1: `capture_max = 1e8`, `memory = 1e9`, `disk = 2e9` and `turns = 20`. The options
+  `gptr.undo.capture_max`, `gptr.undo.memory`, `gptr.undo.disk` and `gptr.undo.turns` are its
+  option layer. `gptr.undo_capture_max`, `gptr.undo_max_bytes`, `gptr.undo_spill_max` and
+  `gptr.undo_turns` are removed, with no aliases; `disk` limits all of a session's images on disk,
+  where `gptr.undo_spill_max` limited one.
+
 ## Bug fixes
 
+* An object you change after a turn, by assigning it again or editing it in place, is a conflict
+  at the next undo or redo: your value is kept and reported unless `force = TRUE`. Undo used to
+  overwrite an in-place edit of a value it had restored from disk or from a copy. `?gptr_rewind`
+  describes the edits it cannot see.
+* `gptr_checkpoints()` counts an object as restorable only while its image is still kept, and
+  each "cannot be undone" message names the limit to raise (`undo.memory` or
+  `undo.capture_max`). For code whose targets cannot be predicted, the message lists every object
+  over `undo.capture_max`, since such code may change any of them.
 * Calls served over MCP or to a command-line route (Claude Code, Codex) are gated and
   checkpointed with the risk of their final input: after a `tool_call` hook rewrites a call into
   code that writes a file, the file is backed up and `gptr_rewind()` removes it. A served tool
