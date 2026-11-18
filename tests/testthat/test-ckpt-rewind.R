@@ -663,6 +663,21 @@ test_that("gptr_checkpoints() lists the turns of the active path (contract 5.12)
   expect_output(print(cp), "Rewind with gptr_rewind")
 })
 
+test_that("gptr_checkpoints() counts as restorable only the images still held", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(undo.memory = 1e6, undo.disk = 0)
+  local_fake_provider(list(fake_tool("r", code = "a = seq_len(5e4) / 2; b = seq_len(1e5) / 2"),
+                           "one", fake_tool("r", code = "a = a + 1"), "two",
+                           fake_tool("r", code = "b = b + 1"), "three"))
+  s = peter("make", model = "fake/fake-1", mode = "auto", envir = new.env())
+  s |> peter("edit a")
+  expect_identical(gptr_checkpoints(s)$objects, c("2/2", "1/1"))
+  # the image of b does not fit beside a's, nor on disk, so the older image of a is dropped
+  s |> peter("edit b")
+  expect_identical(gptr_checkpoints(s)$objects, c("2/2", "1/0", "1/1"))
+})
+
 test_that("held_mb and disk_mb count 2^20 bytes a megabyte, as the other size reports do", {
   cps = list(list(data = list(fragments = list(objects = list(id = "f1", objects = list())))))
   ck = list(obj = list(index = data.frame(frag = "f1", bytes = c(2^20, 2^21),

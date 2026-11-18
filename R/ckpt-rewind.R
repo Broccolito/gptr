@@ -796,15 +796,22 @@ ckpt_turn_rows = function(tree, path, branch, ck, exclude = character()) {
 }
 
 #' The counts of a turn's checkpoint entries: `"changed/restorable"` objects and files, and the
-#' megabytes of their object images in memory and on disk
+#' megabytes of their object images in memory and on disk. A changed or removed object counts as
+#' restorable while this process holds its image or its image file is in the store directory.
 #' @noRd
 ckpt_turn_counts = function(cps, ck) {
   frags = lapply(cps, function(e) e$data$fragments)
+  index = if (is.null(ck)) ckpt_index_empty() else ck$obj$index
+  dir = if (!is.null(ck)) ck$obj$dir
+  held = function(r) {
+    identical(r$status, "created") || r$image %in% index$key ||
+      (!is.null(dir) && nzchar(r$image) && file.exists(ckpt_disk_file(dir, r$image)))
+  }
   count = function(scope) {
     rows = unlist(lapply(frags, function(f) f[[scope]][[scope]]), recursive = FALSE)
-    paste0(length(rows), "/", sum(vapply(rows, function(r) isTRUE(r$restorable), NA)))
+    ok = vapply(rows, function(r) isTRUE(r$restorable) && (scope == "files" || held(r)), NA)
+    paste0(length(rows), "/", sum(ok))
   }
-  index = if (is.null(ck)) ckpt_index_empty() else ck$obj$index
   img = index[index$frag %in% ckpt_chr(lapply(frags, function(f) f$objects$id)), , drop = FALSE]
   mb = function(where) round(sum(img$bytes[img$where == where], na.rm = TRUE) / 2^20, 3)
   list(objects = count("objects"), files = count("files"), held_mb = mb("memory"),
