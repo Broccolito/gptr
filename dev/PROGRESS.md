@@ -1,8 +1,25 @@
-## Current checkpoint — gptr 1.1.0, 2026-11-16
+## Current checkpoint — gptr 1.1.0, 2026-11-17
 
 gptr 1.0.0 is on CRAN (2026-11-01); 1.0.1 was not submitted, so 1.1.0 carries its fixes. `main` holds
-1.1.0 and is the only branch once this checkpoint lands: P32 was built as `claude/v1.1.0`, a straight
-line on 5e2992b1, and main was fast-forwarded to it (PR #113).
+1.1.0 and is the only branch once this checkpoint lands: P32 was built as `claude/v1.1.0` and
+fast-forwarded into main (PR #113); P33 was built as `claude/p33-undo` on 5cf591cd and merged into
+main after CI.
+
+- P33, undo of large objects ([plan](plan/P33-undo-large-objects.md), [log](progress/P33.md),
+  D-368..D-370), from the maintainer's 2026-11-17 request after a survey found four undo defects:
+  undo keeps old values by reference and writes nothing before a call (the 2.8 s disk image of the
+  T03 row is gone); one capture rule in every front end; the memory and disk limits hold after
+  every call, spilled images count against `undo.disk` by their file sizes, and an object's other
+  images are measured again when one leaves memory; restore streams (1x the object's RAM); a change
+  made after a turn is a conflict, by fingerprint (D-369); counts and every "cannot be undone"
+  message are honest and name the limit to raise. The four `gptr.undo_*` options became the
+  setting `undo` (`capture_max`, `memory`, `disk`, `turns`; options `gptr.undo.<field>`), which
+  `gptr_config()` shows with its dotted options; `?gptr_rewind`, `?gptr_options`, the configuration
+  and execution-model articles, the cheat sheet and NEWS document it. A five-lens review with two
+  refuting verifiers per finding left three findings, all fixed. Benchmark at 0.5 GB against main:
+  no image before a call (main 176-512 MB), undo 2.57 to 0.71 s for a 4e6-string list, peak RSS
+  2355 to 825 MB for a data frame, and a non-interactive run without `.gptr/` now restores. Live
+  pass in RStudio (first time; fake provider and the Codex route) and a terminal console.
 
 - P32, the hot path ([plan](plan/P32-hot-path.md), [log](progress/P32.md), D-356..D-367), prompted
   by the gptr-bench T03 benchmark (about 108 s of gptr's own time in a 244 s run): a size walk reads
@@ -18,13 +35,20 @@ line on 5e2992b1, and main was fast-forwarded to it (PR #113).
   race, FIX-35's Windows clock) and a live pass (Terminal, Claude Code and Codex CLI routes, Jupyter,
   object fidelity, the live test files; RStudio not run: its access was declined) fixed the notebook
   size epoch, notebook escape codes, the decision-only model refusal and the billing notice (D-367).
-- Checks at the release head: the offline suite FAIL 0; `R CMD check --as-cran` Status OK with no
-  note; lint clean; CRAN-mode check 166 s locally (main 169 s), CI CRAN-mode 249 s Linux / 520 s
-  Windows with manuals (budgets 480 / 600 s); every CI check green.
-- Ledger: JSONL-sink and child sessions classify twice per call (K14); the interactive disk image
-  before a predicted in-place modify (about 2.8 s for 427 MB, as in 1.0.1) is out of P32's scope;
-  gptr_coach's donttest example takes about 7 s; a gptr_user_dir() memo misses a retargeted
-  symlinked HOME; Windows timings and RStudio were not checked live.
+- Checks at P32's head: the offline suite FAIL 0; `R CMD check --as-cran` Status OK with no note;
+  lint clean; CRAN-mode check 166 s locally (main 169 s), CI CRAN-mode 249 s Linux / 520 s Windows
+  with manuals (budgets 480 / 600 s); every CI check green. At P33's head: see
+  [progress/P33.md](progress/P33.md), Final checks.
+- Ledger: JSONL-sink and child sessions classify twice per call (K14); the after-call walk that
+  sizes a kept image of string-heavy data (1.27 s for 4e6 strings at load 60-100) is to be
+  measured on a quiet machine before bounding it (P33 design review, "bound the after-call
+  held-bytes walk"); undo of objects over `undo.memory` stays unavailable unless it is raised; an
+  edit made at the console between requests can make an image hold more than counted until
+  another image of the object leaves memory; the flagged-call line says 457.8 MB where the undo
+  line says 458 MB (two formatters); G7 (dev/research) still describes the eager disk image and
+  the address-only 3-way rule, superseded by D-368..D-370; gptr_coach's donttest example takes
+  about 7 s; a gptr_user_dir() memo misses a retargeted symlinked HOME; Windows timings were not
+  checked live.
 
 Next: submit 1.1.0 to CRAN (maintainer), recording the final check results in `cran-comments.md`.
 
