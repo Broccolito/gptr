@@ -19,7 +19,8 @@ gptr_preimage(x, name, ctx, ...)
 
 \item{ctx}{A list: \code{predicted}, what the agent's code is predicted to do to \code{name} (\code{"assign"},
 \code{"modify"}, \code{"byref"}, \code{"remove"} or \code{"none"}); \code{bytes}, the size of \code{x} in bytes (\code{NA} when
-unknown); \code{budget}, the largest copy allowed, in bytes. When \code{ctx$dry} is \code{TRUE} the
+unknown); \code{budget}, the largest copy allowed, in bytes (the setting \code{undo.memory}, see
+\code{\link[=gptr_rewind]{gptr_rewind()}}). When \code{ctx$dry} is \code{TRUE} the
 checkpointer only asks whether a capture is possible and a method must not copy.}
 
 \item{...}{Unused; for methods.}
@@ -39,7 +40,7 @@ The default method keeps value-semantics objects by reference (\code{"ref"}: not
 unless the agent edits the object in place) and reports environments (including R6 and
 RefClass objects) and external pointers as not restorable (\code{"none"}). The \code{data.table} method
 returns a deep copy made with \code{data.table::copy()} (\code{"copy"}) when the agent's code is
-predicted to modify the table by reference (\verb{:=}, \verb{set*()}) and the table fits the budget.
+predicted to modify the table by reference (\verb{:=}, \verb{set*()}) and the table fits \code{undo.memory}.
 Packages add methods for their own classes with a delayed registration,
 \code{S3method(gptr::gptr_preimage, myclass)}; an R6 class can, for example, return
 \code{x$clone(deep = TRUE)} as \code{"copy"}. This generic is experimental.

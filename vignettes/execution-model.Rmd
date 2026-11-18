@@ -134,6 +134,10 @@ keeps the old value alive, and an in-place edit copies what it touches, a whole 
 or one column of a data frame. After every call the kept images stay within `undo.memory` in
 memory and `undo.disk` (2 GB) on disk. Over `undo.memory`, the largest image moves to disk when
 it fits and a `.gptr/` workspace exists or a person is present; otherwise the oldest is dropped.
+Images older than `undo.turns` (20) turns are dropped too. An object over these limits is not
+kept, so a turn that changes an object of several GB cannot be undone unless `undo.memory` is
+raised; the approval question and the undo report name the limit. An object you change after a
+turn is a conflict, kept unless `force = TRUE` (`?gptr_rewind` lists the edits it cannot see).
 [Configuration](configuration.html) shows how to change these limits.
 
 A continued session reuses its kept home environment unless you explicitly supply a new `envir`.

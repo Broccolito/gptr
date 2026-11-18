@@ -2162,7 +2162,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   a partial one sends `<workspace_changes since=... reason="rewind">` (about 87 tokens). `gptr_fork()` stays the
   only way to get a second object.
 - **Modes.** plan: conversation only; manual/edits: the permission detail view says "cannot be undone" when
-  capture is impossible and offers "spill first"; auto: a 25-token notice. REPL: `/undo`, `/redo`, `/rewind`,
+  capture is impossible and names the limit to raise (`undo.memory` for a predicted target, else
+  `undo.capture_max`); auto: a 25-token notice. REPL: `/undo`, `/redo`, `/rewind`,
   `/rewind <k>`, `/checkpoints`. Plugins add `checkpointer` specs and `gptr_preimage()` S3 methods.
 
 ### 6.17 Console and front ends [18]
@@ -2973,7 +2974,7 @@ Prices: Sonnet 5.5 at $2 input / $10 output per million tokens, 1-hour cache wri
 5. Dispatcher: validation; `gptr_risk()` sees `pbmc` overwritten above `gptr.protect_size` -> level 3;
    `manual` -> ask; under the call line `▎ r  pbmc = FindNeighbors(pbmc, dims = 1:30)` the console asks
    `? Allow r?` over `y yes · a always (session) · p always (project) · n no · ? more`; `?` would say "cannot be undone:
-   pbmc 5.1 GB exceeds gptr.undo_spill_max" (no pre-image, so no copy). `y` at `› `.
+   pbmc (5.1 GB, larger than undo.memory)" (no image is kept, so no copy). `y` at `› `.
 6. FIFO -> `eval_r()` in `globalenv()`, teed to the console; Seurat mutates `pbmc` in memory with no gptr
    copy (the copy-safety suite pins this). Ctrl-C would open the pause menu; a steer typed there is delivered
    after this tool result. Result: collapsed progress output plus `~ pbmc <Seurat> modified` and `+ markers

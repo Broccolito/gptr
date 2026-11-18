@@ -269,8 +269,10 @@ gptr_usage(session, by = "agent")
 
 `restore = "conversation"` changes the conversation; `"workspace"` restores captured
 workspace state; `"all"` requests both. Restoration covers captured objects/files and
-registered checkpointers, with conflicts and unsupported changes reported. It does not undo
-arbitrary external services or uncaptured side effects. Check the report and restored data.
+registered checkpointers, with conflicts and unsupported changes reported. `gptr_checkpoints()`
+counts an object as restorable only while its image is kept within the `undo` limits
+([Configuration](configuration.html)). It does not undo arbitrary external services or
+uncaptured side effects. Check the report and restored data.
 Assigning a session to another name keeps the same object; use `gptr_fork()` for a branch.
 
 Automatic file scans stop after two seconds. They inspect at most 2,000 entries and back up

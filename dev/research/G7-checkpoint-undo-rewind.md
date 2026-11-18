@@ -3151,6 +3151,7 @@ Body text has been corrected where noted; section 5 still embeds the original fi
 | 23 | Aider `/undo` quote | VERIFIED | `aider.chat/docs/usage/commands.html` |
 | 24 | ALTREP `1:1e9`: `object.size()` 3.7 GB for 680 B | VERIFIED | Re-run: `object.size` 3.7 Gb, `lobstr::obj_size` 680 B |
 | 25 | §1.11 "No new Imports" vs §4.8/§6 "add `methods` to Imports" | CORRECTED (internal inconsistency) | §1.11 now says no new non-base Imports; `methods` is added |
+| 26 | Capture plan with an eager disk image before a predicted in-place edit, the turn-end-only budget, the address-only 3-way rule and the options `gptr.undo_capture_max`, `gptr.undo_max_bytes`, `gptr.undo_spill_max`, `gptr.undo_turns` (§3.4, §3.6, §3.7, the option table) | SUPERSEDED (2026-11-17) | P33, D-368..D-370: old values are held by reference and nothing is written before a call; the setting `undo` (`capture_max`, `memory`, `disk`, `turns`; options `gptr.undo.<field>`) bounds memory and disk after every call; conflicts compare fingerprints. `03` §6.16 and `?gptr_rewind` |
 
 Not verifiable here (left as stated, with their existing labels): all Windows behaviour in §6 (`file.rename` retries,
 junctions, `Sys.chmod`, MAX_PATH); RStudio, Positron and Jupyter; whether a provider cache actually hits after a

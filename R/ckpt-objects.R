@@ -21,7 +21,7 @@
 #' unless the agent edits the object in place) and reports environments (including R6 and
 #' RefClass objects) and external pointers as not restorable (`"none"`). The `data.table` method
 #' returns a deep copy made with `data.table::copy()` (`"copy"`) when the agent's code is
-#' predicted to modify the table by reference (`:=`, `set*()`) and the table fits the budget.
+#' predicted to modify the table by reference (`:=`, `set*()`) and the table fits `undo.memory`.
 #' Packages add methods for their own classes with a delayed registration,
 #' `S3method(gptr::gptr_preimage, myclass)`; an R6 class can, for example, return
 #' `x$clone(deep = TRUE)` as `"copy"`. This generic is experimental.
@@ -30,7 +30,8 @@
 #' @param name The binding name (a string).
 #' @param ctx A list: `predicted`, what the agent's code is predicted to do to `name` (`"assign"`,
 #'   `"modify"`, `"byref"`, `"remove"` or `"none"`); `bytes`, the size of `x` in bytes (`NA` when
-#'   unknown); `budget`, the largest copy allowed, in bytes. When `ctx$dry` is `TRUE` the
+#'   unknown); `budget`, the largest copy allowed, in bytes (the setting `undo.memory`, see
+#'   [gptr_rewind()]). When `ctx$dry` is `TRUE` the
 #'   checkpointer only asks whether a capture is possible and a method must not copy.
 #' @param ... Unused; for methods.
 #' @return A list with `mode` (`"ref"`, `"copy"` or `"none"`), `reason` (a string explaining

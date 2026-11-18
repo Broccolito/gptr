@@ -1926,8 +1926,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #'   `.gptr/checkpoints/` (pre-images of objects and files) and the data snapshots of artifacts
 #'   (`.gptr/artifacts/<id>/v<n>/data/`) are excluded from git by default. The checkpoints never
 #'   hold a copy of a protected file or one that configures R or gptr (`.env`, `.Renviron`, keys
-#'   under `.ssh/`). Object images, held in memory or spilled to the checkpoints, are full copies
-#'   of workspace objects, with nothing redacted ([gptr_rewind()] says which are kept).
+#'   under `.ssh/`). Object images, kept by reference in memory or spilled to the checkpoints as
+#'   files, hold workspace objects' values with nothing redacted ([gptr_rewind()] says which are
+#'   kept).
 #' - `.gptr/plans/` (plans proposed in `plan` mode) and the `app.R` of each artifact are
 #'   committed by default; they can quote data values the model saw.
 #' - Documents you record into keep the model's code and up to `gptr.doc_output_lines` lines of

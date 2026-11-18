@@ -64,7 +64,7 @@ rel_options = function() {
     "gptr.protect_size", "gptr.noninteractive_ask", "gptr.critical_guard", "gptr.secret_guard",
     "gptr.plan_handoff", "gptr.background_tools", "gptr.compact_at", "gptr.compact_cold_min",
     "gptr.cache_ttl", "gptr.cache_gap", "gptr.check_prefix", "gptr.artifact_max_bytes",
-    "gptr.undo_capture_max", "gptr.undo_max_bytes", "gptr.undo_spill_max", "gptr.undo_turns",
+    "gptr.undo.capture_max", "gptr.undo.memory", "gptr.undo.disk", "gptr.undo.turns",
     "gptr.checkpoint", "gptr.checkpoint_disk_bytes", "gptr.checkpoint_days",
     "gptr.checkpoint_turns", "gptr.checkpoint_track_file_max", "gptr.checkpoint_track_total",
     "gptr.checkpoint_capture_max", "gptr.checkpoint_scan_budget", "gptr.checkpoint_rng",
