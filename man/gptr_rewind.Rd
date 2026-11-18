@@ -94,8 +94,11 @@ the end of each request the images in memory are held to \code{undo.memory} byte
 spilled to the checkpoint store while it fits \code{undo.disk}, else the oldest is dropped (a
 non-interactive run without a \verb{.gptr/} workspace writes no image). Spilled images are held to
 \code{undo.disk} bytes per session, the oldest dropped first, and images older than \code{undo.turns}
-turns are dropped. An object that cannot be undone is named with the reason (for its size, the
-limit to raise) when you are asked to approve the call, and in what the model is told after it.
+turns are dropped. An image is counted for what it does not share with the object when it is
+kept, and again when another image of the object leaves memory; an edit you make at the
+console between requests can make it hold more meanwhile. An object that cannot be undone is
+named with the reason (for its size, the limit to raise) when you are asked to approve the
+call, and in what the model is told after it.
 
 The limits are the fields of the setting \code{undo}:
 \itemize{
@@ -107,8 +110,9 @@ the images held in memory per session.
 }
 
 Read them with \code{gptr_config()$undo}. Change them with
-\code{gptr_config(undo = list(memory = 4e9), .scope = "user")} (the other fields keep their values)
-or, for this R process, \code{options(gptr.undo.memory = 4e9)}.
+\code{gptr_config(undo = list(memory = 4e9), .scope = "user")} or, for this R process,
+\code{options(gptr.undo.memory = 4e9)}. A field you leave out comes from the layers below; a
+second call at the same scope replaces the first, so name there every field you set.
 
 A change made after the turn is kept and reported as a conflict when it rebinds or removes the
 object, replaces a list element, a column or an attribute, or changes one of the values gptr

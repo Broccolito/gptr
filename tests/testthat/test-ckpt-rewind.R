@@ -678,6 +678,17 @@ test_that("gptr_checkpoints() counts as restorable only the images still held", 
   expect_identical(gptr_checkpoints(s)$objects, c("2/2", "1/0", "1/1"))
 })
 
+test_that("a turn undone and redone still counts its objects as restorable", {
+  skip_on_cran()
+  local_project()
+  s = two_turn_session(new.env())
+  leaf = session_data(s)$leaf
+  gptr_rewind(s, 1)
+  expect_identical(gptr_checkpoints(s, all = TRUE)$objects, c("1/1", "1/1"))
+  gptr_rewind(s, to = leaf)
+  expect_identical(gptr_checkpoints(s)$objects, c("1/1", "1/1"))
+})
+
 test_that("held_mb and disk_mb count 2^20 bytes a megabyte, as the other size reports do", {
   cps = list(list(data = list(fragments = list(objects = list(id = "f1", objects = list())))))
   ck = list(obj = list(index = data.frame(frag = "f1", bytes = c(2^20, 2^21),

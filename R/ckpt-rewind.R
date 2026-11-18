@@ -639,8 +639,11 @@ ckpt_ext_state = function(s = NULL) {
 #' spilled to the checkpoint store while it fits `undo.disk`, else the oldest is dropped (a
 #' non-interactive run without a `.gptr/` workspace writes no image). Spilled images are held to
 #' `undo.disk` bytes per session, the oldest dropped first, and images older than `undo.turns`
-#' turns are dropped. An object that cannot be undone is named with the reason (for its size, the
-#' limit to raise) when you are asked to approve the call, and in what the model is told after it.
+#' turns are dropped. An image is counted for what it does not share with the object when it is
+#' kept, and again when another image of the object leaves memory; an edit you make at the
+#' console between requests can make it hold more meanwhile. An object that cannot be undone is
+#' named with the reason (for its size, the limit to raise) when you are asked to approve the
+#' call, and in what the model is told after it.
 #'
 #' The limits are the fields of the setting `undo`:
 #' - `capture_max` (`1e8`): bytes; every object up to this size is kept.
@@ -650,8 +653,9 @@ ckpt_ext_state = function(s = NULL) {
 #' - `turns` (`20`): images older than this many turns are dropped.
 #'
 #' Read them with `gptr_config()$undo`. Change them with
-#' `gptr_config(undo = list(memory = 4e9), .scope = "user")` (the other fields keep their values)
-#' or, for this R process, `options(gptr.undo.memory = 4e9)`.
+#' `gptr_config(undo = list(memory = 4e9), .scope = "user")` or, for this R process,
+#' `options(gptr.undo.memory = 4e9)`. A field you leave out comes from the layers below; a
+#' second call at the same scope replaces the first, so name there every field you set.
 #'
 #' A change made after the turn is kept and reported as a conflict when it rebinds or removes the
 #' object, replaces a list element, a column or an attribute, or changes one of the values gptr
@@ -838,14 +842,18 @@ ckpt_turn_counts = function(cps, ck) {
   frags = lapply(cps, function(e) e$data$fragments)
   index = if (is.null(ck)) ckpt_index_empty() else ck$obj$index
   dir = if (!is.null(ck)) ck$obj$dir
-  held = function(r) {
-    identical(r$status, "created") || r$image %in% index$key ||
+  # an undo or a redo moves a value to a new image of the same fragment and name
+  held = function(id, r) {
+    identical(r$status, "created") || any(index$frag == id & index$name == r$name) ||
       (!is.null(dir) && nzchar(r$image) && file.exists(ckpt_disk_file(dir, r$image)))
   }
   count = function(scope) {
-    rows = unlist(lapply(frags, function(f) f[[scope]][[scope]]), recursive = FALSE)
-    ok = vapply(rows, function(r) isTRUE(r$restorable) && (scope == "files" || held(r)), NA)
-    paste0(length(rows), "/", sum(ok))
+    ok = unlist(lapply(frags, function(f) {
+      vapply(f[[scope]][[scope]], function(r) {
+        isTRUE(r$restorable) && (scope == "files" || held(f$objects$id, r))
+      }, NA)
+    }))
+    paste0(length(ok), "/", sum(ok))
   }
   img = index[index$frag %in% ckpt_chr(lapply(frags, function(f) f$objects$id)), , drop = FALSE]
   mb = function(where) round(sum(img$bytes[img$where == where], na.rm = TRUE) / 2^20, 3)

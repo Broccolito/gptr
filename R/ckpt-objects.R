@@ -585,7 +585,7 @@ ckpt_objects_after = function(ck, call, envir, token) {
     rows[[k]]$where = if (is.na(at[k])) "" else "disk"
     if (is.na(at[k])) {
       rows[[k]][c("restorable", "reason")] =
-        list(FALSE, "dropped to stay within undo.memory and undo.disk")
+        list(FALSE, "dropped to stay within undo.memory, undo.disk and undo.turns")
     }
   }
   list(id = token$frag, turn = token$turn, objects = rows)
@@ -746,8 +746,8 @@ ckpt_objects_describe = function(fragment) {
 
 #' Enforce the undo limits after every call and at the end of a request (D-368): drop images
 #' older than undo.turns turns; while the memory images exceed undo.memory, spill the largest when
-#' it fits undo.disk, else drop the oldest; while the disk images exceed undo.disk, drop the
-#' oldest. `envir` is the session home.
+#' it fits undo.disk, else drop the oldest, and measure the object's other memory images again;
+#' while the disk images exceed undo.disk, drop the oldest. `envir` is the session home.
 #' @noRd
 ckpt_objects_budget = function(ck, turn, envir) {
   store = ck$obj
@@ -758,9 +758,14 @@ ckpt_objects_budget = function(ck, turn, envir) {
     mem = store$index[store$index$where == "memory", , drop = FALSE]
     if (sum(mem$bytes, na.rm = TRUE) <= lim$memory) break
     big = which.max(mem$bytes)
-    if (mem$bytes[big] > lim$disk || is.null(ckpt_spill(store, mem$key[big], envir))) {
-      ckpt_drop(store, mem$key[1L])
-    }
+    spilled = mem$bytes[big] <= lim$disk && !is.null(ckpt_spill(store, mem$key[big], envir))
+    if (!spilled) ckpt_drop(store, mem$key[1L])
+    # another image of that object may now hold alone what the image gone shared with it
+    nm = mem$name[if (spilled) big else 1L]
+    i = which(store$index$name == nm & store$index$where == "memory")
+    store$index$bytes[i] = vapply(store$index$key[i], function(k) {
+      ckpt_unshared_bytes(store, k, envir, nm)
+    }, 0, USE.NAMES = FALSE)
   }
   repeat {
     disk = store$index[store$index$where == "disk", , drop = FALSE]

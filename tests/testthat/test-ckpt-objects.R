@@ -581,9 +581,29 @@ test_that("an image dropped in its own call leaves a row that says so (D-368)", 
   e$x = seq_len(1e4) / 2
   row = agent_steps(ck, e, "x = x * 2")[[1L]]$objects[[1L]]
   expect_false(row$restorable)
-  expect_identical(row$reason, "dropped to stay within undo.memory and undo.disk")
+  expect_identical(row$reason, "dropped to stay within undo.memory, undo.disk and undo.turns")
   expect_identical(nrow(ck$obj$index), 0L)
   expect_length(ls(ck$obj$slots), 0L)
+})
+
+test_that("an image left alone with what a spilled image shared is measured again (D-368)", {
+  skip_on_cran()
+  dir = withr::local_tempdir()
+  local_gptr_options(undo.memory = 1e5, undo.disk = 1e9)
+  ck = ckpt_ck_new("s0000000032", dir)
+  e = new.env()
+  e$L = list(a = as.numeric(1:2e4), b = as.numeric(1:2e4), z = 1)
+  for (t in 1:3) {
+    call = list(id = paste0("c", t), name = "r",
+                input = list(code = c("L$z = 2", "L$a[1] = 0", "L$b[1] = 0")[t]))
+    tok = ckpt_objects_before(ck, call, e, turn = t)
+    agent_eval(call$input$code, e)
+    ckpt_objects_after(ck, call, e, tok)
+  }
+  mem = ck$obj$index[ck$obj$index$where == "memory", , drop = FALSE]
+  held = vapply(mem$key, function(k) ckpt_unshared_bytes(ck$obj, k, e, "L"), 0)
+  expect_lte(sum(held), 1e5)
+  expect_identical(mem$bytes, unname(held))
 })
 
 test_that("disk images over undo.disk are dropped oldest first, their files deleted (D-368)", {
