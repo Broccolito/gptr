@@ -6,7 +6,9 @@
 #   * list and S4 images are defused before they are dropped (G7 variant v5);
 #   * user objects pass straight from get() into assign() or a leaf, never into a lasting frame.
 # While a pre-image is held, a value object cannot be modified in place without R duplicating it,
-# so "address changed" is an exact change detector (G7 section 2.3).
+# so "address changed" is an exact change detector (G7 section 2.3). A value restored from a copy
+# or from disk has no such image, so the 3-way rule compares fingerprints, which hold the address
+# and a sample of the values (D-369).
 
 #' Tell the object checkpointer how to capture an object
 #'
@@ -86,9 +88,9 @@ ckpt_index_empty = function() {
              expect = character())
 }
 
-#' Add an index row (`role`: "pre" undo image, "redo" redo image, "mark" the address a value
-#' without an image left; `expect`: the address the binding must have for the row to apply, ""
-#' when absent, an image key while the value it expects lives only in that image)
+#' Add an index row (`role`: "pre" undo image, "redo" redo image, "mark" the fingerprint a value
+#' without an image left; `expect`: the fingerprint (ckpt_fp()) the binding must have for the row
+#' to apply, "" when absent, an image key while the value it expects lives only in that image)
 #' @noRd
 ckpt_index_add = function(store, key, frag, name, role, where = "memory", file = "",
                           bytes = NA_real_, turn = NA_integer_, expect = "") {
@@ -107,15 +109,15 @@ ckpt_index_find = function(store, frag, name, role) {
   if (length(i)) idx$key[max(i)] else NA_character_
 }
 
-#' Add a "mark" row: the address a created binding, or a removed one an undo brought back, left
+#' Add a "mark" row: the fingerprint a created binding, or a removed one an undo brought back, left
 #' @noRd
 ckpt_mark = function(store, frag, name, turn, expect) {
   ckpt_index_add(store, paste0("u", id_new("", 12L)), frag, name, "mark", where = "none",
                  turn = turn, expect = expect)
 }
 
-#' Rows of `name` that expect `from` expect `to` instead: their value was restored at the new
-#' address `to`, or lives only in image `to` (a copy or a disk image; `from` may be reused)
+#' Rows of `name` that expect `from` expect `to` instead: their value was restored with the new
+#' fingerprint `to`, or lives only in image `to` (a copy or a disk image; `from` may be reused)
 #' @noRd
 ckpt_repoint = function(store, name, from, to) {
   store$index$expect[store$index$name == name & store$index$expect == from] = to
@@ -134,6 +136,14 @@ ckpt_index_remove = function(store, keys) {
 ckpt_addr = function(envir, name) {
   if (!exists(name, envir = envir, inherits = FALSE)) return(NA_character_)
   rlang::obj_address(get(name, envir = envir, inherits = FALSE))
+}
+
+#' Snapshot fingerprint of a binding (NA when absent), by env_snap_facts(), so a failing method
+#' gives the address; a leaf that never keeps the value
+#' @noRd
+ckpt_fp = function(envir, name) {
+  if (!exists(name, envir = envir, inherits = FALSE)) return(NA_character_)
+  env_snap_facts(list(envir = envir), name)$fp
 }
 
 #' Capture bindings by reference into the store; no copy is made
@@ -176,7 +186,7 @@ ckpt_settle = function(store, envir, pending, frag = "", turn = NA_integer_) {
   rm(list = pending$key[status == "unchanged"], envir = store$slots)
   for (i in which(status != "unchanged")) {
     ckpt_index_add(store, pending$key[i], frag, pending$name[i], "pre", turn = turn,
-                   expect = post[i])
+                   expect = if (nzchar(post[i])) ckpt_fp(envir, pending$name[i]) else "")
   }
   data.frame(name = pending$name, key = pending$key, status = status,
              pre_address = pending$address, post_address = post)
@@ -192,22 +202,21 @@ ckpt_read_image = function(file) {
 
 #' Restore `name` from image `key` (memory or disk); the displaced value becomes a redo image
 #' held by reference. Callers apply the 3-way rule first (ckpt_expect_ok()).
-#' @return `list(ok, reason, redo, address)`.
+#' @return `list(ok, reason, redo, fp)`: `fp`, the restored binding's fingerprint.
 #' @noRd
 ckpt_restore = function(store, envir, name, key, frag = "", turn = NA_integer_) {
   i = match(key, store$index$key)
   if (is.na(i)) {
-    return(list(ok = FALSE, reason = "no pre-image", redo = NA_character_, address = NA_character_))
+    return(list(ok = FALSE, reason = "no pre-image", redo = NA_character_, fp = NA_character_))
   }
-  now = ckpt_addr(envir, name)
   f = store$index$file[i]
   disk = store$index$where[i] == "disk"
   if (disk && !file.exists(f)) {
     return(list(ok = FALSE, reason = "the disk image is missing", redo = NA_character_,
-                address = now))
+                fp = NA_character_))
   }
   redo = NA_character_
-  if (!is.na(now)) {
+  if (exists(name, envir = envir, inherits = FALSE)) {
     redo = paste0("r", id_new("", 12L))
     assign(redo, get(name, envir = envir, inherits = FALSE), envir = store$slots)
   }
@@ -219,13 +228,13 @@ ckpt_restore = function(store, envir, name, key, frag = "", turn = NA_integer_) 
     rm(list = key, envir = store$slots)
   }
   ckpt_index_remove(store, key)
-  addr = ckpt_addr(envir, name)
-  ckpt_repoint(store, name, key, addr)
+  fp = ckpt_fp(envir, name)
+  ckpt_repoint(store, name, key, fp)
   if (!is.na(redo)) {
-    ckpt_index_add(store, redo, frag, name, "redo", turn = turn, expect = addr,
+    ckpt_index_add(store, redo, frag, name, "redo", turn = turn, expect = fp,
                    bytes = ckpt_unshared_bytes(store, redo, envir, name))
   }
-  list(ok = TRUE, reason = NULL, redo = redo, address = addr)
+  list(ok = TRUE, reason = NULL, redo = redo, fp = fp)
 }
 
 #' Undo of a creation: unbind `name`, keep its value as a redo image
@@ -283,8 +292,8 @@ ckpt_spill = function(store, key, envir) {
     return(invisible(NULL))
   }
   nm = store$index$name[i]
-  addr = ckpt_addr(store$slots, key)
-  if (!identical(ckpt_addr(envir, nm), addr)) ckpt_repoint(store, nm, addr, key)
+  fp = ckpt_fp(store$slots, key)
+  if (!identical(ckpt_fp(envir, nm), fp)) ckpt_repoint(store, nm, fp, key)
   ckpt_defuse(store, key)
   store$index$where[i] = "disk"
   store$index$file[i] = f
@@ -503,6 +512,7 @@ ckpt_settle_row = function(store, envir, token, i, j, post) {
   key = token$key[i]
   removed = is.na(j)
   now = if (removed) "" else post$address[j]
+  fp = if (removed) "" else post$fp[j]
   same = !removed && identical(now, s0$address)
   status = if (removed) "removed" else "changed"
   if (identical(how, "ref") && same) {
@@ -518,9 +528,9 @@ ckpt_settle_row = function(store, envir, token, i, j, post) {
   if (identical(how, "ref")) {
     store$index$bytes[store$index$key == key] = held
   } else {
-    ckpt_repoint(store, nm, s0$address, key)
+    ckpt_repoint(store, nm, s0$fp, key)
     ckpt_index_add(store, key, token$frag, nm, "pre", bytes = held, turn = token$turn,
-                   expect = now)
+                   expect = fp)
   }
   ckpt_obj_row(nm, status, how, s0$class, s0$bytes, s0$address, now, TRUE, "", image = key,
                where = "memory", held = held, about = s0$about)
@@ -551,7 +561,7 @@ ckpt_objects_after = function(ck, call, envir, token) {
   }
   for (k in which(!post$name %in% c(snap$name, token$others))) {
     nm = post$name[k]
-    ckpt_mark(store, token$frag, nm, token$turn, post$address[k])
+    ckpt_mark(store, token$frag, nm, token$turn, post$fp[k])
     rows[[length(rows) + 1L]] = ckpt_obj_row(nm, "created", "created", post$class[k],
                                              post$bytes[k], "", post$address[k], TRUE, "",
                                              about = post$about[k])
@@ -596,10 +606,11 @@ ckpt_objects_undo = function(ck, fragment, envir, force = FALSE, dry = FALSE) {
       out = ckpt_item(out, item, FALSE, paste0("not restored (", r$reason, ")"))
       next
     }
-    now = ckpt_addr(envir, nm)
+    now = ckpt_fp(envir, nm)
     created = identical(r$status, "created")
     key = ckpt_index_find(store, frag, nm, if (created) "mark" else "pre")
-    # the index follows the value to the new address a restore from a copy or disk image gave it
+    # the index follows the value to the fingerprint a restore from a copy or disk image gave it;
+    # another R process's address never equals one, so its rows conflict unless forced
     expect = if (is.na(key)) r$post_address else store$index$expect[match(key, store$index$key)]
     if (created) {
       if (is.na(now)) {
@@ -643,7 +654,7 @@ ckpt_objects_undo = function(ck, fragment, envir, force = FALSE, dry = FALSE) {
       next
     }
     res = ckpt_restore(store, envir, nm, key, frag = frag, turn = turn)
-    if (res$ok && identical(r$status, "removed")) ckpt_mark(store, frag, nm, turn, res$address)
+    if (res$ok && identical(r$status, "removed")) ckpt_mark(store, frag, nm, turn, res$fp)
     out = ckpt_item(out, item, res$ok,
                     if (res$ok) "restored" else paste0("not restored (", res$reason, ")"))
   }
@@ -651,7 +662,7 @@ ckpt_objects_undo = function(ck, fragment, envir, force = FALSE, dry = FALSE) {
 }
 
 #' Redo one objects fragment, oldest row first: the mirror of ckpt_objects_undo(). The undo left
-#' a "redo" image (or, for a removal, a "mark") whose `expect` is the address it left behind.
+#' a "redo" image (or, for a removal, a "mark") whose `expect` is the fingerprint it left behind.
 #' @noRd
 ckpt_objects_redo = function(ck, fragment, envir, force = FALSE, dry = FALSE) {
   store = ck$obj
@@ -671,7 +682,7 @@ ckpt_objects_redo = function(ck, fragment, envir, force = FALSE, dry = FALSE) {
       out = ckpt_item(out, item, FALSE, "not redone (it was not undone in this R process)")
       next
     }
-    now = ckpt_addr(envir, nm)
+    now = ckpt_fp(envir, nm)
     if (!force && !ckpt_expect_ok(now, store$index$expect[match(key, store$index$key)])) {
       out = ckpt_item(out, item, FALSE, "conflict: changed after the undo (kept current)")
       next
@@ -685,7 +696,7 @@ ckpt_objects_redo = function(ck, fragment, envir, force = FALSE, dry = FALSE) {
       ckpt_index_remove(store, key)
     } else {
       res = ckpt_restore(store, envir, nm, key, frag = frag, turn = turn)
-      if (res$ok && identical(r$status, "created")) ckpt_mark(store, frag, nm, turn, res$address)
+      if (res$ok && identical(r$status, "created")) ckpt_mark(store, frag, nm, turn, res$fp)
     }
     # the value the redo displaced is the next undo's pre-image
     store$index$role[store$index$key %in% res$redo] = "pre"
@@ -696,7 +707,8 @@ ckpt_objects_redo = function(ck, fragment, envir, force = FALSE, dry = FALSE) {
   out
 }
 
-#' The 3-way rule (G7 section 3.6): does the binding's address `now` match `expect` ("" = absent)?
+#' The 3-way rule (G7 section 3.6, D-369): does the binding's fingerprint `now` match `expect` (""
+#' = absent)?
 #' @noRd
 ckpt_expect_ok = function(now, expect) {
   if (nzchar(expect)) identical(now, expect) else is.na(now)

@@ -9,7 +9,7 @@
 ckpt_copy_prelude = c(
   "ns = asNamespace('gptr')",
   "for (fn in c('ckpt_obj_store', 'ckpt_capture', 'ckpt_settle', 'ckpt_restore', 'ckpt_drop',",
-  "             'ckpt_spill', 'ckpt_ck_new', 'ckpt_write_image', 'save_rds')) {",
+  "             'ckpt_spill', 'ckpt_ck_new', 'ckpt_write_image', 'ckpt_fp', 'save_rds')) {",
   "  assign(fn, get(fn, envir = ns))",
   "}")
 
@@ -152,6 +152,11 @@ test_that("G7's 24-verdict tracemem matrix reproduces, c03 and c06 included (acc
 
 test_that("user data is serialised without a sticky reference only with ascii = FALSE (R7)", {
   ckpt_copy_check(ckpt_serialize_rows)
+})
+
+test_that("ckpt_fp(), the 3-way rule's fingerprint, is a leaf (R4, D-369)", {
+  ckpt_copy_check(list(list("ckpt_fp() of a binding", ckpt_copy_x,
+                            "invisible(ckpt_fp(globalenv(), 'x'))", "x[1] = 0", "x", 0L)))
 })
 
 # End-to-end rows (04 section 1.3: gptr_rewind() [R1][R6], gptr_preimage() [R4]). The child runs

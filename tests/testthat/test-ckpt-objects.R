@@ -614,6 +614,42 @@ test_that("spilling an image the binding holds again raises no false conflict", 
   expect_identical(e$x, as.numeric(1:50))
 })
 
+test_that("a change made after a restore from disk is a conflict, kept unless forced (D-369)", {
+  skip_on_cran()
+  local_gptr_options(undo.memory = 10)
+  # the steps, the person's in-place edit after the undo, and the value a redo gives back
+  cases = list(x = c("x = seq_len(1e3) / 2", "x = x * 2", "x[1] = 99", "x[1] == 1"),
+               L = c("L = list(a = 1:3, b = seq_len(1e3) / 2)", "L$c = 1", "L$b[1] = 0",
+                     "identical(L$c, 1)"))
+  for (nm in names(cases)) {
+    ck = ckpt_ck_new("s0000000026", withr::local_tempdir())
+    e = new.env()
+    frags = agent_steps(ck, e, cases[[nm]][1:2])
+    expect_identical(ck$obj$index$where[ck$obj$index$role == "pre"], "disk")
+    expect_true(ckpt_objects_undo(ck, frags[[2]], e)$ok)
+    agent_eval(cases[[nm]][3], e)
+    edited = rlang::hash(get(nm, envir = e))
+    expect_match(ckpt_objects_undo(ck, frags[[1]], e)$action, "^conflict")
+    expect_match(ckpt_objects_redo(ck, frags[[2]], e)$action, "^conflict")
+    expect_identical(rlang::hash(get(nm, envir = e)), edited)
+    expect_true(ckpt_objects_redo(ck, frags[[2]], e, force = TRUE)$ok)
+    expect_true(eval(str2lang(cases[[nm]][4]), e))
+  }
+})
+
+test_that("an in-place edit of a value the fingerprint does not sample is not seen (D-369)", {
+  skip_on_cran()
+  local_gptr_options(undo.memory = 10)
+  ck = ckpt_ck_new("s0000000027", withr::local_tempdir())
+  e = new.env()
+  frags = agent_steps(ck, e, c("x = seq_len(1e6) / 2", "x = x * 2"))
+  expect_true(ckpt_objects_undo(ck, frags[[2]], e)$ok)
+  # fingerprint() samples 64 of the 1e6 values; x[37] is not one, so the redo overwrites it
+  agent_eval("x[37] = 0", e)
+  expect_true(ckpt_objects_redo(ck, frags[[2]], e)$ok)
+  expect_identical(e$x[37], 37)
+})
+
 test_that("a predicted in-place edit the fingerprint misses is held by reference and undone", {
   skip_on_cran()
   local_gptr_options(undo.capture_max = 1000)
