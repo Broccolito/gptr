@@ -42,11 +42,12 @@ root, not from R's working directory.
 }
 \section{Choosing controls}{
 
-Use settings for defaults such as \code{model}, \code{mode}, \code{context}, \code{budget}, \code{record}, \code{replay}
-and registered extension selections. Use \link{gptr_options} for transport timeouts, output caps,
-undo retention and concurrency. Arguments to \code{\link[=peter]{peter()}} choose values for one call, within
-inherited safety restrictions. \code{vignette("configuration", package = "gptr")} groups all
-core settings and options and explains trust and scope.
+Use settings for defaults such as \code{model}, \code{mode}, \code{context}, \code{budget}, \code{record}, \code{replay}, the
+\code{undo} limits (\code{\link[=gptr_rewind]{gptr_rewind()}}) and registered extension selections. Use \link{gptr_options} for
+transport timeouts, output caps, file checkpoint retention and concurrency. Arguments to
+\code{\link[=peter]{peter()}} choose values for one call, within inherited safety restrictions.
+\code{vignette("configuration", package = "gptr")} groups all core settings and options and explains
+trust and scope.
 }
 
 \examples{

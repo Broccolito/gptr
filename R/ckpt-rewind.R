@@ -593,8 +593,9 @@ ckpt_ext_state = function(s = NULL) {
 #'
 #' Restores are 3-way: an object or file that changed after the turn (by you or another session)
 #' is kept and reported, unless `force = TRUE`. Reference objects (environments, R6, external
-#' pointers), objects over the undo budget, environment variables, loaded namespaces, the
-#' random-number state and effects outside R (network, databases, processes) are not restored.
+#' pointers), objects too large for the undo limits (see Objects below), environment variables,
+#' loaded namespaces, the random-number state and effects outside R (network, databases,
+#' processes) are not restored.
 #' `s$last_rewind$report` lists each object, file and state item once, by its outcome after the
 #' whole rewind; items that were not restored raise the warning `gptr_warning_rewind_partial`.
 #' Protected files and files that configure R or gptr (`.env`, `.Renviron`, `.Rprofile`,
@@ -627,15 +628,45 @@ ckpt_ext_state = function(s = NULL) {
 #'   skills are `s$last_rewind$skills`.
 #'   `gptr_checkpoints()` returns a `gptr_checkpoints` data frame (it prints at most 20 rows).
 #' @order 1
+#' @section Objects:
+#' Before a call that runs R code, gptr keeps a reference to every object up to
+#' `undo$capture_max` bytes and to every object the code is predicted to change up to
+#' `undo$memory` bytes. Nothing is copied or written to disk then: a kept object costs memory
+#' only when it is edited in place, and the edit then copies what it touches: all of a vector or
+#' matrix, one column of a data frame, one element of a list. A `data.table` the code changes by
+#' reference (`:=`, `set()`) is copied with `data.table::copy()` first. After every call and at
+#' the end of each request the images in memory are held to `undo$memory` bytes: the largest is
+#' spilled to the checkpoint store while it fits `undo$disk`, else the oldest is dropped (a
+#' non-interactive run without a `.gptr/` workspace writes no image). Spilled images are held to
+#' `undo$disk` bytes per session, the oldest dropped first, and images older than `undo$turns`
+#' turns are dropped. An object that cannot be undone is named with the reason (for its size, the
+#' limit to raise) when you are asked to approve the call, and in what the model is told after it.
+#'
+#' The limits are the fields of the setting `undo`:
+#' - `capture_max` (`1e8`): bytes; every object up to this size is kept.
+#' - `memory` (`1e9`): bytes; the largest object kept that the code is predicted to change, and
+#'   the images held in memory per session.
+#' - `disk` (`2e9`): bytes of images spilled to disk per session.
+#' - `turns` (`20`): images older than this many turns are dropped.
+#'
+#' Change them with `gptr_config(undo = list(memory = 4e9), .scope = "user")` (the other fields
+#' keep their values) or, for this R process, `options(gptr.undo.memory = 4e9)`.
+#'
+#' A change made after the turn is kept and reported as a conflict when it rebinds or removes the
+#' object, replaces a list element, a column or an attribute, or changes one of the values gptr
+#' samples (at most 64 a vector). An in-place edit of other values (`x[37] = 0` of a million) is
+#' not seen, and an undo or redo overwrites it. Environments, R6 objects and external pointers
+#' inside a restored list, data frame or S4 object are shared, not copied, so they keep their
+#' current state. Images in memory do not outlive the R process; an image spilled to disk is
+#' restored in a later R process only with `force = TRUE`.
+#'
 #' @section Options:
 #' Options of checkpoints and rewind (`?gptr_options` collects every option):
 #'
 #' - `gptr.checkpoint` (`"on"`): `"files"` checkpoints files only, `"off"` nothing (also the
 #'   settings key `checkpoint`).
-#' - `gptr.undo_capture_max` (`1e8`): bytes; objects up to this size are captured by reference.
-#' - `gptr.undo_max_bytes` (`1e9`): bytes of pre-images held in memory per session.
-#' - `gptr.undo_spill_max` (`2e9`): bytes; the largest object image written to disk.
-#' - `gptr.undo_turns` (`20`): object images older than this many turns are dropped.
+#' - `gptr.undo.capture_max`, `gptr.undo.memory`, `gptr.undo.disk` and `gptr.undo.turns`: the
+#'   option layer of the setting `undo` (see Objects).
 #' - `gptr.checkpoint_disk_bytes` (`2e9`): bytes of blobs and spilled images before a notice.
 #' - `gptr.checkpoint_days` (`30`): unreferenced blobs older than this many days are deleted.
 #' - `gptr.checkpoint_turns` (`100`): file checkpoints older than this many turns are not
@@ -745,10 +776,11 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
 #' `gptr_checkpoints()` lists one row per turn of the active path (`all = TRUE` adds the turns of
 #' abandoned branches): `turn`; `id`, the last entry of the turn (pass it as `to` to
 #' `gptr_rewind()`); `time`, when the prompt was sent (local time); `prompt` (its first 60
-#' characters); `objects` and `files`, `"changed/restorable"` counts; `held_mb` and `disk_mb`,
-#' megabytes (2^20 bytes) of object pre-images held in memory and on disk (for an object with
-#' more than 12.5 million strings an estimate, at or above the truth on average); and `branch`
-#' (`"active"` or `"abandoned"`).
+#' characters); `objects` and `files`, `"changed/restorable"` counts (a changed object is
+#' restorable while its image is kept); `held_mb` and `disk_mb`, megabytes (2^20 bytes) of object
+#' images held in memory and on disk (in memory, for an object with more than 12.5 million
+#' strings an estimate, at or above the truth on average; on disk, the files' sizes); and
+#' `branch` (`"active"` or `"abandoned"`).
 #' @param all Also list the turns of abandoned branches.
 #' @rdname gptr_rewind
 #' @order 2

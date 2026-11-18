@@ -158,11 +158,16 @@ the skill and MCP tool catalogs.
 
 \itemize{
 \item \code{gptr.checkpoint} (character, \code{"on"}): \code{"on"}, \code{"files"} or \code{"off"}.
-\item \code{gptr.undo_capture_max} (bytes, \code{1e8}): objects up to this size are captured by reference
-before a change, even when the change was not predicted.
-\item \code{gptr.undo_max_bytes} (bytes, \code{1e9}): object images held in memory per session.
-\item \code{gptr.undo_spill_max} (bytes, \code{2e9}): the largest object image written to disk.
-\item \code{gptr.undo_turns} (integer, \code{20}): object images older than this many turns are dropped.
+\item \code{gptr.undo.capture_max} (bytes, \emph{settings}, \code{1e8}), the option layer of the setting
+\code{undo$capture_max} (see \code{\link[=gptr_rewind]{gptr_rewind()}}): every object up to this size is kept by reference
+before a call that runs R code.
+\item \code{gptr.undo.memory} (bytes, \emph{settings}, \code{1e9}), the option layer of \code{undo$memory}: an object
+the code is predicted to change is kept up to this size; the images of a session hold at
+most this many bytes in memory.
+\item \code{gptr.undo.disk} (bytes, \emph{settings}, \code{2e9}), the option layer of \code{undo$disk}: bytes of
+images spilled to disk per session.
+\item \code{gptr.undo.turns} (integer, \emph{settings}, \code{20}), the option layer of \code{undo$turns}: images
+older than this many turns are dropped.
 \item \code{gptr.checkpoint_disk_bytes} (bytes, \code{2e9}), \code{gptr.checkpoint_days} (days, \code{30}) and
 \code{gptr.checkpoint_turns} (integer, \code{100}): retention of the checkpoint store.
 \item \code{gptr.checkpoint_track_file_max} (bytes, \code{1e6}) and \code{gptr.checkpoint_track_total} (bytes,

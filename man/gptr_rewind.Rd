@@ -54,16 +54,18 @@ session.
 \code{gptr_checkpoints()} lists one row per turn of the active path (\code{all = TRUE} adds the turns of
 abandoned branches): \code{turn}; \code{id}, the last entry of the turn (pass it as \code{to} to
 \code{gptr_rewind()}); \code{time}, when the prompt was sent (local time); \code{prompt} (its first 60
-characters); \code{objects} and \code{files}, \code{"changed/restorable"} counts; \code{held_mb} and \code{disk_mb},
-megabytes (2^20 bytes) of object pre-images held in memory and on disk (for an object with
-more than 12.5 million strings an estimate, at or above the truth on average); and \code{branch}
-(\code{"active"} or \code{"abandoned"}).
+characters); \code{objects} and \code{files}, \code{"changed/restorable"} counts (a changed object is
+restorable while its image is kept); \code{held_mb} and \code{disk_mb}, megabytes (2^20 bytes) of object
+images held in memory and on disk (in memory, for an object with more than 12.5 million
+strings an estimate, at or above the truth on average; on disk, the files' sizes); and
+\code{branch} (\code{"active"} or \code{"abandoned"}).
 }
 \details{
 Restores are 3-way: an object or file that changed after the turn (by you or another session)
 is kept and reported, unless \code{force = TRUE}. Reference objects (environments, R6, external
-pointers), objects over the undo budget, environment variables, loaded namespaces, the
-random-number state and effects outside R (network, databases, processes) are not restored.
+pointers), objects too large for the undo limits (see Objects below), environment variables,
+loaded namespaces, the random-number state and effects outside R (network, databases,
+processes) are not restored.
 \code{s$last_rewind$report} lists each object, file and state item once, by its outcome after the
 whole rewind; items that were not restored raise the warning \code{gptr_warning_rewind_partial}.
 Protected files and files that configure R or gptr (\code{.env}, \code{.Renviron}, \code{.Rprofile},
@@ -80,16 +82,50 @@ next request's prefix is byte-identical to the earlier request at the target); a
 one the next prompt carries a short \verb{<rewind>} block listing what was not restored. Model code
 may rewind another session only when you approve that call.
 }
+\section{Objects}{
+
+Before a call that runs R code, gptr keeps a reference to every object up to
+\code{undo$capture_max} bytes and to every object the code is predicted to change up to
+\code{undo$memory} bytes. Nothing is copied or written to disk then: a kept object costs memory
+only when it is edited in place, and the edit then copies what it touches: all of a vector or
+matrix, one column of a data frame, one element of a list. A \code{data.table} the code changes by
+reference (\verb{:=}, \code{set()}) is copied with \code{data.table::copy()} first. After every call and at
+the end of each request the images in memory are held to \code{undo$memory} bytes: the largest is
+spilled to the checkpoint store while it fits \code{undo$disk}, else the oldest is dropped (a
+non-interactive run without a \verb{.gptr/} workspace writes no image). Spilled images are held to
+\code{undo$disk} bytes per session, the oldest dropped first, and images older than \code{undo$turns}
+turns are dropped. An object that cannot be undone is named with the reason (for its size, the
+limit to raise) when you are asked to approve the call, and in what the model is told after it.
+
+The limits are the fields of the setting \code{undo}:
+\itemize{
+\item \code{capture_max} (\code{1e8}): bytes; every object up to this size is kept.
+\item \code{memory} (\code{1e9}): bytes; the largest object kept that the code is predicted to change, and
+the images held in memory per session.
+\item \code{disk} (\code{2e9}): bytes of images spilled to disk per session.
+\item \code{turns} (\code{20}): images older than this many turns are dropped.
+}
+
+Change them with \code{gptr_config(undo = list(memory = 4e9), .scope = "user")} (the other fields
+keep their values) or, for this R process, \code{options(gptr.undo.memory = 4e9)}.
+
+A change made after the turn is kept and reported as a conflict when it rebinds or removes the
+object, replaces a list element, a column or an attribute, or changes one of the values gptr
+samples (at most 64 a vector). An in-place edit of other values (\code{x[37] = 0} of a million) is
+not seen, and an undo or redo overwrites it. Environments, R6 objects and external pointers
+inside a restored list, data frame or S4 object are shared, not copied, so they keep their
+current state. Images in memory do not outlive the R process; an image spilled to disk is
+restored in a later R process only with \code{force = TRUE}.
+}
+
 \section{Options}{
 
 Options of checkpoints and rewind (\code{?gptr_options} collects every option):
 \itemize{
 \item \code{gptr.checkpoint} (\code{"on"}): \code{"files"} checkpoints files only, \code{"off"} nothing (also the
 settings key \code{checkpoint}).
-\item \code{gptr.undo_capture_max} (\code{1e8}): bytes; objects up to this size are captured by reference.
-\item \code{gptr.undo_max_bytes} (\code{1e9}): bytes of pre-images held in memory per session.
-\item \code{gptr.undo_spill_max} (\code{2e9}): bytes; the largest object image written to disk.
-\item \code{gptr.undo_turns} (\code{20}): object images older than this many turns are dropped.
+\item \code{gptr.undo.capture_max}, \code{gptr.undo.memory}, \code{gptr.undo.disk} and \code{gptr.undo.turns}: the
+option layer of the setting \code{undo} (see Objects).
 \item \code{gptr.checkpoint_disk_bytes} (\code{2e9}): bytes of blobs and spilled images before a notice.
 \item \code{gptr.checkpoint_days} (\code{30}): unreferenced blobs older than this many days are deleted.
 \item \code{gptr.checkpoint_turns} (\code{100}): file checkpoints older than this many turns are not

@@ -1429,11 +1429,12 @@ settings_model_warn = function(patch, scope) {
 #' root, not from R's working directory.
 #'
 #' @section Choosing controls:
-#' Use settings for defaults such as `model`, `mode`, `context`, `budget`, `record`, `replay`
-#' and registered extension selections. Use [gptr_options] for transport timeouts, output caps,
-#' undo retention and concurrency. Arguments to [peter()] choose values for one call, within
-#' inherited safety restrictions. `vignette("configuration", package = "gptr")` groups all
-#' core settings and options and explains trust and scope.
+#' Use settings for defaults such as `model`, `mode`, `context`, `budget`, `record`, `replay`, the
+#' `undo` limits ([gptr_rewind()]) and registered extension selections. Use [gptr_options] for
+#' transport timeouts, output caps, file checkpoint retention and concurrency. Arguments to
+#' [peter()] choose values for one call, within inherited safety restrictions.
+#' `vignette("configuration", package = "gptr")` groups all core settings and options and explains
+#' trust and scope.
 #'
 #' @param ... Named settings, e.g. `mode = manual`, `model = sonnet`, `budget = list(cost = 2)`.
 #' @param .scope `NULL` (the project when a `.gptr/` workspace exists, else this session), or
@@ -1915,7 +1916,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #'   `.gptr/checkpoints/` (pre-images of objects and files) and the data snapshots of artifacts
 #'   (`.gptr/artifacts/<id>/v<n>/data/`) are excluded from git by default. The checkpoints never
 #'   hold a copy of a protected file or one that configures R or gptr (`.env`, `.Renviron`, keys
-#'   under `.ssh/`).
+#'   under `.ssh/`). Object images, held in memory or spilled to the checkpoints, are full copies
+#'   of workspace objects, with nothing redacted ([gptr_rewind()] says which are kept).
 #' - `.gptr/plans/` (plans proposed in `plan` mode) and the `app.R` of each artifact are
 #'   committed by default; they can quote data values the model saw.
 #' - Documents you record into keep the model's code and up to `gptr.doc_output_lines` lines of

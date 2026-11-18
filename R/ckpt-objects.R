@@ -6,9 +6,9 @@
 #   * list and S4 images are defused before they are dropped (G7 variant v5);
 #   * user objects pass straight from get() into assign() or a leaf, never into a lasting frame.
 # While a pre-image is held, a value object cannot be modified in place without R duplicating it,
-# so "address changed" is an exact change detector (G7 section 2.3). A value restored from a copy
-# or from disk has no such image, so the 3-way rule compares fingerprints, which hold the address
-# and a sample of the values (D-369).
+# so "address changed" is an exact change detector (G7 section 2.3). A value a turn or a restore
+# leaves may share nothing with an image, so the 3-way rule compares fingerprints, which hold the
+# address and a sample of the values (D-369).
 
 #' Tell the object checkpointer how to capture an object
 #'

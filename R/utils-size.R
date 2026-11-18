@@ -139,7 +139,7 @@ env_size_forget = function(call, envir) {
 env_size_outside = c("write", "edit", "sh", "bg", "script", "jobs")
 
 #' Strings a walk reads before it samples (D-356): at 8 bytes a pointer a sampled object holds at
-#' least 1e8 bytes, the default gptr.protect_size and gptr.undo_capture_max, so at the defaults no
+#' least 1e8 bytes, the default gptr.protect_size and undo.capture_max, so at the defaults no
 #' gate or capture decision rests on an estimate
 #' @noRd
 env_size_strings_max = 1.25e7
