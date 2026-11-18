@@ -664,10 +664,13 @@ test_that("the undo setting holds the object undo limits, its fields in every la
   expect_identical(ckpt_limits(), list(capture_max = 1e8, memory = 1e9, disk = 2e9, turns = 20L))
   withr::local_options(gptr.undo.memory = 7)
   expect_identical(ckpt_limits()$memory, 7)
+  cfg = gptr_config()
+  expect_identical(cfg$undo, list(capture_max = 1e8, memory = 7, disk = 2e9, turns = 20L))
+  expect_identical(unname(attr(cfg, "sources")["undo"]), "option")
   gptr_config(undo = list(memory = 5), .scope = "session")
   expect_identical(ckpt_limits(), list(capture_max = 1e8, memory = 5, disk = 2e9, turns = 20L))
   expect_output(print(gptr_config()),
-                "undo +\\{\"capture_max\":100000000,\"memory\":5,.* +\\[session\\]")
+                "undo +capture_max=1e\\+08, memory=5, disk=2e\\+09, turns=20 +\\[session\\]")
   cnd = expect_error(gptr_config(undo = list(memory = -1), .scope = "session"),
                      class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "undo.memory")

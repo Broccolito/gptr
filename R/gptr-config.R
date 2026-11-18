@@ -952,12 +952,17 @@ settings_layered = function(key, path = character()) {
                 source = "user_project")
     }
   }
+  # the whole object also takes the dotted entry of each field of its default
+  paths = if (length(path)) list(path) else if (settings_is_object(spec$default)) {
+    as.list(names(spec$default))
+  }
   opt = getOption(paste0("gptr.", key))
   if (!is.null(opt)) st = settings_apply(st, key, opt, "option", human = FALSE)
-  st = settings_dotted(st, key, path, "option")
+  for (p in paths) st = settings_dotted(st, key, p, "option")
   ses = settings_lookup(the$settings_session %||% list(), key)
   if (ses$found) st = settings_apply(st, key, ses$value, "session", human = TRUE)
-  done(settings_dotted(st, key, path, "session"))
+  for (p in paths) st = settings_dotted(st, key, p, "session")
+  done(st)
 }
 
 #' A key and the layer it came from; a dotted key resolves inside a protected top-level object, or
@@ -1010,7 +1015,7 @@ settings_effective = function() {
 }
 
 #' One-line rendering of a setting value, redacted (a provider header may hold a secret) and cut
-#' at 60 characters
+#' at 60 characters; a flat object reads `name=value, ...`
 #' @noRd
 settings_format_value = function(v) {
   txt = if (is.null(v)) {
@@ -1019,6 +1024,11 @@ settings_format_value = function(v) {
     v
   } else if (is.atomic(v) && length(v) == 1L) {
     format(v, scientific = FALSE, trim = TRUE)
+  } else if (settings_is_object(v) && length(v) &&
+             all(vapply(v, function(e) is.null(e) || (is.atomic(e) && length(e) == 1L), NA))) {
+    # a flat object as name=value pairs, numbers in at most 4 digits
+    vals = vapply(v, function(e) if (is.null(e)) "null" else format(e, digits = 4L), "")
+    paste0(names(v), "=", vals, collapse = ", ")
   } else {
     tryCatch(json_encode(v), error = function(e) paste0("<", class(v)[1L], ">"))
   }
