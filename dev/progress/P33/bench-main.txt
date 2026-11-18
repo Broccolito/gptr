@@ -1,0 +1,38 @@
+[undo] load 92.0 above 20; waiting a minute
+[undo] load 61.2 above 20; waiting a minute
+[undo] load 60.9 above 20; waiting a minute
+[undo] load 46.6 above 20; waiting a minute
+[undo] load 53.2 above 20; waiting a minute
+[undo] load 50.1 above 20; waiting a minute
+[undo] load 33.2 above 20; waiting a minute
+[undo] load 34.1 above 20; waiting a minute
+[undo] load 40.2 above 20; waiting a minute
+[undo] load 78.1 above 20; waiting a minute
+[undo] load 54.9 above 20; waiting a minute
+[undo] load 39.5 above 20; waiting a minute
+[undo] load 96.6 above 20; waiting a minute
+[undo] load 65.1 above 20; waiting a minute
+[undo] load 46.9 above 20; waiting a minute
+[undo] a done
+[undo] b done
+[undo] c done
+[undo] d done
+[undo] e done
+ scenario size_mb before eval after budget_end budget_in_after undo img_pre_mb img_post_mb img_end_mb held_mb disk_mb restored  rss_mb
+        a  416.02   0.53 0.29  0.59          0               0 2.57        176         176        176    0.00  396.75        1 1556.09
+        b  512.00   0.23 0.03  0.00          0               0 0.13        512         512        512    0.00  488.28        1 2354.79
+        c  512.00   0.12 0.03  0.00          0               0 0.11        512         512        512    0.00  488.28        1 1966.98
+        d  520.00   0.00 0.11  0.00          0               0 0.01          0           0          0  495.91    0.00        1 1490.06
+        e  512.00   0.00 0.04  0.00          0               0 0.01          0           0          0    0.00    0.00        0  825.84
+
+seconds: before, eval, after = checkpointer before / R evaluation / checkpointer after; budget_end = agent_end budget; budget_in_after = budget inside after (P33). 
+img_*_mb: files under .gptr/checkpoints/objects at the end of before, of after, of the turn. 
+restored: 1 = identical() after the undo. medians of 3 children.
+a: list of 4e6 strings, element edit
+b: data frame of 8 numeric columns, df$a[1] = 0
+c: numeric matrix 8000 x 8000, m[1, 1] = 0
+d: numeric vector of 6.5e7, rebind x = x + 1
+e: scenario b without .gptr/ (non-interactive)
+load average before: { 38.60 51.79 57.37 }  after: { 32.54 46.45 54.75 } 
+exit 0
+note: baseline is main 5cf591cd. The load average stayed above 20 for the whole 15-minute wait (about 25 to 95), so times are from a loaded machine. Scenario e (no .gptr/, non-interactive) holds and writes no image for a 512 MB frame, so its undo cannot restore (restored = 0 is main's documented behaviour, the defect P33 changes). a's image is smaller than the object because its strings are shared.
