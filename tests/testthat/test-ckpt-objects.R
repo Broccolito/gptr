@@ -674,16 +674,14 @@ test_that("a change made after a restore from disk is a conflict, kept unless fo
 })
 
 test_that("an in-place edit of a value the fingerprint does not sample is not seen (D-369)", {
-  skip_on_cran()
-  local_gptr_options(undo.memory = 10)
-  ck = ckpt_ck_new("s0000000027", withr::local_tempdir())
-  e = new.env()
-  frags = agent_steps(ck, e, c("x = seq_len(1e6) / 2", "x = x * 2"))
-  expect_true(ckpt_objects_undo(ck, frags[[2]], e)$ok)
-  # fingerprint() samples 64 of the 1e6 values; x[37] is not one, so the redo overwrites it
-  agent_eval("x[37] = 0", e)
-  expect_true(ckpt_objects_redo(ck, frags[[2]], e)$ok)
-  expect_identical(e$x[37], 37)
+  # fingerprint() samples 64 of the 1e6 values: x[1] is one, x[37] is not. An end-to-end edit
+  # is in place only while nothing else references x, which the test cannot control.
+  x = seq_len(1e6) / 2
+  y = x
+  y[37] = 0
+  expect_identical(fingerprint_sample(y), fingerprint_sample(x))
+  y[1] = 0
+  expect_false(identical(fingerprint_sample(y), fingerprint_sample(x)))
 })
 
 test_that("a predicted in-place edit the fingerprint misses is held by reference and undone", {
