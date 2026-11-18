@@ -1,13 +1,16 @@
 ## Submission
 
-This is a minor update (1.0.0 -> 1.1.0); 1.0.1 was not released on CRAN, so this update carries
-its fixes too. 1.1.0 makes each agent tool call cheaper: an object's size is computed once per
-version of it, long character data is sized from a sample and shown as an estimate, each call is
-classified once, and project scans are bounded per request. 1.0.1 fixed a long delay before the
-first agent response by bounding automatic file checkpoint scans across folder sizes and layouts,
-fixed MCP waits and plugin setup diagnostics, corrected help pages, and added model listings,
-sub-agent model selection, hidden credential entry and clearer console progress. NEWS.md lists
-each change. No exported function was removed or changed incompatibly.
+This is a minor update (1.0.0 -> 1.1.0); 1.0.1 was not released on CRAN, so this update carries its
+fixes too. 1.1.0 makes each agent tool call cheaper: an object's size is computed once per version
+of it, long character data is sized from a sample and shown as an estimate, each call is classified
+once, and project scans are bounded per request. Undo of objects now keeps old values by reference
+instead of writing them to disk before a call, keeps its memory and disk limits after every call,
+and reports a change made after a turn as a conflict instead of overwriting it; its four options
+`gptr.undo_*` are replaced by one setting, `undo`. 1.0.1 fixed a long delay before the first agent
+response by bounding automatic file checkpoint scans across folder sizes and layouts, fixed MCP
+waits and plugin setup diagnostics, corrected help pages, and added model listings, sub-agent model
+selection, hidden credential entry and clearer console progress. NEWS.md lists each change. No
+exported function was removed or changed incompatibly.
 
 The preceding major update (0.7.0 -> 1.0.0) was a complete rewrite by the same maintainer. gptr now
 runs language model agents in an existing R session, where generated code can inspect and modify
@@ -96,38 +99,38 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## Test environments
 
-* Local: macOS (aarch64), R 4.4.3: isolated offline regressions, the full test suite and release
-  checks. This older R build is not the submission archive.
+* Local: macOS (aarch64), R 4.6.1: the full offline test suite, and `R CMD check --as-cran` of
+  the submission archive with CRAN's remote incoming checks.
+* win-builder: Windows, R-devel (2026-11-17 r90926 ucrt), the submission archive.
 * GitHub Actions, `R CMD check --as-cran`, each job failing on any warning: the whole offline test
   suite in shards on macOS (release), Windows (release) and Ubuntu (release, under `LC_ALL=C`), and
   CRAN's test list on Ubuntu (oldrel-1, oldrel-4), Ubuntu without Suggests and Windows (oldrel-4).
   Two jobs check as CRAN does (`NOT_CRAN=false`, CRAN's timing thresholds), each failing on any
   NOTE and over its time budget: Ubuntu R-devel without Suggests (480 s) and Windows release with
   both manuals (600 s).
-* The exact-tarball workflow builds once with current R-release and checks the same archive on
-  Windows (release and devel), macOS (release), and Ubuntu (release and devel), with both manuals,
-  incoming checks and current HTML Tidy. It retains the source commit, archive hash and full logs.
 
 ## R CMD check results
 
-Final checks of the 1.1.0 submission archive are pending. The submission comment will record
-the results for the archive actually uploaded, with archived logs identifying its checked bytes.
-Naur and Wason in the Description, which the spelling check may flag,
-are the surnames of Peter Naur and Peter Wason, for whom the package is named. Any other NOTE,
-warning or error still needs review before submission.
-The older local R 4.4.3 diagnostic and the earlier R-hub and win-builder archives are separate
-evidence and are not presented as checks of the 1.1.0 tarball.
+The submission archive `gptr_1.1.0.tar.gz` (sha256
+`bd1be863fe1188c01e48b939a91a688d673901bdaffe7d0af1973ed136c0d205`), built with R 4.6.1:
+
+* macOS (aarch64), R 4.6.1, `R CMD check --as-cran` with CRAN's remote incoming checks: 0 errors,
+  0 warnings, 0 notes.
+* win-builder, Windows R-devel: 0 errors, 0 warnings, 1 NOTE, "Possibly misspelled words in
+  DESCRIPTION: Naur, Wason". These are the surnames of Peter Naur and Peter Wason, for whom the
+  package is named.
+
+Every GitHub Actions check above passes on the archive's commit.
 
 ## Installed size
 
-The earlier CRAN-mode checks reported 7.6 to 8.1 Mb installed: R 5.7 to 6.1 Mb and doc 1.3 to
-1.4 Mb. The final archive's check logs give its platform-specific sizes. R is the byte-compiled
-code of 129 R files, with no data sets and no compiled code; doc holds the 15 HTML vignettes.
-Current R versions report the size as INFO; the older R 4.2 check reported it as a NOTE while
-keeping the package source.
+The submission archive's check on macOS reports 8.2 Mb installed: R 6.1 Mb and doc 1.5 Mb. R is the
+byte-compiled code of 129 R files, with no data sets and no compiled code; doc holds the 15 HTML
+vignettes. Current R versions report the size as INFO; the older R 4.2 check reported it as a NOTE
+while keeping the package source.
 
 ## Reverse dependencies
 
-`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-10-31:
+`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-11-17:
 none.
 No package depends on, imports, links to or suggests gptr.
