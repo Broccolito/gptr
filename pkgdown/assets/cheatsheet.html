@@ -405,6 +405,7 @@ abstracts[rct]; sum(rct)</dt><dd>P(yes); subset and count these typed answers.</
         <dl>
           <dt>gptr_permissions(deny = "r(sh:rm *)")</dt><dd>Rules: deny beats ask beats allow.</dd>
           <dt>gptr_rewind(s)</dt><dd>Page 1's s. Restore checkpoints; not references or external effects. Limits: <code>?gptr_rewind</code>.</dd>
+          <dt>gptr_config(undo = list(memory = 4e9))</dt><dd>Keep up to 4 GB of undo images in memory.</dd>
         </dl>
         <p>Auto/yolo: computed <code>system()</code> needs an explicit <code>r(fn:system)</code> allow rule. Advisory, not a sandbox: <code>?gptr_security</code>.</p>
       </section>

@@ -386,10 +386,10 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `gptr.cache_gap` | `num(1)` | `240` | P07 | seconds of inter-request gap that switch the tail to 1 h |
 | `gptr.check_prefix` | `chr(1)` | `"event"` | P07 | on a prefix break: `"event"`, `"warn"`, `"error"` |
 | `gptr.artifact_max_bytes` | `num(1)` | `5e8` | P23 | snapshot cap |
-| `gptr.undo_capture_max` | `num(1)` | `1e8` | P16 | G7 §3.7 |
-| `gptr.undo_max_bytes` | `num(1)` | `1e9` | P16 | G7 §3.7 |
-| `gptr.undo_spill_max` | `num(1)` | `2e9` | P16 | G7 §3.7 |
-| `gptr.undo_turns` | `int(1)` | `20L` | P16 | G7 §3.7 |
+| `gptr.undo.capture_max` | `num(1)` | `1e8` | P16/P33 | option layer of the setting `undo` (§11.2, D-370), as are the next three; bytes: before a call that runs R code, every object up to this size is held by reference (§7.16, D-368) |
+| `gptr.undo.memory` | `num(1)` | `1e9` | P16/P33 | bytes: a predicted target up to this size is held by reference, and after every call a session's images in memory stay within it |
+| `gptr.undo.disk` | `num(1)` | `2e9` | P16/P33 | bytes: after every call a session's spilled images, sized by their files, stay within it |
+| `gptr.undo.turns` | `int(1)` | `20L` | P16/P33 | images older than this many turns are dropped |
 | `gptr.checkpoint` | `chr(1)` | `"on"` | P16 | `"on"`, `"files"`, `"off"` |
 | `gptr.checkpoint_disk_bytes`, `gptr.checkpoint_days`, `gptr.checkpoint_turns`, `gptr.checkpoint_track_file_max`, `gptr.checkpoint_track_total`, `gptr.checkpoint_capture_max`, `gptr.checkpoint_scan_budget`, `gptr.checkpoint_rng`, `gptr.checkpoint_close_devices` | as G7 §3.7 | `2e9`, `30`, `100`, `1e6`, `1e8`, `5e7`, `0.25`, `TRUE`, `FALSE` | P16 | G7 §3.7; `gptr.checkpoint_scan_budget` is the scan time of one request (§7.16, D-360) |
 | `gptr.checkpoint_scan_timeout` | `num(1)` | `2` | P16 | longest run in seconds of an automatic file scan, checked between entries and before each capture; partial coverage and fixed entry/file limits are described in §7.16 |
@@ -2072,7 +2072,7 @@ gptr_preimage(x, name, ctx, ...)
 
 S3 generic deciding how the object checkpointer captures a binding before a mutating tool call. `x` is the
 object (the method is a leaf [R4]); `name` its binding name; `ctx` a list(`predicted` = chr in `assign`,
-`modify`, `byref`, `remove`, `none`; `bytes` num(1); `budget` num(1)). Returns
+`modify`, `byref`, `remove`, `none`; `bytes` num(1); `budget` num(1), the `undo.memory` limit). Returns
 `list(mode = "ref" | "copy" | "none", reason = chr(1) | NULL, copy = <deep copy> | NULL)`: `ref` (the caller binds
 the original object into its private pre-image environment; default for value-semantics objects), `copy` (the
 method returns a deep copy in `copy`; the `data.table` method does this for `:=`/`set*()` targets within budget),
@@ -3117,6 +3117,27 @@ Preserve guarded restores and R-object checkpointing. Unpredicted writes by R co
 outside coverage have no complete-undo guarantee. File discovery stays scoped and on demand through
 `ls`, `find` and `read`; provider startup requires no full-folder inventory.
 
+Objects (D-368): before a call that runs R code, every object up to `undo.capture_max` and every
+predicted target up to `undo.memory` is held by reference in the session's image environment;
+nothing is written before a call. An in-place edit of a held object copies what it touches (a
+whole atomic vector or matrix, one data-frame column). After every call and at `agent_end` the
+budget drops images older than `undo.turns`; while the images in memory exceed `undo.memory` it
+spills the largest when the session has a spill directory (a `.gptr/` workspace or a person
+present) and the image fits `undo.disk`, else drops the oldest; while the spilled images exceed
+`undo.disk` it drops the oldest and deletes its file. A spilled row's `bytes` is its file's size; a
+restore reads the file through a connection. A row whose image the budget dropped is not
+restorable and its reason names the undo limits; `gptr_checkpoints()` counts a changed or removed
+object as restorable only while its image is held in this process or its file exists. A skip
+reason names the limit to raise (`undo.memory` for a predicted target, else `undo.capture_max`);
+before code whose targets are unknown the note also lists the objects over `undo.capture_max`.
+
+Conflicts (D-369): the 3-way rule compares fingerprints (`fingerprint()`, which includes the
+address), so a rebind or an in-place edit after the turn is a conflict, kept and reported unless
+`force = TRUE`. `fingerprint()` samples at most 64 values of an atomic vector: an edit of an
+unsampled element of a value restored from disk or a copy is not seen (while the image is held in
+memory such an edit copies and moves the address). Rows of another R process compare
+`post_address`, which never equals a fingerprint, so they conflict unless `force = TRUE`.
+
 Example calls:
 
 ```r
@@ -4041,6 +4062,7 @@ level 4. A legacy `.gptr/settings.local.json` contributes only deny/ask addition
 | `compactor` | chr | `"checkpoint"` | | P07 |
 | `compact_at` | num\|null | `200000` | | P07 |
 | `checkpoint` | chr | `"on"` | | P16 |
+| `undo` | `{capture_max, memory, disk, turns}` (options `gptr.undo.<key>` are the same knobs, D-370) | `{capture_max: 1e8, memory: 1e9, disk: 2e9, turns: 20}` (§3.1) | | P16/P33 |
 | `doc` | `{outputs: lgl, output_lines: int}` | `{outputs: true, output_lines: 12}` | | P15 |
 | `cache_commit` | `{s1: lgl, s2: lgl}` | `{s1: true, s2: false}` (C-31) | | P13/P15 |
 | `ui` | chr\|null | `null` | | P11 |

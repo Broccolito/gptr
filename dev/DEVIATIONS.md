@@ -11059,3 +11059,43 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   colour"; gptr-gateway "an Ollama model its server reports decision-only is refused as one first
   (IC-74)"; auth-billing-notice (the wording). Evidence: progress/P32.md Live pass fixes - package
   code.
+
+## D-368 - P33 One capture rule, limits after every call, a disk cap, streamed restore (2026-11-17)
+- Rule (capture): before a call that runs R code, every object up to `undo.capture_max` and every
+  predicted target up to `undo.memory` is held by reference; nothing is written before a call
+  (G7 section 3.4 step 3's eager disk image is deleted; 1.0.x `how = "disk"` fragments restore).
+- Rule (budget): after every call and at `agent_end`, images older than `undo.turns` are dropped;
+  over `undo.memory` the largest is spilled if a spill directory exists and it fits `undo.disk`,
+  else the oldest is dropped; over `undo.disk` the oldest spilled image and its file go. A spilled
+  row's bytes are its file's size; a restore streams the file.
+- Rule (honesty): reasons name the limit; `ckpt_note()` lists objects over `undo.capture_max` for
+  unknown targets; `gptr_checkpoints()` counts a changed or removed object as restorable only
+  while its image key or file exists.
+- Contract-visible: 04 section 3.1 (undo rows), section 7.16 (objects paragraph); 03 section 6.16;
+  supersedes G7 sections 3.4 (steps 3 and 6) and 3.7.
+- Tests: ckpt-objects, ckpt-rewind, copy-ckpt (the plan's T2, T3 and T5 tests). Evidence:
+  progress/P33.md Tasks 2, 3 and 5.
+
+## D-369 - P33 The 3-way rule compares fingerprints, not addresses (2026-11-17)
+- Rule: every expectation of the object checkpointer (settle, created rows, restore, spill, undo
+  and redo) holds `ckpt_fp()`, the snapshot fingerprint (address included; NA when unbound), so a
+  user's in-place edit after the turn (`x[1] = 99` on a value restored from disk or a copy) is a
+  conflict kept unless `force = TRUE`, as `?gptr_rewind` said. Rows of another R process keep the
+  `post_address` fallback and conflict unless `force = TRUE`; fragments keep `pre_address` and
+  `post_address` (04 section 4.6 unchanged).
+- Limit: `fingerprint()` samples at most 64 values of an atomic vector, so an edit of an
+  unsampled element of a value restored from disk or a copy is not seen.
+- Contract-visible: 04 section 7.16 (conflicts); supersedes G7 section 3.6.
+- Tests: ckpt-objects, ckpt-rewind (the plan's T4 tests, the `x[37]` limit among them). Evidence:
+  progress/P33.md Task 4.
+
+## D-370 - P33 The undo setting replaces the four gptr.undo_* options (2026-11-17)
+- Rule: the core setting `undo = list(capture_max = 1e8, memory = 1e9, disk = 2e9, turns = 20L)`;
+  `gptr.undo.capture_max`, `gptr.undo.memory`, `gptr.undo.disk` and `gptr.undo.turns` are its
+  option layer, as for `subagents`; `ckpt_limits()` reads `setting_get("undo.<field>")`. The
+  defaults are 1.0.x's; `disk` caps a session's spilled images in all, where
+  `gptr.undo_spill_max` capped one image. `gptr.undo_capture_max`, `gptr.undo_max_bytes`,
+  `gptr.undo_spill_max` and `gptr.undo_turns` are removed, not aliased (NEWS 1.1.0).
+- Contract-visible: 04 section 3.1 (four `gptr.undo.*` rows), section 11.2 (`undo`);
+  `?gptr_options`, `?gptr_rewind`, the configuration vignette, the cheat sheet.
+- Tests: gptr-config, utils-options (the plan's T1 tests). Evidence: progress/P33.md Task 1.

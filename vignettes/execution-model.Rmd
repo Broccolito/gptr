@@ -121,10 +121,20 @@ exempt (Ollama only while local-only inference is on). See [Configuration](confi
 [Token efficiency](token-efficiency.html).
 
 Ordinary R copy-on-modify rules still apply. Modifying an object, keeping aliases, fitting a
-model or calling a package can allocate substantial memory. Checkpoints retain supported
-pre-images for undo, and workers, bridges and artifact snapshots have their own transfer or
-copy costs. An overlay lets reads find the parent object's binding while keeping ordinary
-assignments local; it does not isolate changes to reference objects or external resources.
+model or calling a package can allocate substantial memory. Workers, bridges and artifact
+snapshots have their own transfer or copy costs. An overlay lets reads find the parent object's
+binding while keeping ordinary assignments local; it does not isolate changes to reference
+objects or external resources.
+
+Undo writes nothing before a call and keeps old values by reference; only a data.table the code
+changes by reference is copied. Before a call that runs R code it keeps every object up to
+`undo.capture_max` (100 MB) and each object the code is predicted to change up to `undo.memory`
+(1 GB). A kept value shares memory with the object until the object changes: a new assignment
+keeps the old value alive, and an in-place edit copies what it touches, a whole vector or matrix
+or one column of a data frame. After every call the kept images stay within `undo.memory` in
+memory and `undo.disk` (2 GB) on disk. Over `undo.memory`, the largest image moves to disk when
+it fits and a `.gptr/` workspace exists or a person is present; otherwise the oldest is dropped.
+[Configuration](configuration.html) shows how to change these limits.
 
 A continued session reuses its kept home environment unless you explicitly supply a new `envir`.
 When the default environment is a function call frame, gptr uses it during the active run and

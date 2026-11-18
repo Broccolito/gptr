@@ -2108,14 +2108,18 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 
 ### 6.16 Checkpoints, undo and rewind [G7]
 
-- **Objects.** Per mutating tool call: capture every value binding up to `gptr.undo_capture_max` (1e8 bytes)
-  by reference and predicted targets up to `gptr.undo_max_bytes` (1e9); for predicted in-place edits of larger
-  objects write an eager disk image (`serialize(ascii = FALSE, xdr = FALSE)`, up to `gptr.undo_spill_max`,
-  2e9, about 0.3-0.7 s per GB); deep-copy data.table targets of `:=`/`set()`; report reference objects
-  (environments, R6, external pointers) as not restorable. Pre-images are bindings in a private environment,
-  released with `rm()`; list and S4 pre-images are defused before dropping (R6). After the call, settle: an
-  address change means modified; release the rest. At turn end spill the largest held images or drop the
-  oldest (defuse + `rm()`), and drop images older than `gptr.undo_turns` (20).
+- **Objects.** Limits are the setting `undo` (options `gptr.undo.<field>`) [D-370]. Per call that runs R code:
+  hold by reference every value binding up to `undo.capture_max` (1e8 bytes) and every predicted target up to
+  `undo.memory` (1e9); write nothing before the call; deep-copy data.table targets of `:=`/`set()`; report
+  reference objects (environments, R6, external pointers) as not restorable. Pre-images are bindings in a
+  private environment, released with `rm()`; list and S4 pre-images are defused before dropping (R6). An
+  in-place edit of a held object copies what it touches (a whole atomic vector or matrix, one data-frame
+  column). After the call, settle: a changed fingerprint means modified; release the rest. After every call
+  and at turn end drop images older than `undo.turns` (20); keep the images in memory within `undo.memory` by
+  spilling the largest (`serialize(ascii = FALSE, xdr = FALSE)`, only with a `.gptr/` workspace or a person
+  present) while it fits `undo.disk` (2e9 per session, sized by the files), else dropping the oldest (defuse +
+  `rm()`); drop the oldest spilled image past `undo.disk`. A restore from disk streams the file (1x the
+  object's RAM, not 2x) [D-368]. Restores are 3-way on fingerprints, which include the address [D-369].
 - **Files.** A content-addressed store (XXH128 via rlang, gzip level 1, deduplicated). Automatic
   baseline and subsequent scans run in the R session for at most `gptr.checkpoint_scan_timeout`
   (2 s by default), checked between entries and before each capture; an interrupt the person

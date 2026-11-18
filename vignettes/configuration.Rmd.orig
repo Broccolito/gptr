@@ -144,6 +144,7 @@ of free execution. Disabling a direct tool does not make in-process R a sandbox.
 | `compact_at` | `200000` estimated tokens; a soft compaction cap, also bounded by the model's context. |
 | `compactor` | `"checkpoint"`; selects a registered compactor. |
 | `checkpoint` | `"on"`; `"files"` or `"off"` changes checkpoint capture. |
+| `undo` | `list(capture_max = 1e8, memory = 1e9, disk = 2e9, turns = 20)`. Before a call that runs R code, undo keeps every object up to `capture_max` bytes and each object the code is predicted to change up to `memory`. A session's undo images stay within `memory` bytes in memory and `disk` bytes on disk, for at most `turns` turns. The options `gptr.undo.capture_max`, `gptr.undo.memory`, `gptr.undo.disk` and `gptr.undo.turns` set the same limits. |
 | `plot` | Registered defaults `list(width = 768, height = 512, res = 120)`. Current renderers read `gptr.plot_width`, `gptr.plot_height` and `gptr.plot_res` options; use those to change model-bound plots. |
 
 The `context` setting controls built-in generative-model descriptions, rather than R object
@@ -166,6 +167,15 @@ way to omit those states. See [Execution model](execution-model.html),
 
 Recording and replay are separate controls; see
 [Record, replay and export](script-as-history.html) and [Token efficiency](token-efficiency.html).
+
+Undo keeps old values by reference; see [Execution model](execution-model.html) for what that
+costs and `?gptr_rewind` for what undo restores. When an object is too large to keep, the
+approval question and the undo report name the limit to raise. To keep up to 4 GB of undo images
+in memory in every project:
+
+```{r, eval = FALSE}
+gptr_config(undo = list(memory = 4e9), .scope = "user")
+```
 
 | Extension and interaction setting | Default and purpose |
 |---|---|
