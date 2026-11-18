@@ -3804,7 +3804,7 @@
     "sizes": "huge=104000223",
     "asked": "mode manual, risk level 3 (dangerous)",
     "suggested": "",
-    "undo_note": "cannot be undone: huge (about 99 MB, over the undo budget)",
+    "undo_note": "",
     "blocked": "Mode \"manual\" comes from this call's mode argument. Allow it with mode = \"auto\", a permission rule (gptr_permissions()), or run interactively."
   },
   "native manual_r2 huge.overwrite": {
@@ -3846,7 +3846,7 @@
     "sizes": "huge=104000281",
     "asked": "mode manual, risk level 3 (dangerous)",
     "suggested": "",
-    "undo_note": "cannot be undone: huge (about 99 MB, over the undo budget)",
+    "undo_note": "",
     "blocked": "Mode \"manual\" comes from this call's mode argument. Allow it with mode = \"auto\", a permission rule (gptr_permissions()), or run interactively."
   },
   "served manual_r2 huge.overwrite": {

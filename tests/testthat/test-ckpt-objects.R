@@ -156,21 +156,6 @@ test_that("defusing a data frame image leaves the user's data frame intact", {
   expect_identical(ls(st$slots), character())
 })
 
-test_that("an eager disk image restores a large object edited in place", {
-  dir = withr::local_tempdir()
-  e = new.env()
-  e$big = c(1, 2, 3)
-  st = ckpt_obj_store(dir)
-  d = ckpt_capture_disk(st, e, "big")
-  expect_true(file.exists(d$file))
-  expect_identical(ls(st$slots), character())
-  agent_eval("big[1] = 10", e)
-  ckpt_index_add(st, d$key, "f1", "big", "pre", where = "disk", file = d$file)
-  res = ckpt_restore(st, e, "big", d$key)
-  expect_true(res$ok)
-  expect_identical(e$big, c(1, 2, 3))
-})
-
 test_that("the sweep releases captures that no index row owns", {
   e = new.env()
   e$x = 1:3
@@ -215,16 +200,39 @@ test_that("ckpt_predict() reduces code_targets() to the checkpointers' fields (I
                    c("modify", "assign", "remove", "none"))
 })
 
-test_that("the capture plan follows G7's budget rules", {
+test_that("one capture rule keeps an object by its size and prediction; a skip names its limit", {
   lim = list(capture_max = 100, memory = 1000, disk = 5000)
-  how = ckpt_capture_how(
-    bytes = c(10, 500, 500, 500, 2000, 9000, NA, 10, 10),
-    predicted = c("none", "assign", "modify", "none", "modify", "modify", "none", "byref",
-                  "assign"),
-    mode = c("ref", "ref", "ref", "ref", "ref", "ref", "ref", "copy", "none"),
-    spill_ok = TRUE, lim = lim)
-  expect_identical(how, c("ref", "ref", "disk", "skip", "disk", "skip", "ref", "copy", "none"))
-  expect_identical(ckpt_capture_how(500, "modify", "ref", spill_ok = FALSE, lim = lim), "skip")
+  pm = list(mode = c("ref", "ref", "ref", "ref", "ref", "ref", "copy", "none"),
+            reason = c("", "", "", "", "", "", "", "reference object"))
+  cap = ckpt_capture_how(
+    bytes = c(10, 500, 500, 500, 2000, NA, 10, 10),
+    predicted = c("none", "assign", "modify", "none", "modify", "none", "byref", "assign"),
+    pm = pm, lim = lim)
+  expect_identical(cap$how, c("ref", "ref", "ref", "skip", "skip", "ref", "copy", "none"))
+  expect_identical(cap$reason[c(4L, 5L, 8L)],
+                   c("not predicted to change; larger than undo.capture_max",
+                     "larger than undo.memory", "reference object"))
+})
+
+test_that("a predicted edit over undo.capture_max is held by reference, never on disk (D-368)", {
+  skip_on_cran()
+  local_gptr_options(undo.capture_max = 1000)
+  dir = withr::local_tempdir()
+  e = new.env()
+  e$df = data.frame(a = as.numeric(1:1e5), b = as.numeric(1:1e5), c = as.numeric(1:1e5))
+  e$other = as.numeric(1:1e5)
+  call = list(id = "c1", name = "r", input = list(code = "df$a[1] = 0"))
+  ck = ckpt_ck_new("s0000000020", dir)
+  tok = ckpt_objects_before(ck, call, e)
+  expect_identical(tok$how, ckpt_objects_before(ckpt_ck_new("s0000000021"), call, e)$how)
+  expect_identical(tok$how[match(c("df", "other"), tok$snap$name)], c("ref", "skip"))
+  expect_length(list.files(dir, recursive = TRUE), 0L)
+  agent_eval(call$input$code, e)
+  row = rows_by_name(ckpt_objects_after(ck, call, e, tok))$df
+  expect_true(row$restorable)
+  expect_lt(row$held_bytes, row$bytes / 2)
+  expect_true(ckpt_objects_undo(ck, list(id = tok$frag, turn = 1L, objects = list(row)), e)$ok)
+  expect_identical(e$df$a[1], 1)
 })
 
 test_that("before/after record changed, removed and created bindings; undo and redo swap them", {
@@ -300,7 +308,7 @@ test_that("reference objects and objects over the budget are reported with a mod
   expect_false(rows$cfg$restorable)
   expect_match(rows$cfg$reason, "reference object")
   expect_false(rows$big$restorable)
-  expect_match(rows$big$reason, "over the undo budget")
+  expect_identical(rows$big$reason, "larger than undo.memory")
   notes = ckpt_objects_notes(frag)
   expect_length(notes, 2L)
   expect_match(notes, "^note: big \\(7.9 KB\\) was (modified|overwritten) without an undo copy",
@@ -497,11 +505,12 @@ agent_steps = function(ck, e, codes) {
 
 test_that("a rewind of several fragments of one object follows values restored from disk", {
   skip_on_cran()
-  local_gptr_options(undo.capture_max = 1000, undo.disk = 1e7)
+  local_gptr_options(undo.capture_max = 1000, undo.memory = 1e6)
   ck = ckpt_ck_new("s0000000014", withr::local_tempdir())
   e = new.env()
   frags = agent_steps(ck, e, c("big = seq_len(1e5) / 2", "big[2] = 0", "big[3] = 0"))
-  expect_identical(frags[[2]]$objects[[1]]$how, "disk")
+  ckpt_objects_budget(ck, 1L, e)
+  expect_identical(ck$obj$index$where, c("none", "disk", "memory"))
   for (f in rev(frags)) expect_true(ckpt_objects_undo(ck, f, e)$ok)
   expect_false(exists("big", envir = e, inherits = FALSE))
   for (f in frags) expect_true(ckpt_objects_redo(ck, f, e)$ok)
@@ -551,15 +560,15 @@ test_that("spilling an image the binding holds again raises no false conflict", 
   expect_identical(e$x, as.numeric(1:50))
 })
 
-test_that("a predicted in-place edit keeps its disk image although the fingerprint misses it", {
+test_that("a predicted in-place edit the fingerprint misses is held by reference and undone", {
   skip_on_cran()
-  local_gptr_options(undo.capture_max = 1000, undo.memory = 2000, undo.disk = 1e7)
-  ck = ckpt_ck_new("s0000000010", withr::local_tempdir())
+  local_gptr_options(undo.capture_max = 1000)
+  ck = ckpt_ck_new("s0000000010")
   e = new.env()
   e$big = seq_len(1e5) / 2
   call = list(id = "c5", name = "r", input = list(code = "big[2] = 0"))
   tok = ckpt_objects_before(ck, call, e)
-  expect_identical(tok$how, "disk")
+  expect_identical(tok$how, "ref")
   agent_eval(call$input$code, e)
   frag = ckpt_objects_after(ck, call, e, tok)
   expect_true(frag$objects[[1]]$restorable)
@@ -603,8 +612,13 @@ test_that("checkpoint.note names what cannot be undone", {
   expect_null(ckpt_note(list(input = list(path = "a.R")), run))
   note = ckpt_note(list(input = list(code = "cfg$a = 1; big[1] = 0")), run)
   expect_match(note, "^cannot be undone: ")
-  expect_match(note, "big (7.9 KB, over the undo budget)", fixed = TRUE)
+  expect_match(note, "big (7.9 KB, larger than undo.memory)", fixed = TRUE)
   expect_match(note, "cfg (reference object", fixed = TRUE)
+  # a computed name: the code may change any binding, so the one too large to keep is named
+  note = ckpt_note(list(input = list(code = "assign(paste0('b', 'ig'), 0)")), run)
+  expect_match(note, "big (7.9 KB, not predicted to change; larger than undo.capture_max)",
+               fixed = TRUE)
+  expect_false(grepl("small", note, fixed = TRUE))
   expect_null(ckpt_note(list(input = list(code = "big[1] = 0")), NULL))
   local_gptr_options(checkpoint = "files")
   expect_identical(ckpt_note(list(input = list(code = "small = 2")), run),
@@ -621,7 +635,7 @@ test_that("a sampled size reads about in both undo notes (D-356)", {
   e$big = paste0("s", 1:2e4)
   local_mocked_bindings(run_eval_env = function(run) run$envir, session_home = function(s) e)
   call = list(id = "c4", name = "r", input = list(code = "big[1] = 'a'"))
-  expect_match(ckpt_note(call, list(envir = e)), "big (about 1.2 MB, over the undo budget)",
+  expect_match(ckpt_note(call, list(envir = e)), "big (about 1.2 MB, larger than undo.memory)",
                fixed = TRUE)
   ck = ckpt_ck_new("s0000000004")
   tok = ckpt_objects_before(ck, call, e)

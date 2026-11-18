@@ -56,7 +56,7 @@ gptr_preimage.default = function(x, name, ctx, ...) {
 gptr_preimage.data.table = function(x, name, ctx, ...) {
   if (!identical(ctx$predicted, "byref")) return(list(mode = "ref", reason = NULL, copy = NULL))
   if (!isTRUE(ctx$bytes <= ctx$budget)) {
-    return(list(mode = "none", reason = "data.table modified by reference, over the undo budget",
+    return(list(mode = "none", reason = "data.table modified by reference, larger than undo.memory",
                 copy = NULL))
   }
   if (!requireNamespace("data.table", quietly = TRUE)) {
@@ -161,16 +161,6 @@ ckpt_write_image = function(file, envir, name) {
   dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
   write_atomic(file, serialize_leaf(get(name, envir = envir, inherits = FALSE), xdr = FALSE))
   invisible(file)
-}
-
-#' Eager disk image of a binding (a predicted in-place edit of a large object, G7 section 3.4)
-#' @return `list(key, file)`.
-#' @noRd
-ckpt_capture_disk = function(store, envir, name) {
-  k = paste0("d", id_new("", 12L))
-  f = ckpt_disk_file(store$dir, k)
-  ckpt_write_image(f, envir, name)
-  list(key = k, file = f)
 }
 
 #' Settle captures: release unchanged bindings with rm(), index the rest
@@ -406,19 +396,24 @@ ckpt_predicted = function(names, tg) {
   out
 }
 
-#' The capture plan of each binding (G7 section 3.4 step 3): "ref", "copy", "disk", "none" (the
-#' gptr_preimage() method refused) or "skip" (over the budget). A missing argument (no size)
-#' counts 0 bytes.
+#' The one capture rule (D-368): every object up to undo.capture_max and every predicted target up
+#' to undo.memory is kept by reference ("ref"); "copy" and "none" are the gptr_preimage() method's;
+#' the rest is "skip", whose reason names the limit to raise. A missing argument (no size) counts 0
+#' bytes. `pm` is ckpt_preimage_modes()'s result.
+#' @return `list(how, reason)`.
 #' @noRd
-ckpt_capture_how = function(bytes, predicted, mode, spill_ok, lim) {
+ckpt_capture_how = function(bytes, predicted, pm, lim) {
   bytes[is.na(bytes)] = 0
-  over = bytes > lim$capture_max
-  how = ifelse(over, "skip", "ref")
-  how[over & predicted %in% c("assign", "remove") & bytes <= lim$memory] = "ref"
-  how[over & predicted == "modify" & bytes <= lim$disk & spill_ok] = "disk"
-  how[mode == "copy"] = "copy"
-  how[mode == "none"] = "none"
-  how
+  how = ifelse(bytes <= lim$capture_max | (predicted != "none" & bytes <= lim$memory), "ref",
+               "skip")
+  how[pm$mode == "copy"] = "copy"
+  how[pm$mode == "none"] = "none"
+  reason = pm$reason
+  skip = how == "skip"
+  reason[skip] = ifelse(predicted[skip] == "none",
+                        "not predicted to change; larger than undo.capture_max",
+                        "larger than undo.memory")
+  list(how = how, reason = reason)
 }
 
 #' gptr_preimage() for every binding of a snapshot; "copy" results go straight into the store
@@ -468,22 +463,13 @@ ckpt_objects_before = function(ck, call, envir, turn = 1L) {
   tg = ckpt_predict(code)
   pred = ckpt_predicted(snap$name, tg)
   pm = ckpt_preimage_modes(store, envir, snap, pred, lim)
-  how = ckpt_capture_how(snap$bytes, pred, pm$mode, !is.null(store$dir), lim)
-  reason = pm$reason
-  reason[how == "skip"] = "over the undo budget"
+  cap = ckpt_capture_how(snap$bytes, pred, pm, lim)
   key = pm$key
-  refs = which(how == "ref")
+  refs = which(cap$how == "ref")
   key[refs] = ckpt_capture(store, envir, snap$name[refs])$key
-  for (j in which(how == "disk")) {
-    key[j] = tryCatch(ckpt_capture_disk(store, envir, snap$name[j])$key, error = function(e) "")
-    if (!nzchar(key[j])) {
-      how[j] = "skip"
-      reason[j] = "the disk image could not be written"
-    }
-  }
   list(frag = ckpt_frag_id(), turn = as.integer(turn), snap = snap,
-       others = full$name[full$kind != "value"], tg = tg, how = how, reason = reason, key = key,
-       pred = pred)
+       others = full$name[full$kind != "value"], tg = tg, how = cap$how, reason = cap$reason,
+       key = key, pred = pred)
 }
 
 #' A fragment row: names, classes, sizes and addresses, never a value (contract 4.6); `about`:
@@ -514,22 +500,20 @@ ckpt_settle_row = function(store, envir, token, i, j, post) {
                         "modified by reference (the pre-image is the live object)",
                         about = s0$about))
   }
-  if (!how %in% c("ref", "copy", "disk")) {
+  if (!how %in% c("ref", "copy")) {
     return(ckpt_obj_row(nm, status, how, s0$class, s0$bytes, s0$address, now, FALSE,
                         token$reason[i], about = s0$about))
   }
-  disk = identical(how, "disk")
-  held = if (disk) 0 else ckpt_unshared_bytes(store, key, envir, nm)
+  held = ckpt_unshared_bytes(store, key, envir, nm)
   if (identical(how, "ref")) {
     store$index$bytes[store$index$key == key] = held
   } else {
     ckpt_repoint(store, nm, s0$address, key)
-    ckpt_index_add(store, key, token$frag, nm, "pre", where = if (disk) "disk" else "memory",
-                   file = if (disk) ckpt_disk_file(store$dir, key) else "",
-                   bytes = if (disk) s0$bytes else held, turn = token$turn, expect = now)
+    ckpt_index_add(store, key, token$frag, nm, "pre", bytes = held, turn = token$turn,
+                   expect = now)
   }
   ckpt_obj_row(nm, status, how, s0$class, s0$bytes, s0$address, now, TRUE, "", image = key,
-               where = if (disk) "disk" else "memory", held = held, about = s0$about)
+               where = "memory", held = held, about = s0$about)
 }
 
 #' Objects checkpointer, after the call: settle every capture and build the JSON-able fragment
@@ -760,10 +744,14 @@ ckpt_note = function(call, run = NULL) {
   if (!is.environment(envir)) return(NULL)
   snap = env_snapshot(envir)
   snap = snap[snap$kind == "value", , drop = FALSE]
-  pred = ckpt_predicted(snap$name, ckpt_predict(code))
-  snap = snap[pred != "none", , drop = FALSE]
-  pred = pred[pred != "none"]
+  tg = ckpt_predict(code)
+  pred = ckpt_predicted(snap$name, tg)
   lim = ckpt_limits()
+  # code with unknown targets may change any binding, so also one too large to keep unpredicted
+  keep = pred != "none" | (length(tg$unknown) > 0L & !is.na(snap$bytes) &
+                             snap$bytes > lim$capture_max)
+  snap = snap[keep, , drop = FALSE]
+  pred = pred[keep]
   # objects are captured only with "on" and in the session home, never a function frame (R2)
   pm = if (identical(mode, "on") && identical(envir, session_home(run$shell))) {
     ckpt_preimage_modes(NULL, envir, snap, pred, lim, dry = TRUE)
@@ -771,11 +759,11 @@ ckpt_note = function(call, run = NULL) {
     list(mode = rep("none", nrow(snap)),
          reason = rep("objects are not checkpointed here", nrow(snap)))
   }
-  how = ckpt_capture_how(snap$bytes, pred, pm$mode, ckpt_spill_allowed(), lim)
-  bad = how %in% c("none", "skip")
+  cap = ckpt_capture_how(snap$bytes, pred, pm, lim)
+  bad = cap$how %in% c("none", "skip")
   if (!any(bad)) return(NULL)
   size = mapply(env_fmt_bytes, snap$bytes[bad], snap$about[bad])
-  why = ifelse(how[bad] == "skip", paste0(size, ", over the undo budget"), pm$reason[bad])
+  why = ifelse(cap$how[bad] == "skip", paste0(size, ", ", cap$reason[bad]), cap$reason[bad])
   paste0("cannot be undone: ", paste0(snap$name[bad], " (", why, ")", collapse = "; "))
 }
 
