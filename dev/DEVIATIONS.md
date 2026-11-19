@@ -11099,3 +11099,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: 04 section 3.1 (four `gptr.undo.*` rows), section 11.2 (`undo`);
   `?gptr_options`, `?gptr_rewind`, the configuration vignette, the cheat sheet.
 - Tests: gptr-config, utils-options (the plan's T1 tests). Evidence: progress/P33.md Task 1.
+
+## D-371 - CRAN runs the security core of the tests (2026-11-19)
+- Rule: with `NOT_CRAN` not `"true"`, `tests/testthat.R` runs 7 files: `aaa-state`, `auth-redact`,
+  `auth-secrets`, `perm-gate`, `perm-plan`, `perm-rules` and `zzz`, with D-240's block skips.
+  GitHub Actions runs the whole suite on Windows, macOS and Linux, as before.
+- Why: CRAN's incoming pretest archived the 1.1.0 resubmission for "Overall checktime 11 min >
+  10 min" on Windows R-devel (code checks 282 s, tests 191 s). CI-93's trim had left about 30 s of
+  the 600 s budget, and win-builder's check of the same package took 414 to 648 s. The 7 files took
+  4.3 s of the 38 files' 22.5 s in a local CRAN-mode run against the installed tarball (81% less),
+  so the Windows tests fall by about 150 s.
+- Amends: D-240 and CI-93 (the 35- then 38-file list). Contract-visible: none; `cran-comments.md`.
+- Tests: the whole suite unchanged under `NOT_CRAN=true`. Evidence: the pretest log
+  (incoming_pretest/gptr_1.1.0_20261119_044917), the local timing table and win-builder's check time
+  in progress/P33.md.

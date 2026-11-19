@@ -1,8 +1,10 @@
 ## Submission
 
 This is a resubmission. The incoming pretests archived the first submission of 1.1.0 for one
-NOTE, possibly misspelled words in DESCRIPTION (Naur, Wason). This version removes that sentence
-from the Description, which now matches 1.0.0's apart from one URL; nothing else changed.
+NOTE, possibly misspelled words in DESCRIPTION (Naur, Wason): that sentence is removed, so the
+Description matches 1.0.0's apart from one URL. They archived the second for "Overall checktime
+11 min > 10 min" on Windows R-devel: CRAN now runs 7 test files instead of 38, which cuts the
+tests' time by about 80%. The package code is unchanged.
 
 This is a minor update (1.0.0 -> 1.1.0); 1.0.1 was not released on CRAN, so this update carries its
 fixes too. 1.1.0 makes each agent tool call cheaper: an object's size is computed once per version
@@ -93,10 +95,11 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   MCP server or a Shiny app) or optional sub-agent workers are skipped, and the suite needs no
   network. Small automatic checkpoint tests scan local synthetic files in the R session; the
   large filesystem stress tests run only in the full offline CI suite.
-  To keep the check short, `tests/testthat.R` runs on CRAN a fixed list of 38 test files (the
-  permission, redaction and secret tests and files that reach all but 12 of the R files) without
-  their slowest blocks; GitHub Actions runs the whole suite. Consent regressions are included in
-  the CRAN test list. Live provider tests run only when `GPTR_LIVE_TESTS` is `"true"`.
+  To keep the check well inside CRAN's ten minutes on Windows, `tests/testthat.R` runs on CRAN 7
+  test files: the permission rule, plan and gate tests, the redaction and secret tests, and the
+  package load and metadata tests, without their slowest blocks. GitHub Actions runs the whole
+  suite, consent regressions included, on Windows, macOS and Linux. Live provider tests run only
+  when `GPTR_LIVE_TESTS` is `"true"`.
 * The 15 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
 * Under `R CMD check` every pool of child processes is capped at two.

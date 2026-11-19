@@ -60,6 +60,11 @@ main after CI.
   edit, and a real defect (an undone case-only rename on Windows kept the wrong case while reported
   restored).
 
+- CRAN's pretest archived that resubmission too, for "Overall checktime 11 min > 10 min" on
+  Windows R-devel (code checks 282 s, tests 191 s; CI-93 had left about 30 s of the 600 s budget).
+  D-371: CRAN runs the security core of the tests, 7 files instead of 38 (81% less test time); the
+  rebuilt archive's checks are in `cran-comments.md` and progress/P33.md.
+
 Next: the maintainer submits `dev/release/gptr_1.1.0.tar.gz` (prepared on CRAN's form) and confirms the email link.
 
 ## Historical checkpoint — gptr 1.0.1, 2026-11-03
