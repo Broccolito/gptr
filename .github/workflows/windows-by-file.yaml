@@ -141,6 +141,9 @@ jobs:
         timeout-minutes: 20
         with:
           extra-packages: any::pkgload
+      - uses: ./.github/actions/system-libraries
+        if: inputs.optional && runner.os == 'Linux'
+        timeout-minutes: 10
       - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
         if: inputs.optional
         timeout-minutes: 10
@@ -148,9 +151,6 @@ jobs:
           r-version: ${{ inputs.startup_diagnostic && 'devel' || 'release' }}
           Ncpus: 1
           use-public-rspm: true
-      - uses: ./.github/actions/system-libraries
-        if: inputs.optional && runner.os == 'Linux'
-        timeout-minutes: 10
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
         if: inputs.optional
         timeout-minutes: 20
