@@ -42,6 +42,8 @@ jobs:
       - name: Verify exact checkout
         shell: bash
         run: 'test "$(git rev-parse HEAD)" = "$GPTR_EXPECTED_SOURCE"'
+      - uses: ./.github/actions/system-libraries
+        if: runner.os == 'Linux'
       - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05
         with:
           r-version: release
@@ -126,8 +128,6 @@ jobs:
           (evidence / 'python-admission.json').write_text(json.dumps(witness, indent=2),
                                                          encoding='utf-8')
           PY
-      - uses: ./.github/actions/system-libraries
-        if: runner.os == 'Linux'
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05
         env:
           GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}

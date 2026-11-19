@@ -79,17 +79,17 @@ jobs:
           python3 source/dev/ci/test-exact-source.py \
             --workflow source/.github/workflows/Exact-tarball.yaml --guides 15
       - uses: r-lib/actions/setup-pandoc@v2
-      - uses: r-lib/actions/setup-r@v2
-        with:
-          r-version: release
-          Ncpus: 2
-          use-public-rspm: true
       - uses: actions/checkout@v6
         with:
           path: controller
           sparse-checkout: .github/actions
           persist-credentials: false
       - uses: ./controller/.github/actions/system-libraries
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          Ncpus: 2
+          use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         env:
           PKG_SYSREQS: 'false'
@@ -278,12 +278,6 @@ jobs:
           print(json.dumps(manifest, indent=2))
           PY
       - uses: r-lib/actions/setup-pandoc@v2
-      - uses: r-lib/actions/setup-r@v2
-        with:
-          r-version: ${{ matrix.config.r }}
-          http-user-agent: release
-          Ncpus: 2
-          use-public-rspm: true
       - uses: actions/checkout@v6
         if: runner.os == 'Linux'
         with:
@@ -292,6 +286,12 @@ jobs:
           persist-credentials: false
       - uses: ./controller/.github/actions/system-libraries
         if: runner.os == 'Linux'
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          http-user-agent: release
+          Ncpus: 2
+          use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         env:
           PKG_SYSREQS: 'false'
@@ -458,6 +458,8 @@ jobs:
             --repository controller --output metadata/gptr
       - uses: r-lib/actions/setup-pandoc@v2
         timeout-minutes: 10
+      - uses: ./controller/.github/actions/system-libraries
+        timeout-minutes: 10
       - uses: r-lib/actions/setup-r@v2
         timeout-minutes: 10
         with:
@@ -470,8 +472,6 @@ jobs:
           set -euo pipefail
           Rscript --vanilla controller/dev/ci/test-profile-publication.R \
             controller/dev/ci/exact-profile.R
-      - uses: ./controller/.github/actions/system-libraries
-        timeout-minutes: 10
       - uses: r-lib/actions/setup-r-dependencies@v2
         id: profile_dependencies
         timeout-minutes: 20

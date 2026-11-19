@@ -127,8 +127,9 @@ up to date with `main` and each the name of exactly one job: 12 in `R-CMD-check.
 | `callr-native-environment.yaml` | manual; push to `codex/skipped-platform-tests` that changes the callr patch, its `dev/ci` scripts, its tests or this workflow | the pinned callr patch in `upstream/` on Windows and Ubuntu | none |
 | `rhub.yaml` | manual | R-hub platforms (default `linux,windows,macos`) | none |
 
-Linux jobs install the Ubuntu system libraries of the R dependencies with the local action
-`.github/actions/system-libraries` before `setup-r-dependencies`, which runs with
+Linux jobs install, before `setup-r`, the Ubuntu packages `setup-r` installs and the system
+libraries of the R dependencies with the local action `.github/actions/system-libraries`, from an
+apt cache saved as soon as it is filled; `setup-r-dependencies` then runs with
 `PKG_SYSREQS: 'false'`, so pak adds no Chromium PPA (CI-86); R-hub's jobs use R-hub's own setup.
 `.github/actions/optional-dependencies` pins Python, Quarto and Chrome for
 `Optional-integrations.yaml` and the optional mode of `windows-by-file.yaml`.
