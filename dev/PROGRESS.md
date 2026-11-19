@@ -1,4 +1,4 @@
-## Current checkpoint — gptr 1.1.0, 2026-11-17
+## Current checkpoint — gptr 1.1.0 on CRAN, 2026-11-19
 
 gptr 1.0.0 is on CRAN (2026-11-01); 1.0.1 was not submitted, so 1.1.0 carries its fixes. `main` holds
 1.1.0 and is the only branch once this checkpoint lands: P32 was built as `claude/v1.1.0` and
@@ -70,7 +70,10 @@ main after CI.
   s, tests 41 s), installation 88 s. Submitted and confirmed on 2026-11-18 at 9:48 PM PT, on the
   maintainer's instruction to automate the submission.
 
-Next: CRAN's pretest and review of that submission.
+- CRAN published gptr 1.1.0 on 2026-11-19 at 06:20 UTC: its pretests passed on Debian and Windows
+  R-devel with no NOTE ("[CRAN-pretest-publish] ... on its way to CRAN", 10:10 PM PT).
+
+Next: none for 1.1.0; the ledger above lists what remains.
 
 ## Historical checkpoint — gptr 1.0.1, 2026-11-03
 
