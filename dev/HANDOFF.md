@@ -65,7 +65,12 @@ main after CI.
   D-371: CRAN runs the security core of the tests, 7 files instead of 38 (81% less test time); the
   rebuilt archive's checks are in `cran-comments.md` and progress/P33.md.
 
-Next: the maintainer submits `dev/release/gptr_1.1.0.tar.gz` (prepared on CRAN's form) and confirms the email link.
+- The third archive (sha256 `cacbe441…c1f4`, main a74ef740): macOS `--as-cran` with remote
+  incoming checks Status OK; win-builder Windows R-devel Status OK, check 504 s (R code checks 275
+  s, tests 41 s), installation 88 s. Submitted and confirmed on 2026-11-18 at 9:48 PM PT, on the
+  maintainer's instruction to automate the submission.
+
+Next: CRAN's pretest and review of that submission.
 
 ## Historical checkpoint — gptr 1.0.1, 2026-11-03
 

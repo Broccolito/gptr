@@ -119,11 +119,12 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 ## R CMD check results
 
 The submission archive `gptr_1.1.0.tar.gz` (sha256
-`62392f4b6992ec3e6cc84a160dc45011fce5206a0689606520d6e472a8ef88df`), built with R 4.6.1:
+`cacbe4416be5a1dd0ddc13a8120eda301290e3646c14f467191bb6b2fba1c1f4`), built with R 4.6.1:
 
 * macOS (aarch64), R 4.6.1, `R CMD check --as-cran` with CRAN's remote incoming checks: 0 errors,
   0 warnings, 0 notes.
-* win-builder, Windows R-devel: 0 errors, 0 warnings, 0 notes.
+* win-builder, Windows R-devel: 0 errors, 0 warnings, 0 notes; check time 504 s (R code checks
+  275 s, tests 41 s), installation 88 s.
 
 Every GitHub Actions check above passes on the archive's commit.
 
