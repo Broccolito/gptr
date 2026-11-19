@@ -1,5 +1,9 @@
 ## Submission
 
+This is a resubmission. The incoming pretests archived the first submission of 1.1.0 for one
+NOTE, possibly misspelled words in DESCRIPTION (Naur, Wason). This version removes that sentence
+from the Description, which now matches 1.0.0's apart from one URL; nothing else changed.
+
 This is a minor update (1.0.0 -> 1.1.0); 1.0.1 was not released on CRAN, so this update carries its
 fixes too. 1.1.0 makes each agent tool call cheaper: an object's size is computed once per version
 of it, long character data is sized from a sample and shown as an estimate, each call is classified
@@ -112,19 +116,17 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 ## R CMD check results
 
 The submission archive `gptr_1.1.0.tar.gz` (sha256
-`bd1be863fe1188c01e48b939a91a688d673901bdaffe7d0af1973ed136c0d205`), built with R 4.6.1:
+`62392f4b6992ec3e6cc84a160dc45011fce5206a0689606520d6e472a8ef88df`), built with R 4.6.1:
 
 * macOS (aarch64), R 4.6.1, `R CMD check --as-cran` with CRAN's remote incoming checks: 0 errors,
   0 warnings, 0 notes.
-* win-builder, Windows R-devel: 0 errors, 0 warnings, 1 NOTE, "Possibly misspelled words in
-  DESCRIPTION: Naur, Wason". These are the surnames of Peter Naur and Peter Wason, for whom the
-  package is named.
+* win-builder, Windows R-devel: 0 errors, 0 warnings, 0 notes.
 
 Every GitHub Actions check above passes on the archive's commit.
 
 ## Installed size
 
-The submission archive's check on macOS reports 8.2 Mb installed: R 6.1 Mb and doc 1.5 Mb. R is the
+The submission archive's check on macOS reports 8.3 Mb installed: R 6.1 Mb and doc 1.5 Mb. R is the
 byte-compiled code of 129 R files, with no data sets and no compiled code; doc holds the 15 HTML
 vignettes. Current R versions report the size as INFO; the older R 4.2 check reported it as a NOTE
 while keeping the package source.

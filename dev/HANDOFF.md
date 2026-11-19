@@ -50,15 +50,17 @@ main after CI.
   about 7 s; a gptr_user_dir() memo misses a retargeted symlinked HOME; Windows timings were not
   checked live.
 
-- Final checks of the submission archive `gptr_1.1.0.tar.gz` (sha256 `bd1be863…c0d205`, main
-  2932df99, kept in the ignored `dev/release/`): macOS R 4.6.1 `R CMD check --as-cran` with CRAN's
-  remote incoming checks Status OK, 0 notes; win-builder Windows R-devel 1 NOTE (the spelling check
-  flags Naur and Wason); `cran-comments.md` records them and the 2026-11-17 reverse-dependency run
-  (none). PR #117 fixed the two Windows CI failures of main's push: a test that assumed an in-place
+- CRAN's incoming pretests archived the first 1.1.0 submission (sha256 `bd1be863…`) for one NOTE
+  on Windows and Debian R-devel: the spelling check flagged Naur and Wason, new in DESCRIPTION
+  since 1.0.0 (CRAN flags only words the released version lacks). PR #119 removed that sentence
+  (the README and `?peter` keep the credit). The resubmission archive `gptr_1.1.0.tar.gz` (sha256
+  `62392f4b…ef88df`, main 69fe5e25, kept in the ignored `dev/release/`): macOS R 4.6.1
+  `R CMD check --as-cran` with CRAN's remote incoming checks Status OK, 0 notes; win-builder
+  Windows R-devel Status OK, 0 notes; `cran-comments.md` records them. PR #117 fixed the two Windows CI failures of main's push: a test that assumed an in-place
   edit, and a real defect (an undone case-only rename on Windows kept the wrong case while reported
   restored).
 
-Next: submit `dev/release/gptr_1.1.0.tar.gz` to CRAN (maintainer).
+Next: the maintainer submits `dev/release/gptr_1.1.0.tar.gz` (prepared on CRAN's form) and confirms the email link.
 
 ## Historical checkpoint — gptr 1.0.1, 2026-11-03
 
