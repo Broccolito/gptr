@@ -41,16 +41,7 @@ if (identical(Sys.getenv("NOT_CRAN"), "true") &&
     }
   })
 } else if (!identical(Sys.getenv("NOT_CRAN"), "true")) {
-  cran = c(
-    "aaa-state", "agent-run", "auth-redact", "auth-secrets", "bridge-sh", "ckpt-partial",
-    "ckpt-rewind", "ckpt-scan", "ckpt-scan-integration",
-    "cli-claude", "cli-codex", "console-render", "console-repl", "env-describe", "eval-core",
-    "ext-builtins", "ext-check", "gptr-capture", "http-reactor", "json-schema", "mcp-client",
-    "perm-classify", "perm-gate", "perm-plan", "perm-rules", "proc-spawn", "prompt-compact",
-    "provider-google", "provider-openai-completions", "provider-openai-responses", "s1-client",
-    "s1-route", "subagent-worker", "tool-edit", "tool-namespace", "tool-read", "utils-options",
-    "zzz"
-  )
+  cran = c("aaa-state", "auth-redact", "auth-secrets", "perm-gate", "perm-plan", "perm-rules", "zzz")
   test_check("gptr", filter = paste0("^(", paste(cran, collapse = "|"), ")$"))
 } else {
   test_check("gptr")
