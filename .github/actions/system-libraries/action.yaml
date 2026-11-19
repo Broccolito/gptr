@@ -10,11 +10,16 @@ runs:
     # (70 MB in 7 minutes on 2026-11-03) then costs only the first job of an image
     - id: image
       shell: bash
-      run: echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      run: |
+        echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
+        echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+    # a new runner image or package list starts from the newest archives of the same Ubuntu
+    # release, so apt downloads only what changed (each job downloaded all 78 MB on 2026-11-19)
     - uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/apt-archives
         key: apt-${{ steps.image.outputs.image }}-${{ hashFiles('.github/actions/system-libraries/action.yaml') }}
+        restore-keys: apt-${{ steps.image.outputs.os }}-
     - name: Install the R dependencies' system libraries
       shell: bash
       run: |
