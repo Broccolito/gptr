@@ -5,14 +5,43 @@
 # Adapted from dev/research/07-anthropic-api-claude-plan.md 5.5-5.6 (the transport-agnostic
 # dispatcher, verified live) and dev/research/16-mcp-skills-plugins.md 5.9 (dual-era answers).
 
-#' The tools gptr serves
+#' The tools gptr serves: `inspect` is `r` limited to level-0 code (mcp_inspect_refusal())
 #' @noRd
-mcp_default_tools = function() c("r", "read", "edit", "write")
+mcp_default_tools = function() c("inspect", "r", "read", "edit", "write")
 
-#' The server's instructions
+#' The registered tool behind a served name
 #' @noRd
-mcp_server_instructions = paste("Tools run inside the user's live R session; objects persist.",
-                                "Every call passes the user's permission settings.")
+mcp_tool_of = function(name) if (identical(name, "inspect")) "r" else name
+
+#' The served `inspect` tool's description
+#' @noRd
+mcp_inspect_description = paste(
+  "Evaluate R code that only reads, such as ls.str(), str(x), summary(x), head(x) or",
+  "peter$describe(x), in the live session. Runs only code gptr classifies as read-only (risk",
+  "level 0) and refuses anything else without running it; use r for that.")
+
+#' The server's instructions: short for gptr's own CLI routes (`target$tools` is NULL), whose
+#' system prompt carries the r tool's guidelines; for an outside client of gptr_mcp_serve() that
+#' is served `r` or `inspect`, those guidelines and how to work in the user's session
+#' @noRd
+mcp_server_instructions = function(target) {
+  tools = target$tools
+  short = paste("Tools run inside the user's live R session; objects persist.",
+                "Every call passes the user's permission settings.")
+  if (!any(c("inspect", "r") %in% tools)) return(short)
+  guide = registry_get("tool", "r", session = session_data(target$session)$id)$guidelines
+  paste(c("Tools run inside the user's live R session, where the user's data is already loaded;",
+          "objects persist and belong to the user.",
+          if ("r" %in% tools && length(guide)) paste0(guide, "."),
+          if ("inspect" %in% tools) {
+            paste("Use inspect to look (ls.str(), str(x), peter$describe(x)) before changing",
+                  "anything: it runs only code gptr classifies as read-only.")
+          },
+          "Change objects in place under their names; a new R process, such as Rscript from a",
+          "shell, does not have them. Every call passes the user's permission settings: when one",
+          "is refused, tell the user what the refusal says they can do, and do not reword the",
+          "code to get around it."), collapse = " ")
+}
 
 #' The schema of the served `r` tool: no person watches an MCP caller, so it offers the
 #' best-effort timeout (IC-68)
@@ -24,14 +53,15 @@ mcp_r_schema = list(type = "object", required = I("code"), properties = list(
 
 #' tools/list entries of the served tools: the session's frozen tool array, the declarations an
 #' API provider gets (IC-79), when `target$tools` is NULL and the session froze one; else the
-#' registered specs of `target$tools` (gptr_mcp_serve()) or of the four defaults. `r` offers
-#' mcp_r_schema.
+#' registered specs of `target$tools` (gptr_mcp_serve()) or of the defaults. `r` and `inspect`
+#' offer mcp_r_schema; `inspect`, served by the `r` tool, is read-only.
 #' @noRd
 mcp_served_tools = function(target) {
   d = session_data(target$session)
   frozen = if (is.null(target$tools)) d$frozen$tools_json
   decls = if (is.null(frozen)) {
     lapply(target$tools %||% mcp_default_tools(), function(nm) {
+      if (identical(nm, "inspect")) return(list(name = nm, description = mcp_inspect_description))
       spec = registry_get("tool", nm, session = d$id)
       list(name = nm, description = spec$description, input_schema = spec$parameters)
     })
@@ -40,10 +70,10 @@ mcp_served_tools = function(target) {
   }
   out = list()
   for (decl in decls) {
-    spec = registry_get("tool", decl$name, session = d$id)
-    schema = if (identical(decl$name, "r")) mcp_r_schema else decl$input_schema
+    spec = registry_get("tool", mcp_tool_of(decl$name), session = d$id)
+    schema = if (decl$name %in% c("r", "inspect")) mcp_r_schema else decl$input_schema
     if (is.null(spec) || !is.list(schema)) next
-    ro = isTRUE(spec$annotations$read_only)
+    ro = identical(decl$name, "inspect") || isTRUE(spec$annotations$read_only)
     out[[length(out) + 1L]] = list(name = decl$name, description = decl$description,
                                    inputSchema = schema,
                                    annotations = list(readOnlyHint = ro, destructiveHint = !ro,
@@ -108,11 +138,11 @@ mcp_dispatch_impl = function(msg, target) {
       pv = params$protocolVersion
       list(protocolVersion = if (isTRUE(pv %in% v$legacy)) pv else v$legacy[1L],
            capabilities = caps, serverInfo = mcp_client_info(),
-           instructions = mcp_server_instructions)
+           instructions = mcp_server_instructions(target))
     },
     ping = json_obj(),
     "server/discover" = list(supportedVersions = I(v$modern), capabilities = caps,
-                             instructions = mcp_server_instructions),
+                             instructions = mcp_server_instructions(target)),
     "tools/list" = list(tools = mcp_served_tools(target)),
     "tools/call" = {
       name = params$name
@@ -228,11 +258,12 @@ mcp_serve_call = function(target, name, args, id, schema) {
 #' Run one served tool call, validated against its served `schema`, through the tool_call hooks of
 #' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result. Its risk is call_risk()'s
 #' (for `r` without a run, the classifier's in the served environment), classified again for the
-#' gate unless tool_call_hook() kept it (D-359), then the gate's (D-358). A tool other than
-#' `r` runs as the agent loop runs it (tool_run(): its record's source, the result check), a
-#' reported one (`st`, which marks the start of its execution) in the run's tool frame
-#' (tool_execute_frame()). A reported call runs between the checkpointers' before and after, as
-#' dispatch_steps() runs one. Its child waits cannot reenter later callbacks or sibling tools,
+#' gate unless tool_call_hook() kept it (D-359), then the gate's (D-358). `inspect` is a call of
+#' the `r` tool, gated as one and refused, before and after the gate, unless its risk is level 0.
+#' A tool other than `r` runs as the agent loop runs it (tool_run(): its record's source, the
+#' result check), a reported one (`st`, which marks the start of its execution) in the run's tool
+#' frame (tool_execute_frame()). A reported call runs between the checkpointers' before and after,
+#' as dispatch_steps() runs one. Its child waits cannot reenter later callbacks or sibling tools,
 #' even when entered at idle.
 #' @noRd
 mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
@@ -254,7 +285,8 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   }
   ctx = live$ctx
   sid = session_data(s)$id
-  spec = registry_get("tool", name, session = sid)
+  tool = mcp_tool_of(name)
+  spec = registry_get("tool", tool, session = sid)
   if (is.null(spec) || !is.function(spec$execute)) {
     return(gptr_tool_result(paste("Tool", name, "not found"), is_error = TRUE))
   }
@@ -265,13 +297,13 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   }
   input = v$input
   env = mcp_serve_envir(target, run, ctx$mode())
-  if (identical(name, "r") && !is.environment(env)) {
+  if (identical(tool, "r") && !is.environment(env)) {
     return(gptr_tool_result("This session has no environment to evaluate R code in.",
                             is_error = TRUE))
   }
-  call = list(id = paste0("mcp_", id), name = name, input = input, tool = spec, nested = FALSE,
+  call = list(id = paste0("mcp_", id), name = tool, input = input, tool = spec, nested = FALSE,
               envir = env)
-  call$risk = if (is.null(run) && identical(name, "r")) {
+  call$risk = if (is.null(run) && identical(tool, "r")) {
     ext_service_get("risk.classify")(input$code, envir = env, root = project_root(), kind = "r")
   } else {
     call_risk(call, ctx, run)
@@ -282,6 +314,8 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     return(gptr_tool_result(call$blocked, is_error = TRUE))
   }
   call$risk = call$risk %||% call_risk(call, ctx, run)
+  refused = mcp_inspect_refusal(name, call$risk, st)
+  if (!is.null(refused)) return(refused)
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
     if (!is.null(st)) st$refused = perm_refused(d) %||% "not allowed"
@@ -290,6 +324,8 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   }
   if (is.list(d$input)) call$input = d$input
   call$risk = d$risk %||% call$risk
+  refused = mcp_inspect_refusal(name, call$risk, st)
+  if (!is.null(refused)) return(refused)
   tokens = NULL
   if (!is.null(st)) {
     tokens = checkpoint_before(run, call, ctx)
@@ -300,7 +336,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   on.exit({
     reactor$tool_depth = reactor$tool_depth - 1L
   }, add = TRUE)
-  res = if (identical(name, "r")) {
+  res = if (identical(tool, "r")) {
     call$approved_level = as.integer(call$risk$level %||% 2L)
     mcp_serve_r(call, env, run, s, ctx)
   } else if (is.null(st)) {
@@ -311,6 +347,18 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     tool_execute_frame(run, call, ctx)
   }
   checkpoint_after(run, call, ctx, tokens, res)
+}
+
+#' The refusal of a served `inspect` call whose risk is above level 0 (marking a reported call's
+#' `st` refused), or NULL
+#' @noRd
+mcp_inspect_refusal = function(name, risk, st = NULL) {
+  level = as.integer(risk$level %||% 2L)
+  if (!identical(name, "inspect") || identical(level, 0L)) return(NULL)
+  if (!is.null(st)) st$refused = "inspect runs level-0 code only"
+  gptr_tool_result(paste0("inspect runs only code gptr classifies as read-only (level 0); this ",
+                          "code is level ", level, " (", risk$label %||% "unclassified", "). ",
+                          "Use r for it. Nothing in this call ran."), is_error = TRUE)
 }
 
 #' Evaluate the served r call `call` in `env` through the eval.r service (the evaluator kind,
@@ -495,7 +543,10 @@ mcp_serve_start = function(port = NULL) {
   }
   st$port = as.integer(p)
   st$url = paste0("http://127.0.0.1:", st$port, "/mcp")
+  st$started = with_calendar_preserved(format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC"))
   st$job = paste0("mcp-serve-", st$port)
+  # R's exit runs no unload hook: the discovery record goes with the process (onexit)
+  reg.finalizer(st, mcp_advertise_withdraw, onexit = TRUE)
   job_add("mcp_serve", st$job, paste("MCP server", st$url), pid = Sys.getpid(),
           stop = mcp_serve_stop)
   the$mcp_server = st
@@ -511,6 +562,7 @@ mcp_serve_stop = function() {
   if (is.null(st)) return(invisible(FALSE))
   tokens = the$mcp_tokens
   st$stopping = TRUE
+  mcp_advertise_withdraw(st)
   condition = tryCatch({
     with_seed_preserved(httpuv::stopServer(st$srv))
     NULL
@@ -622,6 +674,75 @@ mcp_http_route = function(st, req) {
   mcp_http_resp(200L, mcp_json(mcp_dispatch(msg, target)), extra)
 }
 
+# ---- the discovery record (advertise) ----------------------------------------------------------
+
+#' The folder of discovery records, `R_user_dir("gptr", "cache")/mcp-serve`. No option moves it,
+#' so every record's path ends in `R/gptr/mcp-serve/serve-<pid>.json`, which a credential-file
+#' rule (gptr's own scan_env_file_re, an agent's shell guard) can match.
+#' @noRd
+mcp_advertise_dir = function(create = FALSE) {
+  file.path(gptr_user_dir("cache", create = create), "mcp-serve")
+}
+
+#' Write the discovery record of the running server `st` (again, when it has one) under `label`
+#' (TRUE: the working folder's name), so local clients find it without copying its address and
+#' token: `serve-<pid>.json`, written by rename, 0600 in a folder made 0700 on Unix (Windows: the
+#' profile's ACL). Removed at stop and unload (mcp_serve_stop()), at R's exit (the finalizer)
+#' and, once this process is gone, by the next load's mcp_advertise_prune(). The token is written
+#' only to the record; a failure's message is redacted.
+#' @noRd
+mcp_advertise = function(st, label) {
+  wd = getwd()
+  rec = list(format = 1L, pid = Sys.getpid(), url = st$url, port = st$port,
+             token = secret_value(st$handle$token, st$url), started = st$started, wd = wd,
+             label = if (isTRUE(label)) basename(wd) else label,
+             mode = session_data(st$user$session)$mode, tools = I(st$user$tools),
+             r_version = as.character(getRversion()), gptr_version = mcp_client_info()$version,
+             front_end = front_end())
+  dir = mcp_advertise_dir(create = TRUE)
+  path = file.path(dir, paste0("serve-", Sys.getpid(), ".json"))
+  why = tryCatch({
+    dir.create(dir, showWarnings = FALSE, mode = "0700")
+    if (!is_windows() && !isTRUE(Sys.chmod(dir, "0700", use_umask = FALSE))) {
+      paste0("the folder ", dir, " cannot be made private")
+    } else {
+      write_atomic(path, json_encode(rec))
+      NULL
+    }
+  }, error = function(e) conditionMessage(e))
+  if (!is.null(why)) {
+    gptr_abort(paste0("The MCP server runs at ", st$url, ", but local clients cannot find it: ",
+                      "its discovery record was not written (", redact(why, "context"), "). ",
+                      "Retry with gptr_mcp_serve(advertise = TRUE), or stop the server with ",
+                      "gptr_mcp_serve(stop = TRUE)."), "io", path = path)
+  }
+  st$record = path
+  invisible(path)
+}
+
+#' Remove the discovery record of the server `st`, if it wrote one (mcp_serve_stop(), and the
+#' finalizer at R's exit)
+#' @noRd
+mcp_advertise_withdraw = function(st) {
+  if (!is.null(st$record)) unlink(st$record)
+  st$record = NULL
+  invisible(NULL)
+}
+
+#' Remove the discovery records of R processes that are gone (a crash, a kill); returns how many.
+#' While R CMD check runs examples, the user's cache is not read (as proc_dir()).
+#' @noRd
+mcp_advertise_prune = function() {
+  if (check_running() && !is_testthat()) return(invisible(0L))
+  files = list.files(mcp_advertise_dir(), pattern = "^serve-[0-9]+[.]json$", full.names = TRUE)
+  pid = suppressWarnings(as.integer(sub("^serve-([0-9]+)[.]json$", "\\1", basename(files))))
+  gone = !vapply(pid, pid_alive, NA)
+  unlink(files[gone])
+  invisible(sum(gone))
+}
+
+on_load(mcp_advertise_prune())
+
 # ---- handles, snippets and the exported server -------------------------------------------------
 
 #' Client snippets for Codex, Claude Code, Claude Desktop and Cursor, each with a tool timeout of
@@ -665,12 +786,15 @@ mcp_handle_new = function(st, tok, stop) {
 
 #' Serve the live R session to other agents over MCP
 #'
-#' Starts an MCP server inside this R session that offers `r`, `read`, `edit` and `write` to
-#' agents such as Codex, Claude Code, Claude Desktop or Cursor. It listens only on 127.0.0.1,
-#' requires a 192-bit bearer token, rejects foreign browser origins, and runs every call through
-#' your permission settings; R code evaluates in `envir`, where its objects persist. The calls
-#' belong to a dedicated gptr session whose permission mode is the configured default when the
-#' server starts, independently of a chat's explicit mode; like any new session, it becomes
+#' Starts an MCP server inside this R session that offers `inspect`, `r`, `read`, `edit` and
+#' `write` to agents such as Codex, Claude Code, Claude Desktop, Cursor or Biorouter. It listens
+#' only on 127.0.0.1, requires a 192-bit bearer token, rejects foreign browser origins, and runs
+#' every call through your permission settings; R code evaluates in `envir`, where its objects
+#' persist. `inspect` runs R code only when gptr classifies it as read-only (risk level 0, see
+#' [gptr_risk()]) and refuses anything else without running it, so a client may run it without
+#' asking you; `r` runs whatever your permission settings allow. The calls belong to a dedicated
+#' gptr session whose permission mode is `mode`, or the configured default when the server
+#' starts, independently of a chat's explicit mode; like any new session, it becomes
 #' [gptr_last()]. A running server keeps its original workspace and mode until stopped.
 #' Requests are answered at R's top-level idle prompt or during an outermost gptr wait. Serving
 #' pauses while Peter's own prompt waits (in every console), while other R code runs and during a
@@ -689,13 +813,30 @@ mcp_handle_new = function(st, tok, stop) {
 #' in `$env`). One server runs per R process. Needs 'httpuv', 'later' and 'openssl'; gptr's own
 #' codex route does not use this server.
 #'
+#' With `advertise = TRUE`, or a label, the server also writes a discovery record so local clients
+#' (Biorouter's gptr Agent, for example) find this session without your copying its address and
+#' token: `serve-<pid>.json` in `file.path(tools::R_user_dir("gptr", "cache"), "mcp-serve")`. It
+#' holds the address, the token, R's process id, the working folder, the label (by default the
+#' folder's name), the mode, the served tools and the R, gptr and front-end versions. On Unix it
+#' is readable only by you (mode 0600 in a folder of mode 0700); on Windows your user profile's
+#' permissions protect it. gptr removes it when the server stops, when gptr is unloaded and when
+#' R exits, and removes the records of R processes that are gone when it next loads. Any program
+#' running as you can read the record, as it can your other credential files: its path always
+#' ends in `R/gptr/mcp-serve/serve-<pid>.json`, which a tool that keeps credential files from
+#' agents can match, and gptr's permission gate treats reading it as reading a secret.
+#'
 #' If shutdown cannot be confirmed, access is revoked and the server is retained for retry.
 #' Call `gptr_mcp_serve(stop = TRUE)` again; new requests are refused until shutdown completes.
 #'
-#' @param tools The tools to serve: a subset of `c("r", "read", "edit", "write")`.
+#' @param tools The tools to serve: a subset of `c("inspect", "r", "read", "edit", "write")`.
 #' @param envir Where served R code evaluates and its objects persist.
 #' @param port A port, or `NULL` for a free one.
 #' @param stop `TRUE` to stop the server.
+#' @param mode The permission mode of the server's session: `"plan"`, `"manual"`, `"edits"` or
+#'   `"auto"`; `NULL` for the configured default. A running server keeps its mode: another one is
+#'   an error until the server is stopped.
+#' @param advertise `TRUE` to write the discovery record for local clients, or a label (a string)
+#'   to show them; `FALSE` writes none. Advertising a running server writes its record.
 #' @return A `gptr_mcp_handle` with `$url`, `$port`, `$token_env`, `$config` and `$stop()`;
 #'   calling again returns the running handle; with `stop = TRUE`, `invisible(NULL)`.
 #' @examples
@@ -703,52 +844,74 @@ mcp_handle_new = function(st, tok, stop) {
 #'   h = gptr_mcp_serve(envir = new.env())
 #'   h$config$codex
 #'   gptr_mcp_serve(stop = TRUE)
+#'   # let a local client such as Biorouter find the session, and let it change objects
+#'   gptr_mcp_serve(envir = globalenv(), mode = "auto", advertise = TRUE)
+#'   gptr_mcp_serve(stop = TRUE)
 #' }
 #' @export
-gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = parent.frame(),
-                          port = NULL, stop = FALSE) {
+gptr_mcp_serve = function(tools = c("inspect", "r", "read", "edit", "write"),
+                          envir = parent.frame(), port = NULL, stop = FALSE, mode = NULL,
+                          advertise = FALSE) {
   if (!is.character(tools) || !length(tools) || !all(tools %in% mcp_default_tools())) {
-    arg_abort(tools, "tools", "a subset of \"r\", \"read\", \"edit\" and \"write\"")
+    arg_abort(tools, "tools",
+              "a subset of \"inspect\", \"r\", \"read\", \"edit\" and \"write\"")
   }
   check_env(envir, "envir")
   port = check_number(port, "port", min = 1, max = 65535, int = TRUE, null = TRUE)
   check_flag(stop, "stop")
+  if (!is.null(mode)) check_choice(mode, c("plan", "manual", "edits", "auto"), "mode")
+  if (!isTRUE(advertise) && !isFALSE(advertise) &&
+        !(rlang::is_string(advertise) && nzchar(advertise))) {
+    arg_abort(advertise, "advertise", "TRUE, FALSE or a label (a single non-empty string)")
+  }
   if (stop) {
     ext_control_guard("gptr_mcp_serve")
     mcp_serve_stop()
     return(invisible(NULL))
   }
-  mcp_serve_open(envir, setting_get("mode", default = "manual"), unique(tools), port)
+  running = the$mcp_server$user$session
+  if (!is.null(mode) && !is.null(running) && !identical(session_data(running)$mode, mode)) {
+    arg_abort(mode, "mode", paste0("NULL or \"", session_data(running)$mode,
+                                   "\", the mode of the running MCP server"))
+  }
+  mcp_serve_open(envir, mode %||% setting_get("mode", default = "manual"), unique(tools), port,
+                 advertise)
 }
 
 #' Start the server with a dedicated session in `mode` (the configured default, or the chat's
-#' for /mcp serve, so a session-scope setting never loosens it), or return the running handle,
-#' which keeps its workspace and mode
+#' for /mcp serve, so a session-scope setting never loosens it), or take the running one, which
+#' keeps its workspace and mode; `advertise` (TRUE or a label) writes its discovery record
 #' @noRd
-mcp_serve_open = function(envir, mode, tools = mcp_default_tools(), port = NULL) {
+mcp_serve_open = function(envir, mode, tools = mcp_default_tools(), port = NULL,
+                          advertise = FALSE) {
   ext_control_guard("gptr_mcp_serve")
   if (isTRUE(the$mcp_server$stopping)) {
     gptr_abort("The MCP server is stopping; retry its stop before serving new requests.",
                "not_available", member = "mcp_serve")
   }
-  if (!is.null(the$mcp_server$handle)) return(the$mcp_server$handle)
-  st = mcp_serve_start(port)
-  st$envir = envir
-  # the dedicated session (contract 6.3, IC-58; P01's arch_contract_edges() admits this edge),
-  # with a placeholder model, since it never sends a request
-  s = session_new(setting_get("model", default = "mcp/serve"), mode, home = envir, kind = "chat")
-  tok = mcp_serve_token(s, tools)
-  st$user = list(key = tok$key, session = s)
-  st$handle = mcp_handle_new(st, tok, mcp_serve_stop)
-  if (!gptr_is_interactive()) {
-    gptr_inform(paste("R has no idle prompt in a script, document or Jupyter kernel: the MCP",
-                      "server answers only during gptr waits such as peter$sh() or gptr_wait(),",
-                      "not between them or between Jupyter cells."), "notice")
+  st = the$mcp_server
+  if (is.null(st$handle)) {
+    st = mcp_serve_start(port)
+    st$envir = envir
+    # the dedicated session (contract 6.3, IC-58; P01's arch_contract_edges() admits this edge),
+    # with a placeholder model, since it never sends a request
+    s = session_new(setting_get("model", default = "mcp/serve"), mode, home = envir,
+                    kind = "chat")
+    tok = mcp_serve_token(s, tools)
+    st$user = list(key = tok$key, session = s, tools = tools)
+    st$handle = mcp_handle_new(st, tok, mcp_serve_stop)
+    if (!gptr_is_interactive()) {
+      gptr_inform(paste("R has no idle prompt in a script, document or Jupyter kernel: the MCP",
+                        "server answers only during gptr waits such as peter$sh() or",
+                        "gptr_wait(), not between them or between Jupyter cells."), "notice")
+    }
   }
+  if (!isFALSE(advertise)) mcp_advertise(st, advertise)
   st$handle
 }
 
-#' Print a server handle (never the token), with the mode of its dedicated session while it runs
+#' Print a server handle (never the token), with the mode of its dedicated session and its
+#' discovery record while it runs
 #'
 #' @param x A `gptr_mcp_handle`.
 #' @param ... Ignored.
@@ -756,15 +919,16 @@ mcp_serve_open = function(envir, mode, tools = mcp_default_tools(), port = NULL)
 #' @export
 #' @noRd
 print.gptr_mcp_handle = function(x, ...) {
-  s = if (identical(the$mcp_server$handle, x)) the$mcp_server$user$session
-  mode = if (!is.null(s)) {
-    paste0("mode: ", session_data(s)$mode, "; calls that need approval are refused (set the ",
-           "mode, then restart the server to change it)")
+  st = if (identical(the$mcp_server$handle, x)) the$mcp_server
+  mode = if (!is.null(st$user$session)) {
+    paste0("mode: ", session_data(st$user$session)$mode, "; calls that need approval are ",
+           "refused (stop the server and start it with gptr_mcp_serve(mode = ) to change it)")
   }
   msg_verbatim(c(paste0("<gptr MCP server> ", x$url),
                  paste0("token: inside the $config snippets, printed redacted (as.character() ",
                         "gives the text; $config$codex passes it as ", x$token_env, ")"),
                  mode,
+                 if (!is.null(st$record)) paste0("advertised to local clients: ", st$record),
                  paste0("config: ", paste(names(x$config), collapse = ", ")),
                  "stop: $stop() or gptr_mcp_serve(stop = TRUE)"))
   invisible(x)

@@ -835,7 +835,8 @@ test_that("gptr_mcp_serve() binds 127.0.0.1, needs the token, checks Origin and 
   ok = mcp_test_post(h$url, lst, token = h$token,
                      headers = list(Origin = paste0("http://localhost:", h$port)))
   expect_identical(ok$status, 200L)
-  expect_identical(vapply(ok$json$result$tools, `[[`, "", "name"), c("r", "read", "edit", "write"))
+  expect_identical(vapply(ok$json$result$tools, `[[`, "", "name"),
+                   c("inspect", "r", "read", "edit", "write"))
   bad_hdr = mcp_test_post(h$url, lst, token = h$token, headers = list(`Mcp-Method` = "tools/call"))
   expect_identical(bad_hdr$status, 400L)
   req = list(PATH_INFO = "/mcp", REQUEST_METHOD = "POST",
@@ -921,7 +922,7 @@ test_that("both client eras work against gptr's own server, legacy sessions incl
     conn = mcp_connect(spec)
     expect_identical(conn$era, era)
     expect_identical(vapply(mcp_tools(conn), function(t) t$name, ""),
-                     c("r", "read", "edit", "write"))
+                     c("inspect", "r", "read", "edit", "write"))
     res = mcp_call(conn, "r", list(code = paste0("v_", era, " = 2 * 21")))
     expect_false(res$is_error)
     mcp_close(conn)

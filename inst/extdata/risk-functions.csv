@@ -308,6 +308,7 @@
 "base","getNamespaceExports",0,"read","",""
 "base","getOption",0,"read","",""
 "base","getRversion",0,"read","",""
+"base","geterrmessage",0,"read","",""
 "base","gettext",0,"read","",""
 "base","gettextf",0,"read","",""
 "base","getwd",0,"read","",""

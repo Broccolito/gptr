@@ -5,32 +5,44 @@
 \title{Serve the live R session to other agents over MCP}
 \usage{
 gptr_mcp_serve(
-  tools = c("r", "read", "edit", "write"),
+  tools = c("inspect", "r", "read", "edit", "write"),
   envir = parent.frame(),
   port = NULL,
-  stop = FALSE
+  stop = FALSE,
+  mode = NULL,
+  advertise = FALSE
 )
 }
 \arguments{
-\item{tools}{The tools to serve: a subset of \code{c("r", "read", "edit", "write")}.}
+\item{tools}{The tools to serve: a subset of \code{c("inspect", "r", "read", "edit", "write")}.}
 
 \item{envir}{Where served R code evaluates and its objects persist.}
 
 \item{port}{A port, or \code{NULL} for a free one.}
 
 \item{stop}{\code{TRUE} to stop the server.}
+
+\item{mode}{The permission mode of the server's session: \code{"plan"}, \code{"manual"}, \code{"edits"} or
+\code{"auto"}; \code{NULL} for the configured default. A running server keeps its mode: another one is
+an error until the server is stopped.}
+
+\item{advertise}{\code{TRUE} to write the discovery record for local clients, or a label (a string)
+to show them; \code{FALSE} writes none. Advertising a running server writes its record.}
 }
 \value{
 A \code{gptr_mcp_handle} with \verb{$url}, \verb{$port}, \verb{$token_env}, \verb{$config} and \verb{$stop()};
 calling again returns the running handle; with \code{stop = TRUE}, \code{invisible(NULL)}.
 }
 \description{
-Starts an MCP server inside this R session that offers \code{r}, \code{read}, \code{edit} and \code{write} to
-agents such as Codex, Claude Code, Claude Desktop or Cursor. It listens only on 127.0.0.1,
-requires a 192-bit bearer token, rejects foreign browser origins, and runs every call through
-your permission settings; R code evaluates in \code{envir}, where its objects persist. The calls
-belong to a dedicated gptr session whose permission mode is the configured default when the
-server starts, independently of a chat's explicit mode; like any new session, it becomes
+Starts an MCP server inside this R session that offers \code{inspect}, \code{r}, \code{read}, \code{edit} and
+\code{write} to agents such as Codex, Claude Code, Claude Desktop, Cursor or Biorouter. It listens
+only on 127.0.0.1, requires a 192-bit bearer token, rejects foreign browser origins, and runs
+every call through your permission settings; R code evaluates in \code{envir}, where its objects
+persist. \code{inspect} runs R code only when gptr classifies it as read-only (risk level 0, see
+\code{\link[=gptr_risk]{gptr_risk()}}) and refuses anything else without running it, so a client may run it without
+asking you; \code{r} runs whatever your permission settings allow. The calls belong to a dedicated
+gptr session whose permission mode is \code{mode}, or the configured default when the server
+starts, independently of a chat's explicit mode; like any new session, it becomes
 \code{\link[=gptr_last]{gptr_last()}}. A running server keeps its original workspace and mode until stopped.
 Requests are answered at R's top-level idle prompt or during an outermost gptr wait. Serving
 pauses while Peter's own prompt waits (in every console), while other R code runs and during a
@@ -50,6 +62,18 @@ in \verb{$env}). One server runs per R process. Needs 'httpuv', 'later' and 'ope
 codex route does not use this server.
 }
 \details{
+With \code{advertise = TRUE}, or a label, the server also writes a discovery record so local clients
+(Biorouter's gptr Agent, for example) find this session without your copying its address and
+token: \verb{serve-<pid>.json} in \code{file.path(tools::R_user_dir("gptr", "cache"), "mcp-serve")}. It
+holds the address, the token, R's process id, the working folder, the label (by default the
+folder's name), the mode, the served tools and the R, gptr and front-end versions. On Unix it
+is readable only by you (mode 0600 in a folder of mode 0700); on Windows your user profile's
+permissions protect it. gptr removes it when the server stops, when gptr is unloaded and when
+R exits, and removes the records of R processes that are gone when it next loads. Any program
+running as you can read the record, as it can your other credential files: its path always
+ends in \verb{R/gptr/mcp-serve/serve-<pid>.json}, which a tool that keeps credential files from
+agents can match, and gptr's permission gate treats reading it as reading a secret.
+
 If shutdown cannot be confirmed, access is revoked and the server is retained for retry.
 Call \code{gptr_mcp_serve(stop = TRUE)} again; new requests are refused until shutdown completes.
 }
@@ -57,6 +81,9 @@ Call \code{gptr_mcp_serve(stop = TRUE)} again; new requests are refused until sh
 if (interactive() && rlang::is_installed(c("httpuv", "later", "openssl"))) {
   h = gptr_mcp_serve(envir = new.env())
   h$config$codex
+  gptr_mcp_serve(stop = TRUE)
+  # let a local client such as Biorouter find the session, and let it change objects
+  gptr_mcp_serve(envir = globalenv(), mode = "auto", advertise = TRUE)
   gptr_mcp_serve(stop = TRUE)
 }
 }
