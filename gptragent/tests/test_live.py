@@ -121,6 +121,14 @@ class LiveTests(unittest.TestCase):
         self.assertIn("cohort", text)
         self.assertIn("200 obs", text)
         self.assertIn("Last traceback", text)
+        self.assertNotIn("could not run in full", text)
+
+    def test_sessions_after_an_error_at_the_prompt_shows_it(self):
+        self.send('boom_at_prompt = function() stop("boom from the prompt"); boom_at_prompt()')
+        text = text_of(self.bridge.call("sessions", {}))
+        self.assertNotIn("could not run in full", text)
+        self.assertIn("boom_at_prompt", text)
+        self.send("rm(boom_at_prompt)")
 
     def test_inspect_reads_the_object_in_memory(self):
         result = self.bridge.call("inspect", {"code": "str(cohort); table(cohort$sex)"})

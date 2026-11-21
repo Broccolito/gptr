@@ -221,7 +221,8 @@ class SeveralSessionTests(BridgeCase):
         self.assertIn("2 R sessions", text)
         self.assertIn('"cohort-study", pid 301', text)
         self.assertIn('"other", pid 302', text)
-        self.assertIn("Ask the user which one", text)
+        self.assertIn("ask the user which session", text)
+        self.assertIn("Do not choose by folder", text)
         self.assertIsNone(bridge.attached)
 
     def test_a_call_without_a_choice_asks_instead_of_guessing(self):

@@ -40,13 +40,17 @@ PROBE_TTL = 60.0
 INSTRUCTIONS = (
     "These tools work inside an R session the user already has open, with their data loaded. "
     "Objects persist and belong to the user. Work in the session the user has open: call "
-    "sessions first, and if several are listed, ask which one unless the user named it. Use "
+    "sessions first, and if several are listed, ask the user which one unless they named it: do "
+    "not choose one yourself by its folder or label, and never mix objects across sessions. Use "
     "inspect to look (ls.str(), str(x), head(x), summary(x), peter$describe(x)) before "
     "computing; never reload or recompute data that is already in memory (no read.csv(), "
     "readRDS() or load() of it); assign results to names and print compact summaries, not whole "
     "objects. Use r only for changes, and change objects in place under their existing names. "
     "gptr's permission settings decide every call: when a call is refused, tell the user the line "
-    "the refusal names, once, and do not reword the code to get around it. Do not run R through "
+    "the refusal names, once, and do not reword the code to get around it. When fixing an error "
+    "needs a choice only the user can make (a missing column, which variable to use, where a "
+    "result should go), ask one precise question instead of guessing, and never overwrite a "
+    "different existing object as a stand-in. Do not run R through "
     "the shell (Rscript, R -e) for work on these objects: a new R process does not have them. "
     "Keep each call under four minutes; when a call times out, R may still be running it, so do "
     "not run it again: check with inspect, and tell the user they can stop it with Esc or Ctrl-C "
@@ -132,9 +136,14 @@ OVERVIEW_CODE = "\n".join([
     'traceback()',
 ])
 # geterrmessage() also holds errors that code caught on its own; shown only after a real error
-OVERVIEW_ERROR_LINE = 'if (!is.null(.Traceback)) cat("Last error message:", geterrmessage(), "\\n")'
+OVERVIEW_ERROR_LINE = ('if (exists(".Traceback")) cat("Last error message:", geterrmessage(), "\\n(The traceback '
+                       'shows the failing calls, not the name the result was being assigned to.)\\n")')
 
 RISK_MARK = "GPTRAGENT-RISK"
+SEVERAL_ASK = ("Stop and ask the user which session to work in, naming each by its label and folder, "
+               "unless the user already named one. Do not choose by folder, label or what the objects "
+               "look like, and do not look for data files instead. Then call sessions with attach and "
+               "that pid. Never mix objects across sessions.")
 
 
 def r_string(text: str) -> str:
@@ -278,8 +287,7 @@ class Bridge:
         if not live:
             raise Unavailable(self.setup_text(found))
         raise Unavailable("Several R sessions are serving gptr:\n" + self._listing(live, None)
-                          + "\nAsk the user which one to work in (by its label or folder) unless "
-                          "they said, then call sessions with attach and that pid.")
+                          + "\n" + SEVERAL_ASK)
 
     # ---- the setup line -----------------------------------------------------------------
 
@@ -498,8 +506,7 @@ class Bridge:
             tail = ("\nThis chat is attached to the session marked [attached]. To work in another, "
                     "call sessions with attach and its pid.")
         else:
-            tail = ("\nAsk the user which one to work in (by its label or folder) unless they said, "
-                    "then call sessions with attach and that pid. Never mix objects across sessions.")
+            tail = "\n" + SEVERAL_ASK
         return text_result(f"{len(live)} R sessions are serving gptr:\n{listing}{tail}")
 
     def _with_overview(self, rec: discovery.Record, live: list) -> dict:

@@ -28,10 +28,14 @@ Objects persist between calls and belong to the user.
 4. **Change in place, minimally.** Use `gptragent__r`. Keep object, column and argument names.
    Before a change that overwrites data, say what will change; for large or irreplaceable objects
    keep a copy first (`cohort_before_fix = cohort`) unless the user declines.
-5. **Fixing an error.** Read the traceback from the overview (or `traceback()` and
-   `geterrmessage()` through inspect), reproduce it on a small slice, fix the cause (a data type,
-   a function body, an argument), then re-run the user's original call and show that it now
-   works. Keep a fixed function's arguments as they were.
+5. **Fixing an error.** Read the traceback and the last error message from the overview (or
+   `traceback()` and `geterrmessage()` through inspect), reproduce it on a small slice, fix the
+   cause (a data type, a function body, an argument), then re-run the user's original call and
+   show that it now works. Keep a fixed function's arguments as they were. A traceback shows the
+   calls, not the name the user was assigning the result to. When the fix needs a choice only the
+   user can make (a column or object that does not exist, which variable to use instead, where
+   the result should go), ask one precise question instead of guessing, and never overwrite
+   another existing object as a stand-in.
 6. **Verify.** After each change, check it with `gptragent__inspect` (the changed values, or
    `stopifnot()` of the property the user asked for) and report the object change lines gptr
    returns (`+ new`, `~ modified`).
