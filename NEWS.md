@@ -1,3 +1,41 @@
+# gptr 1.2.0
+
+Agents on the same computer can find a served R session by themselves and work in it with a
+read-only tool. Everything is additive: a server started as before behaves as before, apart from
+also offering `inspect`.
+
+## Serving R to local agents
+
+* `gptr_mcp_serve(advertise = TRUE)`, or a label (`advertise = "cohort study"`), writes a
+  discovery record so a local client, such as Biorouter's gptr Agent extension, finds the session
+  without your copying its address and token: `serve-<pid>.json` in
+  `file.path(tools::R_user_dir("gptr", "cache"), "mcp-serve")`, readable only by you on Unix
+  (mode 0600 in a folder of mode 0700). It holds the address and token, R's process id, the
+  working folder, the label, the mode, the served tools and the R, gptr and front-end versions.
+  gptr removes it when the server stops, when gptr is unloaded and when R exits, and its next load
+  removes the records of R processes that are gone. Printing the server's handle names the record
+  and never shows the token. Advertising a running server writes its record.
+* Reading a discovery record is a guarded secret read, like reading gptr's `auth.json`, so a
+  served client cannot read another session's token, even in `auto` mode. Every record's path
+  ends in `R/gptr/mcp-serve/serve-<pid>.json`, so other tools that keep credential files away from
+  agents can match it.
+* `gptr_mcp_serve(mode = )` chooses the served session's permission mode: `"plan"`, `"manual"`,
+  `"edits"` or `"auto"`; `NULL` keeps the configured default. A running server refuses another
+  mode, as it refuses another port.
+* The server offers `inspect`: R code that runs only when gptr classifies it at risk level 0, in
+  every mode, and is refused without running otherwise. It is annotated read-only, so a client can
+  run it without asking you, and your rules for `r` apply to it. Serve the four earlier tools only
+  with `tools = c("r", "read", "edit", "write")`.
+* A client of `gptr_mcp_serve()` that is served `r` or `inspect` gets fuller instructions: the
+  `r` tool's guidelines (never reload data already in memory, assign results, print compact
+  summaries), look with `inspect` first, change objects in place, a new R process does not have
+  them, and relay a refusal rather than rewording the code. gptr's own Claude Code and Codex
+  routes keep their short instructions.
+
+## Permissions
+
+* `geterrmessage()` reads at level 0, so an agent can read the last error in `manual` mode.
+
 # gptr 1.1.0
 
 Tool calls spend less time in gptr itself. Every permission rule, guard, checkpoint and secret
