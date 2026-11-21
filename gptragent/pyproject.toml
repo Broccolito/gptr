@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gptragent"
+version = "0.1.0"
+description = "A Biorouter extension that works inside an R session the user already has open, through gptr"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [{name = "Wanjun Gu", email = "wanjun.gu@ucsf.edu"}]
+keywords = ["mcp", "r", "gptr", "biorouter", "live-session"]
+requires-python = ">=3.11"
+# Standard library only: a fast uv sync with nothing to download but the build backend.
+dependencies = []
+
+[project.scripts]
+gptragent = "gptragent.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gptragent"]
