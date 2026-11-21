@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import glob
 import json
+import ntpath
 import os
 import platform
+import posixpath
 import re
 import shutil
 import socket
@@ -25,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable, Mapping, Optional
 
 RECORD_NAME = re.compile(r"serve-([0-9]{1,10})\.json")
-RECORD_SUFFIX = os.path.join("R", "gptr", "mcp-serve")
+RECORD_PARTS = ("R", "gptr", "mcp-serve")
 MAX_RECORD_BYTES = 64 * 1024
 TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{16,512}")
 URL = re.compile(r"http://(127\.0\.0\.1|localhost|\[::1\]):([0-9]{1,5})(/[A-Za-z0-9._~/-]*)")
@@ -87,6 +89,12 @@ def version_tuple(text: str) -> tuple:
 # ---- where records are looked for ----------------------------------------------------------
 
 
+def _paths(os_name: str):
+    """The path rules of the computer R runs on, so the answer depends only on the arguments
+    (``ntpath`` for Windows, ``posixpath`` elsewhere), whichever system asks."""
+    return ntpath if os_name == "nt" else posixpath
+
+
 def _home(env: Mapping[str, str], os_name: str) -> str:
     if os_name == "nt":
         return env.get("USERPROFILE") or os.path.expanduser("~")
@@ -95,13 +103,14 @@ def _home(env: Mapping[str, str], os_name: str) -> str:
 
 def _platform_cache(env: Mapping[str, str], system: str, os_name: str) -> str:
     """R's own default cache base when no variable is set (tools::R_user_dir())."""
+    paths = _paths(os_name)
     home = _home(env, os_name)
     if os_name == "nt":
-        local = env.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local")
-        return os.path.join(local, "R", "cache")
+        local = env.get("LOCALAPPDATA") or paths.join(home, "AppData", "Local")
+        return paths.join(local, "R", "cache")
     if system == "Darwin":
-        return os.path.join(home, "Library", "Caches", "org.R-project.R")
-    return os.path.join(home, ".cache")
+        return paths.join(home, "Library", "Caches", "org.R-project.R")
+    return paths.join(home, ".cache")
 
 
 def r_cache_base(env: Mapping[str, str], system: str, os_name: str) -> str:
@@ -109,7 +118,7 @@ def r_cache_base(env: Mapping[str, str], system: str, os_name: str) -> str:
     for key in ("R_USER_CACHE_DIR", "XDG_CACHE_HOME"):
         value = env.get(key, "")
         if value:
-            return os.path.expanduser(value)
+            return _paths(os_name).expanduser(value)
     return _platform_cache(env, system, os_name)
 
 
@@ -130,16 +139,18 @@ def search_dirs(
     env = os.environ if env is None else env
     system = platform.system() if system is None else system
     os_name = os.name if os_name is None else os_name
+    paths = _paths(os_name)
     found = []
     override = env.get("GPTR_MCP_DISCOVERY_DIR", "").strip()
     if override:
-        found.append(os.path.expanduser(override))
-    found.append(os.path.join(r_cache_base(env, system, os_name), RECORD_SUFFIX))
+        found.append(paths.expanduser(override))
+    found.append(paths.join(r_cache_base(env, system, os_name), *RECORD_PARTS))
     found.extend(extra)
-    found.append(os.path.join(_platform_cache(env, system, os_name), RECORD_SUFFIX))
+    found.append(paths.join(_platform_cache(env, system, os_name), *RECORD_PARTS))
     out, seen = [], set()
     for folder in found:
-        key = os.path.normcase(os.path.abspath(folder))
+        # one folder spelled two ways (Windows folds case, and R reports C:/Users/...) counts once
+        key = paths.normcase(paths.abspath(folder))
         if key not in seen:
             seen.add(key)
             out.append(folder)
@@ -267,11 +278,19 @@ def pid_alive(pid: int, os_name: Optional[str] = None, kill: Callable = os.kill)
     return True
 
 
-def port_accepts(host: str, port: int, timeout: float = 1.0) -> bool:
+# Windows reports a connection to a closed port as refused only after retrying the refused SYN,
+# which takes more than a second even on a loopback address, where Linux and macOS refuse at once:
+# with a one second wait, the GitHub Windows runner read a stopped server as a busy one. A
+# listening port accepts at once on every system, busy R or not, so the longer wait costs time
+# only when nothing listens.
+CONNECT_WAIT = 5.0 if os.name == "nt" else 1.0
+
+
+def port_accepts(host: str, port: int, timeout: Optional[float] = None) -> bool:
     """Whether something listens on host:port. A busy R still accepts (the kernel queues the
     connection), so this tells a stopped server from a busy one."""
     try:
-        with socket.create_connection((host, port), timeout=timeout):
+        with socket.create_connection((host, port), timeout=CONNECT_WAIT if timeout is None else timeout):
             return True
     except ConnectionRefusedError:
         return False
@@ -332,7 +351,7 @@ PROBE_MARK = "gptragent-probe"
 PROBE_CODE = (
     'cat("' + PROBE_MARK + '", '
     'tryCatch(format(utils::packageVersion("gptr")), error = function(e) ""), '
-    'tools::R_user_dir("gptr", "cache"), sep = "\\n")'
+    'path.expand(tools::R_user_dir("gptr", "cache")), sep = "\\n")'
 )
 
 

@@ -1,5 +1,7 @@
 import json
+import ntpath
 import os
+import posixpath
 import socket
 import stat
 import sys
@@ -16,53 +18,90 @@ from fake_gptr import dead_port, write_record  # noqa: E402
 
 POSIX = os.name != "nt"
 TOKEN = "ab" * 24
-SUFFIX = os.path.join("R", "gptr", "mcp-serve")
+PARTS = ("R", "gptr", "mcp-serve")
+
+
+def posix(base):
+    """The records folder under `base` as R on macOS or Linux spells it, on any test machine."""
+    return posixpath.join(base, *PARTS)
+
+
+def windows(base):
+    """The records folder under `base` as R on Windows spells it, on any test machine."""
+    return ntpath.join(base, *PARTS)
 
 
 class SearchDirTests(unittest.TestCase):
+    """search_dirs() follows the path rules of the os_name it is given, so the macOS, Linux and
+    Windows answers are checked on every test machine."""
+
     def test_override_comes_first_then_the_r_rule_then_the_default(self):
         env = {"HOME": "/home/u", "GPTR_MCP_DISCOVERY_DIR": "/x/records", "R_USER_CACHE_DIR": "/cache"}
         dirs = discovery.search_dirs(env, system="Linux", os_name="posix")
-        self.assertEqual(dirs, ["/x/records", os.path.join("/cache", SUFFIX), os.path.join("/home/u/.cache", SUFFIX)])
+        self.assertEqual(dirs, ["/x/records", "/cache/R/gptr/mcp-serve", "/home/u/.cache/R/gptr/mcp-serve"])
 
     def test_xdg_cache_home_is_read_when_r_user_cache_dir_is_unset(self):
         env = {"HOME": "/home/u", "XDG_CACHE_HOME": "/xdg"}
         dirs = discovery.search_dirs(env, system="Linux", os_name="posix")
-        self.assertEqual(dirs[0], os.path.join("/xdg", SUFFIX))
+        self.assertEqual(dirs[0], posix("/xdg"))
 
     def test_r_user_cache_dir_wins_over_xdg(self):
         env = {"HOME": "/h", "R_USER_CACHE_DIR": "/r", "XDG_CACHE_HOME": "/xdg"}
-        self.assertEqual(discovery.search_dirs(env, system="Linux", os_name="posix")[0], os.path.join("/r", SUFFIX))
+        self.assertEqual(discovery.search_dirs(env, system="Linux", os_name="posix")[0], posix("/r"))
 
     def test_macos_default(self):
         dirs = discovery.search_dirs({"HOME": "/Users/u"}, system="Darwin", os_name="posix")
-        self.assertEqual(dirs, [os.path.join("/Users/u/Library/Caches/org.R-project.R", SUFFIX)])
+        self.assertEqual(dirs, ["/Users/u/Library/Caches/org.R-project.R/R/gptr/mcp-serve"])
 
     def test_linux_default(self):
         dirs = discovery.search_dirs({"HOME": "/home/u"}, system="Linux", os_name="posix")
-        self.assertEqual(dirs, [os.path.join("/home/u/.cache", SUFFIX)])
+        self.assertEqual(dirs, ["/home/u/.cache/R/gptr/mcp-serve"])
 
     def test_windows_default_is_localappdata(self):
         env = {"USERPROFILE": r"C:\Users\u", "LOCALAPPDATA": r"C:\Users\u\AppData\Local"}
         dirs = discovery.search_dirs(env, system="Windows", os_name="nt")
-        self.assertEqual(dirs, [os.path.join(r"C:\Users\u\AppData\Local", "R", "cache", SUFFIX)])
+        self.assertEqual(dirs, [r"C:\Users\u\AppData\Local\R\cache\R\gptr\mcp-serve"])
 
     def test_windows_without_localappdata_falls_back_to_the_profile(self):
         dirs = discovery.search_dirs({"USERPROFILE": r"C:\Users\u"}, system="Windows", os_name="nt")
-        self.assertEqual(dirs, [os.path.join(r"C:\Users\u", "AppData", "Local", "R", "cache", SUFFIX)])
+        self.assertEqual(dirs, [r"C:\Users\u\AppData\Local\R\cache\R\gptr\mcp-serve"])
+
+    def test_windows_r_user_cache_dir_comes_before_the_default(self):
+        env = {"USERPROFILE": r"C:\Users\u", "LOCALAPPDATA": r"C:\Users\u\AppData\Local",
+               "R_USER_CACHE_DIR": "D:/rcache"}
+        dirs = discovery.search_dirs(env, system="Windows", os_name="nt")
+        self.assertEqual(dirs, [windows("D:/rcache"), windows(r"C:\Users\u\AppData\Local\R\cache")])
+
+    def test_windows_folds_rs_forward_slashes_and_case_into_one_folder(self):
+        # R on Windows reports tools::R_user_dir() as C:/Users/u/AppData/Local/R/cache/R/gptr
+        env = {"USERPROFILE": r"C:\Users\u", "LOCALAPPDATA": r"C:\Users\u\AppData\Local"}
+        dirs = discovery.search_dirs(env, system="Windows", os_name="nt",
+                                     extra=["c:/users/u/AppData/Local/R/cache/R/gptr/mcp-serve"])
+        self.assertEqual(dirs, [r"C:\Users\u\AppData\Local\R\cache\R\gptr\mcp-serve"])
 
     def test_the_folder_r_reports_is_searched_before_the_default(self):
         dirs = discovery.search_dirs({"HOME": "/h"}, system="Linux", os_name="posix", extra=["/from/r"])
-        self.assertEqual(dirs, [os.path.join("/h/.cache", SUFFIX), "/from/r"])
+        self.assertEqual(dirs, [posix("/h/.cache"), "/from/r"])
 
     def test_the_default_is_searched_even_when_a_variable_moves_the_cache(self):
         # a desktop app started from the Finder does not see a shell's R_USER_CACHE_DIR
         dirs = discovery.search_dirs({"HOME": "/Users/u", "R_USER_CACHE_DIR": "/c"}, system="Darwin", os_name="posix")
-        self.assertIn(os.path.join("/Users/u/Library/Caches/org.R-project.R", SUFFIX), dirs)
+        self.assertEqual(dirs, [posix("/c"), posix("/Users/u/Library/Caches/org.R-project.R")])
 
     def test_repeats_are_dropped(self):
-        env = {"HOME": "/h", "XDG_CACHE_HOME": "/h/.cache", "GPTR_MCP_DISCOVERY_DIR": os.path.join("/h/.cache", SUFFIX)}
-        self.assertEqual(discovery.search_dirs(env, system="Linux", os_name="posix"), [os.path.join("/h/.cache", SUFFIX)])
+        env = {"HOME": "/h", "XDG_CACHE_HOME": "/h/.cache", "GPTR_MCP_DISCOVERY_DIR": posix("/h/.cache")}
+        self.assertEqual(discovery.search_dirs(env, system="Linux", os_name="posix"), [posix("/h/.cache")])
+
+    def test_posix_keeps_case_apart(self):
+        env = {"HOME": "/h", "R_USER_CACHE_DIR": "/H/.cache"}
+        self.assertEqual(discovery.search_dirs(env, system="Linux", os_name="posix"),
+                         [posix("/H/.cache"), posix("/h/.cache")])
+
+    def test_this_machine_gets_its_own_rules_by_default(self):
+        env = {"HOME": os.path.join(os.sep, "h"), "USERPROFILE": os.path.join(os.sep, "h"),
+               "LOCALAPPDATA": os.path.join(os.sep, "h", "local")}
+        for folder in discovery.search_dirs(env):
+            self.assertTrue(folder.endswith(os.path.join(*PARTS)), folder)
 
 
 class RecordTests(unittest.TestCase):
@@ -221,6 +260,12 @@ class LivenessTests(unittest.TestCase):
             server.listen(1)
             self.assertTrue(discovery.port_accepts("127.0.0.1", server.getsockname()[1]))
         self.assertFalse(discovery.port_accepts("127.0.0.1", dead_port()))
+
+    def test_a_refusal_is_a_stopped_server_and_a_wait_that_runs_out_is_a_busy_one(self):
+        with mock.patch("socket.create_connection", side_effect=ConnectionRefusedError()):
+            self.assertFalse(discovery.port_accepts("127.0.0.1", 9))
+        with mock.patch("socket.create_connection", side_effect=socket.timeout()):
+            self.assertTrue(discovery.port_accepts("127.0.0.1", 9))
 
 
 class ScanTests(unittest.TestCase):
