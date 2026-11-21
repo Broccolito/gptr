@@ -12,7 +12,8 @@ py_native_child = function(case, root, failure) {
     "usage-before", "direct-reticulate-init", "independent-cli-run", "independent-cli-decode",
     "python-first-eval", "python-second-eval", "python-knitr-eval", "python-third-eval",
     "python-import-eval", "python-config", "library-stat", "checks", "finished",
-    "reticulate-required", "knitr-required", "json-required", "fresh-python", "offline",
+    "reticulate-required", "knitr-required", "json-required", "processx-required",
+    "fresh-python", "offline",
     "managed-disabled", "explicit-python", "private-prefix", "explicit-version-pins",
     "explicit-native-library", "explicit-native-library-sha", "native-absent-seed",
     "native-unrelated-empty", "native-known-empty", "native-case-empty",
@@ -38,6 +39,9 @@ py_native_child = function(case, root, failure) {
     assert_native(requireNamespace("reticulate", quietly = TRUE), "reticulate-required")
     assert_native(requireNamespace("knitr", quietly = TRUE), "knitr-required")
     assert_native(requireNamespace("jsonlite", quietly = TRUE), "json-required")
+    # Loading processx (3.10.0 and later) sets PROCESSX_RM_PATH. It loads here, before the
+    # snapshots, so they compare what gptr's calls change, not what a dependency's load does.
+    assert_native(requireNamespace("processx", quietly = TRUE), "processx-required")
     assert_native(!reticulate::py_available(initialize = FALSE), "fresh-python")
     assert_native(identical(Sys.getenv("GPTR_LIVE_TESTS"), "false"), "offline")
     assert_native(identical(Sys.getenv("RETICULATE_USE_MANAGED_VENV"), "false"), "managed-disabled")
