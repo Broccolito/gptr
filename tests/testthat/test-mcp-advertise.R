@@ -66,6 +66,8 @@ test_that("an advertised server's record is private, complete and removed at sto
   gptr_mcp_serve(stop = TRUE)
   expect_false(file.exists(path))
   expect_null(the$mcp_server)
+  # unloading gptr stops the server the same way
+  expect_true(any(vapply(the$on_unload, identical, NA, mcp_serve_stop)))
 })
 
 test_that("a label names the session, and advertising a running server writes its record", {
