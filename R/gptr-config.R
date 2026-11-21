@@ -1890,10 +1890,11 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' line (`system()`, `processx::run()`, `peter$sh()` and the others above) and `os.environ` or
 #' `getenv()` in Python; an environment dump (`Sys.getenv()`, `ps::ps_environ()`); and a read of a
 #' `.env` or `.Renviron` file (`.env`, `.env.local` or `name.env`), of a file named `auth.json`
-#' (gptr's credential store) or of a file [gptr_env()] loaded, by a function that reads its text
-#' such as `readLines()`, or in a command line or Python. So does handing one to a child process
-#' through the `env` of `peter$sh()` or `peter$script()`, by its name or in a value, unless the
-#' same code reads that secret by name: the question for that read, or an `r(secret:NAME)` rule
+#' (gptr's credential store), of a discovery record of [gptr_mcp_serve()]
+#' (`mcp-serve/serve-<pid>.json`) or of a file [gptr_env()] loaded, by a function that reads its
+#' text such as `readLines()`, or in a command line or Python. So does handing one to a child
+#' process through the `env` of `peter$sh()` or `peter$script()`, by its name or in a value, unless
+#' the same code reads that secret by name: the question for that read, or an `r(secret:NAME)` rule
 #' allowing it, covers the hand-over too. A name the code computes when it runs (with `paste0()`,
 #' through `get()` or `do.call()`, as a function's argument, or in a variable it sets otherwise or
 #' only to strings naming no secret) is read at level 3, which `auto` runs without asking. Such a
@@ -1944,7 +1945,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' [gptr_mcp_serve()] exposes the live session to other agents over HTTP on `127.0.0.1` only,
 #' with a random bearer token and an `Origin` check, and every call passes the permission gate.
 #' Any local process that learns the token can call the served tools while the server runs; stop
-#' it with `gptr_mcp_serve(stop = TRUE)` when you are done.
+#' it with `gptr_mcp_serve(stop = TRUE)` when you are done. With `advertise = TRUE` the token is
+#' also written to a discovery record that only you can read (on Unix), so that local clients find
+#' the session; any program running as you can read it while the server runs.
 #'
 #' @seealso [gptr_egress], [gptr_options], [gptr_permissions()], [gptr_trust()],
 #'   [gptr_scrub()], [gptr_risk()].

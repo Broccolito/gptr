@@ -1,5 +1,6 @@
 # Load and unload hooks. No network at load; only proc_sweep() touches disk and processes, to
-# stop orphaned child processes of an earlier session (13 C-29, IC-60).
+# stop orphaned child processes of an earlier session (13 C-29, IC-60), and mcp_advertise_prune()
+# disk, to remove the MCP discovery records of R processes that are gone.
 
 #' Run the on_load() queue and load the built-ins (load errors are kept, never raised)
 #' @noRd

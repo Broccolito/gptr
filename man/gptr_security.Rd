@@ -234,10 +234,11 @@ the code only ever sets to strings one of which is its name; \verb{$NAME} or \ve
 line (\code{system()}, \code{processx::run()}, \code{peter$sh()} and the others above) and \code{os.environ} or
 \code{getenv()} in Python; an environment dump (\code{Sys.getenv()}, \code{ps::ps_environ()}); and a read of a
 \code{.env} or \code{.Renviron} file (\code{.env}, \code{.env.local} or \code{name.env}), of a file named \code{auth.json}
-(gptr's credential store) or of a file \code{\link[=gptr_env]{gptr_env()}} loaded, by a function that reads its text
-such as \code{readLines()}, or in a command line or Python. So does handing one to a child process
-through the \code{env} of \code{peter$sh()} or \code{peter$script()}, by its name or in a value, unless the
-same code reads that secret by name: the question for that read, or an \code{r(secret:NAME)} rule
+(gptr's credential store), of a discovery record of \code{\link[=gptr_mcp_serve]{gptr_mcp_serve()}}
+(\verb{mcp-serve/serve-<pid>.json}) or of a file \code{\link[=gptr_env]{gptr_env()}} loaded, by a function that reads its
+text such as \code{readLines()}, or in a command line or Python. So does handing one to a child
+process through the \code{env} of \code{peter$sh()} or \code{peter$script()}, by its name or in a value, unless
+the same code reads that secret by name: the question for that read, or an \code{r(secret:NAME)} rule
 allowing it, covers the hand-over too. A name the code computes when it runs (with \code{paste0()},
 through \code{get()} or \code{do.call()}, as a function's argument, or in a variable it sets otherwise or
 only to strings naming no secret) is read at level 3, which \code{auto} runs without asking. Such a
@@ -294,7 +295,9 @@ saw.
 \code{\link[=gptr_mcp_serve]{gptr_mcp_serve()}} exposes the live session to other agents over HTTP on \verb{127.0.0.1} only,
 with a random bearer token and an \code{Origin} check, and every call passes the permission gate.
 Any local process that learns the token can call the served tools while the server runs; stop
-it with \code{gptr_mcp_serve(stop = TRUE)} when you are done.
+it with \code{gptr_mcp_serve(stop = TRUE)} when you are done. With \code{advertise = TRUE} the token is
+also written to a discovery record that only you can read (on Unix), so that local clients find
+the session; any program running as you can read it while the server runs.
 }
 
 \seealso{
