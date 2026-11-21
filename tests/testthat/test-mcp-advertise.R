@@ -118,7 +118,8 @@ test_that("the record is removed when R exits", {
   res = processx::run(rscript_path(), c("--vanilla", "-e", code), error_on_status = FALSE,
                       env = c("current", R_LIBS = mcp_fixture_libs(), GPTR_LIVE_TESTS = "false"),
                       timeout = 120)
-  out = strsplit(trimws(res$stdout), "\n", fixed = TRUE)[[1L]]
+  # Windows writes CRLF line ends
+  out = strsplit(trimws(res$stdout), "\r?\n")[[1L]]
   expect_identical(res$status, 0L)
   expect_identical(out[[1L]], "TRUE")
   expect_true(startsWith(out[[2L]], root))
@@ -241,7 +242,8 @@ test_that("reading a discovery record is a guarded secret read", {
   # so a served client cannot read a token from a record, even in auto mode (not through
   # inspect either, which runs level 0 only)
   h = local_advertised(envir = new.env(), mode = "auto", advertise = TRUE)
-  code = paste0("readLines('", record_path(), "')")
+  # deparse() writes the path as an R string, so a Windows path's backslashes are escaped
+  code = paste0("readLines(", deparse(record_path()), ")")
   for (name in c("r", "inspect")) {
     res = mcp_test_post(h$url, tool_call(name, code), token = h$token)$json$result
     expect_true(res$isError, label = name)
