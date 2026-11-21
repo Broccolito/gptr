@@ -279,10 +279,10 @@ def pid_alive(pid: int, os_name: Optional[str] = None, kill: Callable = os.kill)
 
 
 # Windows reports a connection to a closed port as refused only after retrying the refused SYN,
-# which takes more than a second even on a loopback address, where Linux and macOS refuse at once:
-# with a one second wait, the GitHub Windows runner read a stopped server as a busy one. A
-# listening port accepts at once on every system, busy R or not, so the longer wait costs time
-# only when nothing listens.
+# about two seconds even on a loopback address (2.0 s on the GitHub Windows runner, 2026-11-21),
+# where Linux and macOS refuse at once: with a one second wait, Windows read a stopped server as a
+# busy one. A listening port accepts at once on every system, busy R or not, so the longer wait
+# costs time only when nothing listens.
 CONNECT_WAIT = 5.0 if os.name == "nt" else 1.0
 
 

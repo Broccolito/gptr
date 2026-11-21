@@ -37,6 +37,10 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(digest, digest2)
         with zipfile.ZipFile(first) as archive:
             names = set(archive.namelist())
+            for info in archive.infolist():
+                # the same bytes on every system that builds it, Windows included
+                self.assertEqual((info.create_system, info.external_attr >> 16, info.date_time),
+                                 (3, 0o100644, build_brxt.ZIP_TIME), info.filename)
         expected = {"manifest.json", "README.md", "LICENSE", "NOTICE", "pyproject.toml", "uv.lock", "r/attach.R",
                     "skills/gptr-live-r/SKILL.md", "src/gptragent/__init__.py", "src/gptragent/__main__.py",
                     "src/gptragent/server.py", "src/gptragent/discovery.py", "src/gptragent/client.py"}

@@ -200,6 +200,9 @@ def build(root: Path, out: Path, files: list, manifest: dict) -> tuple:
         for path in sorted(files, key=lambda p: p.relative_to(root).as_posix()):
             info = zipfile.ZipInfo(path.relative_to(root).as_posix(), date_time=ZIP_TIME)
             info.compress_type = zipfile.ZIP_DEFLATED
+            # made on Unix whichever system builds it: zipfile records Windows (0) on Windows,
+            # which changes the bytes and tells unzip to ignore the Unix mode below
+            info.create_system = 3
             info.external_attr = 0o100644 << 16
             # one line ending everywhere, so a Windows checkout builds the same bytes
             archive.writestr(info, path.read_bytes().replace(b"\r\n", b"\n"))
