@@ -195,10 +195,13 @@ environment variable does not.
 
 ## Serve your R session
 
-`gptr_mcp_serve(tools, envir, port = NULL, stop = FALSE)` exposes a subset of `r`, `read`, `edit`
-and `write` from the current R process. It requires the optional packages `httpuv`, `later` and
-`openssl`. Choose the environment whose objects the other agent should be able to inspect or
-change:
+`gptr_mcp_serve(tools, envir, port = NULL, stop = FALSE, mode = NULL, advertise = FALSE)`
+exposes a subset of `inspect`, `r`, `read`, `edit` and `write` from the current R process. It
+requires the optional packages `httpuv`, `later` and `openssl`. `inspect` runs R code only when
+gptr classifies it as read-only (risk level 0, see `gptr_risk()`) and refuses anything else
+without running it, so a client can run it without asking you; `r` runs what your permission
+settings allow. Choose the environment whose objects the other agent should be able to inspect
+or change:
 
 
 ``` r
@@ -227,10 +230,33 @@ In Peter, enter `/mcp serve` to start or reuse the server and return to R's prom
 uses the chat's workspace and permission mode. Leave R at its prompt while the client works;
 resume the chat with `gptr_last() |> peter()`. Get the running handle and its client configuration
 with `server = gptr_mcp_serve(); server$config`. A running server retains its original workspace
-and mode; stop and restart it to change them. Direct `gptr_mcp_serve()` calls use the configured
-default mode, independently of a chat's explicit mode. Calls use a dedicated gptr session, and
-an action that needs a new approval is refused in a background callback. Approve a specific
-needed action interactively through your permission settings before retrying.
+and mode; stop and restart it to change them. Direct `gptr_mcp_serve()` calls use `mode`, or else
+the configured default mode, independently of a chat's explicit mode. Calls use a dedicated gptr
+session, and an action that needs a new approval is refused in a background callback. Approve a
+specific needed action interactively through your permission settings before retrying. In
+`"manual"` mode a client can only read, because everything else needs your approval; in `"auto"`
+mode it can also create and change objects, while critical actions are still refused.
+
+### Let local agents find the session
+
+A client on the same computer can find a served session without your copying its address and
+token, for example Biorouter's gptr Agent extension:
+
+
+``` r
+gptr_mcp_serve(envir = globalenv(), mode = "auto", advertise = TRUE)
+```
+
+`advertise = TRUE`, or a label such as `advertise = "cohort study"`, writes a discovery record,
+`serve-<pid>.json` in `file.path(tools::R_user_dir("gptr", "cache"), "mcp-serve")`. It holds the
+address and the token, R's process id, the working folder, the label (by default the folder's
+name), the mode and the served tools. On Unix only you can read it (mode 0600 in a folder of mode
+0700); on Windows your user profile's permissions protect it. gptr removes it when the server
+stops, when gptr is unloaded or R exits, and removes the records of R processes that are gone when
+it next loads. Treat it as a credential: any program running as you can read it while the server
+runs, and gptr's permission gate treats reading it as reading a secret. Its path always ends in
+`R/gptr/mcp-serve/serve-<pid>.json`, so a tool that keeps credential files away from agents can
+match it.
 
 Child-process waits cooperate with the reactor. Inside an R tool, they still run neither
 HTTP callbacks nor sibling R tools. If a child needs this same R session's MCP server, start
