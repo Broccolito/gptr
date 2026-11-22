@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from gptragent import discovery  # noqa: E402
-from gptragent.server import Bridge, attach_script, r_string  # noqa: E402
+from gptragent.server import GPTR_PLAN_FLOOR, MODE_NOTES, Bridge, attach_script, r_string  # noqa: E402
 
 LIVE = os.environ.get("GPTRAGENT_LIVE") == "1"
 
@@ -42,16 +42,19 @@ def text_of(result):
 
 @unittest.skipUnless(LIVE, "set GPTRAGENT_LIVE=1 to run against a real R with gptr")
 @unittest.skipIf(os.name == "nt", "the live test feeds an interactive R through a pipe (macOS and Linux)")
-class LiveTests(unittest.TestCase):
+class LiveR(unittest.TestCase):
+    """An interactive R with private R user folders, fed through a pipe."""
+
     @classmethod
-    def setUpClass(cls):
+    def start_r(cls):
         r_bin = os.environ.get("GPTRAGENT_LIVE_R") or shutil.which("R")
         if not r_bin:
             raise unittest.SkipTest("R is not on PATH")
         cls.tmp = tempfile.TemporaryDirectory()
         base = Path(cls.tmp.name)
+        cls.base = base
         cls.cache = base / "cache"
-        wd = base / "live-project"
+        cls.wd = wd = base / "live-project"
         wd.mkdir()
         env = dict(os.environ)
         env.update(R_USER_CACHE_DIR=str(cls.cache), R_USER_CONFIG_DIR=str(base / "config"),
@@ -60,18 +63,18 @@ class LiveTests(unittest.TestCase):
         cls.log = open(cls.log_path, "wb")
         cls.r = subprocess.Popen([r_bin, "--interactive", "--no-readline", "--vanilla", "--quiet"],
                                  stdin=subprocess.PIPE, stdout=cls.log, stderr=subprocess.STDOUT, cwd=wd, env=env)
-        script = attach_script()
-        force_attach = os.environ.get("GPTRAGENT_LIVE_ATTACH") == "1"
-        serve = (
-            f'if (!{"TRUE" if force_attach else "FALSE"} && "advertise" %in% names(formals(gptr::gptr_mcp_serve))) '
-            'invisible(gptr::gptr_mcp_serve(envir = globalenv(), advertise = "live", mode = "auto")) else '
-            f'{{ source({r_string(script.as_posix())}); biorouter_gptr_attach(mode = "auto", label = "live") }}'
-        )
-        cls.send(FIXTURE)
-        cls.send(serve, timeout=120)
-        cls.bridge = Bridge(env={"R_USER_CACHE_DIR": str(cls.cache), "HOME": str(base)},
-                            probe=lambda: discovery.Probe(error="not asked in the live test"))
-        cls.records = list((cls.cache / "R" / "gptr" / "mcp-serve").glob("serve-*.json"))
+        out = cls.send('cat("GPTR-VERSION", format(packageVersion("gptr")), "\\n")')
+        line = [ln for ln in out.splitlines() if ln.startswith("GPTR-VERSION ")][-1]
+        cls.gptr_version = discovery.version_tuple(line.split()[1])
+
+    @classmethod
+    def record_files(cls):
+        return list((cls.cache / "R" / "gptr" / "mcp-serve").glob("serve-*.json"))
+
+    @classmethod
+    def new_bridge(cls):
+        return Bridge(env={"R_USER_CACHE_DIR": str(cls.cache), "HOME": str(cls.base)},
+                      probe=lambda: discovery.Probe(error="not asked in the live test"))
 
     @classmethod
     def tearDownClass(cls):
@@ -105,6 +108,23 @@ class LiveTests(unittest.TestCase):
                 raise AssertionError("R exited:\n" + cls.log_path.read_text(errors="replace")[-3000:])
             time.sleep(0.2)
         raise AssertionError(f"R did not finish within {timeout}s:\n" + cls.log_path.read_text(errors="replace")[-3000:])
+
+
+class LiveTests(LiveR):
+    @classmethod
+    def setUpClass(cls):
+        cls.start_r()
+        script = attach_script()
+        force_attach = os.environ.get("GPTRAGENT_LIVE_ATTACH") == "1"
+        serve = (
+            f'if (!{"TRUE" if force_attach else "FALSE"} && "advertise" %in% names(formals(gptr::gptr_mcp_serve))) '
+            'invisible(gptr::gptr_mcp_serve(envir = globalenv(), advertise = "live", mode = "auto")) else '
+            f'{{ source({r_string(script.as_posix())}); biorouter_gptr_attach(mode = "auto", label = "live") }}'
+        )
+        cls.send(FIXTURE)
+        cls.send(serve, timeout=120)
+        cls.bridge = cls.new_bridge()
+        cls.records = cls.record_files()
 
     def test_a_record_was_written_privately(self):
         self.assertEqual(len(self.records), 1)
@@ -167,6 +187,94 @@ class LiveTests(unittest.TestCase):
         result = self.bridge.call("r", {"code": "1"})
         self.assertTrue(result["isError"])
         self.assertIn("not serving gptr any more", text_of(result))
+
+
+class AttachLiveTests(LiveR):
+    """r/attach.R against the real gptr: a reused server, edits mode and plan mode. Each test
+    serves, checks and stops again in one R."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.start_r()
+        cls.send(FIXTURE)
+        cls.send(f"source({r_string(attach_script().as_posix())})")
+
+    def tearDown(self):
+        self.send('suppressMessages(biorouter_gptr_detach()); try(invisible(gptr::gptr_permissions(remove = '
+                  '"r(fn:write.csv)")), silent = TRUE)')
+        self.assertEqual(self.record_files(), [])
+
+    def attach(self, args):
+        return self.send(f"biorouter_gptr_attach({args})", timeout=120)
+
+    def test_a_server_already_running_is_reported_as_it_is(self):
+        if self.gptr_version >= (1, 2, 0):
+            # gptr 1.2.0 writes the record itself, and refuses another mode while a server runs
+            self.send('invisible(gptr::gptr_mcp_serve(envir = globalenv(), tools = c("inspect", "r"), mode = "manual"))')
+            self.assertIn("the mode of the running MCP server", self.attach('mode = "auto", label = "reuse"'))
+            self.attach('label = "reuse"')
+            tools = ("inspect", "r")
+        else:
+            self.send('local({ old = options(gptr.mode = "manual"); on.exit(options(old)); '
+                      'invisible(gptr::gptr_mcp_serve(envir = globalenv(), tools = c("r", "read"))) })')
+            out = self.attach('mode = "auto", label = "reuse"')
+            self.assertIn("(mode manual)", out)
+            self.assertIn("already running in this R session", out)
+            self.assertIn('biorouter_gptr_attach(mode = "auto") again', out)
+            tools = ("r", "read")
+        [path] = self.record_files()
+        rec = discovery.read_record(str(path))
+        self.assertEqual((rec.label, rec.mode, rec.tools), ("reuse", "manual", tools))
+        bridge = self.new_bridge()
+        text = text_of(bridge.call("sessions", {}))
+        self.assertIn("Mode manual: ", text)
+        self.assertIn("200 obs", text)
+        result = bridge.call("r", {"code": "reuse_probe = 1"})
+        self.assertTrue(result["isError"])
+        self.assertIn("mode manual", text_of(result))
+        self.assertIn("ABSENT", self.send('cat(if (exists("reuse_probe")) "PRESENT" else "ABSENT", "\\n")'))
+
+    def test_edits_mode_runs_and_refuses_what_its_note_says(self):
+        self.attach('mode = "edits", label = "edits"')
+        bridge = self.new_bridge()
+        self.assertIn("Mode edits: " + MODE_NOTES["edits"], text_of(bridge.call("sessions", {})))
+        self.assertFalse(bridge.call("inspect", {"code": "str(cohort)"})["isError"])
+        for code in ('system("mkdir made_in_edits")', 'system("touch touched_in_edits.txt")'):
+            result = bridge.call("r", {"code": code})
+            self.assertFalse(result["isError"], text_of(result))
+        for code in ("edits_probe = 1", 'write.csv(cohort, "written_in_edits.csv")', 'dir.create("dir_in_edits")',
+                     'system("mkdir ../outside_the_project")'):
+            result = bridge.call("r", {"code": code})
+            self.assertTrue(result["isError"], code)
+            self.assertIn("Permission denied", text_of(result))
+        state = self.send('cat("EDITS", dir.exists("made_in_edits"), file.exists("touched_in_edits.txt"), '
+                          'exists("edits_probe"), file.exists("written_in_edits.csv"), dir.exists("dir_in_edits"), '
+                          'dir.exists("../outside_the_project"), "\\n")')
+        self.assertIn("EDITS TRUE TRUE FALSE FALSE FALSE FALSE", state)
+        # an allow rule of the user's lets one more call through
+        self.send('invisible(gptr::gptr_permissions(allow = "r(fn:write.csv)"))')
+        result = bridge.call("r", {"code": 'write.csv(cohort, "allowed_in_edits.csv")'})
+        self.assertFalse(result["isError"], text_of(result))
+        self.assertIn("ALLOWED TRUE", self.send('cat("ALLOWED", file.exists("allowed_in_edits.csv"), "\\n")'))
+
+    def test_plan_mode_works_from_gptr_1_2_and_is_refused_before(self):
+        out = self.attach('mode = "plan", label = "plan"')
+        bridge = self.new_bridge()
+        if self.gptr_version < (1, 2, 0):
+            self.assertIn(f"Plan mode needs gptr {GPTR_PLAN_FLOOR} or later", out)
+            self.assertEqual(self.record_files(), [])
+            self.assertIn("No R session is serving gptr", text_of(bridge.call("sessions", {})))
+            return
+        text = text_of(bridge.call("sessions", {}))
+        self.assertIn("Mode plan: ", text)
+        self.assertNotIn("could not run in full", text)
+        # plan mode evaluates in a scratch environment above the workspace, so the objects are
+        # read through it (the overview's ls.str() lists the scratch environment itself)
+        result = bridge.call("inspect", {"code": "str(cohort)"})
+        self.assertFalse(result["isError"], text_of(result))
+        self.assertIn("200 obs", text_of(result))
+        self.assertTrue(bridge.call("r", {"code": "cohort$age = NULL"})["isError"])
+        self.assertIn("AGE-KEPT", self.send('cat(if ("age" %in% names(cohort)) "AGE-KEPT" else "AGE-GONE", "\\n")'))
 
 
 if __name__ == "__main__":

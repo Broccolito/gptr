@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gptragent"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Biorouter extension that works inside an R session the user already has open, through gptr"
 readme = "README.md"
 license = {text = "Apache-2.0"}

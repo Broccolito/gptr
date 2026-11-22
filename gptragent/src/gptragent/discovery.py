@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable, Mapping, Optional
 
 RECORD_NAME = re.compile(r"serve-([0-9]{1,10})\.json")
+# The record format this gptr Agent reads; gptr 1.2.0 and the bundled r/attach.R write format 1.
+RECORD_FORMAT = 1
 RECORD_PARTS = ("R", "gptr", "mcp-serve")
 MAX_RECORD_BYTES = 64 * 1024
 TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{16,512}")
@@ -170,6 +172,34 @@ def _clean_text(value, limit: int = 300) -> str:
     return text[:limit]
 
 
+def _format_number(value) -> Optional[int]:
+    """The record's format as a whole number, or None (JSON true is no format number)."""
+    if isinstance(value, list) and len(value) == 1:
+        value = value[0]
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return value if isinstance(value, int) else None
+
+
+def format_refusal(value) -> Optional[str]:
+    """Why a record of format `value` is not read, naming the side that is behind; None when
+    it is the format this gptr Agent reads."""
+    number = _format_number(value)
+    if number == RECORD_FORMAT:
+        return None
+    if number is None:
+        return (f"its format {value!r} is not a record format number (this gptr Agent reads "
+                f"format {RECORD_FORMAT})")
+    if number > RECORD_FORMAT:
+        return (f"it is in record format {number}, newer than the format {RECORD_FORMAT} this "
+                "gptr Agent reads: gptr Agent is behind, so update gptr Agent in Biorouter")
+    return (f"it is in record format {number}, older than the format {RECORD_FORMAT} this gptr "
+            "Agent reads: gptr is behind, so update gptr in R (install.packages(\"gptr\")), "
+            "restart R and serve the session again")
+
+
 def _read_private(path: str, os_name: str) -> bytes:
     """The bytes of `path` once it is shown to be the user's own private regular file."""
     if os_name == "nt":
@@ -224,8 +254,9 @@ def read_record(path: str, os_name: Optional[str] = None) -> Record:
         raise RecordRejected("it is not JSON") from None
     if not isinstance(data, dict):
         raise RecordRejected("it is not a JSON object")
-    if data.get("format") not in (1, [1]):
-        raise RecordRejected(f"its format {data.get('format')!r} is not 1")
+    why = format_refusal(data.get("format"))
+    if why:
+        raise RecordRejected(why)
     pid = data.get("pid")
     if isinstance(pid, list) and len(pid) == 1:
         pid = pid[0]

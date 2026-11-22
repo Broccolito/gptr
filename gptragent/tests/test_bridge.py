@@ -75,6 +75,27 @@ class NoSessionTests(BridgeCase):
         text = text_of(self.bridge(probe=probe).call("sessions", {}))
         self.assertIn('install.packages("gptr")', text)
 
+    def test_gptr_1_0_gets_the_helper(self):
+        probe = discovery.Probe(rscript="/usr/bin/Rscript", gptr=server.GPTR_FLOOR)
+        text = text_of(self.bridge(probe=probe).call("sessions", {}))
+        self.assertIn("biorouter_gptr_attach(mode = \"auto\")", text)
+        self.assertNotIn("needs gptr", text)
+
+    def test_gptr_below_the_floor_gets_the_update_line_not_the_helper(self):
+        probe = discovery.Probe(rscript="/usr/bin/Rscript", gptr="0.7.0")
+        text = text_of(self.bridge(probe=probe).call("sessions", {}))
+        self.assertIn('install.packages("gptr")', text)
+        self.assertIn(f"gptr 0.7.0 is installed; gptr Agent needs gptr {server.GPTR_FLOOR} or later", text)
+        self.assertNotIn("biorouter_gptr_attach", text)
+
+    def test_a_record_in_a_newer_format_says_to_update_gptr_agent(self):
+        fake = self.fake()
+        self.advertise(fake, 90, format=2)
+        text = text_of(self.bridge().call("sessions", {}))
+        self.assertIn("serve-90.json was skipped: it is in record format 2", text)
+        self.assertIn("update gptr Agent", text)
+        self.assertEqual(fake.tool_calls(), [])
+
     def test_missing_r_gets_both_lines(self):
         probe = discovery.Probe(error="R was not found")
         text = text_of(self.bridge(probe=probe).call("sessions", {}))
@@ -205,6 +226,62 @@ class OldGptrTests(BridgeCase):
         self.assertIn("Mode manual", text)
         self.assertIn("serves no inspect tool", text)
         self.assertNotIn("geterrmessage", fake.tool_calls()[1][1]["code"])
+
+    def test_a_reused_server_is_reported_with_the_mode_and_tools_its_record_names(self):
+        # attach.R found a server already running in manual mode with r and read only, and its
+        # record says so although the user asked for auto
+        fake = self.fake(answer=self.risky(0), tools=("r", "read"))
+        self.advertise(fake, 205, gptr_version="1.1.0", tools=["r", "read"], mode="manual")
+        text = text_of(self.bridge().call("sessions", {}))
+        self.assertIn("mode manual", text)
+        self.assertIn("Mode manual: " + server.MODE_NOTES["manual"], text)
+        self.assertNotIn("Mode auto", text)
+
+    def test_a_server_that_serves_no_r_is_never_sent_r(self):
+        fake = self.fake(tools=("read",))
+        self.advertise(fake, 206, gptr_version="1.1.0", tools=["read"], mode="auto")
+        bridge = self.bridge()
+        for tool in ("r", "inspect"):
+            result = bridge.call(tool, {"code": "x = 1"})
+            self.assertTrue(result["isError"])
+            self.assertIn("pid 206", text_of(result))
+        self.assertEqual(fake.tool_calls(), [])
+
+    def test_plan_mode_before_1_2_says_inspect_cannot_run(self):
+        fake = self.fake(answer=lambda n, a: {"content": [{"type": "text", "text": "Permission denied: not known "
+                                                           "to be read-only in plan mode"}], "isError": True},
+                         tools=("r", "read", "edit", "write"))
+        self.advertise(fake, 207, gptr_version="1.1.0", tools=["r", "read", "edit", "write"], mode="plan")
+        text = text_of(self.bridge().call("sessions", {}))
+        self.assertIn(f"In plan mode gptr before {server.GPTR_PLAN_FLOOR} refuses that check", text)
+
+
+class ModeNoteTests(BridgeCase):
+    def header(self, mode):
+        fake = self.fake()
+        self.advertise(fake, 250, mode=mode)
+        return text_of(self.bridge().call("sessions", {})).splitlines()[1]
+
+    def test_the_edits_note_says_what_gptr_runs_and_refuses_there(self):
+        line = self.header("edits")
+        self.assertTrue(line.startswith("Mode edits: code gptr knows to be read-only runs"), line)
+        # what gptr's perm_edits_ok() admits through r: mkdir, touch, mv and cp shell commands
+        # inside the project or temp folder that assign nothing
+        for word in ("mkdir, touch, mv or cp", "system()", "system2()", "peter$sh()",
+                     "inside the project folder or R's temporary folder", "assigns nothing"):
+            self.assertIn(word, line)
+        # and what it refuses: objects, files written from R, outside the project
+        for word in ("creating or changing objects", "write.csv()", "dir.create()",
+                     "anything outside the project", "gptr_permissions()", 'mode = "auto"'):
+            self.assertIn(word, line)
+        self.assertNotIn("file edits inside the project run", line)
+
+    def test_every_mode_has_its_note(self):
+        for mode in ("plan", "manual", "edits", "auto"):
+            self.assertIn(f"Mode {mode}: {server.MODE_NOTES[mode]}", self.header(mode))
+            for fake in self.servers:
+                fake.close()
+            self.servers = []
 
 
 class SeveralSessionTests(BridgeCase):

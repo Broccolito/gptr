@@ -3,7 +3,7 @@ name: gptr-live-r
 description: Work inside the user's live R session through the gptr Agent extension. Use when the user refers to objects, data, models or errors in an R session they have open (RStudio, Positron, R.app or R in a terminal), or asks to analyse, plot, debug or fix something there without reloading.
 license: Apache-2.0
 metadata:
-  version: 0.1.0
+  version: 0.1.1
   extension: gptragent
 ---
 

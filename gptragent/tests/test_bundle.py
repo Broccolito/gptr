@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -70,6 +71,25 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(project["dependencies"], [])
         skill = (ROOT / "skills/gptr-live-r/SKILL.md").read_text()
         self.assertIn(f"  version: {manifest['version']}", skill)
+
+    def test_one_gptr_floor_everywhere_it_is_stated(self):
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from gptragent import server
+        finally:
+            sys.path.remove(str(ROOT / "src"))
+        floor, plan_floor = server.GPTR_FLOOR, server.GPTR_PLAN_FLOOR
+        short = ".".join(floor.split(".")[:2])
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+        attach = (ROOT / "r" / "attach.R").read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r"gptr package, (\d+\.\d+) or later", readme), [short])
+        self.assertIn(f"plan mode needs gptr {plan_floor} or later", readme)
+        self.assertEqual(re.findall(r"gptr package \((\d+\.\d+) or later\)", manifest["description"]), [short])
+        self.assertEqual(re.findall(r'gptr_floor = "([^"]+)"', attach), [floor])
+        self.assertEqual(re.findall(r'plan_floor = "([^"]+)"', attach), [plan_floor])
+        self.assertIn(f"gptr Agent needs gptr {short} or later; plan mode needs gptr {plan_floor} or later.",
+                      " ".join(line.lstrip("# ") for line in attach.splitlines()))
 
     def test_a_wrong_tool_count_is_refused(self):
         work = self.copy()

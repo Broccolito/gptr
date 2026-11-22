@@ -1,8 +1,8 @@
 {
   "name": "gptragent",
   "display_name": "gptr Agent",
-  "description": "Work inside an R session you already have open. Biorouter inspects, analyses, plots and fixes objects in memory through gptr, without reloading data. Every call passes gptr's permission settings. Needs R with the gptr package (1.1 or later) and uv.",
-  "version": "0.1.0",
+  "description": "Work inside an R session you already have open. Biorouter inspects, analyses, plots and fixes objects in memory through gptr, without reloading data. Every call passes gptr's permission settings. Needs R with the gptr package (1.0 or later) and uv.",
+  "version": "0.1.1",
   "entry_point": "gptragent",
   "repository": "https://github.com/Broccolito/GptrAgent",
   "tools_count": 3,

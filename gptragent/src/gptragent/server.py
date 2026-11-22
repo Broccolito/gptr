@@ -36,6 +36,11 @@ ANSWER_MARGIN = 12.0
 OVERVIEW_WAIT = 60.0
 RISK_WAIT = 20.0
 PROBE_TTL = 60.0
+# The oldest gptr this works with, and the oldest whose plan mode it can use: before 1.2.0 gptr
+# serves no inspect tool, and plan mode refuses the gptr_risk() check inspect runs instead.
+# r/attach.R, the README and the manifest state the same.
+GPTR_FLOOR = "1.0.0"
+GPTR_PLAN_FLOOR = "1.2.0"
 
 INSTRUCTIONS = (
     "These tools work inside an R session the user already has open, with their data loaded. "
@@ -120,8 +125,14 @@ MODE_NOTES = {
     "manual": ("only code gptr knows to be read-only runs; r refuses every change, because nobody "
                "can approve it while gptr serves from the background. If the user wants changes, "
                "they restart the server in R with mode = \"auto\"."),
-    "edits": ("file edits inside the project run; R code that is not known to be read-only is "
-              "refused, because nobody can approve it from the background."),
+    "edits": ("code gptr knows to be read-only runs, and so does a shell command that only makes, "
+              "touches, moves or copies files inside the project folder or R's temporary folder "
+              "(mkdir, touch, mv or cp, through system(), system2() or peter$sh()) and assigns "
+              "nothing. r refuses everything else, because nobody can approve it from the "
+              "background: creating or changing objects, writing or deleting files from R "
+              "(write.csv(), saveRDS(), dir.create()) and anything outside the project, unless "
+              "the user allowed it with a gptr_permissions() rule. If the user wants changes, they "
+              "restart the server in R with mode = \"auto\"."),
     "plan": ("code that only reads runs in a scratch environment and nothing it creates is kept; "
              "every change is refused."),
 }
@@ -313,6 +324,9 @@ class Bridge:
         elif not probe.gptr:
             lines += ['  install.packages("gptr")', f"  {native}",
                       "gptr is not installed in the R library this computer's Rscript uses."]
+        elif installed < discovery.version_tuple(GPTR_FLOOR):
+            lines += ['  install.packages("gptr")  # then restart R', f"  {native}",
+                      f"gptr {probe.gptr} is installed; gptr Agent needs gptr {GPTR_FLOOR} or later."]
         elif installed >= (1, 2, 0):
             lines += [f"  {native}", f"gptr {probe.gptr} is installed."]
         else:
@@ -474,6 +488,10 @@ class Bridge:
         if not rec.serves("inspect"):
             lines.append("This gptr serves no inspect tool (gptr before 1.2.0): inspect checks each "
                          "call with gptr_risk() first.")
+            if mode == "plan":
+                lines.append(f"In plan mode gptr before {GPTR_PLAN_FLOOR} refuses that check, so "
+                             "inspect and this overview cannot run. Ask the user to update gptr "
+                             "(install.packages(\"gptr\")) or to serve the session in another mode.")
         return "\n".join(lines)
 
     def tool_sessions(self, arguments: dict) -> dict:

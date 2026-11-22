@@ -4,12 +4,12 @@ Work inside an R session you already have open. Biorouter inspects, analyses, pl
 objects in memory through [gptr](https://github.com/Broccolito/gptr), without reloading data.
 Every call passes gptr's permission settings.
 
-Current version: **0.1.0**
+Current version: **0.1.1**
 
 ## What you need
 
-- R with the gptr package, 1.1 or later (`install.packages("gptr")`), and gptr's serving
-  packages `httpuv`, `later` and `openssl`.
+- R with the gptr package, 1.0 or later (`install.packages("gptr")`), and gptr's serving
+  packages `httpuv`, `later` and `openssl`; plan mode needs gptr 1.2.0 or later.
 - [uv](https://docs.astral.sh/uv/), which Biorouter uses to install every `.brxt` extension.
 - An interactive R: RStudio, Positron, R.app or R in a terminal. gptr answers while R waits at its
   prompt, so Rscript, knitr, Quarto and Jupyter kernels do not work.

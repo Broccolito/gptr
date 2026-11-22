@@ -175,10 +175,35 @@ class RecordTests(unittest.TestCase):
             self.rewrite(path, lambda d, token=token: d.update(token=token))
             self.assertRejected(path, "token")
 
-    def test_another_format_is_refused(self):
+    def test_a_newer_format_says_gptr_agent_is_behind(self):
         path = self.record()
         self.rewrite(path, lambda d: d.update(format=2))
-        self.assertRejected(path, "format")
+        self.assertRejected(path, "record format 2, newer than the format 1")
+        self.assertRejected(path, "gptr Agent is behind, so update gptr Agent")
+
+    def test_an_older_format_says_gptr_is_behind(self):
+        path = self.record()
+        self.rewrite(path, lambda d: d.update(format=[0]))
+        self.assertRejected(path, "record format 0, older than the format 1")
+        self.assertRejected(path, 'gptr is behind, so update gptr in R (install.packages("gptr"))')
+        with self.assertRaises(discovery.RecordRejected) as caught:
+            discovery.read_record(path)
+        self.assertNotIn("update gptr Agent", str(caught.exception))
+
+    def test_a_format_that_is_no_number_names_neither_side(self):
+        for value in ("1", True, None, [1, 2], 1.5):
+            path = self.record()
+            self.rewrite(path, lambda d, value=value: d.update(format=value))
+            with self.assertRaises(discovery.RecordRejected) as caught:
+                discovery.read_record(path)
+            self.assertIn("not a record format number", str(caught.exception), value)
+            self.assertNotIn("behind", str(caught.exception))
+
+    def test_format_one_written_as_a_float_or_an_array_is_read(self):
+        for value in (1, 1.0, [1]):
+            path = self.record()
+            self.rewrite(path, lambda d, value=value: d.update(format=value))
+            self.assertEqual(discovery.read_record(path).pid, 4242)
 
     def test_a_file_that_is_not_json_is_refused(self):
         os.makedirs(self.dir, exist_ok=True)
@@ -310,6 +335,14 @@ class ScanTests(unittest.TestCase):
         self.assertEqual([r.pid for r in found.records], [4])
         stopped = discovery.scan([self.a], os_name="nt", kill=forbidden, accepts=lambda h, p: False)
         self.assertEqual(stopped.records, [])
+
+    def test_a_record_in_another_format_is_skipped_with_the_side_to_update(self):
+        write_record(self.a, 11, "http://127.0.0.1:4001/mcp", TOKEN, format=2)
+        found = discovery.scan([self.a], kill=lambda p, s: None, accepts=lambda h, p: True)
+        self.assertEqual(found.records, [])
+        self.assertEqual(len(found.notes), 1)
+        self.assertIn("serve-11.json was skipped", found.notes[0])
+        self.assertIn("update gptr Agent", found.notes[0])
 
     def test_a_missing_folder_is_not_an_error(self):
         found = discovery.scan([os.path.join(self.tmp.name, "none")])
