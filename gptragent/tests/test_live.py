@@ -268,8 +268,12 @@ class AttachLiveTests(LiveR):
         text = text_of(bridge.call("sessions", {}))
         self.assertIn("Mode plan: ", text)
         self.assertNotIn("could not run in full", text)
-        # plan mode evaluates in a scratch environment above the workspace, so the objects are
-        # read through it (the overview's ls.str() lists the scratch environment itself)
+        # plan mode evaluates in a scratch environment above the workspace; the overview lists
+        # the workspace, so the fixture's data frame is in it
+        self.assertIn("cohort", text)
+        self.assertIn("200 obs", text)
+        listing = text_of(bridge.call("inspect", {"code": "cat(ls(parent.env(environment())), '\\n')"}))
+        self.assertIn("cohort", listing)
         result = bridge.call("inspect", {"code": "str(cohort)"})
         self.assertFalse(result["isError"], text_of(result))
         self.assertIn("200 obs", text_of(result))

@@ -4,7 +4,7 @@ Work inside an R session you already have open. Biorouter inspects, analyses, pl
 objects in memory through [gptr](https://github.com/Broccolito/gptr), without reloading data.
 Every call passes gptr's permission settings.
 
-Current version: **0.1.1**
+Current version: **0.1.2**
 
 ## What you need
 

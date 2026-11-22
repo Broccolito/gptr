@@ -276,6 +276,20 @@ class ModeNoteTests(BridgeCase):
             self.assertIn(word, line)
         self.assertNotIn("file edits inside the project run", line)
 
+    def test_the_plan_overview_lists_the_workspace_not_its_empty_scratch(self):
+        # gptr 1.2.0 runs a plan-mode call in a fresh scratch environment whose parent is the
+        # workspace, so the overview names the parent; every other mode lists where it runs
+        for pid, mode, listing in ((260, "plan", "print(ls.str(envir = parent.env(environment())), "),
+                                   (261, "manual", "print(ls.str(), ")):
+            fake = self.fake()
+            self.advertise(fake, pid, mode=mode)
+            self.bridge().call("sessions", {})
+            [code] = [args["code"] for _, args in fake.tool_calls() if "Objects in memory" in args.get("code", "")]
+            self.assertIn(listing, code, mode)
+            for server_ in self.servers:
+                server_.close()
+            self.servers = []
+
     def test_every_mode_has_its_note(self):
         for mode in ("plan", "manual", "edits", "auto"):
             self.assertIn(f"Mode {mode}: {server.MODE_NOTES[mode]}", self.header(mode))

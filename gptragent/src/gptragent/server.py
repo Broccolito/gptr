@@ -134,10 +134,12 @@ MODE_NOTES = {
               "the user allowed it with a gptr_permissions() rule. If the user wants changes, they "
               "restart the server in R with mode = \"auto\"."),
     "plan": ("code that only reads runs in a scratch environment and nothing it creates is kept; "
-             "every change is refused."),
+             "every change is refused. The session's objects are read through that environment by "
+             "name, but ls() lists only the empty scratch itself: list them with "
+             "ls(parent.env(environment()))."),
 }
 
-OVERVIEW_CODE = "\n".join([
+OVERVIEW_LINES = [
     'cat("R:", R.version.string, "\\n")',
     'cat("Working folder:", getwd(), "\\n")',
     'cat("Attached packages:", paste(sub("^package:", "", grep("^package:", search(), value = TRUE)), collapse = ", "), "\\n")',
@@ -145,7 +147,12 @@ OVERVIEW_CODE = "\n".join([
     'print(ls.str(), max.level = 1, give.attr = FALSE, vec.len = 2)',
     'cat("Last traceback:\\n")',
     'traceback()',
-])
+]
+OVERVIEW_CODE = "\n".join(OVERVIEW_LINES)
+# plan mode evaluates every call in a fresh, empty scratch environment whose parent is the
+# session's workspace, so a bare ls.str() would list nothing; list the workspace instead
+OVERVIEW_PLAN_CODE = OVERVIEW_CODE.replace(
+    "print(ls.str(), ", "print(ls.str(envir = parent.env(environment())), ")
 # geterrmessage() also holds errors that code caught on its own; shown only after a real error
 OVERVIEW_ERROR_LINE = ('if (exists(".Traceback")) cat("Last error message:", geterrmessage(), "\\n(The traceback '
                        'shows the failing calls, not the name the result was being assigned to.)\\n")')
@@ -475,7 +482,7 @@ class Bridge:
     # ---- the tools ----------------------------------------------------------------------
 
     def overview(self, rec: discovery.Record) -> dict:
-        code = OVERVIEW_CODE
+        code = OVERVIEW_PLAN_CODE if rec.mode == "plan" else OVERVIEW_CODE
         if rec.gptr_at_least(1, 2, 0):
             code = code + "\n" + OVERVIEW_ERROR_LINE
         _, _, answer = self._readonly(code, rec.pid, OVERVIEW_WAIT)
