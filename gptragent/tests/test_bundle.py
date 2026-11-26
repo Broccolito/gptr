@@ -10,9 +10,17 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("build_brxt", ROOT / "scripts" / "build_brxt.py")
-build_brxt = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(build_brxt)
+
+
+def script(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+build_brxt = script("build_brxt")
+version_py = script("version")
 
 
 class BundleTests(unittest.TestCase):
@@ -23,7 +31,10 @@ class BundleTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def copy(self) -> Path:
-        work = Path(self.tmp.name) / "repo"
+        """This folder, and beside it the marketplace that lists it, as in the repository."""
+        repo = Path(self.tmp.name) / "repo"
+        shutil.copytree(ROOT.parent / ".claude-plugin", repo / ".claude-plugin")
+        work = repo / ROOT.name
         shutil.copytree(ROOT, work, ignore=shutil.ignore_patterns(".git", ".venv", "dist", "__pycache__"))
         return work
 
@@ -121,6 +132,26 @@ class BundleTests(unittest.TestCase):
         with self.assertRaises(build_brxt.Refused) as caught:
             build_brxt.check(work)
         self.assertIn("disagree", caught.exception.message)
+
+    def test_a_plugin_manifest_at_another_version_is_refused(self):
+        work = self.copy()
+        version = json.loads((work / "manifest.json").read_text())["version"]
+        for name in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "../.claude-plugin/marketplace.json"):
+            path = work / name
+            text = path.read_text()
+            path.write_text(text.replace(f'"version": "{version}"', f'"version": "9{version}"'))
+            with self.assertRaises(build_brxt.Refused, msg=name) as caught:
+                build_brxt.check(work)
+            self.assertIn(f"{name!r}: '9{version}'", caught.exception.message)
+            path.write_text(text)
+
+    def test_version_py_moves_every_version_the_build_checks(self):
+        work = self.copy()
+        version_py.bump(work, "9.9.9")
+        with self.assertRaises(build_brxt.Refused) as caught:
+            build_brxt.check(work)
+        # every version agrees, so only uv.lock, which uv lock moves, is left behind
+        self.assertIn("uv.lock", caught.exception.message)
 
     def test_a_previous_release_must_keep_its_skills_and_move_forward(self):
         manifest, files = build_brxt.check(ROOT)
