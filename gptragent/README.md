@@ -79,7 +79,9 @@ codex plugin add gptr@gptr
 ```
 
 Start a new thread afterwards. Check with `codex mcp get gptr`. The plugin sets a tool timeout of
-300 seconds, as Codex's default of 60 would cut long calls.
+300 seconds, as Codex's default of 60 would cut long calls. Codex asks before each `r` call,
+because the tool can change objects; `codex exec`, which has nobody to ask, refuses it unless
+its approval settings allow the server's tools.
 
 ## Tools
 
