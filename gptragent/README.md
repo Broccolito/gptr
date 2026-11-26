@@ -14,7 +14,7 @@ GitHub releases.
 ## What you need
 
 - R with the gptr package, 1.0 or later (`install.packages("gptr")`), and gptr's serving
-  packages `httpuv`, `later` and `openssl`. Plan mode needs gptr 1.2.0 or later, recording needs
+  packages `httpuv`, `later` and `openssl`; plan mode needs gptr 1.2.0 or later, and recording
   1.3.0.
 - [uv](https://docs.astral.sh/uv/) on your `PATH`. It runs the bridge, a Python program with no
   dependencies, and fetches a Python 3.11 or later when your computer has none.
