@@ -34,11 +34,12 @@ gptr_provider(
 (\code{reasoning = TRUE}) lists the levels it accepts in \code{thinking_levels}, a subset of \code{"off"},
 \code{"minimal"}, \code{"low"}, \code{"medium"}, \code{"high"}, \code{"xhigh"} and \code{"max"}; without it \code{"off"} to
 \code{"high"} is assumed. A requested level the model lacks becomes the nearest one it has, with a
-message. A record's \code{prices} is a data frame or a list of price records: \code{input} and
-\code{output} in USD per million tokens, optional \code{cache_read}, \code{cache_write_5m},
-\code{cache_write_1h}, \code{from} (a \code{"YYYY-MM-DD"} date) and \code{tier} (\code{"default"}, or \code{">Nk"} for
-prompts above N thousand tokens, such as \code{">200k"}); it is checked here, and without it the
-cost is unknown.}
+message. A level goes to the API as an effort name, or as a token budget for a record with
+\code{thinking_budget = list(min = , max = )} and no \code{thinking_effort = TRUE}. A record's \code{prices}
+is a data frame or a list of price records: \code{input} and \code{output} in USD per million tokens,
+optional \code{cache_read}, \code{cache_write_5m}, \code{cache_write_1h}, \code{from} (a \code{"YYYY-MM-DD"} date) and
+\code{tier} (\code{"default"}, or \code{">Nk"} for prompts above N thousand tokens, such as \code{">200k"}); it is
+checked here, and without it the cost is unknown.}
 
 \item{compat}{Named list of compatibility switches for the adapter (for
 \code{api = "bedrock-converse"}, \code{region}: the AWS region requests are signed for).}
@@ -56,8 +57,9 @@ result; an error keeps prior catalog entries. Report only actual capabilities an
 
 \item{aliases}{Alternative names of the provider.}
 
-\item{local}{Endpoint locality hint permitting unknown model ids. Resolved model locality is
-checked separately: a loopback server may route inference to a remote model.}
+\item{local}{Endpoint locality hint: a model id written in for a local server gets no tool
+calls. Resolved model locality is checked separately: a loopback server may route inference
+to a remote model.}
 
 \item{offline}{\code{TRUE} when no remote model is called (test providers).}
 
@@ -77,13 +79,13 @@ gptr_provider("corp", api = "openai-completions", base_url = "https://llm.corp.e
 # Amazon Bedrock's Converse API through a SigV4 gateway (region and endpoint are record data):
 # the IAM key pair is read from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and
 # AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them. Thinking
-# levels are sent only to a Claude model whose `capabilities` declare adaptive thinking with
-# an effort (Claude 4.6 and later); other models get no thinking, with a message. The
-# bedrock-converse adapter does not request prompt caching, so each request sends the full
-# prompt at the uncached rate.
+# levels are sent only to a model whose record declares `owner = "anthropic"`: as adaptive
+# thinking with an effort, or as a token budget when the record gives a `thinking_budget`;
+# other models get no thinking, with a message. The bedrock-converse adapter does not request
+# prompt caching, so each request sends the full prompt at the uncached rate.
 gptr_provider("gateway", api = "bedrock-converse", base_url = "https://ai.corp.example/awsai",
               auth = "AWS_SECRET_ACCESS_KEY", compat = list(region = "us-west-2"),
               models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE,
-                                 reasoning = TRUE,
-                                 capabilities = list(adaptive_thinking = TRUE, effort = TRUE))))
+                                 reasoning = TRUE, owner = "anthropic",
+                                 thinking_effort = TRUE)))
 }

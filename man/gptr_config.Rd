@@ -25,8 +25,14 @@ file < \verb{options(gptr.*)} < this R session. With named arguments, sets those
 }
 \details{
 \code{model}, \code{small_model}, \code{system1}, \code{mode} and \code{preset} take bare names (\code{mode = plan}); \code{NULL}
-removes a key from the scope. \code{egress} (the providers you allow automatic context to go to) is
-accepted only at user scope. \code{mode = yolo} and turning off local-only Ollama inference
+removes a key from the scope. Unset, \code{model} and \code{system1} come from the catalog's reviewed
+defaults of the first ready route: Anthropic, OpenAI, Google, then a detected command-line
+tool (System 1: TypeSafe, else an installed local classifier); \code{small_model} is that route's
+small default, else \code{model}. \code{model = openai}, a provider with a reviewed default named alone,
+means that default; any \code{provider/id} is accepted (\code{\link[=gptr_models]{gptr_models()}}).
+
+\code{egress} (the providers you allow automatic context to go to) is accepted only at user scope.
+\code{mode = yolo} and turning off local-only Ollama inference
 (\code{providers = list(ollama = list(local_only = FALSE))}) are accepted only at user or session
 scope; a project can only keep local-only inference on. A change called from model code
 during a run needs an allowing permission decision (a person's, in every mode but \code{yolo}; see

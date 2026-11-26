@@ -39,11 +39,10 @@ provider_table = function() {
          auth = "TOGETHER_API_KEY",
          compat = list(thinking_format = "together", max_tokens_field = "max_tokens",
                        supports_store = FALSE, supports_developer_role = FALSE,
-                       supports_reasoning_effort = FALSE, think_tags = TRUE)),
+                       think_tags = TRUE)),
     list(id = "xai", api = "openai-completions", base_url = "https://api.x.ai/v1",
          auth = "XAI_API_KEY",
-         compat = list(supports_store = FALSE, supports_developer_role = FALSE,
-                       supports_reasoning_effort = FALSE)),
+         compat = list(supports_store = FALSE, supports_developer_role = FALSE)),
     list(id = "cerebras", api = "openai-completions", base_url = "https://api.cerebras.ai/v1",
          auth = "CEREBRAS_API_KEY",
          compat = list(supports_store = FALSE, supports_developer_role = FALSE,
@@ -53,14 +52,13 @@ provider_table = function() {
          compat = list(supports_store = FALSE, supports_developer_role = FALSE)),
     list(id = "ollama", api = "openai-completions", base_url = "http://127.0.0.1:11434/v1",
          auth = NULL, local = TRUE, discover = provider_ollama_discoverer("ollama"),
-         compat = list(supports_reasoning_effort = TRUE, supports_tool_choice = FALSE)),
+         compat = list(supports_tool_choice = FALSE)),
     list(id = "lmstudio", api = "openai-completions", base_url = "http://localhost:1234/v1",
          auth = NULL, local = TRUE),
     list(id = "llamacpp", api = "openai-completions", base_url = "http://127.0.0.1:8080/v1",
          auth = NULL, local = TRUE),
     list(id = "vllm", api = "openai-completions", base_url = "http://localhost:8000/v1",
-         auth = provider_optional_auth("vllm", "VLLM_API_KEY"), local = TRUE,
-         compat = list(supports_reasoning_effort = TRUE)),
+         auth = provider_optional_auth("vllm", "VLLM_API_KEY"), local = TRUE),
     list(id = "azure", api = "openai-completions", base_url = NULL, auth = "AZURE_OPENAI_API_KEY",
          compat = list(auth_header = "api-key", deployment_model = TRUE,
                        base_url_env = "AZURE_OPENAI_ENDPOINT",
@@ -72,12 +70,6 @@ provider_table = function() {
            base_url_template = "https://bedrock-runtime.{value}.amazonaws.com/openai/v1"
          ))
   )
-}
-
-#' Default model id per built-in provider (architecture section 8.4)
-#' @noRd
-provider_default_models = function() {
-  c(anthropic = "claude-sonnet-5-5", openai = "gpt-6-sol", google = "gemini-3.8-flash")
 }
 
 #' An `auth` function for an optional key (vLLM): a bound handle when the key exists, else NULL
@@ -108,15 +100,18 @@ provider_models_supported = function(p) {
 #' Sparse advertised model records: map only fields the endpoint actually reports. Catalog
 #' facts for an existing id survive a sparse response; a new id receives no guessed limits,
 #' tools or price. A listing is not proof that the account can make an inference request.
+#' LM Studio answers its native `/api/v1/models`, which reports tools, vision and reasoning.
 #' @noRd
 provider_models = function(p, credential = provider_credential(p)) {
   if (check_running() || !provider_models_supported(p)) return(NULL)
   base = provider_base_url(p)
   if (is.null(base)) return(NULL)
   api = p[["api"]]
+  pid = p[["id"]] %||% p[["name"]]
+  lmstudio = identical(pid, "lmstudio")
   fail = function(why, status = NA_integer_) {
-    gptr_abort(paste0("Model listing for ", p[["id"]] %||% p[["name"]], " ", why, "."),
-               c("network", "provider"), provider = p[["id"]] %||% p[["name"]],
+    gptr_abort(paste0("Model listing for ", pid, " ", why, "."),
+               c("network", "provider"), provider = pid,
                status = status, retryable = FALSE, reason = why)
   }
   headers = list(accept = "application/json")
@@ -138,17 +133,32 @@ provider_models = function(p, credential = provider_credential(p)) {
   }
   headers = adp_merge_headers(headers, p[["headers"]] %||% list(),
                               auth = c("authorization", "x-api-key", "x-goog-api-key", "api-key"))
+  if (lmstudio) base = catalog_endpoint(p)$root
   path = if (identical(api, "anthropic-messages")) {
     "/v1/models?limit=1000"
+  } else if (identical(api, "google-generative-ai")) {
+    "/models?pageSize=1000"
+  } else if (lmstudio) {
+    "/api/v1/models"
   } else {
-    if (identical(api, "google-generative-ai")) "/models?pageSize=1000" else "/models"
+    "/models"
   }
   positive = function(x) {
     if (is.numeric(x) && length(x) == 1L && !is.na(x) && is.finite(x) && x > 0) x else NULL
   }
+  # the provider's own effort names become the thinking levels (D-393)
+  effort = function(names, off) {
+    levels = catalog_effort_levels(names, off)
+    if (length(setdiff(levels, "off"))) {
+      list(reasoning = TRUE, thinking_effort = TRUE, thinking_levels = levels)
+    } else {
+      list(reasoning = TRUE)
+    }
+  }
   record = function(m) {
     if (!is.list(m)) fail("returned an invalid model record")
-    id = m[["id"]] %||% m[["name"]]
+    if (lmstudio && !identical(m[["type"]], "llm")) return(NULL)
+    id = if (lmstudio) m[["key"]] else m[["id"]] %||% m[["name"]]
     if (!rlang::is_string(id) || !nzchar(id) || grepl("[[:cntrl:]]", id)) {
       fail("returned an invalid model id")
     }
@@ -160,10 +170,10 @@ provider_models = function(p, credential = provider_credential(p)) {
     name = m[["display_name"]] %||% m[["displayName"]] %||% m[["name"]] %||% id
     if (!rlang::is_string(name) || grepl("[[:cntrl:]]", name)) name = id
     out = list(id = id, name = name)
+    caps = m[["capabilities"]]
     if (identical(api, "anthropic-messages")) {
       out$context = positive(m[["max_input_tokens"]])
       out$max_output = positive(m[["max_tokens"]])
-      caps = m[["capabilities"]]
       if (is.logical(caps[["thinking"]][["supported"]])) {
         out$reasoning = isTRUE(caps[["thinking"]][["supported"]])
       }
@@ -172,6 +182,15 @@ provider_models = function(p, credential = provider_credential(p)) {
         out$input = c("text", if (isTRUE(caps[["image_input"]][["supported"]])) "image",
                       if (isTRUE(caps[["pdf_input"]][["supported"]])) "pdf")
       }
+      e = caps[["effort"]]
+      if (isTRUE(e[["supported"]])) {
+        named = names(Filter(function(x) isTRUE(x[["supported"]]), e[names(e) != "supported"]))
+        off = isTRUE(caps[["thinking"]][["types"]][["disabled"]][["supported"]])
+        out = utils::modifyList(out, effort(named, off))
+      } else if (isFALSE(e[["supported"]])) {
+        out$thinking_effort = FALSE
+      }
+      if (isTRUE(m[["lifecycle"]] %in% c("deprecated", "retired"))) out$status = "deprecated"
     } else if (identical(api, "google-generative-ai")) {
       out$context = positive(m[["inputTokenLimit"]])
       out$max_output = positive(m[["outputTokenLimit"]])
@@ -183,25 +202,56 @@ provider_models = function(p, credential = provider_credential(p)) {
       out$api = api
       out$tool_call = FALSE
       out$reasoning = FALSE
+    } else if (lmstudio) {
+      # a loaded instance's context is what the server runs; the model's maximum otherwise
+      loaded = m[["loaded_instances"]]
+      out$context = positive(if (length(loaded)) loaded[[1L]][["config"]][["context_length"]]) %||%
+        positive(m[["max_context_length"]])
+      if (rlang::is_bool(caps[["trained_for_tool_use"]])) {
+        out$tool_call = caps[["trained_for_tool_use"]]
+      }
+      if (isTRUE(caps[["vision"]])) out$input = c("text", "image")
+      options = caps[["reasoning"]][["allowed_options"]]
+      if (is.list(caps[["reasoning"]])) {
+        out = utils::modifyList(out, effort(options, "off" %in% unlist(options)))
+      }
     } else {
-      caps = m[["capabilities"]]
       if (isFALSE(caps[["completion_chat"]])) return(NULL)
       outputs = unlist(m[["architecture"]][["output_modalities"]], use.names = FALSE)
       if (length(outputs) && !"text" %in% outputs) return(NULL)
-      out$context = positive(m[["context_length"]]) %||% positive(m[["max_context_length"]])
-      out$max_output = positive(m[["top_provider"]][["max_completion_tokens"]])
-      params = unlist(m[["supported_parameters"]], use.names = FALSE)
+      # the context fields of OpenRouter, Mistral, Cerebras, vLLM, Groq and llama.cpp
+      out$context = positive(m[["context_length"]]) %||% positive(m[["max_context_length"]]) %||%
+        positive(m[["limits"]][["max_context_length"]]) %||% positive(m[["max_model_len"]]) %||%
+        positive(m[["context_window"]]) %||% positive(m[["meta"]][["n_ctx_train"]])
+      out$max_output = positive(m[["top_provider"]][["max_completion_tokens"]]) %||%
+        positive(m[["limits"]][["max_completion_tokens"]])
+      sp = m[["supported_parameters"]]
+      params = if (is.null(names(sp))) unlist(sp, use.names = FALSE) else names(Filter(isTRUE, sp))
       if (length(params)) {
         out$tool_call = "tools" %in% params
+        out$temperature = "temperature" %in% params
         if (any(c("reasoning", "reasoning_effort") %in% params)) out$reasoning = TRUE
       }
-      if (is.logical(caps[["function_calling"]]) && length(caps[["function_calling"]]) == 1L) {
-        out$tool_call = isTRUE(caps[["function_calling"]])
-      }
+      if (rlang::is_bool(caps[["function_calling"]])) out$tool_call = caps[["function_calling"]]
+      if (rlang::is_bool(caps[["reasoning"]])) out$reasoning = caps[["reasoning"]]
       input = intersect(c("text", "image", "pdf"),
                           unlist(m[["architecture"]][["input_modalities"]], use.names = FALSE))
       if (length(input)) out$input = input else if (isTRUE(caps[["vision"]])) {
         out$input = c("text", "image")
+      }
+      r = m[["reasoning"]]
+      if (is.list(r) && length(r[["supported_efforts"]])) {
+        out = utils::modifyList(out, effort(r[["supported_efforts"]],
+                                            "none" %in% unlist(r[["supported_efforts"]]) &&
+                                              !isTRUE(r[["mandatory"]])))
+      }
+      if (length(caps[["reasoning_effort"]])) {
+        out = utils::modifyList(out, effort(caps[["reasoning_effort"]],
+                                            "none" %in% unlist(caps[["reasoning_effort"]])))
+      }
+      retiring = c("expiration_date", "shutdown_date", "deprecation")
+      if (any(vapply(m[retiring], rlang::is_string, NA)) || isTRUE(m[["deprecated"]])) {
+        out$status = "deprecated"
       }
     }
     Filter(Negate(is.null), out)
@@ -220,7 +270,11 @@ provider_models = function(p, credential = provider_credential(p)) {
                                attempts = 1L, max_bytes = 8 * 1024^2)
     if (!identical(res$status, 200L)) fail(paste0("returned HTTP ", res$status), res$status)
     body = tryCatch(json_decode(raw_to_utf8(res$body)), error = function(e) NULL)
-    field = if (api %in% c("google-generative-ai", "typesafe-system-one")) "models" else "data"
+    field = if (lmstudio || api %in% c("google-generative-ai", "typesafe-system-one")) {
+      "models"
+    } else {
+      "data"
+    }
     if (!is.list(body) || !is.list(body[[field]])) fail("returned an invalid response")
     result = c(result, Filter(Negate(is.null), lapply(body[[field]], record)))
     if (length(result) > 4096L) fail("exceeded 4096 models")
@@ -1446,19 +1500,19 @@ provider_status = function(p, h, check) {
   list(status = status, version = NA_character_)
 }
 
-#' The default model reference shown for a provider: architecture 8.4, else its newest active
-#' catalog model; never a classifier for a conversational provider, or the reverse (IC-74)
+#' The default model reference shown for a provider: the catalog's reviewed default, else its
+#' newest active catalog model; never a classifier for a conversational provider, or the reverse
+#' (IC-74)
 #' @noRd
-provider_default_model = function(p, idx) {
+provider_default_model = function(p, ctg) {
   id = p[["id"]] %||% p[["name"]]
-  d = provider_default_models()[id]
-  if (!is.na(d)) return(paste0(id, "/", d))
-  if (!is.data.frame(idx) || !nrow(idx)) return(NA_character_)
   decision = identical(p[["type"]], "classifier")
-  ok = idx$provider == id & idx$status == "active" & (idx$type == "classifier") == decision
-  rows = idx[!is.na(ok) & ok, , drop = FALSE]
-  if (!nrow(rows)) return(NA_character_)
-  rows$ref[order(rows$release_date, decreasing = TRUE, method = "radix")][[1]]
+  d = ctg$defaults[[id]][[if (decision) "system1" else "model"]]
+  if (rlang::is_string(d)) return(paste0(id, "/", d))
+  idx = ctg$index
+  if (!is.data.frame(idx) || !nrow(idx)) return(NA_character_)
+  catalog_alias_target(list(provider = id),
+                       idx[(idx$type == "classifier") == decision, , drop = FALSE])
 }
 
 #' Egress acknowledgment state of a provider (the acknowledgment itself is P08's)
@@ -1493,7 +1547,7 @@ provider_listing_get = function(id) {
 
 #' One row of the provider listing (the credential lookup registers and binds nothing)
 #' @noRd
-provider_listing_row = function(id, p, err, check, reg, idx) {
+provider_listing_row = function(id, p, err, check, reg, ctg) {
   # a failing settings entry or `auth` function marks its own row, never the whole listing
   h = if (is.null(err)) {
     tryCatch(provider_credential(p, register = FALSE), error = function(e) e)
@@ -1514,7 +1568,7 @@ provider_listing_row = function(id, p, err, check, reg, idx) {
          NA_character_
        },
        source = if (length(src)) src[[1]] else NA_character_, status = s$status,
-       default_model = provider_default_model(p, idx), egress = provider_egress(p),
+       default_model = provider_default_model(p, ctg), egress = provider_egress(p),
        version = s$version)
 }
 
@@ -1532,7 +1586,10 @@ provider_listing_row = function(id, p, err, check, reg, idx) {
 #' `unreachable`, or `not checked` under `R CMD check`. `egress` is `ack` when no
 #' acknowledgment is needed (offline providers, local servers at a loopback address) or the
 #' user has given it. Listing reads credentials only: it never registers an environment
-#' variable or binds it to a provider.
+#' variable or binds it to a provider. `default_model` is gptr's reviewed default where the
+#' catalog has one (Anthropic, OpenAI, Google, TypeSafe), `<route>/default` for a command-line
+#' route (the model your CLI starts with, see [gptr_models()]), else the provider's newest
+#' catalog model.
 #'
 #' `ready` means the required configuration is present; it does not validate the credential,
 #' account quota or access to a specific model. `check = TRUE` tests reachability, not login.
@@ -1564,8 +1621,8 @@ gptr_providers = function(check = FALSE, check_login = FALSE) {
   keep = !vapply(provs, function(x) is.null(x$p), NA)
   ids = ids[keep]
   provs = provs[keep]
-  idx = tryCatch(catalog_get()$index, gptr_error = function(e) NULL)
-  rows = Map(function(id, x) provider_listing_row(id, x$p, x$err, check, reg, idx), ids, provs)
+  ctg = tryCatch(catalog_get(), gptr_error = function(e) NULL)
+  rows = Map(function(id, x) provider_listing_row(id, x$p, x$err, check, reg, ctg), ids, provs)
   col = function(f) vapply(rows, function(r) r[[f]], "", USE.NAMES = FALSE)
   df = data.frame(id = col("id"), type = col("type"), api = col("api"),
                   credential = col("credential"), source = col("source"),

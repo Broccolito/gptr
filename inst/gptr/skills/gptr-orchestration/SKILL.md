@@ -35,7 +35,9 @@ Code and `codex/...` uses Codex. The built-in `opus`, `sonnet` and `haiku` alias
 Anthropic API models; user aliases may override them.
 For an Opus Claude Code parent to delegate to Sonnet through Claude Code, use
 `model = "claude-cli/sonnet"`. Either CLI can delegate to the other with an explicit reference,
-such as `model = "codex/gpt-6-sol"` or `model = "claude-cli/sonnet"`.
+such as `model = "codex/default"` (the model that Codex starts with) or
+`model = "claude-cli/sonnet"`. A CLI route lists the ids its CLI reports; an id it does not list
+is passed to the CLI as written.
 
 ## A team: several agents on one task
 

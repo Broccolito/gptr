@@ -348,21 +348,45 @@ test_that("/model and /status name the model a CLI's default runs (#44)", {
   # the switch's answer names it too (FIX-34)
   expect_identical(run_command(rs, "/model fakeclaude/default")$out,
                    paste0("Model: ", shown, " (used from the first prompt)"))
-  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_identical(run_command(rs, "/model")$out[[1L]], paste0("Model: ", shown))
   expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
   rs$session = idle_session()
   expect_identical(run_command(rs, "/model fakeclaude/default")$out,
                    paste0("Model: ", shown, " (from the next request)"))
-  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_identical(run_command(rs, "/model")$out[[1L]], paste0("Model: ", shown))
   expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
   run_command(rs, "/model fakeclaude/claude-sonnet-5-5")
-  expect_identical(run_command(rs, "/model")$out, "Model: fakeclaude/claude-sonnet-5-5")
+  expect_identical(run_command(rs, "/model")$out[[1L]], "Model: fakeclaude/claude-sonnet-5-5")
   # another CLI adapter decides what its `default` runs
   off2 = gptr_register(gptr_provider("mycli", api = "mycli-api", type = "cli",
                                      models = list(list(id = "default"))))
   withr::defer(off2())
   run_command(rs, "/model mycli/default")
-  expect_identical(run_command(rs, "/model")$out, "Model: mycli/default")
+  expect_identical(run_command(rs, "/model")$out[[1L]], "Model: mycli/default")
+})
+
+test_that("/model on a CLI route lists the models its CLI reports and names the default", {
+  local_console_commands()
+  talks = local_talks(fixture_lines("claude-discover-text.ndjson"))
+  local_mocked_bindings(check_running = function() FALSE, egress_check = function(...) TRUE,
+                        replay_guard = function(...) TRUE)
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  rs = repl_state(NULL, new.env())
+  run_command(rs, "/model claude-cli")
+  out = run_command(rs, "/model")$out
+  expect_identical(out[[1L]], "Model: claude-cli (vendor-large-3)")
+  expect_identical(out[[2L]],
+                   "The claude-cli route lists (any other id: /model claude-cli/<id>):")
+  expect_true(any(grepl("^  claude-cli/vendor-mid-3 +Mid 3$", out)))
+  expect_true(any(grepl("^  claude-cli/default +default [(]vendor-large-3[)]$", out)))
+  # the CLI is asked once in this R session, and not for another route
+  run_command(rs, "/model")
+  expect_length(talks$all, 1L)
+  off = gptr_register(gptr_fake_provider(list("unused")))
+  withr::defer(off())
+  run_command(rs, "/model fake/fake-1")
+  expect_identical(run_command(rs, "/model")$out, "Model: fake/fake-1")
 })
 
 test_that("/mode on a session appends the mode change for the next turn", {

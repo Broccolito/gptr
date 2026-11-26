@@ -278,7 +278,7 @@ test_that("discovery preserves consent and replay refusals before credentials or
                class = "gptr_error_not_recorded")
   # Pure catalog lookup, defaults and listing never inspect credentials or discover.
   expect_identical(model_resolve("openai/known")$id, "known")
-  expect_error(model_resolve("openai/unknown"), "gptr_models(provider", fixed = TRUE)
+  expect_identical(model_resolve("openai/unknown")$id, "unknown")
   expect_true(nrow(gptr_models(provider = "openai")) > 0L)
 })
 
@@ -311,7 +311,8 @@ test_that("custom discover callbacks support sparse records and successful empty
   expect_identical(m$locality, "unknown")
   p$discover = function() list()
   catalog_discover(p)
-  expect_null(model_resolve("openai/callback-id", strict = FALSE))
+  # the empty listing removed it: the id is now only written in, with no known context
+  expect_true(is.na(model_resolve("openai/callback-id")$context))
   expect_identical(model_resolve("openai/known")$id, "known")
 })
 

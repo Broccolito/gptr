@@ -1,0 +1,99 @@
+{
+ "typesafe/jev-latest": {
+  "id": "typesafe/jev-latest",
+  "type": "decision",
+  "name": "Jev",
+  "family": "jev",
+  "attachment": true,
+  "reasoning": false,
+  "tool_call": false,
+  "temperature": false,
+  "release_date": "2026-09-15",
+  "last_updated": "2026-09-15",
+  "modalities": {
+   "input": [
+    "text",
+    "image"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "open_weights": false,
+  "limit": {
+   "context": 64000,
+   "output": 0
+  }
+ },
+ "typesafe/jev-1.14.0": {
+  "id": "typesafe/jev-1.14.0",
+  "type": "decision",
+  "name": "Jev 1.14",
+  "family": "jev",
+  "attachment": true,
+  "reasoning": false,
+  "tool_call": false,
+  "temperature": false,
+  "release_date": "2026-10-14",
+  "last_updated": "2026-10-14",
+  "modalities": {
+   "input": [
+    "text",
+    "image"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "open_weights": false,
+  "limit": {
+   "context": 64000,
+   "output": 0
+  }
+ },
+ "cloudflare/clef": {
+  "id": "cloudflare/clef",
+  "type": "decision",
+  "name": "Clef",
+  "family": "clef",
+  "attachment": true,
+  "reasoning": false,
+  "tool_call": false,
+  "temperature": true,
+  "release_date": "2026-10-01",
+  "last_updated": "2026-10-01",
+  "modalities": {
+   "input": [
+    "text",
+    "image"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "open_weights": true,
+  "limit": {
+   "context": 65536,
+   "output": 0
+  },
+  "license": "Apache-2.0",
+  "links": [
+   {
+    "label": "Announcement",
+    "url": "https://blog.cloudflare.com/clef-decision-models/",
+    "type": "announcement"
+   },
+   {
+    "label": "Model card",
+    "url": "https://huggingface.co/Cloudflare/clef",
+    "type": "model_card"
+   }
+  ],
+  "weights": [
+   {
+    "label": "Hugging Face",
+    "url": "https://huggingface.co/Cloudflare/clef"
+   }
+  ]
+ }
+}

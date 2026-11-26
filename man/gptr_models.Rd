@@ -19,7 +19,8 @@ revalidation into the user cache. With a provider it asks that provider's model-
 egress and replay checks. API discovery is bounded to four pages, four seconds total and
 one second per request. A failed listing keeps prior models and reports the failed refresh
 in the footer. A provider with neither (Bedrock Converse, an offline provider) is not
-contacted. For Ollama it uses native \verb{/api/version}, \verb{/api/tags} and \verb{/api/show} endpoints
+contacted. For \code{claude-cli} and \code{codex} it asks the CLI, as above, within 15 seconds.
+For Ollama it uses native \verb{/api/version}, \verb{/api/tags} and \verb{/api/show} endpoints
 with a one second limit per request. Ollama discovery requires a
 loopback address under the default local-only policy; only an explicit human setting at
 user or session scope can relax it (see \code{\link[=gptr_config]{gptr_config()}}).
@@ -31,29 +32,48 @@ A \code{gptr_models} data frame with columns \code{ref}, \code{provider}, \code{
 \code{max_output}, \code{input_price}, \code{output_price} (USD per million tokens, selected for today's
 date from the available catalog; \code{0} for verified local inference, \code{NA} when unknown),
 \code{reasoning} (\code{NA} when unknown), \code{aliases}, \code{status}, \code{availability} (\code{unknown},
-\code{advertised}, \code{unlisted}, or
-the latter two with \code{ (stale)}; a \code{claude-cli} or \code{codex} \code{default} row takes that of the
-full id it runs) and \code{checked_at} (UTC time of the last successful provider listing, \code{NA}
-when none). Unlisted models remain in the catalog. Catalog prices can be
-stale and are not an account quote.
+\code{advertised}, \code{unlisted}, or the latter two with \code{ (stale)}) and \code{checked_at} (UTC time of
+the last successful provider listing, \code{NA} when none). Unlisted models remain in the catalog.
+Catalog prices can be stale and are not an account quote.
 }
 \description{
-Searches the merged model catalog: the shipped snapshot (models.dev plus gptr's reviewed
-prices and capabilities), a refreshed copy in \code{tools::R_user_dir("gptr", "cache")}, models
-declared by registered providers, user configuration and provider inventories. Offline
-by default: only \code{refresh = TRUE} touches the network.
+Searches the merged model catalog: the shipped snapshot (models.dev, MIT, with gptr's reviewed
+corrections, aliases and defaults), a refreshed copy in \code{tools::R_user_dir("gptr", "cache")},
+models declared by registered providers, user configuration and provider inventories. A
+refresh keeps gptr's reviewed data. Offline by default: only \code{refresh = TRUE} touches the
+network.
 }
 \details{
+An alias such as \code{sonnet}, \code{gpt} or \code{gemini} names the newest active model of its models.dev
+family; on a release-date tie the shortest id wins. Any \code{provider/id} of a known provider is
+accepted: an id the catalog lacks is sent as written, with one notice, and gets only what a
+name can tell: tool calls on a remote chat or command-line route (none on a local server),
+text input, no thinking level, unknown limits and price. Declare its real capabilities in the
+provider's \code{models} setting (\code{\link[=gptr_config]{gptr_config()}}) or with \code{\link[=gptr_provider]{gptr_provider()}}. A name without a
+provider that is neither a catalog id nor an alias is refused with the closest catalog
+references as suggestions; gptr never runs a similar model in its place.
+
 A catalog entry describes a route, not current account access. \code{availability} records what
 the last provider listing advertised, with its \code{checked_at} time; it does not verify inference
 or billing access. Failed or expired listings are marked stale and keep the previous models.
 Providers other than Ollama with a native model-list API are inventoried before use after
 consent, at most once per five minutes in this R process; \code{refresh = TRUE} bypasses that
-cache. A \code{discover()} callback, such as the \code{claude} and \code{codex} command-line catalogs, runs
-only with \code{refresh = TRUE}.
-Copy a \code{ref} into the
-\code{model} argument of \code{\link[=peter]{peter()}} to choose that route. Ollama routes require current installed
-model evidence before inference; discovery does not pull models. See
+cache. Their listings also give thinking levels, temperature support and retirement where the
+provider reports them. A \code{discover()} callback runs with \code{refresh = TRUE}.
+
+The \code{claude-cli} and \code{codex} routes ask your installed CLI which models it offers and which one
+it starts with: Claude Code through its stream-json \code{initialize} and \code{get_settings} control
+requests, Codex through \verb{codex app-server} (\code{model/list}, \code{config/read}), else
+\verb{codex debug models}. No prompt is sent and no tokens are spent. Claude Code's probe starts
+with your settings, which name the model it starts with, so their SessionStart hooks run;
+tools and slash commands stay off. gptr asks once per R session and CLI version, when a run
+starts or at \verb{/model}, and again with \code{refresh = TRUE}, so a CLI update changes the list
+without a gptr release. The \code{default} row runs the model your CLI starts with and names it
+(\code{default (claude-opus-5-5)}); when the CLI cannot say, gptr passes no model flag and the CLI
+chooses.
+
+Copy a \code{ref} into the \code{model} argument of \code{\link[=peter]{peter()}} to choose that route. Ollama routes require
+current installed model evidence before inference; discovery does not pull models. See
 \code{vignette("language-models", package = "gptr")} for setup and \code{\link[=gptr_providers]{gptr_providers()}} for
 credentials and reachability.
 }

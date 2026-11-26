@@ -551,9 +551,8 @@ adp_fixture_model = function(api, dir = NULL, type = "chat") {
            release_date = NA_character_, context = 200000, max_output = 8192, reasoning = TRUE,
            thinking_levels = c("off", "low", "medium", "high"), thinking = NULL,
            input = c("text", "image"), tool_call = TRUE, structured_output = TRUE,
-           cache_min = NA_real_,
-           capabilities = list(mid_system = TRUE, tool_addition = TRUE, images_in_results = TRUE,
-                               adaptive_thinking = TRUE, effort = TRUE),
+           temperature = FALSE, cache_min = NA_real_,
+           capabilities = list(mid_system = TRUE, tool_addition = TRUE, images_in_results = TRUE),
            aliases = character(), status = "active", local = TRUE)
   f = if (is.null(dir)) "" else file.path(dir, "model.json")
   if (nzchar(f) && file.exists(f)) {
@@ -799,6 +798,23 @@ adp_model_cap = function(model, name, default = FALSE) {
   if (is.null(v) || length(v) != 1L || is.na(v)) default else v
 }
 
+#' The temperature a request may carry, or NULL: only for a model whose data accepts it
+#' (`temperature = TRUE`; unknown is no), and for a reasoning model only with its thinking off
+#' (conservative: GPT-6.2 refuses it, Gemini 3 asks for the default)
+#' @noRd
+adp_temperature = function(model, params) {
+  ok = isTRUE(model[["temperature"]]) &&
+    (!isTRUE(model$reasoning) || identical(params$thinking, "off"))
+  if (ok) params$temperature
+}
+
+#' Does the model think within a token budget rather than at named effort levels? Its data gives
+#' a `thinking_budget`; a model that also takes effort names gets the effort (D-393)
+#' @noRd
+adp_budget_thinking = function(model) {
+  !is.null(model[["thinking_budget"]]) && !isTRUE(model[["thinking_effort"]])
+}
+
 #' Does the model take image input? (images are otherwise replaced by a one-line note)
 #' @noRd
 adp_images_ok = function(model) "image" %in% unlist(model$input %||% "text")
@@ -979,13 +995,6 @@ adp_anchor_index = function(msgs) {
 #' @noRd
 adp_operator_text = function(m) {
   paste(vapply(m$content, function(b) b$text %||% "", ""), collapse = "\n")
-}
-
-#' The effort for a thinking level: `minimal` maps to `low`, `off` and NULL to none
-#' @noRd
-adp_level_effort = function(level) {
-  if (is.null(level) || identical(level, "off")) return(NULL)
-  if (identical(level, "minimal")) "low" else level
 }
 
 #' Thinking budget in tokens for budget-based models (report 03 section 5.5 defaults)
@@ -1194,22 +1203,22 @@ anthropic_elements = function(model, msgs, opts, anchors = "project", tail = FAL
   list(elements = out, betas = unique(betas), prev = prev, mid = mid)
 }
 
-#' Thinking, effort and budget of a request: adaptive models get adaptive thinking and an
-#' effort, budget models `enabled` with a budget and the interleaved beta (07 section 2.6)
+#' Thinking, effort and budget of a request from the model's data: named levels get adaptive
+#' thinking and an effort, a token budget `enabled` with the interleaved beta, and `off` is
+#' `disabled` where the levels list it (07 section 2.6; the per-model table of
+#' https://platform.claude.com/docs/en/build-with-claude/thinking)
 #' @noRd
 anthropic_thinking = function(model, params) {
   out = list(thinking = NULL, effort = NULL, budget = NULL, betas = character())
   if (!isTRUE(model$reasoning)) return(out)
   level = params$thinking
-  if (isTRUE(adp_model_cap(model, "adaptive_thinking", FALSE))) {
-    if (!identical(level, "off")) {
-      out$thinking = list(type = "adaptive",
-                          display = if (gptr_has_human()) "summarized" else "omitted")
-    }
-    if (isTRUE(adp_model_cap(model, "effort", TRUE))) {
-      out$effort = params$effort %||% adp_level_effort(level)
-    }
-  } else if (!is.null(level) && !identical(level, "off")) {
+  if (identical(level, "off")) {
+    if ("off" %in% unlist(model$thinking_levels)) out$thinking = list(type = "disabled")
+  } else if (!adp_budget_thinking(model)) {
+    out$thinking = list(type = "adaptive",
+                        display = if (gptr_has_human()) "summarized" else "omitted")
+    out$effort = params$effort %||% level
+  } else if (!is.null(level)) {
     out$budget = adp_budget(level)
     out$thinking = list(type = "enabled", budget_tokens = out$budget)
     out$betas = "interleaved-thinking-2025-05-14"
@@ -1222,7 +1231,9 @@ anthropic_thinking = function(model, params) {
 anthropic_tool_choice = function(tc, model, thinking, returns) {
   if (identical(tc, "none")) return(list(type = "none"))
   if (!adp_forced(tc) || !adp_forced_ok(model, anthropic_caps())) return(NULL)
-  if (!is.null(thinking) || !is.null(returns)) return(NULL)
+  if (!is.null(returns) || (!is.null(thinking) && !identical(thinking$type, "disabled"))) {
+    return(NULL)
+  }
   if (identical(tc$type, "any")) return(list(type = "any"))
   list(type = "tool", name = tc$name)
 }
@@ -1269,11 +1280,6 @@ anthropic_build = function(model, context, opts) {
   if (length(oc)) head$output_config = oc
   tc = anthropic_tool_choice(params$tool_choice, model, th$thinking, params$returns)
   if (!is.null(tc)) head$tool_choice = tc
-  # report 07 section 2.3: a non-default temperature is a 400 on every 5.x (adaptive) model
-  adaptive = isTRUE(adp_model_cap(model, "adaptive_thinking", FALSE))
-  if (!is.null(params$temperature) && is.null(th$thinking) && !adaptive) {
-    head$temperature = params$temperature
-  }
   for (f in anthropic_caps()$request_params) if (!is.null(params[[f]])) head[[f]] = params[[f]]
 
   extra = character()
@@ -1310,8 +1316,10 @@ anthropic_build = function(model, context, opts) {
     elements = c(elements, json_encode(instr))
   }
 
+  # 2026-10-21 refuses temperature, top_p and top_k on every model, so none is sent
+  # (https://platform.claude.com/docs/en/api/migration-2026-10-21)
   headers = list(`content-type` = "application/json", accept = "text/event-stream",
-                 `anthropic-version` = "2023-06-01")
+                 `anthropic-version` = "2026-10-21")
   cred = opts$credential
   if (!is.null(cred)) {
     if (identical(cred$name, "ANTHROPIC_AUTH_TOKEN")) {

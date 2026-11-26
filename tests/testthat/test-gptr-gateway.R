@@ -1222,7 +1222,7 @@ test_that("System 1 arguments with an unknown model name the unknown model (D-32
   local_gw()
   fake = local_fake_provider(list("ok"))
   # the id a decision's meta reports, which the catalog may not list yet
-  cnd = expect_error(peter("Is it fine?", c("ok", "bad"), model = "jev-1.14.0",
+  cnd = expect_error(peter("Is it fine?", c("ok", "bad"), model = "jev-9.99.0",
                            choices = c("yes", "no")), class = "gptr_error_unknown_model")
   expect_false(grepl("conversational", conditionMessage(cnd), fixed = TRUE))
   s = peter("Start.", model = fake, envir = new.env())

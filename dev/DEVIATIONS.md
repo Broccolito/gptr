@@ -713,7 +713,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   3. Without image input each tool-result image becomes "(image omitted: this model does not accept
      images)" in `functionResponse.response` after the text, once per image, with no image content;
      with image input unchanged (`functionResponse.parts` on Gemini 3, a following "Tool result
-     image:" content on 2.5) (D-023 item 4, D-029 item 3).
+     image:" content on 2.5) (D-023 item 4, D-029 item 3). Amended by D-395:
+     `functionResponse.parts` on a model with thinking levels, not by version.
 - Contract-visible: none; no section amended.
 - Tests: test-provider-google.R: 3 blocks (resolved headers, no tools without tool calling, omission
   note in the tool output); `gptr_check()` 30 checks, 0 failed. Evidence: progress/P12.md Task 9.
@@ -2299,6 +2300,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
      `pcli_models("codex")`, else the fallback `gpt-6-sol` (contract 11.10; architecture 8.4; the
      shipped catalog's `gpt-6.1-sol` is not on the Codex route, 08 2.C); claude keeps the catalog
      passthrough; adding a confirmed id to `pcli_models("codex")` lets the alias reach it.
+     Superseded by D-391: `default` is the model the user's CLI starts with.
   2. `status(check = TRUE)` calls `pcli_probe()` (which runs `pcli_version()` first), so a recorded
      capability problem stays reported (contract 7.20); local runs only, never a model request.
   3. `pcli_plan_set()` reads an `info` or `unifiedWindows` that is not a list as empty, and a field
@@ -11198,3 +11200,120 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   the cheat sheet.
 - Tests: console-commands (`/calls`, `/calls 2`, before a call, a bad `n`, `/help`). Evidence:
   progress/P35.md Task 3.
+
+## D-390 - P36 A CLI route's models come from its CLI (2026-11-26)
+- Rule: `pcli_discover()`, the `discover()` of `claude-cli` and `codex`, asks the CLI through
+  `pcli_talk()` (15 s, 4 MB of output, process tree killed, stderr dropped, the reactor runs), with
+  no prompt and no tokens: Claude Code `-p` in stream-json with the user's settings loaded (for
+  `applied.model`; their SessionStart hooks run) and `--tools ""`, `--disable-slash-commands`
+  (claude 2.1.323 reports the same models and settings without them) sends `initialize` and
+  `get_settings`; `codex app-server` gets `initialize`, `initialized`,
+  `model/list` (every page, at most 20) and `config/read`, else `codex debug models` (models not
+  hidden). Ids and effort levels are kept as reported (Claude `resolvedModel`, else `value`; Codex
+  `model`); no name is filtered. Rows enter the catalog's discovered layer (`catalog_inventory()`).
+- Rule: gptr asks once per R session and CLI version: an answer, or a failure, is kept in memory
+  per CLI command (`pcli_cache_key()`: path and file time, which an update changes); a run's
+  `agent_start` (after the version probe) and `/model` ask when nothing is kept for that
+  command, `gptr_models(provider = , refresh = TRUE)` asks again. `pcli_models()` and the P20 lists go;
+  each built-in route declares only `default`.
+- Contract-visible: 04 section 7.20, 03 section 8.4 (not amended here); `?gptr_models`,
+  `?gptr_egress`, the language-models article.
+- Tests: test-cli-discovery (11 blocks; fixtures/cli/ probe recordings); test-console-commands
+  "/model on a CLI route lists the models its CLI reports and names the default"; test-live-cli
+  (shapes only). Evidence: progress/P36.md Task 1 and Review fixes.
+
+## D-391 - P36 A route's default is the model the user's CLI starts with (2026-11-26)
+- Rule: `default` runs the model the CLI reports, passed as `--model` or `-m`, since gptr's runs
+  keep `--setting-sources ""` and `--ignore-user-config`: Claude `get_settings` `applied.model`,
+  else initialize's default row; Codex `config/read` `model`, else the `isDefault` row. Unknown:
+  no model flag, the CLI chooses, no notice. Supersedes D-097 item 1 (the fixed list and the
+  `gpt-6-sol` fallback).
+- Rule: `pcli_default_model()` names it in `/model`, `/status`, the status line and the `default`
+  row of `gptr_models()` (`default (<id>)`). First-run setup saves `<cli>/default` without a probe,
+  which would ask the egress question during setup.
+- Contract-visible: 04 section 7.20, 03 section 8.4 (`codex/default`), not amended here; `?peter`.
+- Tests: test-cli-discovery "a route's default runs as the CLI's own: its reported model, else no
+  model flag"; test-console-commands "/model and /status name the model a CLI's default runs
+  (#44)". Evidence: progress/P36.md Task 1.
+
+## D-392 - P36 Any model id may be written in, for every route and provider (2026-11-26)
+- Rule: `model_resolve()` of `<known provider>/<id>` the catalog lacks returns the id as typed,
+  with one notice per reference (`gptr_message_model_write_in`, naming the provider's listing when
+  it has one): tool calls only on a remote chat or CLI route (never a local server, IC-74, or a
+  classifier), text input, thinking `off`, unknown limits and price, `locality = "unknown"`. An
+  unknown provider or an empty id stays `unknown_model`. Resolution is an exact (or
+  separator-normalised) id, a declared alias, a provider named alone, else this write-in; a name
+  alone that is none of these is `unknown_model` with suggestions (`model_near()`, then edit
+  distance), never a similar model by family or substring. A CLI route's notice comes once, from
+  `pcli_write_in()` when the run is built, saying when discovery had no list to check against.
+- Rule: Codex execs carry `config/read`'s `model_provider` with its `model_providers.<id>` table
+  (inline TOML), `openai_base_url` and `model_catalog_json` as `-c` overrides; of the table only
+  Codex's documented keys without a credential or command go (`pcli_codex_provider_keys`), and
+  the rest (`experimental_bearer_token`, `http_headers`, `query_params`, `auth`, `gateway_oauth`,
+  unknown keys) is named in one notice. Claude routers through `ANTHROPIC_BASE_URL` stay removed
+  by the `cli-claude` billing guard.
+- Contract-visible: 04 section 7.5 (`model_resolve()` row), section 4.9 (`local`), section 2.2
+  (the message class), not amended here; `?gptr_models`, `?gptr_provider`.
+- Tests: test-catalog-models "an id the catalog lacks is written in once, with conservative
+  capabilities (D-392)", "a name that is no catalog id or alias never resolves to a similar model
+  (D-392)"; test-cli-discovery "a model id the CLI does not list is passed as written,
+  with one notice (D-392)", "Codex runs keep the user's model provider through -c, never its
+  credentials". Evidence: progress/P36.md Task 2 and Review fixes.
+
+## D-393 - P36 gptr matches no model name: catalog data decides (2026-11-26)
+- Rule (data): `catalog_seed()`, `catalog_overrides()`, the alias and dated-suffix regexes,
+  `provider_default_models()` and the shipped preset globs go. `dev/release/catalog-reviewed.json`
+  (each entry with its source) holds `overrides`, `aliases` (a models.dev family, or a `ref`) and
+  per-route `defaults` (`model`, `small`, `system1`); the snapshot carries it, a refresh keeps it.
+  An alias is the newest non-deprecated model of its family (a tie: the shortest id);
+  `model_default()` and a provider named alone take `defaults`, then a detected CLI; settings win.
+  The `extended` preset applies where `cache_min` exceeds the projected standard prefix.
+- Rule (record): `thinking_effort` (TRUE, FALSE, NA), `thinking_budget` (NULL or `list(min, max)`),
+  `temperature` (TRUE, FALSE, NA) and `owner`, filled by models.dev and by native listings
+  (`provider_models()`, Ollama `/api/show`); `capabilities` loses `adaptive_thinking` and `effort`.
+  Adapters read only these: a budget where `thinking_budget` is set and `thinking_effort` is not
+  TRUE (`adp_budget_thinking()`), else named levels; bedrock-converse thinking for owner
+  "anthropic". The Google version helpers, Bedrock's `anthropic\.claude` test, OpenRouter's id
+  prefixes and `adp_level_effort()` go.
+- Exception: `catalog_ollama_cloud()`, the Ollama `:cloud` and `-cloud` tag check (P05), stays.
+  It is a fail-closed privacy guard, not a model choice: IC-74 (07 sections 2 and 2.1) makes
+  local-only inference reject cloud selectors before any state is sent, and the tag is the one
+  signal before discovery, or when a listing has no `remote_host` or `remote_model`.
+- Contract-visible: 04 sections 4.9, 7.5 (`preset_tools()`), 11.10, 03 section 8.4, IC-73, IC-80,
+  not amended here; `?gptr_models`, `?gptr_config`, `?gptr_provider`, NEWS 1.3.0.
+- Tests: test-catalog-models "aliases follow the catalog's family data, never model names
+  (D-393)"; test-prompt-sections; test-provider-registry (native listings); the provider adapter
+  files. Evidence: progress/P36.md Tasks 3 and 4.
+
+## D-394 - P36 The shipped snapshot is built from models.dev at release time (2026-11-26)
+- Rule: `dev/release/catalog-snapshot.R` builds `inst/extdata/models.json.gz` from models.dev
+  `api.json` and its decision list with gptr's converter (version 3; older caches are ignored),
+  keeps gptr's providers, adds the reviewed data and stops when an alias or default names no
+  model; an entry gptr cannot convert is skipped (respan/span-01, context 0, failed the whole
+  conversion). Release: review `catalog-reviewed.json` against the providers' official lists, then
+  run it. `dev/catalog/build_models.R` is deleted; the snapshot test keeps its 200 KB ceiling.
+- 2026-11-26: 704 models, 23.6 KB gzipped, source "models.dev (MIT)". Reviewed: claude-mythos-5-2
+  added; the GPT-6 healthcare variants get their own family; Sonnet 5.5 cache read 0.10. Left to
+  write-in: claude-mythos-5-1, claude-mythos-5, gpt-6-cyber, gpt-6-rosalind, chat-latest and two
+  Groq previews. Conflicts kept for lack of a confirmed source: in progress/P36.md Task 3.
+- Contract-visible: 04 section 11.10 (not amended here); supersedes the 2026-10-03 seed.
+- Tests: test-catalog-models "the shipped snapshot is models.dev with gptr's reviewed data (D-393,
+  D-394)". Evidence: progress/P36.md Task 3.
+
+## D-395 - P36 Provider adapters follow the current APIs (2026-11-26)
+- Rule: Anthropic sends `anthropic-version: 2026-10-21` and never temperature, top_p or top_k (the
+  version's only break gptr hits); a budget model gets `enabled` with `budget_tokens`, others
+  `adaptive` with `output_config.effort`; `off` is `disabled` only where the levels list it, and a
+  forced `tool_choice` is allowed with thinking disabled.
+- Rule: `adp_temperature()` sends a temperature only where `temperature` is TRUE (NA is no), to a
+  reasoning model only with thinking `off`. Gemini: `thinkingBudget` (`off` 0, unset -1) for a
+  budget model, else `thinkingLevel` as listed (`off` the lowest listed); function-call ids always;
+  tool-result images in `functionResponse.parts` on level models (amends D-035 item 3).
+- Rule: xAI, DeepSeek, Ollama and vLLM get `reasoning_effort` by name, `none` only where `off` is
+  listed; OpenRouter gets `reasoning.max_tokens` for a budget model, else `reasoning.effort`,
+  never `none` when reasoning is mandatory, and `cache_control` only where prices bill cache
+  writes. The `supports_reasoning_effort` compat field is removed (a user's value is ignored).
+- Contract-visible: IC-80 (owner, temperature), 04 section 4.9, not amended here; NEWS 1.3.0.
+- Tests: test-provider-anthropic "off is `disabled` where the levels list it, else no thinking
+  field (D-395)"; test-provider-openai-responses, test-provider-openai-completions,
+  test-provider-google, test-provider-bedrock. Evidence: progress/P36.md Task 4.

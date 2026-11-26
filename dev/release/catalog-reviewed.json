@@ -1,0 +1,167 @@
+{
+  "overrides": {
+    "providers": {
+      "anthropic": {
+        "capabilities": {"tool_addition": true, "images_in_results": true, "operator_role": true},
+        "source": "dev/research/07-anthropic-api-claude-plan.md sections 2.1, 2.7, 2.8"
+      },
+      "openai": {
+        "capabilities": {"images_in_results": true, "operator_role": true},
+        "source": "dev/research/08 finding 10"
+      },
+      "google": {
+        "capabilities": {"images_in_results": true},
+        "source": "dev/research/G2 row 7"
+      },
+      "typesafe": {
+        "api": "typesafe-system-one", "base_url": "https://api.typesafe.ai/v1/",
+        "env": ["TYPESAFE_API_KEY"], "compat": {}, "local": false,
+        "source": "https://docs.typesafe.ai/models"
+      }
+    },
+    "models": [
+      {
+        "provider": "anthropic", "id": "claude-opus-5-5", "cache_min": 512,
+        "capabilities": {"mid_system": true, "forced_tool_choice": false},
+        "source": "07 sections 2.1 and 2.5: mid-conversation system messages; forced tool_choice is a 400; https://platform.claude.com/docs/en/models/opus-5-5/migration-guide"
+      },
+      {
+        "provider": "anthropic", "id": "claude-sonnet-5-5", "cache_min": 512,
+        "capabilities": {"mid_system": true, "forced_tool_choice": false},
+        "source": "07 sections 2.1 and 2.5; https://platform.claude.com/docs/en/models/overview"
+      },
+      {
+        "provider": "anthropic", "id": "claude-fable-5-1", "cache_min": 512,
+        "capabilities": {"mid_system": true, "forced_tool_choice": false},
+        "source": "07 sections 2.1 and 2.5"
+      },
+      {
+        "provider": "anthropic", "id": "claude-fable-5-2",
+        "capabilities": {"mid_system": true, "forced_tool_choice": false},
+        "source": "https://platform.claude.com/docs/en/models/fable-5-2/ (tool_choice auto or none only; thinking blocks bound to the prefix, so instructions are appended as system messages, as on Fable 5 and 5.1 per 07 section 2.2)"
+      },
+      {
+        "provider": "anthropic", "id": "claude-fable-5",
+        "capabilities": {"mid_system": true},
+        "source": "07 section 2.2: mid-conversation system messages on Opus 5/5.5, Opus 4.8, Fable 5/5.1, Sonnet 5.5"
+      },
+      {
+        "provider": "anthropic", "id": "claude-opus-5",
+        "capabilities": {"mid_system": true},
+        "source": "07 section 2.2"
+      },
+      {
+        "provider": "anthropic", "id": "claude-opus-4-8",
+        "capabilities": {"mid_system": true},
+        "source": "07 section 2.2"
+      },
+      {
+        "provider": "anthropic", "id": "claude-haiku-5-5", "cache_min": 512,
+        "source": "https://platform.claude.com/docs/en/models/haiku-5-5/overview (minimum cacheable prompt 512 tokens)"
+      },
+      {
+        "provider": "anthropic", "id": "claude-haiku-4-5", "cache_min": 4096,
+        "source": "dev/research/G4 (cache minimum); 07 section 2.1"
+      },
+      {
+        "provider": "anthropic", "id": "claude-mythos-5-2", "name": "Claude Mythos 5.2",
+        "family": "claude-mythos", "release_date": "2026-11-09", "status": "preview",
+        "context": 1000000, "max_output": 128000, "reasoning": true,
+        "thinking_levels": ["low", "medium", "high", "xhigh", "max"], "thinking_effort": true,
+        "input": ["text", "image"], "tool_call": true, "temperature": false,
+        "prices": [{"from": "2000-01-01", "tier": "default", "input": 8, "output": 40}],
+        "capabilities": {"forced_tool_choice": false}, "owner": "anthropic",
+        "source": "not on models.dev; limited availability (Cyber Verification Program): https://platform.claude.com/docs/en/models/fable-5-2/whats-new-fable-5-2 and https://platform.claude.com/docs/en/about-claude/models/overview"
+      },
+      {
+        "provider": "openai", "id": "gpt-6.2-sol-healthcare", "family": "gpt-sol-healthcare",
+        "source": "https://developers.openai.com/api/docs/changelog (2026-11-24): specialised healthcare variants, Responses API only; models.dev files them in the general gpt-sol family, which would make them its newest models"
+      },
+      {
+        "provider": "openai", "id": "gpt-6.1-sol-healthcare", "family": "gpt-sol-healthcare",
+        "source": "https://developers.openai.com/api/docs/changelog (2026-11-24)"
+      },
+      {
+        "provider": "openai", "id": "gpt-6.2-astra-healthcare", "family": "gpt-astra-healthcare",
+        "source": "https://developers.openai.com/api/docs/changelog (2026-11-24)"
+      },
+      {
+        "provider": "openai", "id": "gpt-6-astra-healthcare", "family": "gpt-astra-healthcare",
+        "source": "https://developers.openai.com/api/docs/changelog (2026-11-24)"
+      },
+      {
+        "provider": "google", "id": "gemini-3.8-flash", "cache_min": 4096,
+        "prices": [
+          {"from": "2000-01-01", "tier": "default", "input": 0.75, "output": 3.75, "cache_read": 0.075},
+          {"from": "2027-01-01", "tier": "default", "input": 1.5, "output": 7.5, "cache_read": 0.15}
+        ],
+        "source": "https://ai.google.dev/gemini-api/docs/pricing (promotional through 2026-12-31; dev/research/00-digest.md); cache minimum dev/research/G4"
+      },
+      {
+        "provider": "typesafe", "id": "jev-latest", "name": "Jev", "family": "jev",
+        "type": "classifier", "release_date": "2026-09-15", "context": 64000, "max_output": 0,
+        "reasoning": false, "thinking_levels": ["off"], "input": ["text"], "tool_call": false,
+        "structured_output": true,
+        "prices": [{"from": "2000-01-01", "tier": "default", "input": 0.042, "output": 0, "cache_read": 0}],
+        "status": "active", "owner": "typesafe",
+        "source": "https://docs.typesafe.ai/models (images are opt-in per request, so text input)"
+      },
+      {
+        "provider": "typesafe", "id": "jev-1.14.0", "input": ["text"],
+        "prices": [{"from": "2000-01-01", "tier": "default", "input": 0.042, "output": 0, "cache_read": 0}],
+        "source": "https://docs.typesafe.ai/models; models.dev lists no price"
+      },
+      {
+        "provider": "ollama", "id": "clef", "name": "Clef", "family": "clef", "type": "classifier",
+        "api": "ollama-system-one", "locality": "unknown", "reasoning": false,
+        "thinking_levels": ["off"], "input": ["text", "image"], "tool_call": false,
+        "structured_output": true, "status": "active",
+        "decision": {"types": ["noul", "choice", "score"], "images": true, "server_min": "0.35.1",
+                     "max_questions": 64, "max_options": 26, "max_request_bytes_text": 65536,
+                     "max_request_bytes_images": 33554432, "max_active": 1},
+        "source": "dev/spec/07-local-ollama.md sections 2-4: a native decision model is described before discovery, which alone attests it"
+      },
+      {
+        "provider": "ollama", "id": "clef-flash", "name": "Clef Flash", "family": "clef",
+        "type": "classifier", "api": "ollama-system-one", "locality": "unknown",
+        "reasoning": false, "thinking_levels": ["off"], "input": ["text", "image"],
+        "tool_call": false, "structured_output": true, "status": "active",
+        "decision": {"types": ["noul", "choice", "score"], "images": true, "server_min": "0.35.1",
+                     "max_questions": 64, "max_options": 26, "max_request_bytes_text": 65536,
+                     "max_request_bytes_images": 33554432, "max_active": 1},
+        "source": "dev/spec/07-local-ollama.md sections 2-4"
+      }
+    ]
+  },
+  "aliases": {
+    "sonnet": {"provider": "anthropic", "family": "claude-sonnet"},
+    "opus": {"provider": "anthropic", "family": "claude-opus"},
+    "haiku": {"provider": "anthropic", "family": "claude-haiku"},
+    "gemini": {"provider": "google", "family": "gemini"},
+    "flash": {"provider": "google", "family": "gemini-flash"},
+    "gpt": {"provider": "openai", "family": "gpt-sol"},
+    "jev": {"ref": "typesafe/jev-latest"},
+    "claude_code": {"ref": "claude-cli/default"},
+    "codex": {"ref": "codex/default"},
+    "source": "dev/spec/03-architecture.md section 8.4: an alias is the newest active model of a models.dev family"
+  },
+  "defaults": {
+    "anthropic": {
+      "model": "claude-sonnet-5-5", "small": "claude-haiku-5-5",
+      "source": "03 section 8.4 ($2/$10, vs $4/$20 for Opus 5.5); Haiku 5.5 $0.10/$0.50 (https://platform.claude.com/docs/en/models/overview)"
+    },
+    "openai": {
+      "model": "gpt-6.2-sol", "small": "gpt-6-luna",
+      "source": "https://developers.openai.com/api/docs/models: GPT-6.2 Sol (2026-11-17) is the everyday agentic model at $2/$10, GPT-6 Luna the efficient one at $0.10/$0.50"
+    },
+    "google": {
+      "model": "gemini-4-hydrogen", "small": "gemini-3.5-flash-lite",
+      "source": "https://aistudio.google.com/docs/changelog: Gemini 4 Hydrogen (GA 2026-11-12) for everyday coding and agentic work at $1.50/$7.50; 3.5 Flash-Lite the stable low-cost model at $0.30/$2.50"
+    },
+    "typesafe": {
+      "system1": "jev-latest",
+      "source": "03 section 8.2: the hosted System 1 route; jev-latest names the newest Jev (https://docs.typesafe.ai/models)"
+    },
+    "source": "per route, in route order (03 section 8.4): the default chat model (`model`), the small model of that provider (`small`) and the System 1 model (`system1`)"
+  }
+}

@@ -290,7 +290,7 @@ test_that("reasoning deltas are a signed thinking block; a guardrail stop is a r
 # ---- the Converse request body -----------------------------------------------------------------
 
 test_that("the body maps system, messages, tools, tool results, images and inference config", {
-  model = test_model(api, reasoning = FALSE)
+  model = test_model(api, reasoning = FALSE, temperature = TRUE)
   turn = msg_assistant(list(block_text("Reading."),
                             block_tool_call("toolu_1|fc_2", "read", list(path = "a.R"))),
                        api = api, provider = "fixture", model = "fixture-1")
@@ -323,8 +323,9 @@ test_that("the body maps system, messages, tools, tool results, images and infer
   expect_identical(results[[1L]], list(toolResult = list(toolUseId = "toolu_1_fc_2",
                                                          content = list(list(text = "x = 1")))))
   expect_identical(results[[2L]]$toolResult$status, "error")
-  # a text-only model gets a note for an image; a reasoning model gets no temperature
-  model = test_model(api, input = "text", reasoning = TRUE)
+  # a text-only model gets a note for an image; a thinking model gets no temperature, even one
+  # whose data accepts sampling
+  model = test_model(api, input = "text", reasoning = TRUE, temperature = TRUE)
   body = json_decode(bedrock_build(model, ctx, list(base_url = "https://h.test"))$body)
   expect_identical(body$messages[[1L]]$content[[4L]]$text, adp_image_note())
   expect_identical(body$inferenceConfig, list(maxTokens = 512L))
@@ -347,7 +348,7 @@ test_that("signed reasoning is replayed only to the model that produced it", {
   expect_identical(body$messages[[2L]]$content, list(list(text = "Done.")))
 })
 
-test_that("a Claude model declared adaptive gets the thinking level; others get none (D-250)", {
+test_that("a model of owner anthropic gets Anthropic's thinking fields; others none (D-250)", {
   rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
   body_of = function(model, thinking, max_tokens = 32000L) {
     params = list(max_tokens = max_tokens, thinking = thinking, temperature = 0.2)
@@ -355,24 +356,35 @@ test_that("a Claude model declared adaptive gets the thinking level; others get 
     json_decode(bedrock_build(model, ctx, list(base_url = "https://h.test"))$body)
   }
   today = c("inferenceConfig", "system", "toolConfig", "messages")
-  opus = test_model(api, id = "us.anthropic.claude-opus-4-8")
+  # D-393: the record's owner and thinking data decide, never the id (a gateway's own name here)
+  opus = test_model(api, id = "corp-claude", owner = "anthropic",
+                    thinking_levels = c("off", "low", "medium", "high", "xhigh", "max"))
   body = body_of(opus, "high")
   expect_identical(body$additionalModelRequestFields,
                    list(thinking = list(type = "adaptive", display = "omitted"),
                         output_config = list(effort = "high")))
   expect_identical(body$inferenceConfig, list(maxTokens = 32000L))
-  expect_identical(names(body_of(opus, "off")), today)
-  expect_identical(names(body_of(test_model(api, id = opus$id, reasoning = FALSE), "high")), today)
-  # a registered Claude record that does not declare how it thinks (Opus 4.8 refuses a budget
-  # with HTTP 400; Claude 4.5 and earlier think only on one): no thinking, said once per model
+  expect_identical(body_of(opus, "off")$additionalModelRequestFields,
+                   list(thinking = list(type = "disabled")))
+  budget = test_model(api, id = "corp-claude-old", owner = "anthropic", thinking_budget = list())
+  expect_identical(body_of(budget, "medium")$additionalModelRequestFields$thinking,
+                   list(type = "enabled", budget_tokens = 8192L))
+  expect_identical(names(body_of(test_model(api, id = opus$id, owner = "anthropic",
+                                            reasoning = FALSE), "high")), today)
+  # a sampling model without thinking keeps its temperature
+  plain_t = test_model(api, reasoning = FALSE, temperature = TRUE)
+  expect_identical(body_of(plain_t, NULL)$inferenceConfig,
+                   list(maxTokens = 32000L, temperature = 0.2))
+  # a registered record that does not name its owner, even with a Claude id: no thinking, said
+  # once per model
   spec = gptr_provider("gw", api = api, base_url = "https://h.test", auth = "AWS_SECRET_ACCESS_KEY",
                        compat = list(region = "us-west-2"),
-                       models = list(list(id = opus$id, tool_call = TRUE, reasoning = TRUE,
-                                         max_output = 32000)))
+                       models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE,
+                                         reasoning = TRUE, max_output = 32000)))
   plain = model_resolve(spec)
   withr::local_options(gptr.quiet = FALSE)
   expect_message(expect_identical(names(body_of(plain, "high")), today),
-                 "capabilities = list(adaptive_thinking = TRUE, effort = TRUE)", fixed = TRUE,
+                 "declares owner = \"anthropic\"", fixed = TRUE,
                  class = "gptr_message_notice")
   expect_no_message(expect_identical(names(body_of(plain, "max")), today))
   expect_no_message(expect_identical(names(body_of(plain, NULL)), today))

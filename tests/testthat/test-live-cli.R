@@ -277,3 +277,24 @@ test_that("ephemeral Codex delegates a real child to Claude Sonnet", {
   expect_true(all(usage$requests > 0L & usage$output > 0))
   expect_true(all(session_data(s)$usage$route == "plan-cli"))
 })
+
+# A CLI's discovery (D-390), with no model call: shapes only, never model names
+expect_live_discovery = function(cli) {
+  skip_live_cli(cli, .env = parent.frame())
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear(), envir = parent.frame())
+  rows = pcli_discover(cli)
+  expect_identical(rows[[1L]]$id, "default")
+  expect_gt(length(rows), 1L)
+  expect_true(all(vapply(rows, function(r) rlang::is_string(r$id) && nzchar(r$id), NA)))
+  expect_true(rlang::is_string(pcli_default_model(paste0("cli-", cli))))
+  expect_true(all(vapply(rows[-1L], function(r) r$id, "") %in% pcli_discovery(cli)$listed))
+}
+
+test_that("the claude CLI reports its models and the model it starts with", {
+  expect_live_discovery("claude")
+})
+
+test_that("the codex CLI reports its models and the model it starts with", {
+  expect_live_discovery("codex")
+})

@@ -1425,8 +1425,14 @@ settings_model_warn = function(patch, scope) {
 #' file < `options(gptr.*)` < this R session. With named arguments, sets those keys in one scope.
 #'
 #' `model`, `small_model`, `system1`, `mode` and `preset` take bare names (`mode = plan`); `NULL`
-#' removes a key from the scope. `egress` (the providers you allow automatic context to go to) is
-#' accepted only at user scope. `mode = yolo` and turning off local-only Ollama inference
+#' removes a key from the scope. Unset, `model` and `system1` come from the catalog's reviewed
+#' defaults of the first ready route: Anthropic, OpenAI, Google, then a detected command-line
+#' tool (System 1: TypeSafe, else an installed local classifier); `small_model` is that route's
+#' small default, else `model`. `model = openai`, a provider with a reviewed default named alone,
+#' means that default; any `provider/id` is accepted ([gptr_models()]).
+#'
+#' `egress` (the providers you allow automatic context to go to) is accepted only at user scope.
+#' `mode = yolo` and turning off local-only Ollama inference
 #' (`providers = list(ollama = list(local_only = FALSE))`) are accepted only at user or session
 #' scope; a project can only keep local-only inference on. A change called from model code
 #' during a run needs an allowing permission decision (a person's, in every mode but `yolo`; see
@@ -2021,8 +2027,9 @@ NULL
 #' After the acknowledgment above, gptr asks a provider for its model list on
 #' `gptr_models(provider = , refresh = TRUE)`, and before the first request to a provider with a
 #' native model-list API (at most once per five minutes in an R process). The listing carries only
-#' that provider's credential, never a prompt or session context; for the `claude` and `codex`
-#' tools only the explicit refresh lists models, by starting the tool without a prompt. The
+#' that provider's credential, never a prompt or session context. gptr asks the `claude` and
+#' `codex` tools for their models without a prompt on that refresh, and once per R session and
+#' tool version when a run starts or at `/model`. The
 #' models.dev catalog is refreshed only by `gptr_models(refresh = TRUE)`, reachability checks run
 #' only with `gptr_providers(check = TRUE)`, and MCP servers, sub-agents and command-line tools
 #' are otherwise contacted only when a session uses them. The `claude` and `codex` command-line

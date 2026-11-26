@@ -17,9 +17,11 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 named object under its name (\code{text = x}) and any other as \code{input}, so its answers and cache
 entries never depend on how a variable is named or subset.}
 
-\item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}), a provider or router spec
-such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default. A call made by the
-agent's own R code, and a team or fan-out it starts, uses the running session's model instead.}
+\item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}, \code{"codex/default"}; an id
+the catalog lacks is written in, see \code{\link[=gptr_models]{gptr_models()}}), a provider or router spec such as
+\code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default (\code{\link[=gptr_config]{gptr_config()}}). A call made by
+the agent's own R code, and a team or fan-out it starts, uses the running session's model
+instead.}
 
 \item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.
 The plan a \code{plan} run proposes goes once, as a \verb{<plan>} block, to the next top-level
@@ -149,8 +151,9 @@ prompt opens the console when someone can answer, and signals \code{gptr_error_n
 otherwise.
 
 A new interactive console without an explicit or configured model first offers CLI selection
-or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
-cancellation (choose Cancel or press Enter) or manual setup returns without starting a session.
+or manual API/Ollama instructions. Selecting an available CLI saves \verb{<route>/default}, the
+model that CLI starts with, at user scope; cancellation (choose Cancel or press Enter) or manual
+setup returns without starting a session.
 Existing sessions, explicit or configured models and \code{.stdin = TRUE} skip setup. CLI-reported
 login is not proof of online access or subscription billing. See
 \code{vignette("interactive-console", package = "gptr")}.

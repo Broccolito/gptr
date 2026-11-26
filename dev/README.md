@@ -134,7 +134,7 @@ apt cache saved as soon as it is filled; `setup-r-dependencies` then runs with
 `.github/actions/optional-dependencies` pins Python, Quarto and Chrome for
 `Optional-integrations.yaml` and the optional mode of `windows-by-file.yaml`.
 
-### Release (`release/`, 25 files)
+### Release (`release/`, 28 files)
 
 Release checks for gptr 1.0.0 (P25), development only.
 
@@ -143,6 +143,7 @@ Release checks for gptr 1.0.0 (P25), development only.
 | `lib.R` | The shared finders: each `*_problems()` function returns the problems it found. | code |
 | `check-docs.R`, `check-examples.R`, `check-files.R`, `check-live.R` | Audits of the Rd pages, the examples (each in a fresh R process), the release files, and a live calibration record against IC-73. | code |
 | `precompute.R`, `build-site.R`, `cheatsheet-pdf.R` | Builders: knit `vignettes/*.Rmd.orig` and render `README.Rmd` offline; build the pkgdown site outside the repository; print the cheatsheet PDF (needs Chrome or Chromium). | code |
+| `catalog-snapshot.R`, `catalog-reviewed.json` | The shipped catalog `inst/extdata/models.json.gz`, built from models.dev pruned to gptr's providers with the reviewed corrections, aliases and defaults (each with its source) of `catalog-reviewed.json` (P36, D-394). Nothing here runs on CRAN. | code |
 | `tests/` | Self-tests of these scripts, and two pkgdown UI controls. | code |
 
 ### Bench (`bench/`, 92 files)
@@ -166,12 +167,6 @@ Benchmark suites, development only. `bench/README.md` gives every command and ga
 | Path | Holds | Status |
 |---|---|---|
 | `callr-native-environment/` | Reviewed development patch against callr 3.8.0 that passes the final environment directly to processx, with pinned manifests, fixtures and `historical/` scripts. A partial upstream candidate, not an installed or released dependency. | reference |
-
-### Catalog (`catalog/`, 1 file)
-
-| Path | Holds | Status |
-|---|---|---|
-| `build_models.R` | Maintainer tool that builds `inst/extdata/models.json.gz` from models.dev pruned to gptr's providers, with gptr's seed entries and reviewed overrides (P05). Nothing here runs on CRAN. | code |
 
 ## Stale or superseded
 
