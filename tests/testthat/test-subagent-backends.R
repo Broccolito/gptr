@@ -925,8 +925,8 @@ test_that("both CLI adapters can delegate a team member to the opposite CLI", {
     fixture$cli_fixture_dir = dir
     child_cli = if (parent_cli == "claude") "codex" else "claude"
     target = if (child_cli == "codex") "codex-cli/gpt-6-sol" else "claude_code/sonnet"
-    expected = if (child_cli == "codex") "codex/gpt-6-sol" else
-      "claude-cli/claude-sonnet-5-5"
+    # a CLI's own alias passes to it as written (D-392); the CLI resolves it
+    expected = if (child_cli == "codex") "codex/gpt-6-sol" else "claude-cli/sonnet"
     code = paste0("delegated = peter('Leaf', agents = list(leaf = agent(model = '", target,
                     "'))); delegated$leaf$text")
     rewrite = function(x) {
