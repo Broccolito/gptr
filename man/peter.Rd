@@ -184,6 +184,13 @@ backslash continues a line;
 \item a slash command such as \verb{/model}, \verb{/mode}, \verb{/cost} or \verb{/exit}; \verb{/help} lists them all.
 }
 
+Each tool call shows as one row: the tool, the first line of its code and \verb{(+N more lines)},
+then what changed (an edit's added and removed lines, an error in full); what R code prints
+shows at most 5 rows a call, then \verb{(+N more lines)}; what the model receives is unchanged. An
+approval shows the code it asks about. \verb{/calls [n]} prints the last \code{n} calls in full (default
+1). \code{gptr_config(compact_calls = FALSE)} shows every call's code as it runs (at most 20 rows)
+and all its output.
+
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 and \code{... } waits for Enter (text typed there is added); a pasted fence or \verb{"""} block is read
 up to its closer at once, a block pasted at an approval or a choice is kept in the console

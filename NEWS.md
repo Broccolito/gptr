@@ -1,5 +1,16 @@
 # gptr 1.3.0
 
+## Console
+
+* A tool call takes one row in the console: the tool, the first line of its code and
+  `(+N more lines)`, so a long script no longer fills the screen. An edit's result is one row
+  with the lines it added and removed, and what R code prints shows at most 5 rows a call, then
+  `(+N more lines)`; what the model receives is unchanged. An approval still shows the whole code
+  it asks about.
+* `/calls` prints the last tool call in full, `/calls 3` the last three.
+* `gptr_config(compact_calls = FALSE)` shows every call's code as it runs and all its output, as
+  before; `.scope = "user"` keeps that for every session.
+
 # gptr 1.2.0
 
 Agents on the same computer can find a served R session by themselves and work in it with a

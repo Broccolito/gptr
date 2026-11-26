@@ -155,7 +155,9 @@ weakened.
 
 | Row | Command | Actual | Status |
 |---|---|---|---|
-| Tests | `devtools::test(filter = "console-\|gptr-config\|utils-options\|cli-codex\|doc-")` | 0 failures | open |
-| Lint | `lintr::lint()` on the changed R files | clean | open |
-| Files | `Rscript --vanilla dev/release/check-files.R all` | clean | open |
-| Vignettes | `Rscript --vanilla dev/release/precompute.R --check configuration interactive-console` | no problems | open |
+| Tests | `devtools::test(filter = "console-\|gptr-config\|utils-options\|cli-codex\|doc-")` | FAIL 0, SKIP 3, PASS 8867 | met |
+| Neighbours | `devtools::test(filter = "eval-core\|tool-\|perm-gate\|env-describe\|bridge-sh\|cli-claude\|...")` (16 patterns) | FAIL 0, SKIP 3, PASS 5667 | met |
+| Lint | `lintr::lint()` on the changed R files, against the current source | clean | met |
+| Files | `Rscript --vanilla dev/release/check-files.R all` | 0 problems | met |
+| Vignettes | `Rscript --vanilla dev/release/precompute.R --check configuration interactive-console` | 0 problems | met |
+| Live | a terminal, RStudio and Positron console with compact on and off | not run | open |

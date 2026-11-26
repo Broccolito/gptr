@@ -4068,6 +4068,7 @@ level 4. A legacy `.gptr/settings.local.json` contributes only deny/ask addition
 | `ui` | chr\|null | `null` | | P11 |
 | `frontend` | chr\|null | `null` (`console`) | | P14 |
 | `type_ahead` | chr | `"steer"` (`"follow_up"`): what Enter does with a message typed in a terminal console while the agent works (Tab does the other); in other consoles, what a typed line does (IC-76) | | P26, P28 |
+| `compact_calls` | lgl | `true`: a tool call is one console row and what `r` code prints shows at most 5 rows a call; `/calls [n]` shows calls in full (IC-82, D-380, D-381) | | P35 |
 | `store`, `evaluator` | chr | `"jsonl"`, `"r"` (registered `store` and `evaluator` records, IC-69) | | P06, P09 |
 | `providers` | `{<id>: {base_url, models, headers, enabled}}` | `{}` (a project `base_url` needs trust and a one-time confirmation) | | P05 |
 | `egress` | `{<provider>: "ack"}` | `{}` (user file only) | | P05 |
@@ -6327,6 +6328,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     red, name bold, cut before `(+N more lines)`; the name as `console_tool_name()` gives it, an MCP tool as
     `server/tool` with its arguments dim, in the question and the detail view too) only when they are not the
     request's (`session`, `tool_call_id`, §7.11): a background ask, a nested member call in `r` code, a sub-agent's call.
+    Under a call drawn compact (`last_call` ends `"compact"`, D-382) it prints the call's code rows instead, at most
+    20 as the full call line draws them, and `?` treats them as shown.
     A request whose input has a `path` and no `code` shows the change it asks for under the call line
     (`ui_request_change()`, from the input alone; the file is never read, so the ask cannot fail or stall on it): at
     most 12 rows at column 4 in the result diff's style (`console_diff_rows()`: `+` blue, `-` red, others dim, each cut
@@ -6634,7 +6637,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     | kind | line | style |
     |---|---|---|
     | read | `▎ read  R/plot.R` | the whole line dim; no result line unless it fails |
-    | act | `▎ r  zz = 1`, or the name over at most 20 code rows at column 4, under the name with the results (no fence lines; a cut block ends with `# … +N more lines`; a row wider than the console is cut with `…`, and `?` then shows the code whole); an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold, R code highlighted (also on the one line); an MCP call's arguments dim |
+    | act | `▎ r  zz = 1`, or the name over at most 20 code rows at column 4, under the name with the results (no fence lines; a cut block ends with `# … +N more lines`; a row wider than the console is cut with `…`, and `?` then shows the code whole); an MCP call `▎ github/search_issues  {"q":"bug"}`; with the setting `compact_calls` (D-381) a call that would expand is one row, `▎ r  library(stats)  (+29 more lines)` (its first non-blank line, the other non-blank lines counted), and an edit's result is one row, `edited <path> · +a -r` | strip red, name bold, R code highlighted (also on the one line); an MCP call's arguments dim |
     | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started` (cut to the width before ` started`, which stays; P28 Task 36), `▌ sub-agent a done (1/3) · 4 turns · 12 s` (cut before ` done`, its turns and time staying; P28 Task 61); the label's name is cut first, inside its quotes, its run tag and model staying, so a nested call's two lines cut alike, `▌ sub-agent 'count the cars i…' #1 (kid/kid-1) started` and `… #1 done · 1 turn · 4 s` (P28 Task 72, visual round 3: the started line cut its model, the done line its tag) | block blue |
 
     Tool blocks of consecutive requests group as those of one response: the live row between them is no block
@@ -6644,7 +6647,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     the capture's sink is not split; `eval_flush()` shows each new line at column 4, escaped, dim in the console's
     colours and cut to its width, through the writer below the evaluation, per top-level expression or before a
     notice, and a warning as `Warning: <text>` in its place among them (P28 Task 75, visual round 3: it waited
-    for R's top level, after `/exit`), and an R message (P28 Task 79: R wrote it at column 0); the result keeps
+    for R's top level, after `/exit`), and an R message (P28 Task 79: R wrote it at column 0); with
+    `compact_calls` at most 5 such rows a call, then `    (+N more lines)` after the call, D-381; the result keeps
     all of it). A `!code` block's error is red at column 4 too, `Error: <text>` (`repl_passthrough()`), and a
     block that showed anything ends with a blank row, as a command's output does (P28 Task 79, visual round 3:
     three indents in one block, and the next prompt right under it). Without the margin (Rscript, knitr) the sink is split as before (visual
