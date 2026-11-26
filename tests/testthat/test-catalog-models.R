@@ -741,17 +741,17 @@ test_that("a loopback server's listed models join the catalog only on request", 
   local_mocked_bindings(
     check_running = function() FALSE,
     catalog_http_request = function(url, headers = list(), timeout = 30, ...) {
-      expect_equal(url, "http://localhost:1234/v1/models")
+      expect_equal(url, "http://127.0.0.1:8080/v1/models")
       expect_equal(timeout, 1)
       list(status = 200L, headers = list(),
            body = charToRaw('{"data":[{"id":"llama3.2:3b"},{"id":"qwen3.5:9b"}]}'))
     }
   )
-  expect_equal(nrow(gptr_models(provider = "lmstudio")), 0L)
-  found = gptr_models(provider = "lmstudio", refresh = TRUE)
-  expect_setequal(found$ref, c("lmstudio/llama3.2:3b", "lmstudio/qwen3.5:9b"))
+  expect_equal(nrow(gptr_models(provider = "llamacpp")), 0L)
+  found = gptr_models(provider = "llamacpp", refresh = TRUE)
+  expect_setequal(found$ref, c("llamacpp/llama3.2:3b", "llamacpp/qwen3.5:9b"))
   # IC-74: a listed name grants no tools, vision or locality
-  m = model_resolve("lmstudio/qwen3.5:9b")
+  m = model_resolve("llamacpp/qwen3.5:9b")
   expect_false(m$tool_call)
   expect_identical(m$input, "text")
   expect_identical(m$locality, "unknown")
@@ -909,6 +909,27 @@ test_that("an untagged Ollama catalog name is advertised when its :latest tag is
   found = gptr_models(provider = "ollama", refresh = TRUE)
   expect_identical(found$availability[found$ref == "ollama/clef-flash"], "advertised")
   expect_identical(found$availability[found$ref == "ollama/clef"], "unlisted")
+})
+
+test_that("Ollama's /api/show thinking values are the model's thinking levels (D-393)", {
+  ep = list(origin = "http://127.0.0.1:11434", path = "/v1", loopback = TRUE)
+  describe = function(values) {
+    show = list(capabilities = list("completion", "tools", "thinking"),
+                thinking = if (!is.null(values)) list(values = values))
+    catalog_ollama_describe("ollama", list(name = "m:1b"), show, "0.40.16", ep, NULL)$entry
+  }
+  named = describe(list(FALSE, "low", "medium", "high"))
+  expect_identical(as.character(named$thinking_levels), c("off", "low", "medium", "high"))
+  expect_true(named$thinking_effort)
+  on = describe(list(TRUE))
+  expect_identical(as.character(on$thinking_levels), c("low", "medium", "high"))
+  expect_false(on$thinking_effort)
+  # [false] alone means no thinking
+  expect_false(describe(list(FALSE))$reasoning)
+  # without the metadata the thinking capability keeps gptr's on/off scale
+  old = describe(NULL)
+  expect_identical(as.character(old$thinking_levels), c("off", "low", "medium", "high"))
+  expect_null(old$thinking_effort)
 })
 
 test_that("native Ollama discovery reads version, tags and show only on explicit request", {

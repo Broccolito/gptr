@@ -1141,7 +1141,8 @@ catalog_discover = function(p, safety = NULL, credential = NULL) {
                problem = "expected a data frame or list of model records")
   }
   fields = c("id", "type", "api", "context", "max_output", "reasoning", "thinking_levels",
-              "input", "tool_call", "structured_output")
+              "thinking_effort", "thinking_budget", "input", "tool_call", "structured_output",
+              "temperature", "status")
   known = catalog_get()$models
   entries = lapply(rows, function(m) {
     id = if (is.list(m)) m[["id"]]
@@ -1378,6 +1379,20 @@ catalog_ollama_describe = function(pid, tag, show, version, ep, lifecycle) {
   decision = "decision" %in% caps
   vision = "vision" %in% caps || length(show[["projector_info"]]) > 0L
   thinking = !decision && "thinking" %in% caps
+  levels = if (thinking) c("off", "low", "medium", "high") else "off"
+  effort = NULL
+  # `thinking.values`: strings are the model's own levels, booleans turn thinking on or off
+  values = show[["thinking"]][["values"]]
+  if (thinking && is.list(values) && length(values)) {
+    off = any(vapply(values, isFALSE, NA))
+    levels = catalog_effort_levels(Filter(is.character, values), off)
+    effort = length(levels) > off
+    if (!effort && any(vapply(values, isTRUE, NA))) {
+      levels = c(if (off) "off", "low", "medium", "high")
+    }
+    thinking = length(levels) > off
+    if (!thinking) levels = "off"
+  }
   configured = catalog_ollama_num_ctx(show[["parameters"]])
   trained = catalog_ollama_trained_ctx(show[["model_info"]]) %||% Inf
   context = if (is.null(configured)) NULL else min(configured, trained)
@@ -1385,8 +1400,7 @@ catalog_ollama_describe = function(pid, tag, show, version, ep, lifecycle) {
   entry = list(provider = pid, id = name, name = name, family = chr(details[["family"]]),
                type = if (decision) "classifier" else "chat",
                api = if (decision) "ollama-system-one", context = context,
-               reasoning = thinking,
-               thinking_levels = I(if (thinking) c("off", "low", "medium", "high") else "off"),
+               reasoning = thinking, thinking_levels = I(levels), thinking_effort = effort,
                input = I(if (vision) c("text", "image") else "text"),
                tool_call = !decision && "tools" %in% caps, structured_output = decision,
                status = "active", digest = digest,

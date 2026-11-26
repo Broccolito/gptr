@@ -1,0 +1,246 @@
+{
+ "data": [
+  {
+   "id": "openai/gpt-6.2-sol",
+   "name": "OpenAI: GPT-6.2 Sol",
+   "created": 1794938371,
+   "context_length": 1050000,
+   "architecture": {
+    "modality": "text+image+file->text",
+    "input_modalities": [
+     "file",
+     "image",
+     "text"
+    ],
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "GPT",
+    "instruct_type": null
+   },
+   "top_provider": {
+    "context_length": 1050000,
+    "max_completion_tokens": 128000,
+    "is_moderated": true
+   },
+   "supported_parameters": [
+    "include_reasoning",
+    "max_completion_tokens",
+    "max_tokens",
+    "reasoning",
+    "reasoning_effort",
+    "response_format",
+    "seed",
+    "structured_outputs",
+    "tool_choice",
+    "tools",
+    "verbosity"
+   ],
+   "reasoning": {
+    "mandatory": true,
+    "default_enabled": true,
+    "supported_efforts": [
+     "max",
+     "xhigh",
+     "high",
+     "medium",
+     "low"
+    ],
+    "default_effort": "medium"
+   },
+   "expiration_date": null
+  },
+  {
+   "id": "deepseek/deepseek-v4.1-flash-1017",
+   "name": "DeepSeek: DeepSeek V4.1 Flash 1017",
+   "created": 1792225624,
+   "context_length": 1048576,
+   "architecture": {
+    "modality": "text+image->text",
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "DeepSeek",
+    "instruct_type": null
+   },
+   "top_provider": {
+    "context_length": 1048576,
+    "max_completion_tokens": 393216,
+    "is_moderated": false
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "logprobs",
+    "max_completion_tokens",
+    "max_tokens",
+    "min_p",
+    "parallel_tool_calls",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_logprobs",
+    "top_p"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "default_enabled": true,
+    "supported_efforts": [
+     "max",
+     "high",
+     "low",
+     "none"
+    ],
+    "default_effort": "high"
+   },
+   "expiration_date": null
+  },
+  {
+   "id": "google/gemini-omni-1.2-flash",
+   "name": "Google: Gemini Omni 1.2 Flash",
+   "created": 1793898961,
+   "context_length": 131072,
+   "architecture": {
+    "modality": "text+image+video->text+video",
+    "input_modalities": [
+     "text",
+     "image",
+     "video"
+    ],
+    "output_modalities": [
+     "text",
+     "video"
+    ],
+    "tokenizer": "Gemini",
+    "instruct_type": null
+   },
+   "top_provider": {
+    "context_length": 131072,
+    "max_completion_tokens": 65536,
+    "is_moderated": false
+   },
+   "supported_parameters": [
+    "include_reasoning",
+    "max_tokens",
+    "reasoning",
+    "reasoning_effort",
+    "seed",
+    "temperature",
+    "top_p"
+   ],
+   "reasoning": {
+    "mandatory": true,
+    "supported_efforts": [
+     "high",
+     "low"
+    ],
+    "default_effort": "low"
+   },
+   "expiration_date": null
+  },
+  {
+   "id": "nvidia/nemotron-3.5-content-safety",
+   "name": "NVIDIA: Nemotron 3.5 Content Safety",
+   "created": 1780581864,
+   "context_length": 131072,
+   "architecture": {
+    "modality": "text+image->text",
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Other",
+    "instruct_type": null
+   },
+   "top_provider": {
+    "context_length": 131072,
+    "max_completion_tokens": 117964,
+    "is_moderated": false
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "max_tokens",
+    "min_p",
+    "presence_penalty",
+    "reasoning",
+    "repetition_penalty",
+    "seed",
+    "stop",
+    "temperature",
+    "top_k",
+    "top_p"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "default_enabled": true
+   },
+   "expiration_date": "2026-11-30"
+  },
+  {
+   "id": "inclusionai/lingsante-3.1-air-vl",
+   "name": "inclusionAI: LingSante 3.1 Air VL",
+   "created": 1795705284,
+   "context_length": 131072,
+   "architecture": {
+    "modality": "text+image->text",
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Other",
+    "instruct_type": null
+   },
+   "top_provider": {
+    "context_length": 131072,
+    "max_completion_tokens": 32768,
+    "is_moderated": false
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "max_tokens",
+    "min_p",
+    "presence_penalty",
+    "reasoning",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_p"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "default_enabled": true
+   },
+   "expiration_date": null
+  }
+ ]
+}
