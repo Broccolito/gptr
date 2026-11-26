@@ -1,10 +1,10 @@
-# gptr Agent: let Biorouter reach this R session through gptr.
+# gptr Agent: let an agent (Biorouter, Claude Code, Codex) reach this R session through gptr.
 #
-# Run it at the R prompt of the session you want Biorouter to work in:
+# Run it at the R prompt of the session you want the agent to work in:
 #
 #   source("<gptr Agent's folder>/r/attach.R")
-#   biorouter_gptr_attach(mode = "auto")     # Biorouter may change objects (gptr still refuses critical code)
-#   biorouter_gptr_attach()                  # Biorouter can only read
+#   biorouter_gptr_attach(mode = "auto")     # the agent may change objects (gptr still refuses critical code)
+#   biorouter_gptr_attach()                  # the agent can only read
 #   biorouter_gptr_detach()                  # stop serving
 #
 # With gptr 1.2.0 or later this is the same as gptr::gptr_mcp_serve(advertise = TRUE, mode = ...),
@@ -91,7 +91,7 @@ local({
   plan_refusal = function(version) {
     paste0("Plan mode needs gptr ", plan_floor, " or later, and this R has gptr ", version,
            ": before ", plan_floor, ", plan mode refuses the read-only check gptr Agent runs ",
-           "first. Serve in another mode (mode = \"manual\" lets Biorouter only read), or update ",
+           "first. Serve in another mode (mode = \"manual\" lets the agent only read), or update ",
            "gptr with install.packages(\"gptr\") and restart R.")
   }
 
@@ -121,7 +121,7 @@ local({
     }
     if (serves_advertise()) {
       h = gptr::gptr_mcp_serve(envir = envir, mode = mode, advertise = label %||% TRUE)
-      message("Biorouter can now reach this R session through gptr ", version,
+      message("gptr Agent can now reach this R session through gptr ", version,
               ". It answers while R waits at its prompt. Stop with biorouter_gptr_detach().")
       return(invisible(h))
     }
@@ -156,7 +156,7 @@ local({
       refuse("This version of gptr does not expose its server's token; update gptr.")
     }
     kept = if (!started) {
-      paste0(" A gptr server was already running in this R session, so Biorouter reaches it as it ",
+      paste0(" A gptr server was already running in this R session, so gptr Agent reaches it as it ",
              "is: its mode, its tools (", paste(served$tools, collapse = ", "), ") and the ",
              "workspace it started with.",
              if (!is.null(mode) && !identical(mode, served$mode)) {
@@ -190,7 +190,7 @@ local({
       stop("The server runs, but its discovery record could not be written in ", dir, ".", call. = FALSE)
     }
     state$path = path
-    message("Biorouter can now reach this R session through gptr ", rec$gptr_version, " (mode ",
+    message("gptr Agent can now reach this R session through gptr ", rec$gptr_version, " (mode ",
             rec$mode, "). It answers while R waits at its prompt. Stop with biorouter_gptr_detach().",
             kept %||% "")
     invisible(h)
@@ -199,7 +199,7 @@ local({
   detach_fn = function() {
     if (requireNamespace("gptr", quietly = TRUE)) gptr::gptr_mcp_serve(stop = TRUE)
     withdraw()
-    message("This R session is no longer served to Biorouter.")
+    message("This R session is no longer served to gptr Agent.")
     invisible(NULL)
   }
 
