@@ -8,8 +8,9 @@ Writes dist/gptragent.brxt, dist/gptragent-X.Y.Z.brxt (the same bytes) and dist/
 
 It refuses unless:
 
-* manifest.json, pyproject.toml, src/gptragent/__init__.py and the README's "Current version"
-  line carry the same X.Y.Z;
+* manifest.json, pyproject.toml, src/gptragent/__init__.py, the README's "Current version"
+  line, the Claude Code and Codex plugin manifests and the plugin's entry in the Claude Code
+  marketplace (../.claude-plugin/marketplace.json) carry the same X.Y.Z;
 * the project depends on nothing outside Python's standard library, and uv.lock was made for this
   version of it;
 * no declared environment value is a secret with a default;
@@ -45,6 +46,7 @@ README_VERSION = re.compile(r"Current version: \*\*(\d+\.\d+\.\d+)\*\*")
 INIT_VERSION = re.compile(r'(?m)^__version__ = "([^"]+)"')
 ZIP_TIME = (2020, 1, 1, 0, 0, 0)
 EXPECTED_TOOLS = {"sessions": "read-only", "inspect": "read-only", "r": "destructive"}
+PLUGIN = "gptr"
 
 
 class Refused(SystemExit):
@@ -67,6 +69,17 @@ def _frontmatter(text: str) -> Optional[dict]:
             key, value = line.split(":", 1)
             out[key.strip()] = value.strip().strip("'\"")
     return out
+
+
+def _plugin_version(path: Path, listed: bool = False) -> Optional[str]:
+    """The version a plugin manifest states, or with `listed` a marketplace's entry for the plugin."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if listed:
+        data = next((p for p in data.get("plugins") or [] if p.get("name") == PLUGIN), {})
+    return data.get("version")
 
 
 def _tools(root: Path, package: str) -> list:
@@ -108,6 +121,9 @@ def check(root: Path, previous: Optional[Path] = None) -> tuple:
         "pyproject.toml": project.get("version"),
         f"src/{package}/__init__.py": init_match.group(1) if init_match else None,
         "README.md (Current version line)": readme_match.group(1) if readme_match else None,
+        ".claude-plugin/plugin.json": _plugin_version(root / ".claude-plugin" / "plugin.json"),
+        ".codex-plugin/plugin.json": _plugin_version(root / ".codex-plugin" / "plugin.json"),
+        "../.claude-plugin/marketplace.json": _plugin_version(root.parent / ".claude-plugin" / "marketplace.json", True),
     }
     if len(set(versions.values())) != 1:
         raise Refused(f"the versions disagree: {versions}. Run scripts/version.py.")

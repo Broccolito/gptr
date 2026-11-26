@@ -1,6 +1,7 @@
 """The gptr Agent MCP server (stdio, newline-delimited JSON-RPC, standard library only).
 
-Biorouter starts it as ``uv run --directory <install dir> gptragent``. It finds the R sessions
+Biorouter starts it as ``uv run --directory <install dir> gptragent``, the Claude Code and Codex
+plugins as ``python -m gptragent`` in src/ through ``uv run --no-project``. It finds the R sessions
 gptr advertises on this computer and forwards three tools to the one the chat works in:
 
 * ``sessions``: list the advertised sessions, attach to one and see what is in it;
@@ -31,7 +32,7 @@ DEFAULT_PROTOCOL = "2025-06-18"
 DEFAULT_TIMEOUT = 280.0
 MAX_TIMEOUT = 280.0
 # Seconds added to an r call's own timeout while waiting for its answer: gptr's timeout is best
-# effort, and the answer still has to travel. Biorouter's extension timeout is 300 s.
+# effort, and the answer still has to travel. Biorouter and the Codex plugin end a tool call at 300 s.
 ANSWER_MARGIN = 12.0
 OVERVIEW_WAIT = 60.0
 RISK_WAIT = 20.0
@@ -59,7 +60,9 @@ INSTRUCTIONS = (
     "the shell (Rscript, R -e) for work on these objects: a new R process does not have them. "
     "Keep each call under four minutes; when a call times out, R may still be running it, so do "
     "not run it again: check with inspect, and tell the user they can stop it with Esc or Ctrl-C "
-    "in R."
+    "in R. gptr 1.3.0 and later records each r call that runs in the session's history "
+    "(gptr_last()) and in the document the user bound with gptr_doc(), so do not also write that "
+    "work to a script unless the user asks for one."
 )
 
 SESSION_PROP = {
@@ -319,7 +322,7 @@ class Bridge:
         if script is not None:
             helper = f'source({r_string(script.as_posix())}); biorouter_gptr_attach(mode = "auto")'
         else:
-            helper = 'source("<this extension\'s folder>/r/attach.R"); biorouter_gptr_attach(mode = "auto")'
+            helper = 'source("<gptr Agent\'s folder>/r/attach.R"); biorouter_gptr_attach(mode = "auto")'
         lines = ["No R session is serving gptr on this computer, so nothing can run in R yet.",
                  "Ask the user to run this at the R prompt of the session they want to work in "
                  "(an interactive R: RStudio, Positron, R.app or R in a terminal), then call "
@@ -340,15 +343,15 @@ class Bridge:
             lines += [f"  {helper}",
                       f"gptr {probe.gptr} is installed; gptr 1.2.0 and later need only "
                       f"{native}."]
-        lines.append('Without mode = "auto" Biorouter can only read the session; with it, Biorouter '
-                     "may change objects, and gptr still refuses critical code.")
+        lines.append('Without mode = "auto" you can only read the session; with it, you may change '
+                     "objects, and gptr still refuses critical code.")
         lines.append("Relay that line to the user once and wait; do not start R yourself, because a "
                      "new R process does not have the user's objects.")
         lines.append("Folders searched for gptr's discovery records: " + "; ".join(found.dirs))
         for note in found.notes[:8]:
             lines.append("Note: " + note)
         lines.append("If the user keeps R's cache elsewhere, they can set GPTR_MCP_DISCOVERY_DIR "
-                     "for this extension to that cache's R/gptr/mcp-serve folder.")
+                     "for gptr Agent to that cache's R/gptr/mcp-serve folder.")
         return "\n".join(lines)
 
     # ---- calls into R -------------------------------------------------------------------
@@ -475,7 +478,7 @@ class Bridge:
             return rec, live, text_result(
                 f"inspect runs only code gptr classifies as read-only (level 0); this code is level "
                 f"{level}. Use r for it. Nothing in this call ran.", True)
-        # the two calls together stay inside Biorouter's 300 s extension timeout
+        # the two calls together stay inside the 300 s tool timeout of Biorouter and the Codex plugin
         wait = max(1.0, min(wait, MAX_TIMEOUT - (self._clock() - started)))
         return self._forward("r", {"code": code, "timeout": wait}, rec.pid, wait + ANSWER_MARGIN)
 

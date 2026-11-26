@@ -11114,6 +11114,47 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (incoming_pretest/gptr_1.1.0_20261119_044917), the local timing table and win-builder's check time
   in progress/P33.md.
 
+## D-372 - P34 gptr Agent is hosted and released in gptr (2026-11-26)
+- Rule: the bridge lives in the top-level `gptragent/` folder, outside the R package
+  (`.Rbuildignore`, conventions section 3); its id `gptragent`, Python package and asset name
+  `gptragent.brxt` are unchanged. Its version is `DESCRIPTION`'s Version and its manifest
+  repository `https://github.com/Broccolito/gptr`, because Biorouter's updater compares the tag of
+  that repository's latest release with the installed `manifest.version`. A published gptr
+  release `vX.Y.Z` (never a prerelease or draft) gets `gptragent.brxt`, `gptragent-X.Y.Z.brxt` and
+  `SHA256SUMS` from `.github/workflows/gptragent.yaml`, which refuses a tag other than `v` + both
+  versions. Broccolito/GptrAgent is archived with no final release (maintainer, 2026-11-26).
+- Contract-visible: none in the R package; Biorouter's card and catalog move to Broccolito/gptr.
+- Tests: gptragent/tests/test_bundle.py `test_the_bridge_is_released_with_gptr`. Evidence:
+  progress/P34.md Task 1.
+
+## D-373 - P34 An outside agent's served R calls are recorded (2026-11-26)
+- Rule: an `r` or `inspect` call served with no live run that ran (status ok, or stopped part-way
+  with expressions done), was not refused and is not in plan mode appends the run path's
+  `gptr.mcp_r` entry to the served session (for `gptr_mcp_serve()`, its dedicated session,
+  `gptr_last()`); inside a run the old rule stands. `inspect` is history, not code, unless it
+  changed objects (IC-48). With no run and a `gptr_doc()` binding the call goes out on P14's
+  `console:direct` channel, so the bound .R, .Rmd or .qmd gets a direct R line that
+  `gptr_export()` keeps; a call stopped part-way sends `n_done` and records what ran.
+- Contract-visible: 04 IC-58/IC-65 recording rule; 11.5 transcript row (direct R lines also come
+  from served R); `console:direct` gains an optional `n_done`; `?gptr_mcp_serve`.
+- Tests: test-mcp-recording.R "plan and non-recording runs record no code, failed R what ran,
+  idle R its session" and "idle served R records on the server's session and its bound document
+  (D-373)". Evidence: progress/P34.md Task 2.
+
+## D-374 - P34 gptragent/ is the gptr plugin for Claude Code and Codex (2026-11-26)
+- Rule: `gptragent/.claude-plugin/plugin.json` and `gptragent/.codex-plugin/plugin.json` declare
+  the plugin `gptr` with one inline MCP server `gptr`; root marketplaces
+  `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` (both named `gptr`)
+  list `./gptragent`. Claude Code runs `uv run --no-project --python ">=3.11" --directory
+  ${CLAUDE_PLUGIN_ROOT}/src python -m gptragent`; Codex expands no variable in a plugin's MCP
+  config, so it runs the same command with `cwd = "./src"`, `tool_timeout_sec = 300`,
+  `startup_timeout_sec = 60` and `env_vars` forwarding the discovery variables. The bridge's
+  texts name no host. `scripts/version.py` moves the plugin versions and `build_brxt.py` refuses a
+  mismatch; the `.brxt` allowlist is unchanged.
+- Contract-visible: none in the R package.
+- Tests: gptragent/tests/test_plugins.py; test_bundle.py (plugin versions); test_bridge.py (no
+  host named). Evidence: progress/P34.md Task 3.
+
 ## D-380 - P35 The compact_calls setting, on by default (2026-11-26)
 - Rule: the core flag setting `compact_calls`, default `TRUE`; `gptr.compact_calls` is its option
   layer, and it is changed with `gptr_config(compact_calls = FALSE, .scope = )` as any setting.

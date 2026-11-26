@@ -96,6 +96,16 @@ class NoSessionTests(BridgeCase):
         self.assertIn("update gptr Agent", text)
         self.assertEqual(fake.tool_calls(), [])
 
+    def test_the_agent_is_told_the_same_on_every_host(self):
+        # one bridge serves Biorouter, Claude Code and Codex
+        setup = text_of(self.bridge(probe=discovery.Probe(error="R was not found")).call("sessions", {}))
+        skill = (Path(server.__file__).parents[2] / "skills" / "gptr-live-r" / "SKILL.md").read_text(encoding="utf-8")
+        for text in [server.INSTRUCTIONS, setup, skill, *server.MODE_NOTES.values(),
+                     *(tool["description"] for tool in server.TOOLS)]:
+            self.assertNotRegex(text, "Biorouter|Claude|Codex")
+        for text in (server.INSTRUCTIONS, skill):
+            self.assertIn("gptr 1.3.0 and later records each", text)
+
     def test_missing_r_gets_both_lines(self):
         probe = discovery.Probe(error="R was not found")
         text = text_of(self.bridge(probe=probe).call("sessions", {}))

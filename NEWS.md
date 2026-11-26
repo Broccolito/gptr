@@ -1,5 +1,23 @@
 # gptr 1.3.0
 
+## Serving R to local agents
+
+* gptr Agent, the bridge that lets an agent outside R work in a served session, now lives in
+  gptr's repository (folder `gptragent/`, outside the R package) and is released with gptr: its
+  version is gptr's, and each gptr GitHub release carries `gptragent.brxt` for Biorouter.
+* The same folder is a Claude Code plugin and a Codex plugin named `gptr`:
+  `claude plugin marketplace add Broccolito/gptr` then `claude plugin install gptr@gptr`, or
+  `codex plugin marketplace add Broccolito/gptr` then `codex plugin add gptr@gptr`. With
+  `gptr_mcp_serve(advertise = TRUE)` the agent finds the session by itself and gets the tools
+  `sessions`, `inspect` and `r`, with a skill that tells it to look first and change objects in
+  place.
+* An outside agent's R calls are recorded. A served `r` or `inspect` call that ran outside a
+  Peter turn is recorded on the server's session, as Peter's are (of a call that stopped
+  part-way, the expressions that ran; nothing in plan mode or for a refused call), so it persists
+  with the session and `gptr_last() |> peter()` continues after it. While `gptr_doc()` binds a
+  document, the call is also written into it as a direct R line, so `gptr_export()` turns the
+  agent's work into a runnable R script; an `inspect` call is left out unless it changed objects.
+
 ## Console
 
 * A tool call takes one row in the console: the tool, the first line of its code and
