@@ -92,6 +92,8 @@ settings_core = function() {
         paste("What Enter does with a message typed in a terminal console while the agent works",
               "(Tab does the other); in other consoles, what a typed line does."),
         choices = c("steer", "follow_up")),
+    rec("compact_calls", TRUE, "flag",
+        "Show tool calls in one abbreviated line in the console; /calls shows them in full."),
     rec("store", "jsonl", "chr", "Session store."),
     rec("evaluator", "r", "chr", "R evaluator."),
     rec("providers", json_obj(), "providers",

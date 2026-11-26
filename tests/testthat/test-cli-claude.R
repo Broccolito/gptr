@@ -791,7 +791,7 @@ test_that("a sub-agent asking in a served r call ends the streamed line, not the
     if (length(request$last_results)) "child done" else
       fake_tool("r", code = "gptr_mcp_serve(tools = 'r')")
   }, name = "kid")
-  local_gptr_options(interactive = TRUE, verbose = 2L, quiet = FALSE,
+  local_gptr_options(interactive = TRUE, verbose = 2L, quiet = FALSE, compact_calls = FALSE,
                      ui = ui_console_spec(function(prompt, ...) "n"))
   e = new.env()
   e$topics = c(a = "alpha", b = "beta")

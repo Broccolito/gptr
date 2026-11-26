@@ -667,6 +667,7 @@ test_that("the console's one grey is the style table's dim (D-245)", {
 test_that("tool calls are cursor strips tinted by kind (D-245)", {
   skip_on_cran()
   local_project()
+  local_gptr_options(compact_calls = FALSE)
   spec = function(name) tryCatch(registry_get("tool", name), error = function(e) NULL)
   kinds = c(read = "read", grep = "read", ls = "read", ask = "read", r = "act", edit = "act",
             write = "act", codex_shell = "act", mcp__github__search_issues = "act",
@@ -823,6 +824,7 @@ test_that("a call's code split on CRLF and CR shows no <U+000D> (P30 follow-up)"
 
 test_that("a diff row wider than the console is cut, its spaces and sign kept (visual review)", {
   withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE)
+  local_gptr_options(compact_calls = FALSE)
   row = "+     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"
   diff = msg_tool_result("c5", "edit", "ok", details = list(diff = c("@@ -1 +1,2 @@", " a", row)))
   out = console_tool_line(list(name = "edit"), diff, width = 40L)
@@ -836,6 +838,77 @@ test_that("a diff row wider than the console is cut, its spaces and sign kept (v
                          details = list(diff = c(fits, paste0("+", strrep("b", 50L)))))
   out = console_tool_line(list(name = "edit"), diff, width = 40L)
   expect_identical(out, c(paste0("    ", fits), paste0("    +", strrep("b", 32L), "...")))
+})
+
+# ---------------------------------------------------------------- P35: compact tool calls
+
+test_that("a call that would expand is one row with compact_calls, other rows as before (D-381)", {
+  skip_on_cran()
+  proj = local_project()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  lines = c("library(stats)", sprintf("x%d = %d", 1:29, 1:29))
+  r = list(id = "c1", name = "r", input = list(code = paste(lines, collapse = "\n")))
+  # the row is marked compact, so its approval prints the code (D-382)
+  one = function(row) structure(row, compact = TRUE)
+  expect_identical(console_tool_line(r), one("  \u258e r  library(stats)  (+29 more lines)"))
+  # the first non-blank line, a comment too; the count leaves out blank lines
+  note = list(name = "r", input = list(code = "\n# fit the model\n\nfit = lm(mpg ~ wt, mtcars)\n"))
+  expect_identical(console_tool_line(note), one("  \u258e r  # fit the model  (+1 more lines)"))
+  bad = list(name = "r", input = list(code = "x = 1 # \033[31mred\ny = 2"))
+  expect_identical(console_tool_line(bad), one("  \u258e r  x = 1 # <U+001B>[31mred  (+1 more lines)"))
+  # a row too wide is cut before the count, to the width
+  wide = console_tool_line(list(name = "r", input = list(code = paste0(strrep("a", 60L), "\nb"))),
+                           width = 40L)
+  expect_identical(wide, one(paste0("  \u258e r  ", strrep("a", 15L), "\u2026  (+1 more lines)")))
+  expect_identical(cli::ansi_nchar(wide, type = "width"), 40L)
+  # a call that fits one row, a path, a command and JSON arguments are as before
+  expect_identical(console_tool_line(list(name = "r", input = list(code = "x = 1"))),
+                   "  \u258e r  x = 1")
+  write = list(name = "write", input = list(path = file.path(proj, "R/new.R"),
+                                            content = paste(lines, collapse = "\n")))
+  expect_identical(console_tool_line(write), "  \u258e write  R/new.R")
+  expect_identical(console_tool_line(write, msg_tool_result("c2", "write", "ok", details = list(
+    path = file.path(proj, "R/new.R"), bytes = 230))), "    wrote R/new.R (230 bytes)")
+  mcp = list(name = "mcp__github__search_issues", input = list(q = "bug", repo = "x/y"))
+  expect_identical(console_tool_line(mcp),
+                   "  \u258e github/search_issues  {\"q\":\"bug\",\"repo\":\"x/y\"}")
+  expect_identical(console_tool_line(list(name = "codex_shell", input = list(command = "ls -la"))),
+                   "  \u258e codex_shell  ls -la")
+  expect_identical(console_tool_line(list(name = "codex_shell",
+                                          input = list(command = "set -e\nmake check"))),
+                   "  \u258e codex_shell  {\"command\":\"set -e\\nmake check\"}")
+  # an edit sums its change up in one row; an error keeps its rows
+  edit = list(id = "c3", name = "edit", input = list(path = "R/fit.R"))
+  diff = msg_tool_result("c3", "edit", "ok", details = list(diff = c(
+    "--- a/R/fit.R", "+++ b/R/fit.R", "@@ -1,2 +1,2 @@", "-n = 10", "+n = 20", " plot(n)")))
+  expect_identical(console_tool_line(edit), "  \u258e edit  R/fit.R")
+  expect_identical(console_tool_line(edit, diff), "    edited R/fit.R \u00b7 +1 -1")
+  bad = msg_tool_result("c1", "r", "boom", is_error = TRUE,
+                        details = list(error = "boom", objects = list(added = "x")))
+  expect_identical(console_tool_line(r, bad), c("    error: boom", "    + x"))
+  # compact_calls = FALSE: the rows as before, code block and diff
+  local_gptr_options(compact_calls = FALSE)
+  expect_identical(console_tool_line(r), c("  \u258e r", paste0("    ", lines[1:20]),
+                                           "    # \u2026 +10 more lines"))
+  expect_identical(console_tool_line(edit, diff),
+                   c("    @@ -1,2 +1,2 @@", "    -n = 10", "    +n = 20", "     plot(n)"))
+})
+
+test_that("the printed output of r code shows 5 rows a call with compact_calls (D-381)", {
+  skip_on_cran()
+  local_mocked_bindings(console_pad = function() "  ")
+  testthat::local_reproducible_output(width = 80, crayon = FALSE)
+  code = "for (i in 1:60) cat(sprintf('row %d\\n', i)); message('done')"
+  res = NULL
+  out = utils::capture.output({
+    res = eval_r(code, new.env(), plots = "none", tee = TRUE)
+  })
+  expect_identical(out, c(sprintf("    row %d", 1:5), "    (+56 more lines)"))
+  # the model gets the whole output
+  expect_true(any(grepl("row 60", unlist(res$outputs), fixed = TRUE)))
+  local_gptr_options(compact_calls = FALSE)
+  out = utils::capture.output(invisible(eval_r(code, new.env(), plots = "none", tee = TRUE)))
+  expect_identical(out, c(sprintf("    row %d", 1:60), "    done"))
 })
 
 # ---------------------------------------------------------------- Task 2: renderer hooks
@@ -1006,7 +1079,7 @@ test_that("same-block chunks stay contiguous and tools follow the complete text 
 test_that("tool lines escape the preview and summarise the result (acceptance 7)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
-  local_gptr_options(verbose = 2L)
+  local_gptr_options(verbose = 2L, compact_calls = FALSE)
   s = render_session()
   result = msg_tool_result("c1", "r", "ok", details = list(
     objects = list(added = c("x", "y"), modified = character(), removed = character()),

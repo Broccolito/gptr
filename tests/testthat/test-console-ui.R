@@ -328,8 +328,9 @@ test_that("an edit or write approval shows the change before the answer (cheat-s
   json = "    {\"args\":[\"--force\"]}"
   expect_identical(ui_permission_lines(run)[1:2], c("  | fs/run  x.sh", json))
   expect_true(json %in% ui_permission_detail(run))
-  # at 256 colours the rows are styled as the result's diff
+  # at 256 colours the rows are styled as the result's diff (compact_calls off)
   withr::local_options(cli.num_colors = 256L)
+  local_gptr_options(compact_calls = FALSE)
   shown = console_tool_line(list(name = "edit"), msg_tool_result("c1", "edit", "ok", details = list(
     diff = c("-n = 10", "+n = 20"))))
   expect_identical(ui_permission_lines(ed)[2:3], shown)
@@ -394,7 +395,8 @@ test_that("an allowed edit whose change the ask showed sums it up once (review o
   expect_match(out[match("  ? Allow edit?", out) + 2L],
                "^    edited fit[.]R - [+]1( - [1-9][0-9]*[.][0-9] s)?$")
   expect_identical(readLines(file.path(root, "fit.R")), c("n = 10", "plot(n)", "title('n')"))
-  # a call that was not asked keeps its result's diff
+  # with compact_calls off a call that was not asked keeps its result's diff
+  local_gptr_options(compact_calls = FALSE)
   call = list(id = "c1", name = "edit", input = list(path = "fit.R"))
   res = msg_tool_result("c1", "edit", "ok", details = list(diff = c("@@ -1 +1 @@", "-a", "+b")))
   expect_identical(console_tool_line(call, res), c("    @@ -1 +1 @@", "    -a", "    +b"))
@@ -532,6 +534,54 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   expect_identical(ui_rstudio_spec()$permission(req)$decision, "allow")
   expect_match(shown, "\n    write.csv(df, 'out.csv')\n", fixed = TRUE)
   expect_false(grepl("\033", shown, fixed = TRUE))
+})
+
+test_that("an approval of a call drawn compact prints its code; ? does not again (D-382)", {
+  skip_on_cran()
+  root = local_project()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  code = c("library(stats)", sprintf("x%d = %d", 1:29, 1:29))
+  req = ui_request(paste(code, collapse = "\n"))
+  req$tool_call_id = "t1"
+  old = console_state()$last_call
+  withr::defer(assign("last_call", old, envir = console_state()))
+  shown = function(how) {
+    assign("last_call", c(req$session, "t1", how), envir = console_state())
+    ui_permission_lines(req)
+  }
+  rows = c(paste0("    ", code[1:20]), "    # ... +10 more lines")
+  expect_identical(shown("compact")[1:21], rows)
+  expect_true("  ? Allow r?" %in% shown("compact"))
+  # a call the console drew whole is not shown again; one it did not draw is its one row
+  expect_false(any(rows %in% shown(NULL)))
+  assign("last_call", NULL, envir = console_state())
+  expect_identical(ui_permission_lines(req)[1L], "  | r  library(stats)  (+29 more lines)")
+  # the ? view leaves out the code the ask showed whole, and shows a longer call's code
+  three = modifyList(req, list(input = list(code = "a = 1\nb = 2\nc = 3")))
+  assign("last_call", c(req$session, "t1", "compact"), envir = console_state())
+  out = console_try(function() ui_console_permission(three), c("?", "y"))$shown
+  expect_identical(sum(out == "    b = 2"), 1L)
+  out = console_try(function() ui_console_permission(req), c("?", "y"))$shown
+  expect_identical(sum(out == "    x25 = 25"), 1L)
+})
+
+test_that("a compact call's approval shows the code under its row in a run (D-382)", {
+  skip_on_cran()
+  local_project()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  code = c("library(stats)", sprintf("x%d = %d", 1:29, 1:29))
+  fake = local_fake_provider(function(request) {
+    if (length(request$last_results)) return("done")
+    fake_tool("r", code = paste(code, collapse = "\n"))
+  })
+  local_gptr_options(mode = "manual", interactive = TRUE, verbose = 2L, quiet = FALSE,
+                     ui = ui_console_spec(function(prompt, ...) "y"))
+  e = new.env()
+  out = utils::capture.output(peter("set them", model = fake, envir = e))
+  at = match("  | r  library(stats)  (+29 more lines)", out)
+  expect_identical(out[at + 1:21], c(paste0("    ", code[1:20]), "    # ... +10 more lines"))
+  expect_true("  ? Allow r?" %in% out[at + 22:30])
+  expect_identical(e$x29, 29)
 })
 
 test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3)", {
