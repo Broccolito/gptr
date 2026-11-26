@@ -1,0 +1,7 @@
+gptr Agent
+Copyright 2026 Wanjun Gu
+
+Licensed under the Apache License, Version 2.0.
+
+gptr Agent talks to gptr (https://github.com/Broccolito/gptr, Apache-2.0), which the user
+installs in R; no part of gptr is bundled here.
