@@ -881,11 +881,11 @@ console_code_rows = function(lines, lang, n, width = NULL) {
 #' The default start of a tool call, a cursor strip by its kind (D-245): `  | r  x = 1` with the
 #' strip (`console_style()$tool`) red, the name bold and R code highlighted, an MCP call as
 #' `server/tool` with its arguments dim; the whole line dim for a read; the agent's blue block for
-#' a sub-agent call. Code that does not fit `width` follows under the name, at most 20 rows, each
+#' a sub-agent call. Code that does not fit `width` follows under the name, at most `n` rows, each
 #' cut to `width` (console_code_rows()); `compact` (D-381) keeps such code to one row instead, its
 #' first non-blank line cut before a dim `(+N more lines)`, the row's attribute `compact` TRUE
 #' @noRd
-console_call_line = function(call, width, kind = "act", compact = FALSE) {
+console_call_line = function(call, width, kind = "act", compact = FALSE, n = 20L) {
   lines = console_escape(console_preview(call$input), FALSE)
   sym = console_style()
   mcp = startsWith(call$name %||% "", "mcp__")
@@ -914,7 +914,7 @@ console_call_line = function(call, width, kind = "act", compact = FALSE) {
     row = paste0(cli::ansi_strtrim(one, width - nchar(more)), if (nzchar(more)) sym$dim(more))
     return(structure(row, compact = TRUE))
   }
-  c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L, width))
+  c(paste0("  ", tone(head)), console_code_rows(lines, lang, n, width))
 }
 
 #' `text` cut to `width` display columns in its middle, the ellipsis there, so its start and its
@@ -1036,16 +1036,18 @@ console_result_lines = function(call, result, width, kind = "act", compact = FAL
 #'
 #' A tool spec's `render(call, result, width)` wins (IC-69), escaped like any untrusted text;
 #' `call` is `list(id, name, input)`, `result` the tool-result message plus `elapsed`; `compact` is
-#' the setting `compact_calls` (D-380).
+#' the setting `compact_calls` (D-380); `n` the most code rows of a call.
 #' @noRd
 console_tool_line = function(call, result = NULL, session = NULL, width = cli::console_width(),
-                             compact = !isFALSE(setting_get("compact_calls", session))) {
+                             compact = !isFALSE(setting_get("compact_calls", session)), n = 20L) {
   spec = tryCatch(registry_get("tool", call$name, session = session), error = function(e) NULL)
   out = tryCatch(if (is.function(spec$render)) spec$render(call, result, width),
                  error = function(e) NULL)
   width = max(20L, as.integer(width) - nchar(console_pad()))
   kind = console_tool_kind(call$name, spec)
-  if (!is.character(out) && is.null(result)) return(console_call_line(call, width, kind, compact))
+  if (!is.character(out) && is.null(result)) {
+    return(console_call_line(call, width, kind, compact, n))
+  }
   out = if (is.character(out)) console_escape(out, FALSE) else
     console_result_lines(call, result, width, kind, compact)
   console_cut(console_wrap(out, width), width)

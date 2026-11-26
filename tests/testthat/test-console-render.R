@@ -855,7 +855,8 @@ test_that("a call that would expand is one row with compact_calls, other rows as
   note = list(name = "r", input = list(code = "\n# fit the model\n\nfit = lm(mpg ~ wt, mtcars)\n"))
   expect_identical(console_tool_line(note), one("  \u258e r  # fit the model  (+1 more lines)"))
   bad = list(name = "r", input = list(code = "x = 1 # \033[31mred\ny = 2"))
-  expect_identical(console_tool_line(bad), one("  \u258e r  x = 1 # <U+001B>[31mred  (+1 more lines)"))
+  expect_identical(console_tool_line(bad),
+                   one("  \u258e r  x = 1 # <U+001B>[31mred  (+1 more lines)"))
   # a row too wide is cut before the count, to the width
   wide = console_tool_line(list(name = "r", input = list(code = paste0(strrep("a", 60L), "\nb"))),
                            width = 40L)

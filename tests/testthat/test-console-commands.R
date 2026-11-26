@@ -682,7 +682,7 @@ test_that("/permissions shows and changes the rules of this R session", {
   expect_identical(r$res, "error")
 })
 
-test_that("/calls shows the last calls in full, oldest first (D-383)", {
+test_that("/calls shows the last calls whole, oldest first, as the live rows (D-383)", {
   skip_on_cran()
   local_console_commands()
   local_project(list("a.txt" = "hi"))
@@ -692,16 +692,26 @@ test_that("/calls shows the last calls in full, oldest first (D-383)", {
   code = c("library(stats)", sprintf("x%d = %d", 1:29, 1:29))
   fake = gptr_fake_provider(list(fake_tool("r", code = paste(code, collapse = "\n")),
                                  fake_tool("r", code = "y = 2"), fake_tool("read", path = "a.txt"),
+                                 fake_tool("edit", path = "a.txt",
+                                           edits = list(list(oldText = "hi", newText = "hello"))),
+                                 fake_tool("write", path = "b.R", content = "a = 1\nb = 2"),
                                  "done"))
   s = peter("go", model = fake, envir = new.env(), mode = "auto")
   rs = repl_state(s, new.env())
-  expect_identical(run_command(rs, "/calls")$out, "  | read  a.txt")
-  expect_identical(run_command(rs, "/calls 2")$out, c("  | r  y = 2", "  | read  a.txt"))
-  # the full rows whatever compact_calls says, all calls when n is more
-  all = c("  | r", paste0("    ", code[1:20]), "    # ... +10 more lines", "  | r  y = 2",
-          "  | read  a.txt")
-  expect_identical(run_command(rs, "/calls 3")$out, all)
+  write = c("  | write  b.R", "    +a = 1", "    +b = 2")
+  expect_identical(run_command(rs, "/calls")$out, write)
+  # every code row and an edit's or a write's change rows, whatever compact_calls says
+  edit = c("  | edit  a.txt", "    -hi", "    +hello")
+  expect_identical(run_command(rs, "/calls 2")$out, c(edit, write))
+  all = c("  | r", paste0("    ", code), "  | r  y = 2", "  | read  a.txt", edit, write)
+  expect_identical(run_command(rs, "/calls 5")$out, all)
   expect_identical(run_command(rs, "/calls 9")$out, all)
-  expect_identical(run_command(rs, "/calls x")$out, "Use /calls [n], n a whole number above 0.")
+  for (bad in c("x", "2.5", "0", "-1", "3 junk")) {
+    expect_identical(run_command(rs, paste("/calls", bad))$out,
+                     "Use /calls [n], n a whole number above 0.")
+  }
   expect_true(any(grepl("^  /calls ", help_text())))
+  # inside the console margin the rows line up with the live ones, written at column 0
+  local_mocked_bindings(console_pad = function() "  ")
+  expect_identical(run_command(rs, "/calls 2")$out, c(edit, write, ""))
 })

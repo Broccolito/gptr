@@ -30,7 +30,7 @@ The survey of 2026-11-26 (main 0280d953) found:
 | D-380 | the core flag setting `compact_calls`, default `TRUE`, read with `setting_get("compact_calls", session)` where the console renders; its option layer is `gptr.compact_calls` | `04` §11.2 |
 | D-381 | with `compact_calls`, a call that would expand to code rows is one row: its head, its first non-blank line cut to the width, a dim `(+N more lines)`; an edit's result is `edited <path> · +a -r`; the printed output of `r` code shows at most 5 rows a call, then a dim `(+N more lines)` after the call; with `FALSE` the console is as before | `04` IC-82 (tool calls, printed output) |
 | D-382 | an approval of a call drawn compact prints the code rows itself, at most 20 as the call block did; `?` keeps its 40 | `04` IC-77, IC-82 |
-| D-383 | `/calls [n]` (default 1) prints the last `n` tool calls of the session from `s$messages`, oldest first, as full call rows | `03` §6.17 |
+| D-383 | `/calls [n]` (default 1) prints the last `n` tool calls of the session from `s$messages`, oldest first, whole | `03` §6.17 |
 
 Next free decision: D-384.
 
@@ -111,8 +111,9 @@ call the console did not draw keeps its one-line call row, as now.
 
 `cmd_calls()` takes `n` (default 1, a positive whole number), collects the `tool_call` blocks of
 `s$messages` (`msg_calls()`), and prints the last `n` with `console_tool_line(call, NULL, s,
-compact = FALSE)`, oldest first: the full call rows (at most 20 code rows each). Before any call it
-says `No tool call yet.` `/help` lists it with its description.
+compact = FALSE, n = Inf)`, oldest first: the full call rows with every code row, then a path
+tool's change rows as its approval shows them (`ui_request_change()`), uncut, at the live rows'
+column. Before any call it says `No tool call yet.` `/help` lists it with its description.
 
 ### 5. Front ends
 

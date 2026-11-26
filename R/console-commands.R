@@ -358,20 +358,26 @@ cmd_env = function(args, ctx) {
   if (length(lines)) lines else "(no objects)"
 }
 
-#' `/calls [n]`: the last `n` tool calls of the session's messages (default 1), oldest first, as
-#' their full call rows whatever compact_calls says (D-383)
+#' `/calls [n]`: the last `n` tool calls of the session's messages (default 1), oldest first, whole
+#' whatever compact_calls says: every code row, and the change rows of a path tool as its approval
+#' shows them (an edit's old and new text, a write's content), at the live rows' column (D-383)
 #' @noRd
 cmd_calls = function(args, ctx) {
-  n = if (nzchar(args)) suppressWarnings(as.integer(args)) else 1L
-  if (is.na(n) || n < 1L) return("Use /calls [n], n a whole number above 0.")
+  n = if (nzchar(args)) args else "1"
+  if (!grepl("^[0-9]+$", n) || as.numeric(n) < 1) {
+    return("Use /calls [n], n a whole number above 0.")
+  }
   s = ctx$session
   calls = if (!is.null(s)) unlist(lapply(s$messages, msg_calls), recursive = FALSE)
   if (!length(calls)) return("No tool call yet.")
-  rows = lapply(utils::tail(calls, n), function(b) {
-    console_tool_line(list(id = b$id, name = b$name, input = b$arguments %||% list()), NULL, s,
-                      compact = FALSE)
-  })
-  cli::ansi_string(unlist(rows))
+  rows = unlist(lapply(utils::tail(calls, as.numeric(n)), function(b) {
+    call = list(id = b$id, name = b$name, input = b$arguments %||% list())
+    c(console_tool_line(call, NULL, s, compact = FALSE, n = Inf),
+      console_diff_rows(ui_request_change(list(tool = b$name, input = call$input)), Inf,
+                        ui_width()))
+  }))
+  # console_command() prints in the margin, which the rows already hold
+  cli::ansi_substr(rows, nchar(console_pad()) + 1L, cli::ansi_nchar(rows))
 }
 
 #' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL); it reports

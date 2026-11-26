@@ -11146,9 +11146,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 
 ## D-383 - P35 /calls [n] shows the last calls in full (2026-11-26)
 - Rule: `/calls [n]` (default 1, a positive whole number) prints the last `n` `tool_call` blocks of
-  the session's messages (`msg_calls()` over `s$messages`), oldest first, as the full call rows
-  (`console_tool_line(compact = FALSE)`, at most 20 code rows each); `No tool call yet.` before
-  one. A CLI route's steps are not messages of the session, so they are not listed.
+  the session's messages (`msg_calls()` over `s$messages`), oldest first, whole: the full call rows
+  with every code row (`console_tool_line(compact = FALSE, n = Inf)`), then a path tool's change
+  rows as its approval shows them (`ui_request_change()`: an edit's old and new text, a write's
+  content), uncut, at the live rows' column (the command's margin is taken off); `No tool call
+  yet.` before one. A sub-agent's calls and a CLI route's steps are not messages of the session,
+  so they are not listed. Amended by the P35 review (2026-11-26): whole calls, the live column, `n`
+  only digits.
 - Contract-visible: 03 section 6.17 (the command list); the interactive-console vignette, `?peter`,
   the cheat sheet.
 - Tests: console-commands (`/calls`, `/calls 2`, before a call, a bad `n`, `/help`). Evidence:
