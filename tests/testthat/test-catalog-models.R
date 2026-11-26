@@ -309,7 +309,7 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
   expect_true("claude-sonnet-5-5" %in% err$suggestions)
   expect_equal(err$ref, "claude-sonet-5-5")
   expect_null(model_resolve("sonnet:turbo", strict = FALSE))
-  expect_error(model_resolve("anthropic/claude-nope"), class = "gptr_error_unknown_model")
+  expect_error(model_resolve("nowhere/claude-nope"), class = "gptr_error_unknown_model")
   expect_error(model_resolve(42), class = "gptr_error_invalid_argument")
   local_without_builtin("cli")
   expect_error(model_resolve("claude_code"), "claude-cli", class = "gptr_error_unknown_model")
@@ -344,42 +344,52 @@ test_that("an alias with no model in the catalog is unknown, not a fuzzy match",
   expect_identical(model_resolve("gemini")$ref, "google/gemini-3.1-pro-preview")
 })
 
-test_that("an unknown id points to explicit provider discovery without doing I/O", {
-  local_catalog(catalog_snapshot(generated = "2026-10-22")$models)
-  hint = 'gptr_models\\(provider = "groq", refresh = TRUE\\)'
-  for (ref in c("groq/llama-x", "groq/llama-x:high")) {
-    err = expect_error(model_resolve(ref), hint, class = "gptr_error_unknown_model")
-    expect_identical(err$suggestions, character())
-  }
-  # a route with catalog rows keeps its suggestions and also names the explicit refresh
-  err = expect_error(model_resolve("anthropic/claude-nope"), class = "gptr_error_unknown_model")
-  expect_gt(length(err$suggestions), 0L)
-  expect_match(conditionMessage(err), 'provider = "anthropic"', fixed = TRUE)
-  # custom compatible providers use their own endpoint too
-  off = gptr_register(gptr_provider("versa", api = "openai-completions",
-                                    base_url = "https://versa.example/v1"))
+test_that("an id the catalog lacks is written in once, with conservative capabilities (D-392)", {
+  local_catalog()
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  withr::local_options(gptr.quiet = FALSE)
+  msg = expect_message(model_resolve("anthropic/claude-opus-9"),
+                       class = "gptr_message_model_write_in")
+  expect_match(conditionMessage(msg), "claude-opus-9 is not in the model catalog", fixed = TRUE)
+  expect_match(conditionMessage(msg), 'gptr_models(provider = "anthropic", refresh = TRUE)',
+               fixed = TRUE)
+  rec = expect_no_message(model_resolve("anthropic/claude-opus-9"))
+  expect_identical(c(rec$ref, rec$api, rec$type), c("anthropic/claude-opus-9",
+                                                    "anthropic-messages", "chat"))
+  expect_true(rec$tool_call)
+  expect_false(rec$reasoning)
+  expect_identical(rec$thinking_levels, "off")
+  expect_identical(rec$input, "text")
+  expect_true(is.na(rec$context) && is.na(rec$max_output))
+  expect_identical(nrow(rec$prices), 0L)
+  # no hint that would do nothing for a provider without a listing API or discover()
+  off = gptr_register(gptr_provider("brx", api = "bedrock-converse",
+                                    base_url = "https://brx.example"))
   withr::defer(off())
-  err = expect_error(model_resolve("versa/x"), class = "gptr_error_unknown_model")
-  expect_match(conditionMessage(err), 'provider = "versa"', fixed = TRUE)
-  # a provider without a listing API or discover() gets no hint that would do nothing
-  off2 = gptr_register(gptr_provider("brx", api = "bedrock-converse",
-                                     base_url = "https://brx.example"))
-  withr::defer(off2())
-  err = expect_error(model_resolve("brx/x"), class = "gptr_error_unknown_model")
-  expect_no_match(conditionMessage(err), "gptr_models(", fixed = TRUE)
+  msg = expect_message(model_resolve("brx/x"), class = "gptr_message_model_write_in")
+  expect_no_match(conditionMessage(msg), "gptr_models(", fixed = TRUE)
+  # a thinking suffix stays a level
+  withr::local_options(gptr.quiet = TRUE)
+  expect_identical(model_resolve("groq/llama-x:high")[c("id", "thinking")],
+                   list(id = "llama-x", thinking = "off"))
+  expect_identical(model_resolve("typesafe/jev-1.99.0")$type, "classifier")
+  expect_false(model_resolve("typesafe/jev-1.99.0")$tool_call)
+  # a CLI route takes any id its CLI accepts (a router's or a local model's name)
+  cli = model_resolve("codex/kimi-k3:cloud")
+  expect_identical(c(cli$id, cli$api, cli$type), c("kimi-k3:cloud", "cli-codex", "cli"))
+  expect_true(cli$tool_call)
 })
 
-test_that("a reference that names a provider gets suggestions from that provider only (#44)", {
+test_that("a provider with no id gets suggestions from that provider only (#44)", {
   local_catalog()
   ids = paste0("gpt-5.6-", c("sol", "luna", "terra"), "-2026-07-09")
   off = gptr_register(gptr_provider("versa", api = "openai-responses",
                                     base_url = "https://versa.example/v1",
                                     models = lapply(ids, function(id) list(id = id))))
   withr::defer(off())
-  for (ref in c("versa/gpt-9-nonexistent", "versa/", "versa/gpt-9:high")) {
-    err = expect_error(model_resolve(ref), class = "gptr_error_unknown_model")
-    expect_setequal(err$suggestions, paste0("versa/", ids))
-  }
+  err = expect_error(model_resolve("versa/"), 'provider = "versa"',
+                     class = "gptr_error_unknown_model")
+  expect_setequal(err$suggestions, paste0("versa/", ids))
 })
 
 test_that("a provider named alone means its first model; alias separators match (IC-19)", {

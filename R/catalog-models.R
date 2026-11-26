@@ -749,14 +749,26 @@ model_match = function(pat, ctg) {
   list(entry = NULL, how = "no match")
 }
 
-#' Is a provider local (loopback server: unknown model ids allowed)?
+#' Is a provider local (a loopback server)?
 #' @noRd
 model_provider_local = function(pid, ctg) {
   p = provider_get(pid)
   isTRUE(p[["local"]] %||% ctg$providers[[pid]][["local"]])
 }
 
-#' Resolve a reference with Pi's last-colon thinking rule and local-provider fallback
+#' The entry of an id the catalog lacks for a known provider (D-392): only what a name alone can
+#' grant, so tool calls on a remote chat or CLI route (the provider refuses what its model cannot
+#' do) and never on a local server (IC-74) or a classifier; text input, no thinking control,
+#' unknown limits and price
+#' @noRd
+model_write_in = function(pid, id, ctg) {
+  classifier = identical(provider_get(pid)[["type"]], "classifier")
+  list(provider = pid, id = id, status = "active", reasoning = FALSE,
+       tool_call = !classifier && !model_provider_local(pid, ctg), locality = "unknown")
+}
+
+#' Resolve a reference with Pi's last-colon thinking rule; an id the catalog lacks for a known
+#' provider is written in
 #' @noRd
 model_lookup = function(text, ctg) {
   hit = model_match(text, ctg)
@@ -777,10 +789,9 @@ model_lookup = function(text, ctg) {
       }
     }
   }
-  if (!is.null(hit$provider) && model_provider_local(hit$provider, ctg)) {
-    entry = list(provider = hit$provider, id = hit$id, status = "active",
-                 reasoning = FALSE, tool_call = FALSE, locality = "unknown")
-    return(list(entry = entry, how = "local id", thinking = thinking))
+  if (!is.null(hit$provider) && nzchar(hit$id)) {
+    return(list(entry = model_write_in(hit$provider, hit$id, ctg), how = "write-in",
+                thinking = thinking))
   }
   hit
 }
@@ -912,14 +923,25 @@ model_resolve = function(ref, strict = TRUE) {
     if (nzchar(pid) && catalog_listable(provider_get(pid))) {
       lead = paste0(lead, " Run gptr_models(provider = \"", pid,
                     "\", refresh = TRUE) to ask that provider for its models.")
-    } else if (pid %in% names(catalog_modelsdev_ids()) && !(pid %in% ctg$index$provider)) {
-      lead = paste0(lead, " gptr_models(refresh = TRUE) updates the offline catalog.")
     }
     gptr_abort(paste0(lead, if (length(sugg)) paste0(" Did you mean: ",
                                                      paste(sugg, collapse = ", "), "?") else ""),
                "unknown_model", ref = ref, suggestions = sugg)
   }
   rec = model_record(hit$entry, ctg)
+  if (identical(hit$how, "write-in")) {
+    pid = rec$provider
+    hint = if (catalog_listable(provider_get(pid))) {
+      paste0(" gptr_models(provider = \"", pid, "\", refresh = TRUE) asks ", pid,
+             " for its models.")
+    } else {
+      ""
+    }
+    gptr_inform(paste0(rec$ref, " is not in the model catalog; it is sent to ", pid,
+                       " as written, with ", if (rec$tool_call) "tool calls, ",
+                       "text input, no thinking level and unknown limits and price.", hint),
+                "model_write_in", .once = paste0("model_write_in:", rec$ref))
+  }
   if (!is.null(hit$thinking)) {
     rec$thinking = model_clamp_thinking(rec$thinking_levels, hit$thinking, rec$ref)
   }
