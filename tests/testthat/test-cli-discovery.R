@@ -177,6 +177,59 @@ test_that("a route's default runs as the CLI's own: its reported model, else no 
   expect_identical(pcli_model_id(default), "vendor-large-3")
 })
 
+test_that("a model id the CLI does not list is passed as written, with one notice (D-392)", {
+  withr::local_options(gptr.quiet = FALSE)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  local_talks(fixture_lines("claude-discover-text.ndjson"))
+  local_mocked_bindings(pcli_probe = function(path) list(bare_optout = NULL),
+                        pcli_notice = function(cli) invisible(NULL))
+  model = stub_model("claude", "my-router-model")
+  # nothing listed to compare with: no notice
+  expect_false(pcli_write_in(model, "my-router-model"))
+  pcli_discover("claude")
+  for (listed in c("large", "vendor-mid-3")) expect_false(pcli_write_in(model, listed))
+  ctx = list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Hello")))
+  opts = stub_opts()
+  expect_message({
+    spec = pcli_claude_build(model, ctx, opts)
+  }, paste("The claude CLI does not list the model my-router-model; gptr passes it",
+           "to claude --model as written."), fixed = TRUE)
+  expect_identical(utils::tail(spec$start$args, 2L), c("--model", "my-router-model"))
+  expect_silent(pcli_write_in(model, "my-router-model"))
+  pcli_untrack("s0123456789")
+})
+
+test_that("Codex runs keep the user's model provider through -c, never its credentials", {
+  withr::local_options(gptr.quiet = FALSE)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  local_talks(fixture_lines("codex-discover-custom.jsonl"))
+  local_mocked_bindings(pcli_probe = function(path) list(resume = TRUE),
+                        pcli_notice = function(cli) invisible(NULL))
+  expect_message(pcli_discover("codex"),
+                 "experimental_bearer_token of your Codex model provider lm", fixed = TRUE)
+  route = c("-c", 'model_provider="lm"', "-c", 'openai_base_url="http://127.0.0.1:11434/v1"',
+            "-c", 'model_catalog_json="/home/user/catalog.json"',
+            "-c", paste0('model_providers.lm={"name"="LM","base_url"="http://127.0.0.1:1234/v1",',
+                         '"wire_api"="responses","env_key"="LM_API_KEY",',
+                         '"requires_openai_auth"=false,"stream_max_retries"=3}'))
+  expect_identical(pcli_discovery("codex")$route, route)
+  # the configured model the list lacks is the default, passed as written with the provider
+  ctx = list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Hello")))
+  opts = stub_opts()
+  expect_message({
+    spec = pcli_codex_build(stub_model("codex", "default"), ctx, opts)
+  }, "does not list the model my-local-model", fixed = TRUE)
+  withr::defer(unlink(opts$state$codex_relay, recursive = TRUE))
+  args = spec$start$args
+  i = match("-m", args)
+  expect_identical(args[i + 0:(1L + length(route))], c("-m", "my-local-model", route))
+  expect_false(any(grepl("not-a-secret-test-value", args, fixed = TRUE)))
+  expect_identical(pcli_codex_route(list(model_provider = NULL)), character())
+  expect_identical(pcli_toml_value(list(a = list(), b = list(1L, "x\""), c = NULL)),
+                   '{"a"=[],"b"=[1,"x\\""]}')
+  pcli_untrack("s0123456789")
+})
+
 test_that("a fake CLI process answers the discovery talk and is gone after it", {
   skip_on_cran()
   pcli_cache_clear()

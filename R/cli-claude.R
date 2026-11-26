@@ -206,6 +206,7 @@ pcli_claude_build = function(model, context, opts) {
   pcli_track(opts[["session"]], state)
   model_id = pcli_model_id(model)
   state$pcli_model_arg = model_id
+  pcli_write_in(model, model_id)
   par = pcli_params(context)
   parts = pcli_split(context[["messages"]] %||% list())
   role = the$coach_role

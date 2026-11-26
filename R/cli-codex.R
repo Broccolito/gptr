@@ -12,9 +12,10 @@
 #' Codex's models and the model the user's Codex starts with, from its app-server over stdio
 #' (D-390, D-391): `model/list`, every page (each model's `model` slug as the id, with its display
 #' name, input modalities and reasoning efforts), and `config/read`, whose `model` is the user's
-#' configured model, else the list's `isDefault` one. No thread is started. When the app-server
-#' gives no list, `codex debug models`' catalog, without a default. `listed` holds the ids.
-#' @return list(models, default = chr(1) or NULL, listed = chr)
+#' configured model, else the list's `isDefault` one, and the model provider settings every exec
+#' then carries (pcli_codex_route()). No thread is started. When the app-server gives no list,
+#' `codex debug models`' catalog, without a default. `listed` holds the ids.
+#' @return list(models, default = chr(1) or NULL, listed = chr, route = chr)
 #' @noRd
 pcli_codex_discover = function(path) {
   ask = function(id, method, params = json_obj()) list(id = id, method = method, params = params)
@@ -61,7 +62,7 @@ pcli_codex_discover = function(path) {
   }
   cfg = st$config
   list(models = unname(rows), default = pcli_chr(cfg[["model"]]) %||% own,
-       listed = as.character(names(rows)))
+       listed = as.character(names(rows)), route = pcli_codex_route(cfg))
 }
 
 #' Codex's catalog from `codex debug models` (D-390), the models it does not hide; signals
@@ -97,6 +98,52 @@ pcli_codex_row = function(id, name, input, efforts) {
 #' A TOML basic string
 #' @noRd
 pcli_toml = function(x) paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x), "\"")
+
+#' A decoded JSON value as an inline TOML value: objects as inline tables (keys quoted, null
+#' members left out), arrays, booleans, numbers and strings
+#' @noRd
+pcli_toml_value = function(x) {
+  if (is.list(x) && !is.null(names(x))) {
+    x = Filter(Negate(is.null), x)
+    if (!length(x)) return("{}")
+    return(paste0("{", paste0(pcli_toml(names(x)), "=", vapply(x, pcli_toml_value, ""),
+                              collapse = ","), "}"))
+  }
+  if (is.list(x)) return(paste0("[", paste(vapply(x, pcli_toml_value, ""), collapse = ","), "]"))
+  if (is.logical(x)) return(if (isTRUE(x)) "true" else "false")
+  if (is.numeric(x)) return(format(x, scientific = FALSE, trim = TRUE, digits = 15L))
+  pcli_toml(x)
+}
+
+#' The `-c` overrides that keep the user's own Codex model provider under --ignore-user-config
+#' (D-392), from config/read: `model_provider` with its `model_providers` table, `openai_base_url`
+#' and `model_catalog_json`, so the models Codex lists, the user's default and any written-in id
+#' reach the server the user's Codex uses. A table's `experimental_bearer_token` and
+#' `http_headers` hold credentials: they never go on a command line, which other users of the
+#' computer can read, and gptr says so once.
+#' @noRd
+pcli_codex_route = function(cfg) {
+  id = pcli_chr(cfg[["model_provider"]])
+  table = if (!is.null(id)) cfg[["model_providers"]][[id]]
+  held = intersect(c("experimental_bearer_token", "http_headers"),
+                   names(Filter(Negate(is.null), table)))
+  if (length(held)) {
+    gptr_inform(paste0("gptr leaves the ", paste(held, collapse = " and "), " of your Codex model ",
+                       "provider ", id, " off the codex command line, where other users of this ",
+                       "computer could read it; give it through env_key or env_http_headers in ",
+                       "your Codex config."), "notice", .once = paste0("codex_route:", id))
+  }
+  out = character()
+  for (k in c("model_provider", "openai_base_url", "model_catalog_json")) {
+    v = pcli_chr(cfg[[k]])
+    if (!is.null(v)) out = c(out, "-c", paste0(k, "=", pcli_toml(v)))
+  }
+  if (is.list(table) && !is.null(names(table))) {
+    table = table[setdiff(names(table), held)]
+    out = c(out, "-c", paste0("model_providers.", id, "=", pcli_toml_value(table)))
+  }
+  out
+}
 
 #' The `-c` overrides that make gptr's stdio relay Codex's `gptr` MCP server (IC-65, IC-79):
 #' `Rscript --vanilla --default-packages=base <mcp_relay.R> <mailbox> <seconds>`, the paths as
@@ -139,12 +186,12 @@ pcli_codex_confine = c(
 #' Under a coaching `role` the exec is confined (08 3.7): ephemeral and read-only, Codex's own
 #' tools off, gptr's hook for SessionStart and PreToolUse, and the person's credentials store.
 #' A run keeps gptr's relay; a coach has none and gets the strict reply `schema` file. A NULL
-#' `model_id` passes no -m, so Codex chooses (D-391).
+#' `model_id` passes no -m, so Codex chooses (D-391); `route` follows it (pcli_codex_route()).
 #' @noRd
 pcli_codex_args = function(model_id, wd, sandbox, relay, resume = NULL, role = NULL,
-                           schema = NULL) {
+                           schema = NULL, route = NULL) {
   mcp = if (!identical(role, "coach")) pcli_codex_mcp_args(relay)
-  model = if (!is.null(model_id)) c("-m", model_id)
+  model = c(if (!is.null(model_id)) c("-m", model_id), route)
   if (!is.null(resume)) {
     return(c("exec", "resume", resume, "--json", "--ignore-user-config", "--skip-git-repo-check",
              model, mcp, "-c", paste0("sandbox_mode=", sandbox), "-"))
@@ -521,6 +568,7 @@ pcli_codex_build = function(model, context, opts) {
   pcli_codex_settle(state)
   state$pcli_request_id = context[["request_id"]]
   state$pcli_model_arg = pcli_model_id(model)
+  pcli_write_in(model, state$pcli_model_arg)
   pcli_track(opts[["session"]], state)
   path = pcli_find("codex")
   probe = pcli_probe(path)
@@ -542,7 +590,7 @@ pcli_codex_build = function(model, context, opts) {
   resume = if (isTRUE(probe$resume) && is.null(role)) state$codex_thread else NULL
   wd = path_norm(getwd())
   args = pcli_codex_args(state$pcli_model_arg, wd, sandbox, state$codex_relay, resume = resume,
-                         role = role, schema = schema)
+                         role = role, schema = schema, route = pcli_discovery("codex")$route)
   state$cli_api = "cli-codex"
   state$codex_sandbox = sandbox
   state$codex_cap = pcli_codex_cap(par)
