@@ -495,7 +495,8 @@ console_think_line = function(rec, width = cli::console_width()) {
 
 #' The console's process state (`the$console`, owned by P14): `active` (run id -> record);
 #' `artifacts` (NS-8 lines) and `pending` (pause-menu items) held while a tool executes;
-#' `last_call`, the session and call ids of the last call line printed (D-243)
+#' `last_call`, the session and call ids of the last call line printed (D-243), then "compact"
+#' for a compact row (D-382)
 #' @noRd
 console_state = function() {
   if (is.null(the$console)) {
@@ -880,10 +881,11 @@ console_code_rows = function(lines, lang, n, width = NULL) {
 #' The default start of a tool call, a cursor strip by its kind (D-245): `  | r  x = 1` with the
 #' strip (`console_style()$tool`) red, the name bold and R code highlighted, an MCP call as
 #' `server/tool` with its arguments dim; the whole line dim for a read; the agent's blue block for
-#' a sub-agent call. Code that does not fit `width` follows under the name, at most 20 rows, each
-#' cut to `width` (console_code_rows())
+#' a sub-agent call. Code that does not fit `width` follows under the name, at most `n` rows, each
+#' cut to `width` (console_code_rows()); `compact` (D-381) keeps such code to one row instead, its
+#' first non-blank line cut before a dim `(+N more lines)`, the row's attribute `compact` TRUE
 #' @noRd
-console_call_line = function(call, width, kind = "act") {
+console_call_line = function(call, width, kind = "act", compact = FALSE, n = 20L) {
   lines = console_escape(console_preview(call$input), FALSE)
   sym = console_style()
   mcp = startsWith(call$name %||% "", "mcp__")
@@ -893,7 +895,8 @@ console_call_line = function(call, width, kind = "act") {
   head = switch(kind, read = paste0(sym$tool, " ", name),
                 agent = paste0(sym$blue(sym$agent), " ", name),
                 paste0(sym$red(sym$tool), " ", cli::style_bold(name)))
-  arg = c(lines, "")[[1L]]
+  shown = if (compact && code && length(lines) > 1L) lines[nzchar(trimws(lines))] else lines
+  arg = c(shown, "")[[1L]]
   if (!code) {
     arg = console_cut_middle(arg, width - cli::ansi_nchar(paste0("  ", head, "  "), type = "width"))
   }
@@ -906,7 +909,12 @@ console_call_line = function(call, width, kind = "act") {
   if (!code || (length(lines) < 2L && cli::ansi_nchar(one, type = "width") <= width)) {
     return(as.character(cli::ansi_strtrim(one, width)))
   }
-  c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L, width))
+  if (compact) {
+    more = console_more_lines(shown)
+    row = paste0(cli::ansi_strtrim(one, width - nchar(more)), if (nzchar(more)) sym$dim(more))
+    return(structure(row, compact = TRUE))
+  }
+  c(paste0("  ", tone(head)), console_code_rows(lines, lang, n, width))
 }
 
 #' `text` cut to `width` display columns in its middle, the ellipsis there, so its start and its
@@ -970,11 +978,11 @@ console_diff_rows = function(rows, n, width = NULL, more = "") {
 #' `width`; an error's message in red,
 #' wrapped to at most 6 rows, then the object changes of `r` (also after an error); nothing else
 #' for a read; the diff of `edit` without its file headers, which the call line names, at most 12
-#' rows (console_diff_rows()), or where its approval showed the change (`call$asked`) one row,
-#' `edited <path><sep>+a -r`; the project-relative path of `write`, else `done`; each with
-#' `<sep><elapsed>` when it took a second or more
+#' rows (console_diff_rows()), or where its approval showed the change (`call$asked`) or the calls
+#' are `compact` (D-381) one row, `edited <path><sep>+a -r`; the project-relative path of `write`,
+#' else `done`; each with `<sep><elapsed>` when it took a second or more
 #' @noRd
-console_result_lines = function(call, result, width, kind = "act") {
+console_result_lines = function(call, result, width, kind = "act", compact = FALSE) {
   sym = console_style()
   pad = "    "
   el = result$elapsed
@@ -1005,7 +1013,9 @@ console_result_lines = function(call, result, width, kind = "act") {
   if (!is.null(changes)) return(sym$dim(paste0(changes, secs)))
   if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
     diff = d$diff[!grepl("^(--- a/|[+]{3} b/)", d$diff)]
-    if (!isTRUE(call$asked)) return(console_diff_rows(console_escape(diff, FALSE), 12L, width))
+    if (!isTRUE(call$asked) && !compact) {
+      return(console_diff_rows(console_escape(diff, FALSE), 12L, width))
+    }
     n = c(sum(startsWith(diff, "+")), sum(startsWith(diff, "-")))
     counts = paste(c(if (n[[1L]]) paste0("+", n[[1L]]), if (n[[2L]]) paste0("-", n[[2L]])),
                    collapse = " ")
@@ -1025,17 +1035,21 @@ console_result_lines = function(call, result, width, kind = "act") {
 #' (a word wider than `width` is cut)
 #'
 #' A tool spec's `render(call, result, width)` wins (IC-69), escaped like any untrusted text;
-#' `call` is `list(id, name, input)`, `result` the tool-result message plus `elapsed`.
+#' `call` is `list(id, name, input)`, `result` the tool-result message plus `elapsed`; `compact` is
+#' the setting `compact_calls` (D-380); `n` the most code rows of a call.
 #' @noRd
-console_tool_line = function(call, result = NULL, session = NULL, width = cli::console_width()) {
+console_tool_line = function(call, result = NULL, session = NULL, width = cli::console_width(),
+                             compact = !isFALSE(setting_get("compact_calls", session)), n = 20L) {
   spec = tryCatch(registry_get("tool", call$name, session = session), error = function(e) NULL)
   out = tryCatch(if (is.function(spec$render)) spec$render(call, result, width),
                  error = function(e) NULL)
   width = max(20L, as.integer(width) - nchar(console_pad()))
   kind = console_tool_kind(call$name, spec)
-  if (!is.character(out) && is.null(result)) return(console_call_line(call, width, kind))
+  if (!is.character(out) && is.null(result)) {
+    return(console_call_line(call, width, kind, compact, n))
+  }
   out = if (is.character(out)) console_escape(out, FALSE) else
-    console_result_lines(call, result, width, kind)
+    console_result_lines(call, result, width, kind, compact)
   console_cut(console_wrap(out, width), width)
 }
 
@@ -1276,10 +1290,11 @@ console_on_message_end = function(event, ctx) {
   NULL
 }
 
-#' tool_execution_start: the call's lines (verbosity 2), whose ids its approval reads (D-243), with
-#' the tool's name as the live row's state word, or a progress message of its first line and
-#' `(+N more lines)` (verbosity 1); an r call, which evaluates in this process, freezes its
-#' record with its id, and a shown sub-agent's draws the row once
+#' tool_execution_start: the call's lines (verbosity 2), whose ids its approval reads (D-243; marked
+#' "compact" for a compact row, D-382), with the tool's name as the live row's state word, or a
+#' progress message of its first line and `(+N more lines)` (verbosity 1); an r call, which
+#' evaluates in this process, freezes its record with its id, and a shown sub-agent's draws the row
+#' once
 #' @noRd
 console_on_tool_start = function(event, ctx) {
   rec = console_record(event)
@@ -1309,7 +1324,8 @@ console_on_tool_start = function(event, ctx) {
     lines = console_tool_line(call, NULL, rec$session)
     console_write(lines)
     if (length(lines)) {
-      assign("last_call", c(session_data(rec$session)$id, call$id), console_state())
+      assign("last_call", c(session_data(rec$session)$id, call$id,
+                            if (isTRUE(attr(lines, "compact"))) "compact"), console_state())
     }
   }
   NULL

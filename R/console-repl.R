@@ -1435,6 +1435,15 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'   backslash continues a line;
 #' * a slash command such as `/model`, `/mode`, `/cost` or `/exit`; `/help` lists them all.
 #'
+#' Each tool call shows as one row: the tool, the first line of its code and `(+N more lines)`,
+#' then what changed (an edit's added and removed lines, an error's message in up to six wrapped
+#' rows); what R code prints shows at most 5 rows a call, then `(+N more lines)`; what the model
+#' receives is unchanged. An approval shows the code it asks about. `/calls [n]` prints this
+#' session's last `n` tool calls whole (default 1): all their code, and what an edit or a write
+#' changes; a sub-agent's calls and the steps a CLI route runs itself are not among them.
+#' `gptr_config(compact_calls = FALSE)` shows every call's code as it runs (at most 20 rows) and
+#' all its output.
+#'
 #' In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 #' and `... ` waits for Enter (text typed there is added); a pasted fence or `"""` block is read
 #' up to its closer at once, a block pasted at an approval or a choice is kept in the console

@@ -26,6 +26,19 @@
   document, the call is also written into it as a direct R line, so `gptr_export()` turns the
   agent's work into a runnable R script; an `inspect` call is left out unless it changed objects.
 
+## Console
+
+* A tool call takes one row in the console: the tool, the first line of its code and
+  `(+N more lines)`, so a long script no longer fills the screen. An edit's result is one row
+  with the lines it added and removed, and what R code prints shows at most 5 rows a call, then
+  `(+N more lines)`; what the model receives is unchanged. An approval still shows the whole code
+  it asks about.
+* `/calls` prints this session's last tool call whole, all its code and what an edit or a write
+  changes, `/calls 3` the last three; a sub-agent's calls and the steps a CLI route runs itself
+  are not among them.
+* `gptr_config(compact_calls = FALSE)` shows every call's code as it runs and all its output, as
+  before; `.scope = "user"` keeps that for every session.
+
 # gptr 1.2.0
 
 Agents on the same computer can find a served R session by themselves and work in it with a

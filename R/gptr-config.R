@@ -92,6 +92,8 @@ settings_core = function() {
         paste("What Enter does with a message typed in a terminal console while the agent works",
               "(Tab does the other); in other consoles, what a typed line does."),
         choices = c("steer", "follow_up")),
+    rec("compact_calls", TRUE, "flag",
+        "Show tool calls in one abbreviated line in the console; /calls shows them in full."),
     rec("store", "jsonl", "chr", "Session store."),
     rec("evaluator", "r", "chr", "R evaluator."),
     rec("providers", json_obj(), "providers",
@@ -1440,9 +1442,10 @@ settings_model_warn = function(patch, scope) {
 #'
 #' @section Choosing controls:
 #' Use settings for defaults such as `model`, `mode`, `context`, `budget`, `record`, `replay`, the
-#' `undo` limits ([gptr_rewind()]) and registered extension selections. Use [gptr_options] for
-#' transport timeouts, output caps, file checkpoint retention and concurrency. Arguments to
-#' [peter()] choose values for one call, within inherited safety restrictions.
+#' `undo` limits ([gptr_rewind()]), `compact_calls` (`TRUE`: one console row per tool call, the
+#' `/calls` command of [peter()] showing calls in full) and registered extension selections. Use
+#' [gptr_options] for transport timeouts, output caps, file checkpoint retention and concurrency.
+#' Arguments to [peter()] choose values for one call, within inherited safety restrictions.
 #' `vignette("configuration", package = "gptr")` groups all core settings and options and explains
 #' trust and scope.
 #'

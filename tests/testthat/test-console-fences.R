@@ -251,6 +251,7 @@ test_that("a fence indented under a list item closes and shows its body unindent
 
 test_that("tool code shows on the tool line when it fits, else under its name, cut to the width", {
   fence_test_format(width = 40L)
+  local_gptr_options(compact_calls = FALSE)
   line = function(x) cli::ansi_strip(console_tool_line(x, width = 40L))
   call = function(code) list(id = "c1", name = "r", input = list(code = code))
   long = paste0("x = c(", paste(seq_len(40L), collapse = ", "), ")")
@@ -275,6 +276,7 @@ test_that("tool code shows on the tool line when it fits, else under its name, c
 
 test_that("R code in a call block is highlighted at any length; other code is plain (D-245)", {
   withr::local_options(cli.num_colors = 256L, cli.width = 80L, cli.dynamic = FALSE)
+  local_gptr_options(compact_calls = FALSE)
   local_mocked_bindings(is_utf8_output = function() FALSE, .package = "cli")
   one = "  \033[38;5;167m|\033[39m \033[1mr\033[22m  x = \033[38;5;67m1\033[39m"
   for (name in c("r", "mcp__gptr__r")) {

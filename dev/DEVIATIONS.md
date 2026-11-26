@@ -11154,3 +11154,47 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: none in the R package.
 - Tests: gptragent/tests/test_plugins.py; test_bundle.py (plugin versions); test_bridge.py (no
   host named). Evidence: progress/P34.md Task 3.
+
+## D-380 - P35 The compact_calls setting, on by default (2026-11-26)
+- Rule: the core flag setting `compact_calls`, default `TRUE`; `gptr.compact_calls` is its option
+  layer, and it is changed with `gptr_config(compact_calls = FALSE, .scope = )` as any setting.
+  The console reads it with `setting_get("compact_calls", session)` where it renders a call
+  (`console_tool_line()`) and once per evaluation (`eval_open()`). No other option or command.
+- Contract-visible: 04 section 11.2 (`compact_calls` row); `?gptr_config`, the configuration
+  vignette, the cheat sheet.
+- Tests: gptr-config (the names, default, validation, layers and print). Evidence: progress/P35.md
+  Task 2.
+
+## D-381 - P35 A compact call is one row; printed output shows 5 rows a call (2026-11-26)
+- Rule: with `compact_calls`, a call that would expand to code rows (more than one line, or one
+  that does not fit) is its head and its first non-blank line, cut before a dim `(+N more lines)`
+  counting the other non-blank lines (D-187); other calls are unchanged. An edit's result is always
+  `edited <path> · +a -r`. The printed output of `r` code (output, messages and warnings) shows at
+  most 5 rows a call, then one dim `    (+N more lines)` after the call; the model's result is
+  unchanged. With `FALSE` every row is as before (D-207, D-245).
+- Contract-visible: 04 IC-82 (tool calls, printed output).
+- Tests: console-render (compact rows of r, write, edit, MCP, codex_shell and an error; FALSE;
+  the output cap). Evidence: progress/P35.md Task 2.
+
+## D-382 - P35 An approval prints the code of a call drawn compact (2026-11-26)
+- Rule: `last_call` is `c(<session id>, <call id>, "compact")` for a call drawn compact, and
+  `ui_call_shown()` returns `"full"`, `"compact"` or `""`. Under a compact call the ask prints its
+  code rows (`console_code_rows(..., 20L, width)`, the block the full call line draws), then the
+  question; the `?` view leaves out code that fits 20 rows and shows a longer call's code, at most
+  40 rows, as after a full call block (D-243). A call the console did not draw keeps its one row.
+- Contract-visible: 04 IC-77 (the approval's call line), IC-82.
+- Tests: console-ui (an approval of a compact call; its ? view). Evidence: progress/P35.md Task 2.
+
+## D-383 - P35 /calls [n] shows the last calls in full (2026-11-26)
+- Rule: `/calls [n]` (default 1, a positive whole number) prints the last `n` `tool_call` blocks of
+  the session's messages (`msg_calls()` over `s$messages`), oldest first, whole: the full call rows
+  with every code row (`console_tool_line(compact = FALSE, n = Inf)`), then a path tool's change
+  rows as its approval shows them (`ui_request_change()`: an edit's old and new text, a write's
+  content), uncut, at the live rows' column (the command's margin is taken off); `No tool call
+  yet.` before one. A sub-agent's calls and a CLI route's steps are not messages of the session,
+  so they are not listed. Amended by the P35 review (2026-11-26): whole calls, the live column, `n`
+  only digits.
+- Contract-visible: 03 section 6.17 (the command list); the interactive-console vignette, `?peter`,
+  the cheat sheet.
+- Tests: console-commands (`/calls`, `/calls 2`, before a call, a bad `n`, `/help`). Evidence:
+  progress/P35.md Task 3.
