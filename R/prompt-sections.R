@@ -329,18 +329,13 @@ prompt_tools_check = function(mods, session_id) {
   invisible(TRUE)
 }
 
-#' Shipped `tools.presets` defaults (IC-73), applied only past break-even
+#' Does the shipped `extended` default apply? (IC-73; D-393)
+#' For a model whose catalog `cache_min` exceeds the projected standard prefix, which the
+#' extended prefix can reach, in a session expected to pass break-even (interactive, or a fan-out
+#' child).
 #' @noRd
-presets_shipped = c("google/gemini-3*" = "extended", "anthropic/claude-haiku-4-5*" = "extended")
-
-#' Does the shipped `extended` default apply? (IC-73)
-#' Only for `presets_shipped` models whose `cache_min` exceeds the projected standard prefix, in a
-#' session expected to pass break-even (interactive, or a fan-out child).
-#' @noRd
-preset_shipped_applies = function(model, mrec, static, human, kind) {
-  if (is.null(model) || is.null(mrec)) return(FALSE)
-  hit = any(vapply(names(presets_shipped), function(g) grepl(utils::glob2rx(g), model), NA))
-  if (!hit) return(FALSE)
+preset_shipped_applies = function(mrec, static, human, kind) {
+  if (is.null(mrec)) return(FALSE)
   # the provider prior of the token multiplier (architecture 12.5)
   prior = switch(mrec$provider %||% "", anthropic = 1.35, google = 1.10, 1.00)
   # an unknown (NA) or missing cache_min or estimate is not zero (IC-74): the default does not apply
@@ -684,8 +679,7 @@ prompt_compose = function(s, opts = list()) {
   name = explicit %||% mapped %||% configured
   frozen = prompt_compose_preset(s, ctx, name, opts, model, mode, human, doc, root, trusted)
   shipped = is.null(explicit) && is.null(mapped) && identical(name, "standard") &&
-    preset_shipped_applies(model, prompt_model(model), prompt_static_tokens(frozen), human,
-                           d$kind)
+    preset_shipped_applies(prompt_model(model), prompt_static_tokens(frozen), human, d$kind)
   if (shipped) {
     frozen = prompt_compose_preset(s, ctx, "extended", opts, model, mode, human, doc, root,
                                    trusted)

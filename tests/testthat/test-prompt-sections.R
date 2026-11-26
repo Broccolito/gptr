@@ -225,20 +225,23 @@ test_that("the user's tools.presets maps a model glob to a preset", {
 test_that("the shipped extended default applies only past break-even (IC-73)", {
   skip_on_cran()
   haiku = list(provider = "anthropic", id = "claude-haiku-4-5", cache_min = 4096)
-  ref = "anthropic/claude-haiku-4-5"
-  expect_true(preset_shipped_applies(ref, haiku, 2000, TRUE, "chat"))
-  expect_false(preset_shipped_applies(ref, haiku, 2000, FALSE, "chat"))
-  expect_true(preset_shipped_applies(ref, haiku, 2000, FALSE, "child"))
-  expect_false(preset_shipped_applies(ref, haiku, 5000, TRUE, "chat"))
+  expect_true(preset_shipped_applies(haiku, 2000, TRUE, "chat"))
+  expect_false(preset_shipped_applies(haiku, 2000, FALSE, "chat"))
+  expect_true(preset_shipped_applies(haiku, 2000, FALSE, "child"))
+  expect_false(preset_shipped_applies(haiku, 5000, TRUE, "chat"))
   sonnet = list(provider = "anthropic", id = "claude-sonnet-5-5", cache_min = 512)
-  expect_false(preset_shipped_applies("anthropic/claude-sonnet-5-5", sonnet, 2000, TRUE, "chat"))
+  expect_false(preset_shipped_applies(sonnet, 2000, TRUE, "chat"))
   # the provider prior scales the o200k estimate: Claude 1.35 (3500 -> 4725), Gemini 1.10
   # (3500 -> 3850, 3800 -> 4180); an unknown estimate never applies the default
-  expect_false(preset_shipped_applies(ref, haiku, 3500, TRUE, "chat"))
+  expect_false(preset_shipped_applies(haiku, 3500, TRUE, "chat"))
   gem = list(provider = "google", id = "gemini-3-flash", cache_min = 4096)
-  expect_true(preset_shipped_applies("google/gemini-3-flash", gem, 3500, TRUE, "chat"))
-  expect_false(preset_shipped_applies("google/gemini-3-flash", gem, 3800, TRUE, "chat"))
-  expect_false(preset_shipped_applies(ref, haiku, NA_real_, TRUE, "chat"))
+  expect_true(preset_shipped_applies(gem, 3500, TRUE, "chat"))
+  expect_false(preset_shipped_applies(gem, 3800, TRUE, "chat"))
+  expect_false(preset_shipped_applies(haiku, NA_real_, TRUE, "chat"))
+  # catalog data decides, not the model's name (D-393): any model with a large cache minimum
+  expect_true(preset_shipped_applies(list(provider = "xai", id = "grok-x", cache_min = 8192),
+                                     2000, TRUE, "chat"))
+  expect_false(preset_shipped_applies(list(provider = "xai", id = "grok-x"), 2000, TRUE, "chat"))
 })
 
 test_that("preset tools functions are called as P02 validates them (positional human, model)", {
