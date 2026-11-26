@@ -389,23 +389,18 @@ bedrock_tools = function(tools) {
   })
 }
 
-#' Anthropic's adaptive thinking fields for a Claude model whose record declares
-#' `adaptive_thinking`, sent in `additionalModelRequestFields` (D-250); any other model's level
-#' is not sent, said once per model: an undeclared record may be adaptive-only (Opus 4.8 refuses
-#' a budget) or budget-only (Claude 4.5 and earlier), and a wrong guess is an HTTP 400
+#' Anthropic's thinking fields, sent in `additionalModelRequestFields` (D-250), for a model whose
+#' record names Anthropic as its owner; any other model's level is not sent, said once per
+#' model: Converse takes each model family's own fields, and a wrong guess is an HTTP 400
 #' @noRd
 bedrock_thinking = function(model, params) {
-  if (grepl("anthropic\\.claude", model$id) &&
-      isTRUE(adp_model_cap(model, "adaptive_thinking", FALSE))) {
-    return(anthropic_thinking(model, params))
-  }
+  if (identical(model$owner, "anthropic")) return(anthropic_thinking(model, params))
   level = params$thinking
   if (!is.null(level) && !identical(level, "off")) {
     ref = paste0(model$provider, "/", model$id)
     gptr_inform(paste0("Thinking level \"", level, "\" is not sent to ", ref, ": api = ",
-                       "\"bedrock-converse\" sends thinking only to a Claude model whose record ",
-                       "declares capabilities = list(adaptive_thinking = TRUE, effort = TRUE) ",
-                       "(Claude 4.6 and later)."),
+                       "\"bedrock-converse\" sends thinking only to a model whose record ",
+                       "declares owner = \"anthropic\"."),
                 "notice", .once = paste0("bedrock_thinking:", ref))
   }
   list()
@@ -425,9 +420,7 @@ bedrock_build = function(model, context, opts) {
   th = bedrock_thinking(model, params)
   inference = list()
   if (!is.null(params$max_tokens)) inference$maxTokens = as.integer(params$max_tokens)
-  if (!is.null(params$temperature) && !isTRUE(model$reasoning)) {
-    inference$temperature = params$temperature
-  }
+  inference$temperature = adp_temperature(model, params)
   head = if (length(inference)) list(inferenceConfig = inference) else list()
   fields = list(thinking = th$thinking,
                 output_config = if (!is.null(th$effort)) list(effort = th$effort))

@@ -6,8 +6,7 @@
 #' The compat fields and their defaults (snake_case forms of Pi's OpenAICompletionsCompat)
 #' @noRd
 compat_defaults = function() {
-  list(supports_store = TRUE, supports_developer_role = TRUE,
-       supports_reasoning_effort = TRUE, supports_usage_in_streaming = TRUE,
+  list(supports_store = TRUE, supports_developer_role = TRUE, supports_usage_in_streaming = TRUE,
        supports_finish_reason = TRUE, supports_strict_mode = FALSE, supports_tool_choice = TRUE,
        max_tokens_field = "max_completion_tokens", requires_tool_result_name = FALSE,
        requires_assistant_after_tool_result = FALSE, requires_thinking_as_text = FALSE,
@@ -30,30 +29,26 @@ compat_snake = function(x) {
 #' The compat record of a provider and model (04 section 7.12; report 09 section 3.3)
 #' Detected from the base URL and the `local` flag like Pi's detectCompat(), then overridden per
 #' field by the record's `compat` (provider_table() holds each built-in's flags); OpenRouter's
-#' cache_control reaches Anthropic and Google models only.
+#' cache_control reaches only a model whose prices bill cache writes, the models OpenRouter
+#' caches by explicit breakpoints
+#' (https://openrouter.ai/docs/guides/best-practices/prompt-caching).
 #' @noRd
 compat_flags = function(provider, model) {
   rec = if (is.character(provider)) provider_get(provider) else provider
   base = tolower(rec[["base_url"]] %||% "")
-  mid = tolower(model[["id"]] %||% "")
   out = compat_defaults()
   hosts = paste0("cerebras\\.ai|api\\.x\\.ai|together\\.(ai|xyz)|deepseek\\.com|api\\.z\\.ai|",
                  "moonshot|nvidia\\.com|chutes\\.ai")
   local = isTRUE(rec[["local"]])
   openrouter = grepl("openrouter\\.ai", base)
-  if (grepl(hosts, base) || local) {
+  if (grepl(hosts, base) || local || openrouter) {
     out$supports_store = FALSE
     out$supports_developer_role = FALSE
   }
-  if (local) {
-    out$supports_reasoning_effort = FALSE
-    out$max_tokens_field = "max_tokens"
-  }
+  if (local) out$max_tokens_field = "max_tokens"
   if (openrouter) {
-    out$supports_store = FALSE
     out$thinking_format = "openrouter"
     out$session_affinity = "openrouter"
-    out$supports_developer_role = grepl("^(anthropic|openai)/", mid)
     out$cache_control_format = "anthropic"
   }
   over = rec[["compat"]]
@@ -61,7 +56,8 @@ compat_flags = function(provider, model) {
     names(over) = compat_snake(names(over))
     for (k in intersect(names(over), names(out))) if (!is.null(over[[k]])) out[[k]] = over[[k]]
   }
-  if (openrouter && !grepl("^(anthropic|google)/", mid)) out$cache_control_format = "none"
+  writes = model[["prices"]][c("cache_write_5m", "cache_write_1h")]
+  if (openrouter && all(is.na(unlist(writes)))) out$cache_control_format = "none"
   out
 }
 
@@ -549,19 +545,28 @@ completions_tools = function(tools, compat) {
   })
 }
 
-#' The thinking request fields of a compat thinking_format (report 09 section 3.4)
+#' The thinking request fields of a compat thinking_format (report 09 section 3.4) from the
+#' model's data: a level is sent by name (xAI, DeepSeek, vLLM, Ollama, which maps it to `think`)
+#' or as an OpenRouter budget, and `off` only where the levels list it
+#' (https://openrouter.ai/docs/guides/best-practices/reasoning-tokens,
+#' https://docs.x.ai/docs/guides/reasoning, https://docs.ollama.com/api/openai-compatibility)
 #' @noRd
 completions_thinking = function(head, model, params, compat) {
   if (!isTRUE(model$reasoning) || is.null(params$thinking)) return(head)
   level = params$thinking
   on = !identical(level, "off")
+  none = !on && "off" %in% unlist(model$thinking_levels)
   eff = params$effort %||% (if (on) level else NULL)
   fmt = compat$thinking_format %||% "openai"
   if (fmt == "openrouter") {
-    head$reasoning = list(effort = if (on) eff else "none")
+    if (on && isTRUE(adp_model_cap(model, "thinking_budget"))) {
+      head$reasoning = list(max_tokens = adp_budget(level))
+    } else if (on || none) {
+      head$reasoning = list(effort = if (on) eff else "none")
+    }
   } else if (fmt == "deepseek") {
     head$thinking = list(type = if (on) "enabled" else "disabled")
-    if (on && isTRUE(compat$supports_reasoning_effort)) head$reasoning_effort = eff
+    if (on) head$reasoning_effort = eff
   } else if (fmt == "zai") {
     head$thinking = if (on) list(type = "enabled", clear_thinking = FALSE) else
       list(type = "disabled")
@@ -571,12 +576,8 @@ completions_thinking = function(head, model, params, compat) {
     head$chat_template_kwargs = list(enable_thinking = on, preserve_thinking = TRUE)
   } else if (fmt == "together") {
     head$reasoning = list(enabled = on)
-  } else if (isTRUE(compat$supports_reasoning_effort)) {
-    if (on) {
-      head$reasoning_effort = eff
-    } else if ("off" %in% unlist(model$thinking_levels)) {
-      head$reasoning_effort = "none"
-    }
+  } else if (on || none) {
+    head$reasoning_effort = if (on) eff else "none"
   }
   head
 }
@@ -606,7 +607,7 @@ completions_build = function(model, context, opts) {
   if (isTRUE(compat$supports_usage_in_streaming)) head$stream_options = list(include_usage = TRUE)
   if (isTRUE(compat$supports_store)) head$store = FALSE
   if (!is.null(params$max_tokens)) head[[compat$max_tokens_field]] = as.integer(params$max_tokens)
-  if (!is.null(params$temperature)) head$temperature = params$temperature
+  head$temperature = adp_temperature(model, params)
   head = completions_thinking(head, model, params, compat)
   tc = params$tool_choice
   if (!is.null(tj) && isTRUE(compat$supports_tool_choice)) {

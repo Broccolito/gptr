@@ -478,6 +478,29 @@ test_that("reasoning effort, tool_choice, operators and returns follow 08 sectio
   expect_null(body$text)
 })
 
+test_that("sampling parameters only where the model's data accepts them (D-395)", {
+  skip_on_cran()
+  # GPT-6.2 refuses temperature, top_p and logprobs
+  # (https://developers.openai.com/api/docs/guides/latest-model); a model whose data accepts
+  # sampling gets temperature only while it does not think
+  sent = function(model, thinking) {
+    ctx = ctx_fixture(list(msg_user("x")), params = list(thinking = thinking, temperature = 0.2))
+    body = json_decode(responses_build(model, ctx, list())$body)
+    expect_false(any(c("top_p", "logprobs", "top_logprobs") %in% names(body)))
+    expect_false("message.output_text.logprobs" %in% unlist(body$include))
+    body$temperature
+  }
+  sol62 = test_model(api, id = "gpt-6.2-sol",
+                     thinking_levels = c("low", "medium", "high", "xhigh", "max"))
+  expect_null(sent(sol62, "high"))
+  expect_null(sent(test_model(api, reasoning = FALSE), NULL))
+  sol6 = test_model(api, id = "gpt-6-sol", sampling = TRUE,
+                    thinking_levels = c("off", "low", "medium", "high", "xhigh", "max"))
+  expect_null(sent(sol6, "high"))
+  expect_identical(sent(sol6, "off"), 0.2)
+  expect_identical(sent(test_model(api, reasoning = FALSE, sampling = TRUE), NULL), 0.2)
+})
+
 test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", {
   skip_on_cran()
   model = test_model(api, provider = "openai", id = "gpt-6-sol")
