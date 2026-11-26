@@ -1,7 +1,9 @@
 # Model catalog: snapshot, merge layers, aliases, the model resolver, explicit refresh and
 # gptr_models() (P05; contract 4.9, 6.2, 7.5, 11.10; architecture 8.4; IC-67, IC-71, IC-73). The
 # resolver is report 09 section 5.5's algorithm with Pi's last-colon thinking rule and clamp; the
-# snapshot comes from a maintainer script, refreshed only on explicit request (09 section 4.8).
+# snapshot is built from models.dev by dev/release/catalog-snapshot.R and carries gptr's reviewed
+# data (corrections, aliases, defaults), refreshed only on explicit request (09 section 4.8, D-394).
+# No model name is matched here: aliases, defaults and request shapes are catalog data (D-393).
 
 #' Thinking levels in order (Pi EXTENDED_THINKING_LEVELS)
 #' @noRd
@@ -45,122 +47,7 @@ catalog_price = function(tier, input, output, cache_read = NULL, cache_write_5m 
               cache_write_5m = cache_write_5m, cache_write_1h = cache_write_1h))
 }
 
-#' Complete entries for the models the specification names (the base of every snapshot)
-#' Values from reports 07 2.1, 03 2.10, 08 finding 10, 09 5.6 and G2 2.4 (verified 2026-09-29/30);
-#' models.dev replaces these fields in the maintainer build.
-#' @noRd
-catalog_seed = function() {
-  claude = function(id, name, family, date, context, output, levels) {
-    list(provider = "anthropic", id = id, name = name, family = family, release_date = date,
-         context = context, max_output = output, reasoning = TRUE, thinking_levels = I(levels),
-         input = I(c("text", "image", "pdf")), tool_call = TRUE, structured_output = TRUE,
-         status = "active", owner = "anthropic")
-  }
-  adaptive = c("low", "medium", "high", "xhigh", "max")
-  clef = function(id, name) {
-    list(provider = "ollama", id = id, name = name, family = "clef",
-         type = "classifier", api = "ollama-system-one", locality = "unknown",
-         reasoning = FALSE, thinking_levels = I("off"), input = I(c("text", "image")),
-         tool_call = FALSE, structured_output = TRUE, status = "active",
-         decision = catalog_ollama_decision(TRUE))
-  }
-  list(
-    clef("clef", "Clef"),
-    clef("clef-flash", "Clef Flash"),
-    claude("claude-sonnet-5-5", "Claude Sonnet 5.5", "claude-sonnet", "2026-09-28", 1e6, 128000,
-           c("off", adaptive)),
-    claude("claude-opus-5-5", "Claude Opus 5.5", "claude-opus", "2026-09-22", 1e6, 128000,
-           adaptive),
-    claude("claude-fable-5-1", "Claude Fable 5.1", "claude-fable", NULL, 1e6, 128000, adaptive),
-    claude("claude-haiku-4-5", "Claude Haiku 4.5", "claude-haiku", "2025-10-01", 200000, 64000,
-           c("off", "minimal", "low", "medium", "high")),
-    list(provider = "openai", id = "gpt-6.1-sol", name = "GPT-6.1 Sol", family = "gpt-sol",
-         release_date = "2026-09-29", context = 1050000, max_output = 128000, reasoning = TRUE,
-         thinking_levels = I(adaptive), input = I(c("text", "image")), tool_call = TRUE,
-         structured_output = TRUE, status = "active", owner = "openai"),
-    list(provider = "openai", id = "gpt-6-sol", name = "GPT-6 Sol", family = "gpt-sol",
-         context = 1050000, max_output = 128000, reasoning = TRUE,
-         thinking_levels = I(c("off", "low", "medium", "high")), input = I(c("text", "image")),
-         tool_call = TRUE, structured_output = TRUE, status = "active", owner = "openai"),
-    list(provider = "google", id = "gemini-3.8-flash", name = "Gemini 3.8 Flash",
-         family = "gemini-flash", release_date = "2026-09-02", context = 1048576,
-         max_output = 65536, reasoning = TRUE, thinking_levels = I(c("low", "medium", "high")),
-         input = I(c("text", "image", "pdf")), tool_call = TRUE, structured_output = TRUE,
-         status = "active", owner = "google")
-  )
-}
-
-#' gptr's reviewed corrections, applied on top of every source (snapshot, cache, refresh)
-#' Sources: 07 sections 2.1, 2.7, 2.8 (Anthropic), 08 finding 10 (OpenAI), G2 row 7 (Gemini), G4
-#' (cache_min), IC-71 (forced_tool_choice); aliases: architecture 8.4, 04 section 11.10.
-#' @noRd
-catalog_overrides = function() {
-  claude5 = list(mid_system = TRUE, tool_addition = TRUE, images_in_results = TRUE,
-                 operator_role = TRUE, adaptive_thinking = TRUE, effort = TRUE,
-                 forced_tool_choice = FALSE)
-  anthropic = function(id, input, output, read, w5, w1, cache_min, max_images, caps,
-                       levels = NULL) {
-    Filter(Negate(is.null),
-           list(provider = "anthropic", id = id,
-                thinking_levels = if (is.null(levels)) NULL else I(levels),
-                prices = list(catalog_price("default", input, output, read, w5, w1)),
-                cache_min = cache_min, max_images = max_images, capabilities = caps))
-  }
-  adaptive = c("low", "medium", "high", "xhigh", "max")
-  list(
-    providers = list(
-      anthropic = list(capabilities = list(tool_addition = TRUE, images_in_results = TRUE,
-                                           operator_role = TRUE)),
-      openai = list(capabilities = list(images_in_results = TRUE, operator_role = TRUE)),
-      google = list(capabilities = list(images_in_results = TRUE)),
-      typesafe = list(api = "typesafe-system-one", base_url = "https://api.typesafe.ai/v1/",
-                      env = I("TYPESAFE_API_KEY"), compat = json_obj(), local = FALSE)
-    ),
-    models = list(
-      anthropic("claude-opus-5-5", 4, 20, 0.20, 5, 8, 512, 600, claude5, adaptive),
-      anthropic("claude-sonnet-5-5", 2, 10, 0.20, 2.50, 4, 512, 600, claude5,
-                c("off", adaptive)),
-      anthropic("claude-fable-5-1", 10, 50, 0.25, 12.50, 20, 512, 600, claude5),
-      anthropic("claude-haiku-4-5", 1, 5, 0.10, 1.25, 2, 4096, 100,
-                list(mid_system = FALSE, tool_addition = TRUE, images_in_results = TRUE,
-                     operator_role = TRUE, adaptive_thinking = FALSE, effort = FALSE,
-                     forced_tool_choice = TRUE)),
-      list(provider = "openai", id = "gpt-6.1-sol", cache_min = 1024,
-           prices = list(catalog_price("default", 2, 10, 0.10, 2.50),
-                         catalog_price(">272k", 4, 15, 0.20, 5))),
-      list(provider = "openai", id = "gpt-6-sol", cache_min = 1024,
-           prices = list(catalog_price("default", 2, 10, 0.20, 2.50),
-                         catalog_price(">272k", 4, 15, 0.40, 5))),
-      list(provider = "google", id = "gemini-3.8-flash", cache_min = 4096,
-           prices = list(catalog_price("default", 0.75, 3.75, 0.075),
-                         catalog_price("default", 1.50, 7.50, 0.15, from = "2027-01-01"))),
-      list(provider = "typesafe", id = "jev-latest", name = "Jev", family = "jev",
-           type = "classifier", release_date = "2026-09-15", context = 64000, max_output = 0,
-           reasoning = FALSE, thinking_levels = I("off"), input = I("text"), tool_call = FALSE,
-           structured_output = TRUE, prices = list(catalog_price("default", 0.042, 0, 0)),
-           status = "active", owner = "typesafe")
-    ),
-    aliases = list(
-      sonnet = list(provider = "anthropic", family = "claude-sonnet"),
-      opus = list(provider = "anthropic", family = "claude-opus"),
-      haiku = list(provider = "anthropic", family = "claude-haiku"),
-      gemini = list(provider = "google", family = "gemini-pro",
-                    pattern = "^gemini-[0-9.]+-pro(-preview)?$"),
-      flash = list(provider = "google", family = "gemini-flash"),
-      gpt = list(provider = "openai", pattern = "^gpt-[0-9.]+-sol$"),
-      jev = list(ref = "typesafe/jev-latest"),
-      claude_code = list(ref = "claude-cli/default"),
-      codex = list(ref = "codex/default")
-    ),
-    small = list(
-      anthropic = list(provider = "anthropic", family = "claude-haiku"),
-      openai = list(provider = "openai", pattern = "^gpt-[0-9.]+-luna$"),
-      google = list(provider = "google", family = "gemini-flash-lite")
-    )
-  )
-}
-
-#' The providers section of a snapshot, from the built-in provider table and the overrides
+#' The providers section of a snapshot, from the built-in provider table
 #' @noRd
 catalog_providers_section = function() {
   out = list()
@@ -170,7 +57,7 @@ catalog_providers_section = function() {
                             compat = if (length(r[["compat"]])) r[["compat"]] else json_obj(),
                             local = isTRUE(r[["local"]]))
   }
-  utils::modifyList(out, catalog_overrides()[["providers"]])
+  out
 }
 
 #' ISO date of a models.dev date ("YYYY-MM" becomes the first of the month)
@@ -190,20 +77,33 @@ catalog_status = function(x) {
   switch(as.character(x[[1]]), deprecated = "deprecated", beta = , alpha = "preview", "active")
 }
 
-#' Thinking levels from models.dev reasoning options (Pi generate-models.ts rules)
+#' gptr's thinking levels of a provider's own effort names, `off` first when thinking turns off
 #' @noRd
-catalog_levels_from = function(m) {
-  if (!isTRUE(m[["reasoning"]])) return("off")
+catalog_effort_levels = function(efforts, off) {
+  c(if (off) "off", intersect(catalog_thinking_levels[-1L], as.character(unlist(efforts))))
+}
+
+#' Thinking data of a models.dev model (D-393): its levels (Pi generate-models.ts rules), whether
+#' they are its own effort names, and the token range of a thinking budget it takes
+#' @noRd
+catalog_thinking_from = function(m) {
+  if (!isTRUE(m[["reasoning"]])) return(list(levels = "off", effort = FALSE))
   effort = NULL
   toggle = FALSE
+  budget = NULL
   for (o in m[["reasoning_options"]] %||% list()) {
-    if (identical(o[["type"]], "effort")) effort = as.character(unlist(o[["values"]]))
-    if (identical(o[["type"]], "toggle")) toggle = TRUE
+    type = o[["type"]]
+    if (identical(type, "effort")) effort = as.character(unlist(o[["values"]]))
+    if (identical(type, "toggle")) toggle = TRUE
+    if (identical(type, "budget_tokens")) budget = Filter(is.numeric, o[c("min", "max")])
   }
-  if (is.null(effort)) return(c("off", "minimal", "low", "medium", "high"))
-  out = intersect(c("minimal", "low", "medium", "high", "xhigh", "max"), effort)
-  if ("none" %in% effort || toggle) out = c("off", out)
-  if (length(out)) out else "off"
+  levels = if (is.null(effort)) {
+    c("off", "minimal", "low", "medium", "high")
+  } else {
+    catalog_effort_levels(effort, "none" %in% effort || toggle)
+  }
+  list(levels = if (length(levels)) levels else "off",
+       effort = !is.null(effort) && length(setdiff(levels, "off")) > 0L, budget = budget)
 }
 
 #' Price rows from a models.dev cost object (context tiers become `>Nk` rows)
@@ -230,7 +130,7 @@ catalog_prices_from = function(cost) {
 #' Version of the price conversion stamped on a snapshot; a refreshed cache converted by
 #' another is ignored and downloaded again (D-250)
 #' @noRd
-catalog_converter = 2L
+catalog_converter = 3L
 
 #' A catalog entry from one models.dev model; NULL unless tool-capable, text output and not
 #' deprecated (09 section 4.8)
@@ -252,13 +152,16 @@ catalog_entry_modelsdev = function(m, provider) {
   if (pruned) return(NULL)
   input = intersect(c("text", "image", "pdf"), as.character(unlist(m[["modalities"]][["input"]])))
   canonical = m[["canonical_model_id"]]
+  thinking = catalog_thinking_from(m)
   e = list(provider = provider, id = as.character(m[["id"]]),
            name = as.character(m[["name"]] %||% m[["id"]]), family = m[["family"]],
            release_date = catalog_date(m[["release_date"]]),
            context = catalog_entry_context(m), max_output = m[["limit"]][["output"]],
-           reasoning = isTRUE(m[["reasoning"]]), thinking_levels = I(catalog_levels_from(m)),
+           reasoning = isTRUE(m[["reasoning"]]), thinking_levels = I(thinking$levels),
+           thinking_effort = thinking$effort, thinking_budget = thinking$budget,
            input = I(if (length(input)) input else "text"), tool_call = TRUE,
            structured_output = isTRUE(m[["structured_output"]]),
+           temperature = if (rlang::is_bool(m[["temperature"]])) m[["temperature"]],
            prices = catalog_prices_from(m[["cost"]]), status = status,
            owner = if (is.null(canonical)) NULL else sub("/.*$", "", as.character(canonical)))
   Filter(Negate(is.null), c(e, catalog_entry_metadata(m, paste0(provider, "/", m[["id"]]))))
@@ -313,23 +216,22 @@ catalog_entry_decision = function(m) {
   Filter(Negate(is.null), c(e, catalog_entry_metadata(m, ref)))
 }
 
-#' Catalog entries (named by ref) from models.dev `api.json` and the decision endpoint
+#' Catalog entries (named by ref) from models.dev `api.json` and the decision endpoint; a model
+#' gptr cannot convert (a zero context, say) is skipped, so one entry never blocks the others
 #' @noRd
 catalog_from_modelsdev = function(api, decision = NULL) {
   ids = catalog_modelsdev_ids()
   out = list()
+  add = function(e) if (!is.null(e)) out[[paste0(e[["provider"]], "/", e[["id"]])]] <<- e
+  skip = function(err) NULL
   for (gid in names(ids)) {
     p = api[[ids[[gid]]]]
     if (!is.list(p)) next
     for (m in p[["models"]] %||% list()) {
-      e = catalog_entry_modelsdev(m, gid)
-      if (!is.null(e)) out[[paste0(gid, "/", e[["id"]])]] = e
+      add(tryCatch(catalog_entry_modelsdev(m, gid), gptr_error = skip))
     }
   }
-  for (m in decision %||% list()) {
-    e = catalog_entry_decision(m)
-    if (!is.null(e)) out[[paste0(e[["provider"]], "/", e[["id"]])]] = e
-  }
+  for (m in decision %||% list()) add(tryCatch(catalog_entry_decision(m), gptr_error = skip))
   out
 }
 
@@ -360,21 +262,23 @@ catalog_merge_models = function(base, layer, patch_only = FALSE) {
   base
 }
 
-#' A snapshot (04 section 11.10): seed < models.dev < overrides, models sorted by ref
+#' A snapshot (04 section 11.10): models.dev < gptr's reviewed corrections, the models of gptr's
+#' providers sorted by ref, with the reviewed data (`overrides`, `aliases`, `defaults`) carried
+#' as is, by default the shipped snapshot's (a refresh keeps gptr's review)
 #' @noRd
 catalog_snapshot = function(api = NULL, decision = NULL,
+                            reviewed = catalog_read(catalog_snapshot_path()),
                             generated = with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d"))) {
-  models = catalog_merge_models(list(), catalog_seed())
-  if (!is.null(api) || !is.null(decision)) {
-    models = catalog_merge_models(models, catalog_from_modelsdev(api %||% list(), decision))
-  }
-  ov = catalog_overrides()
-  models = catalog_merge_models(models, ov[["models"]], patch_only = TRUE)
-  models = models[order(names(models), method = "radix")]
+  ov = reviewed[["overrides"]]
+  providers = utils::modifyList(catalog_providers_section(), ov[["providers"]] %||% list())
+  models = catalog_merge_models(catalog_from_modelsdev(api %||% list(), decision), ov[["models"]],
+                                patch_only = TRUE)
+  models = Filter(function(e) e[["provider"]] %in% names(providers), models)
+  models = models[order(names(models) %||% character(), method = "radix")]
   list(schema_version = 1L, converter = catalog_converter, generated = generated,
-       source = if (is.null(api)) "gptr seed + overrides" else "models.dev (MIT) + gptr overrides",
-       providers = catalog_providers_section(), models = unname(models),
-       aliases = ov[["aliases"]])
+       source = if (is.null(api)) "gptr reviewed data" else "models.dev (MIT)",
+       providers = providers, models = unname(models), overrides = ov,
+       aliases = reviewed[["aliases"]], defaults = reviewed[["defaults"]])
 }
 
 #' Read a catalog file (gzip or plain JSON); NULL when absent or of another schema
@@ -398,18 +302,20 @@ catalog_read_cache = function() {
   if (identical(cache[["converter"]], catalog_converter)) cache else NULL
 }
 
-#' The newer of the shipped snapshot and the refreshed cache
+#' The newer of the shipped snapshot and the refreshed cache, with the shipped reviewed data
 #' @noRd
 catalog_read_base = function() {
   snap = catalog_read(catalog_snapshot_path())
   cache = catalog_read_cache()
   if (is.null(cache)) {
     return(snap %||% list(schema_version = 1L, generated = NA_character_, source = "none",
-                          providers = list(), models = list(), aliases = list()))
+                          providers = list(), models = list()))
   }
   if (is.null(snap)) return(cache)
   newer = as.character(cache[["generated"]] %||% "") >= as.character(snap[["generated"]] %||% "")
-  if (newer) cache else snap
+  if (!newer) return(snap)
+  for (k in c("overrides", "aliases", "defaults")) cache[k] = list(snap[[k]])
+  cache
 }
 
 #' Model entries declared by a provider spec, with the provider id filled in
@@ -460,7 +366,8 @@ catalog_index = function(models) {
 }
 
 #' The ref an alias resolves to now (newest active model; the owner's listing preferred when
-#' no provider is given; on a release-date tie the undated id wins over its `-YYYYMMDD` twin)
+#' no provider is given; on a release-date tie the shortest id wins, so an undated id over its
+#' dated twin and a version over a moving `-latest` name)
 #' @noRd
 catalog_alias_target = function(a, idx) {
   if (!is.null(a[["ref"]])) return(as.character(a[["ref"]]))
@@ -468,7 +375,6 @@ catalog_alias_target = function(a, idx) {
   if (!is.null(a[["provider"]])) ok = ok & idx$provider == a[["provider"]]
   if (!is.null(a[["id"]])) ok = ok & idx$id == a[["id"]]
   if (!is.null(a[["family"]])) ok = ok & !is.na(idx$family) & idx$family == a[["family"]]
-  if (!is.null(a[["pattern"]])) ok = ok & grepl(a[["pattern"]], idx$id)
   cand = idx[ok, , drop = FALSE]
   if (!nrow(cand)) return(NA_character_)
   act = cand[cand$status == "active", , drop = FALSE]
@@ -477,18 +383,17 @@ catalog_alias_target = function(a, idx) {
     own = cand[!is.na(cand$owner) & cand$provider == cand$owner, , drop = FALSE]
     if (nrow(own)) cand = own
   }
-  dated = grepl("-[0-9]{8}$", cand$id)
-  cand = cand[order(cand$release_date, dated, cand$id, decreasing = c(TRUE, FALSE, TRUE),
-                    method = "radix"), , drop = FALSE]
+  cand = cand[order(cand$release_date, nchar(cand$id), cand$id,
+                    decreasing = c(TRUE, FALSE, TRUE), method = "radix"), , drop = FALSE]
   cand$ref[[1]]
 }
 
-#' Build the merged catalog: base < overrides < provider specs < model specs < user config <
-#' discovery
+#' Build the merged catalog: base < reviewed corrections < provider specs < model specs < user
+#' config < discovery
 #' @noRd
 catalog_build = function() {
   base = catalog_read_base()
-  ov = catalog_overrides()
+  ov = base[["overrides"]]
   models = catalog_merge_models(list(), base[["models"]])
   models = catalog_merge_models(models, ov[["models"]], patch_only = TRUE)
   for (nm in sort(registry_names("provider"))) {
@@ -505,13 +410,12 @@ catalog_build = function() {
   }
   disc = the$catalog[["discovered"]] %||% list()
   for (pid in names(disc)) models = catalog_merge_models(models, disc[[pid]])
-  aliases = base[["aliases"]] %||% list()
-  for (nm in names(ov[["aliases"]])) aliases[[nm]] = ov[["aliases"]][[nm]]
   ctg = list(schema_version = 1L, generated = base[["generated"]] %||% NA_character_,
              source = base[["source"]] %||% "none",
              providers = utils::modifyList(base[["providers"]] %||% list(),
                                            ov[["providers"]] %||% list()),
-             models = models, aliases = aliases, small = ov[["small"]])
+             models = models, aliases = base[["aliases"]] %||% list(),
+             defaults = base[["defaults"]] %||% list())
   ctg$index = catalog_index(models)
   ctg$alias_targets = vapply(ctg$aliases, catalog_alias_target, "", idx = ctg$index)
   targets = ctg$alias_targets
@@ -658,10 +562,9 @@ model_match_fuzzy = function(pat, ctg, sel) {
     if (length(part)) {
       own = part[!is.na(idx$owner[part]) & idx$provider[part] == idx$owner[part]]
       if (length(own)) part = own
-      pref = part[!grepl("-[0-9]{8}$", idx$id[part])]
-      pool = if (length(pref)) pref else part
-      ord = order(idx$release_date[pool], idx$id[pool], decreasing = TRUE, method = "radix")
-      return(list(entry = ctg$models[[pool[ord][1]]], how = "substring"))
+      ord = order(idx$release_date[part], nchar(idx$id[part]), idx$id[part],
+                  decreasing = c(TRUE, FALSE, TRUE), method = "radix")
+      return(list(entry = ctg$models[[part[ord][1]]], how = "substring"))
     }
   }
   NULL
@@ -697,7 +600,8 @@ model_alias_target = function(name, targets) {
 
 #' Resolve a reference without its thinking suffix: explicit provider-qualified matching,
 #' a declared alias, an unqualified id, a registered provider named alone (its first declared
-#' model, IC-19), then the fuzzy step. An unavailable alias never matches an unrelated id.
+#' model, IC-19, else its reviewed default), then the fuzzy step. An unavailable alias never
+#' matches an unrelated id.
 #' @noRd
 model_match = function(pat, ctg) {
   idx = ctg$index
@@ -737,8 +641,8 @@ model_match = function(pat, ctg) {
     if (!is.null(r)) return(r)
   }
   pv = model_provider_id(pat, ctg)
-  models = if (!is.na(pv)) provider_get(pv)$models
-  e = if (length(models)) model_alias_entry(paste0(pv, "/", models[[1L]]$id), ctg)
+  id = if (!is.na(pv)) provider_get(pv)$models[[1L]]$id %||% ctg$defaults[[pv]][["model"]]
+  e = if (rlang::is_string(id)) model_alias_entry(paste0(pv, "/", id), ctg)
   if (!is.null(e)) return(list(entry = e, how = "provider"))
   # an alias with no model is not guessed ("gemini" with no Gemini Pro is no Gemini Flash)
   if (declared_alias) {
@@ -835,11 +739,13 @@ catalog_num = function(x) {
   suppressWarnings(as.numeric(x[[1]]))
 }
 
-#' Model capabilities (contract section 4.9 plus forced_tool_choice, IC-71)
+#' Model capabilities (contract section 4.9 plus forced_tool_choice, IC-71); a model that takes
+#' named effort levels thinks adaptively at the effort it is given unless its data says otherwise
 #' @noRd
 model_capabilities = function(e, pinfo) {
+  effort = isTRUE(e[["thinking_effort"]])
   caps = list(mid_system = FALSE, tool_addition = FALSE, images_in_results = FALSE,
-              operator_role = FALSE, adaptive_thinking = FALSE, effort = FALSE,
+              operator_role = FALSE, adaptive_thinking = effort, effort = effort,
               forced_tool_choice = TRUE)
   caps = utils::modifyList(caps, pinfo[["capabilities"]] %||% list())
   caps = utils::modifyList(caps, e[["capabilities"]] %||% list())
@@ -865,15 +771,19 @@ model_record = function(e, ctg, provider = NULL) {
   metadata[["capabilities"]] = NULL
   context = catalog_entry_context(list(limit = list(context = e[["context"]]),
                                         configured_context = e[["configured_context"]]))
+  known = function(x) if (rlang::is_bool(x)) x else NA
   record = list(ref = ref, provider = pid, id = id, name = as.character(e[["name"]] %||% id),
        family = as.character(e[["family"]] %||% NA_character_),
        api = as.character(e[["api"]] %||% p[["api"]] %||% info[["api"]] %||% NA_character_),
        type = type, release_date = as.character(e[["release_date"]] %||% NA_character_),
        context = catalog_num(context), max_output = catalog_num(e[["max_output"]]),
        reasoning = reasoning, thinking_levels = levels, thinking = NULL,
+       thinking_effort = known(e[["thinking_effort"]]),
+       thinking_budget = if (is.list(e[["thinking_budget"]])) e[["thinking_budget"]],
        input = as.character(unlist(e[["input"]] %||% "text")),
        tool_call = isTRUE(e[["tool_call"]]),
-       structured_output = isTRUE(e[["structured_output"]]), prices = prices_df(e[["prices"]]),
+       structured_output = isTRUE(e[["structured_output"]]),
+       temperature = known(e[["temperature"]]), prices = prices_df(e[["prices"]]),
        cache_min = catalog_num(e[["cache_min"]]), max_images = catalog_num(e[["max_images"]]),
        capabilities = model_capabilities(e, info),
        aliases = names(targets)[!is.na(targets) & targets == ref],
@@ -1008,9 +918,25 @@ catalog_local_classifier = function() {
   NULL
 }
 
+#' The first ready provider's reviewed default for `key` (`model` or `system1`), in the order of
+#' the catalog's defaults, or NULL
+#' @noRd
+model_default_route = function(key) {
+  defaults = catalog_get()$defaults
+  for (pid in names(defaults)) {
+    id = defaults[[pid]][[key]]
+    vars = provider_get(pid)[["auth"]]
+    if (rlang::is_string(id) && is.character(vars) && model_route_ready(pid, vars)) {
+      return(paste0(pid, "/", id))
+    }
+  }
+  NULL
+}
+
 #' Default model reference for a role (contract section 7.5; architecture section 8.4)
-#' The setting wins, else the first enabled route (Anthropic, OpenAI, Gemini, CLI; System 1:
-#' TypeSafe, else an evidenced local classifier). Never discovers or materialises a key.
+#' The setting wins, else the first ready provider of the catalog's reviewed defaults, then a
+#' detected CLI (System 1: else an evidenced local classifier; small: the chat provider's small
+#' default, else the chat model). Never discovers or materialises a key.
 #' @noRd
 model_default = function(role = c("chat", "small", "system1")) {
   role = check_choice(role, c("chat", "small", "system1"), "role")
@@ -1018,8 +944,7 @@ model_default = function(role = c("chat", "small", "system1")) {
   v = setting_get(key)
   if (rlang::is_string(v) && nzchar(v)) return(v)
   if (identical(role, "system1")) {
-    if (model_route_ready("typesafe", "TYPESAFE_API_KEY")) return("typesafe/jev-latest")
-    return(catalog_local_classifier())
+    return(model_default_route("system1") %||% catalog_local_classifier())
   }
   if (identical(role, "small")) {
     base = setting_get("model")
@@ -1028,17 +953,13 @@ model_default = function(role = c("chat", "small", "system1")) {
     }
     chat = if (is.null(rec)) model_default("chat") else rec$ref
     if (is.null(chat)) return(NULL)
-    ctg = catalog_get()
-    spec = ctg$small[[sub("/.*$", "", chat)]]
-    small = if (is.null(spec)) NA_character_ else catalog_alias_target(spec, ctg$index)
-    return(if (is.na(small)) chat else small)
+    pid = sub("/.*$", "", chat)
+    small = catalog_get()$defaults[[pid]][["small"]]
+    return(if (rlang::is_string(small)) paste0(pid, "/", small) else chat)
   }
-  if (model_route_ready("anthropic", "ANTHROPIC_API_KEY")) {
-    "anthropic/claude-sonnet-5-5"
-  } else if (model_route_ready("openai", "OPENAI_API_KEY")) {
-    "openai/gpt-6-sol"
-  } else if (model_route_ready("google", c("GEMINI_API_KEY", "GOOGLE_API_KEY"))) {
-    "google/gemini-3.8-flash"
+  route = model_default_route("model")
+  if (!is.null(route)) {
+    route
   } else if (model_cli_available("claude-cli")) {
     "claude-cli/default"
   } else if (model_cli_available("codex")) {

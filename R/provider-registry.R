@@ -74,12 +74,6 @@ provider_table = function() {
   )
 }
 
-#' Default model id per built-in provider (architecture section 8.4)
-#' @noRd
-provider_default_models = function() {
-  c(anthropic = "claude-sonnet-5-5", openai = "gpt-6-sol", google = "gemini-3.8-flash")
-}
-
 #' An `auth` function for an optional key (vLLM): a bound handle when the key exists, else NULL
 #' Its `gptr_optional_auth` attribute names the variables for the read-only listing.
 #' @noRd
@@ -1446,19 +1440,19 @@ provider_status = function(p, h, check) {
   list(status = status, version = NA_character_)
 }
 
-#' The default model reference shown for a provider: architecture 8.4, else its newest active
-#' catalog model; never a classifier for a conversational provider, or the reverse (IC-74)
+#' The default model reference shown for a provider: the catalog's reviewed default, else its
+#' newest active catalog model; never a classifier for a conversational provider, or the reverse
+#' (IC-74)
 #' @noRd
-provider_default_model = function(p, idx) {
+provider_default_model = function(p, ctg) {
   id = p[["id"]] %||% p[["name"]]
-  d = provider_default_models()[id]
-  if (!is.na(d)) return(paste0(id, "/", d))
-  if (!is.data.frame(idx) || !nrow(idx)) return(NA_character_)
   decision = identical(p[["type"]], "classifier")
-  ok = idx$provider == id & idx$status == "active" & (idx$type == "classifier") == decision
-  rows = idx[!is.na(ok) & ok, , drop = FALSE]
-  if (!nrow(rows)) return(NA_character_)
-  rows$ref[order(rows$release_date, decreasing = TRUE, method = "radix")][[1]]
+  d = ctg$defaults[[id]][[if (decision) "system1" else "model"]]
+  if (rlang::is_string(d)) return(paste0(id, "/", d))
+  idx = ctg$index
+  if (!is.data.frame(idx) || !nrow(idx)) return(NA_character_)
+  catalog_alias_target(list(provider = id),
+                       idx[(idx$type == "classifier") == decision, , drop = FALSE])
 }
 
 #' Egress acknowledgment state of a provider (the acknowledgment itself is P08's)
@@ -1493,7 +1487,7 @@ provider_listing_get = function(id) {
 
 #' One row of the provider listing (the credential lookup registers and binds nothing)
 #' @noRd
-provider_listing_row = function(id, p, err, check, reg, idx) {
+provider_listing_row = function(id, p, err, check, reg, ctg) {
   # a failing settings entry or `auth` function marks its own row, never the whole listing
   h = if (is.null(err)) {
     tryCatch(provider_credential(p, register = FALSE), error = function(e) e)
@@ -1514,7 +1508,7 @@ provider_listing_row = function(id, p, err, check, reg, idx) {
          NA_character_
        },
        source = if (length(src)) src[[1]] else NA_character_, status = s$status,
-       default_model = provider_default_model(p, idx), egress = provider_egress(p),
+       default_model = provider_default_model(p, ctg), egress = provider_egress(p),
        version = s$version)
 }
 
@@ -1564,8 +1558,8 @@ gptr_providers = function(check = FALSE, check_login = FALSE) {
   keep = !vapply(provs, function(x) is.null(x$p), NA)
   ids = ids[keep]
   provs = provs[keep]
-  idx = tryCatch(catalog_get()$index, gptr_error = function(e) NULL)
-  rows = Map(function(id, x) provider_listing_row(id, x$p, x$err, check, reg, idx), ids, provs)
+  ctg = tryCatch(catalog_get(), gptr_error = function(e) NULL)
+  rows = Map(function(id, x) provider_listing_row(id, x$p, x$err, check, reg, ctg), ids, provs)
   col = function(f) vapply(rows, function(r) r[[f]], "", USE.NAMES = FALSE)
   df = data.frame(id = col("id"), type = col("type"), api = col("api"),
                   credential = col("credential"), source = col("source"),
