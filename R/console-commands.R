@@ -18,6 +18,7 @@ console_commands = function() {
                  "Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]"),
     gptr_command("plan", cmd_plan, "Switch to plan mode (read-only exploration, then a plan)"),
     gptr_command("tools", cmd_tools, "List the direct tools and the peter$ members"),
+    gptr_command("calls", cmd_calls, "Show the last n tool calls in full (default 1): /calls [n]"),
     gptr_command("env", cmd_env,
                  "List the objects, or those whose names contain text: /env [text]"),
     gptr_command("compact", cmd_compact, "Compact the conversation now: /compact [focus]"),
@@ -375,6 +376,28 @@ cmd_env = function(args, ctx) {
   if (!is.environment(env)) return("No environment is attached to this console.")
   lines = console_env_lines(env, args)
   if (length(lines)) lines else "(no objects)"
+}
+
+#' `/calls [n]`: the last `n` tool calls of the session's messages (default 1), oldest first, whole
+#' whatever compact_calls says: every code row, and the change rows of a path tool as its approval
+#' shows them (an edit's old and new text, a write's content), at the live rows' column (D-383)
+#' @noRd
+cmd_calls = function(args, ctx) {
+  n = if (nzchar(args)) args else "1"
+  if (!grepl("^[0-9]+$", n) || as.numeric(n) < 1) {
+    return("Use /calls [n], n a whole number above 0.")
+  }
+  s = ctx$session
+  calls = if (!is.null(s)) unlist(lapply(s$messages, msg_calls), recursive = FALSE)
+  if (!length(calls)) return("No tool call yet.")
+  rows = unlist(lapply(utils::tail(calls, as.numeric(n)), function(b) {
+    call = list(id = b$id, name = b$name, input = b$arguments %||% list())
+    c(console_tool_line(call, NULL, s, compact = FALSE, n = Inf),
+      console_diff_rows(ui_request_change(list(tool = b$name, input = call$input)), Inf,
+                        ui_width()))
+  }))
+  # console_command() prints in the margin, which the rows already hold
+  cli::ansi_substr(rows, nchar(console_pad()) + 1L, cli::ansi_nchar(rows))
 }
 
 #' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL); it reports

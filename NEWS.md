@@ -1,5 +1,44 @@
 # gptr 1.3.0
 
+## Permissions
+
+* A path's class no longer drops when R warns while gptr reads it. With `HOME` naming a folder
+  that does not exist (a container, a service account, a CI runner), `tools::R_user_dir()` warns,
+  and gptr read every literal path as "unknown": deleting a file outside the project, `.git` or
+  `.env`, or writing gptr's settings, was level 3 instead of 4, so `"auto"` and `"yolo"` ran them
+  without asking (gptr 1.0.0 to 1.2.0). Found by an end-to-end test of gptr Agent.
+
+## Serving R to local agents
+
+* gptr Agent, the bridge that lets an agent outside R work in a served session, now lives in
+  gptr's repository (folder `gptragent/`, outside the R package) and is released with gptr: its
+  version is gptr's, and each gptr GitHub release carries `gptragent.brxt` for Biorouter.
+* The same folder is a Claude Code plugin and a Codex plugin named `gptr`:
+  `claude plugin marketplace add Broccolito/gptr` then `claude plugin install gptr@gptr`, or
+  `codex plugin marketplace add Broccolito/gptr` then `codex plugin add gptr@gptr`. With
+  `gptr_mcp_serve(advertise = TRUE)` the agent finds the session by itself and gets the tools
+  `sessions`, `inspect` and `r`, with a skill that tells it to look first and change objects in
+  place.
+* An outside agent's R calls are recorded. A served `r` or `inspect` call that ran outside a
+  Peter turn is recorded on the server's session, as Peter's are (of a call that stopped
+  part-way, the expressions that ran; nothing in plan mode or for a refused call), so it persists
+  with the session and `gptr_last() |> peter()` continues after it. While `gptr_doc()` binds a
+  document, the call is also written into it as a direct R line, so `gptr_export()` turns the
+  agent's work into a runnable R script; an `inspect` call is left out unless it changed objects.
+
+## Console
+
+* A tool call takes one row in the console: the tool, the first line of its code and
+  `(+N more lines)`, so a long script no longer fills the screen. An edit's result is one row
+  with the lines it added and removed, and what R code prints shows at most 5 rows a call, then
+  `(+N more lines)`; what the model receives is unchanged. An approval still shows the whole code
+  it asks about.
+* `/calls` prints this session's last tool call whole, all its code and what an edit or a write
+  changes, `/calls 3` the last three; a sub-agent's calls and the steps a CLI route runs itself
+  are not among them.
+* `gptr_config(compact_calls = FALSE)` shows every call's code as it runs and all its output, as
+  before; `.scope = "user"` keeps that for every session.
+
 ## Models
 
 * The `claude-cli` and `codex` routes ask your installed CLI which models it offers and which one

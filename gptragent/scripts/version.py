@@ -3,16 +3,18 @@
     uv run python scripts/version.py 1.4.0
 
 It rewrites manifest.json, pyproject.toml, src/gptragent/__init__.py, the README's
-"Current version" line and the bundled skill's metadata version. The User-Agent the bridge
-sends to gptr is built from __version__, so it moves with them. It refuses a version that does
-not move forward. Then run uv lock, the tests and scripts/build_brxt.py. The bundle is released
-with gptr: the tag is gptr's release tag v<version>, and <version> must equal DESCRIPTION's
-Version.
+"Current version" line, the bundled skill's metadata version, the Claude Code and Codex plugin
+manifests and the plugin's entry in the Claude Code marketplace (../.claude-plugin). The
+User-Agent the bridge sends to gptr is built from __version__, so it moves with them. It refuses
+a version that does not move forward. Then run uv lock, the tests and scripts/build_brxt.py. The
+bundle is released with gptr: the tag is gptr's release tag v<version>, and <version> must equal
+DESCRIPTION's Version.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -37,11 +39,14 @@ def bump(root: Path, version: str) -> str:
     ]
     edits += [(path, r"(?m)^  version: \d+\.\d+\.\d+$", f"  version: {version}")
               for path in sorted((root / "skills").glob("*/SKILL.md"))]
+    edits += [(path, r'"version": "[^"]+"', f'"version": "{version}"')
+              for path in (root / ".claude-plugin" / "plugin.json", root / ".codex-plugin" / "plugin.json",
+                           root.parent / ".claude-plugin" / "marketplace.json")]
     for path, pattern, replacement in edits:
         text = path.read_text(encoding="utf-8")
         new, count = re.subn(pattern, replacement, text, count=1)
         if count != 1:
-            raise SystemExit(f"{path.relative_to(root)} has no version line to move.")
+            raise SystemExit(f"{os.path.relpath(path, root)} has no version line to move.")
         path.write_text(new, encoding="utf-8")
     manifest["version"] = version
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

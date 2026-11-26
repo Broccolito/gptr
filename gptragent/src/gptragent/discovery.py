@@ -194,7 +194,7 @@ def format_refusal(value) -> Optional[str]:
                 f"format {RECORD_FORMAT})")
     if number > RECORD_FORMAT:
         return (f"it is in record format {number}, newer than the format {RECORD_FORMAT} this "
-                "gptr Agent reads: gptr Agent is behind, so update gptr Agent in Biorouter")
+                "gptr Agent reads: gptr Agent is behind, so update gptr Agent")
     return (f"it is in record format {number}, older than the format {RECORD_FORMAT} this gptr "
             "Agent reads: gptr is behind, so update gptr in R (install.packages(\"gptr\")), "
             "restart R and serve the session again")

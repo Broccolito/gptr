@@ -214,7 +214,7 @@ mode it can also create and change objects, while critical actions are still ref
 ### Let local agents find the session
 
 A client on the same computer can find a served session without your copying its address and
-token, for example Biorouter's gptr Agent extension:
+token, for example gptr Agent in Claude Code, Codex or Biorouter (next section):
 
 ```{r, eval = FALSE}
 gptr_mcp_serve(envir = globalenv(), mode = "auto", advertise = TRUE)
@@ -230,6 +230,52 @@ it next loads. Treat it as a credential: any program running as you can read it 
 runs, and gptr's permission gate treats reading it as reading a secret. Its path always ends in
 `R/gptr/mcp-serve/serve-<pid>.json`, so a tool that keeps credential files away from agents can
 match it.
+
+### Work from Claude Code, Codex or Biorouter
+
+gptr Agent connects an agent outside R to an advertised session. It lives in the `gptragent/`
+folder of gptr's repository, ships with each gptr release and runs with
+[uv](https://docs.astral.sh/uv/), which supplies Python when your computer has none. Install it
+once in the agent you use:
+
+```bash
+# Claude Code
+claude plugin marketplace add Broccolito/gptr
+claude plugin install gptr@gptr
+# Codex (start a new thread afterwards)
+codex plugin marketplace add Broccolito/gptr
+codex plugin add gptr@gptr
+```
+
+In Biorouter, install gptr Agent from the BAAM marketplace, or `gptragent.brxt` from gptr's
+GitHub releases with `biorouter extension install gptragent.brxt`. Biorouter updates it with
+each gptr release.
+
+Then serve the session as above and ask the agent about your objects. It gets three tools:
+`sessions` lists the advertised sessions and attaches to one (it asks which when there are
+several), `inspect` runs code gptr classifies as read-only, and `r` runs other code through your
+permission settings in the server's mode, returning plots as images. A bundled skill tells the
+model to look first, never reload data and change objects in place. With gptr 1.0 or 1.1, which
+cannot advertise, the `sessions` tool prints the line that loads gptr Agent's `attach.R` helper.
+
+The agent's calls are recorded as Peter's are. Each `r` call that ran (of one that stopped
+part-way, the expressions that ran) is kept on the server's session, `gptr_last()`, so
+`gptr_last() |> peter()` continues after it. While `gptr_doc()` binds a document, the call is
+also written into it as a direct R line; an `inspect` call is left out unless it changed
+objects, and nothing is written in plan mode or for a refused call. `gptr_export()` then gives a
+plain script of the agent's work:
+
+```{r, eval = FALSE}
+gptr_doc("agent.R")
+gptr_mcp_serve(envir = globalenv(), mode = "auto", advertise = "cohort study")
+# ... the agent works in the session ...
+gptr_mcp_serve(stop = TRUE)
+gptr_export("agent.R", "analysis.R")
+```
+
+A call waits while R runs other code and gives up after 280 seconds at most (Biorouter allows
+300); stopping the agent does not stop R code, so press Esc or Ctrl-C in R. The agent reaches
+sessions on the same computer only.
 
 Child-process waits cooperate with the reactor. Inside an R tool, they still run neither
 HTTP callbacks nor sibling R tools. If a child needs this same R session's MCP server, start

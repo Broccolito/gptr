@@ -53,6 +53,13 @@ their output are in `A/probes/`.
 
 ## Permission gate
 
+- **L-72** (medium; no). A symlink is classified by its target: `path_class()`
+  (`R/utils-paths.R:466-472`) lets the lexical class win only when it is guarded, so a link at
+  `/tmp/x` that points into the project is "workspace" (delete level 3) and one into `tempdir()`
+  "temp" (level 1), and `"auto"` runs `unlink('/tmp/x')`, which removes a file outside the
+  project (the link). Evidence: the S6 audit of 2026-11-26 (P34 verification). Fix: none yet;
+  a delete or write classifies the link's own location as well as its target, taking the higher.
+  Status: open.
 - **L-2** (low; yes). The drive-relative rule (`D:x` is outside on every OS) raises unrelated
   readings: `rm -rf ${X:-build}` with a one-letter name 3 to 4, `readLines("a:b.txt")` 0 to 1,
   `rm a:b` 3 to 4, and `cd <outside> && git commit -m 'rm -rf build'` 2 to 4 (the literal scan reads

@@ -113,7 +113,7 @@ test_that("served gptr_return(<expression>) records the block's hidden value, wh
   expect_length(fake_requests(fake), 2L)
 })
 
-test_that("plan, non-recording and idle served R add no executable history; failed R what ran", {
+test_that("plan and non-recording runs record no code, failed R what ran, idle R its session", {
   skip_on_cran()
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", mode = "auto")
@@ -140,13 +140,63 @@ test_that("plan, non-recording and idle served R add no executable history; fail
     expect_false(any(readLines(path) %in% c("scratch = 1", "unrecorded = 1")), info = nm)
     expect_false(any(grepl("not successful", readLines(path), fixed = TRUE)), info = nm)
     if (identical(nm, "plan")) expect_false(exists("scratch", envir = work, inherits = FALSE))
-    # Once settled, the same session's standalone server retains no automatic recording.
+    # Once settled, served R records on the session outside plan mode (D-373); the document that
+    # holds the call is not bound, so it is not written.
     before = readLines(path)
     msg = mcp_test_msg("tools/call", list(name = "r", arguments = list(code = "idle = 2")))
     mcp_dispatch_local(msg, work$res)
-    expect_length(mcp_record_entries(work$res), as.integer(failed))
+    expect_length(mcp_record_entries(work$res), failed + !identical(nm, "plan"))
     expect_identical(readLines(path), before, info = nm)
   }
+})
+
+test_that("idle served R records on the server's session and its bound document (D-373)", {
+  root = local_project()
+  local_gptr_options(mode = "auto")
+  fake = local_fake_provider(list("Done."))
+  ref = paste0(fake$id, "/", fake$models[[1L]]$id)
+  home = new.env(parent = globalenv())
+  home$d = datasets::mtcars
+  plan = session_new(ref, "plan", home = home, kind = "chat")
+  # as gptr_mcp_serve() makes its dedicated session, which becomes gptr_last()
+  s = session_new(ref, "auto", home = home, kind = "chat")
+  path = file.path(root, "agent.R")
+  gptr_doc(path)
+  withr::defer(gptr_doc(FALSE))
+  serve = function(code, name = "r", session = s) {
+    msg = mcp_test_msg("tools/call", list(name = name, arguments = list(code = code)))
+    mcp_dispatch_local(msg, session)$result$isError
+  }
+  expect_false(serve("fit = lm(mpg ~ wt, d)"))
+  expect_false(serve("summary(fit)$r.squared", "inspect"))
+  expect_true(serve("beta = coef(fit)\nstop('after beta')"))
+  # nothing ran, refused, or plan mode's scratch environment: nothing is recorded
+  expect_true(serve("stop('nothing ran')"))
+  expect_true(serve("gone = 1", "inspect"))
+  expect_false(serve("nrow(d)", session = plan))
+  expect_length(mcp_record_entries(plan), 0L)
+  trace = mcp_record_entries(s)
+  # inspection is history but not code (?gptr_doc); a call stopped part-way keeps what ran
+  expect_identical(vapply(trace, function(e) e$data$record, NA), c(TRUE, FALSE, TRUE))
+  expect_identical(trace[[3L]]$data$n_done, 1L)
+  txt = readLines(path)
+  expect_true(all(c("# direct R (no model) created=fit", "fit = lm(mpg ~ wt, d)",
+                    "# direct R (no model) created=beta", "beta = coef(fit)") %in% txt))
+  expect_false(any(grepl("summary\\(|stop\\(|gone|nrow\\(", txt)))
+  # the document exports as R that makes what the agent made
+  out = file.path(root, "agent-export.R")
+  gptr_export(path, out)
+  again = new.env(parent = globalenv())
+  again$d = datasets::mtcars
+  for (x in parse(out, keep.source = FALSE)) {
+    if (!identical(x, quote(library(gptr)))) eval(x, again)
+  }
+  expect_equal(again$beta, coef(lm(mpg ~ wt, mtcars)))
+  # the session's next turn continues after the served calls
+  expect_identical(gptr_last(), s)
+  gptr_last() |> peter("Report beta")
+  expect_equal(session_data(s)$turns, 1)
+  expect_length(mcp_record_entries(s), 3L)
 })
 
 test_that("a native execution trace belongs only to its still-active document owner", {

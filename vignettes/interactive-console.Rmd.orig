@@ -190,6 +190,7 @@ commands available in the current session, including any supplied by plugins or 
 | `/mode [plan|manual|edits|auto|yolo]` | Show the mode or switch it from the next turn. |
 | `/plan` | Switch to plan mode for read-only exploration and a proposed plan. |
 | `/tools` | List direct tools and `peter$` members. |
+| `/calls [n]` | Show this session's last `n` tool calls whole (default 1). |
 | `/env [text]` | Describe workspace objects whose names contain the text. |
 | `/compact [focus]` | Compact the conversation now, optionally emphasizing a topic; may make a model request. |
 | `/cost` | Show this session's tokens and cost. |
@@ -213,6 +214,23 @@ commands available in the current session, including any supplied by plugins or 
 Undo and rewind report partial restores when something cannot be captured or restored. External
 side effects are not generally reversible. See `?gptr_rewind` and `?gptr_security` before relying
 on restoration.
+
+## Follow the tool calls
+
+Each tool call Peter makes takes one row: the tool's name, the first line of its code (a comment
+counts) and how many lines follow: a 30-line `r` call reads `library(stats)  (+29 more lines)`
+after its name. Under it is what changed: the objects created, changed or removed (`+ fit, s`),
+an edit as one row with the lines it added and removed, a written file's size, or an error's
+message in up to six wrapped rows. What R code prints shows at most 5 rows a call, then
+`(+N more lines)`; what the model receives is unchanged. `/calls` prints this session's last tool
+call whole, all its code and what an edit or a write changes, and `/calls 3` the last three; a
+sub-agent's calls and the steps a CLI route runs itself are not among them. An approval always
+shows the code it asks about. To see every call's code as it runs (at most 20 rows) and all of
+its output, turn the setting off:
+
+```{r, eval = FALSE}
+gptr_config(compact_calls = FALSE, .scope = "user")
+```
 
 ## Approve changes
 

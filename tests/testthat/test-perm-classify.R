@@ -2036,3 +2036,16 @@ test_that("R CMD INSTALL and REMOVE are installs, in any case and through Rcmd (
   }
   expect_identical(gptr_risk("system('R CMD check .')", root = root)$categories, "process")
 })
+
+test_that("a missing HOME never lowers a path class (S6)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  withr::local_envvar(HOME = file.path(out, "no-home"))
+  victim = file.path(out, "canary.txt")
+  writeLines("canary", victim)
+  level = function(code) expect_no_warning(gptr_risk(code, root = root))$level
+  expect_identical(level(sprintf("unlink('%s')", victim)), 4L)
+  expect_identical(level("unlink('.git', recursive = TRUE)"), 4L)
+  expect_identical(level("file.remove('.env')"), 4L)
+  expect_identical(level("writeLines('{}', '.gptr/settings.json')"), 4L)
+})
