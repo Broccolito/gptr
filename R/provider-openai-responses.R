@@ -454,9 +454,7 @@ responses_build = function(model, context, opts) {
     }
   }
   if (!is.null(params$max_tokens)) head$max_output_tokens = max(16L, as.integer(params$max_tokens))
-  if (!is.null(params$temperature) && !isTRUE(model$reasoning)) {
-    head$temperature = params$temperature
-  }
+  head$temperature = adp_temperature(model, params)
   tc = if (!is.null(tj)) responses_tool_choice(params$tool_choice, model, params$returns)
   if (!is.null(tc)) head$tool_choice = tc
   for (f in responses_caps()$request_params) if (!is.null(params[[f]])) head[[f]] = params[[f]]
