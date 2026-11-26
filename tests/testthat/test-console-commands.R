@@ -56,7 +56,7 @@ test_that("every command of architecture 6.17 that P14 owns is a command spec", 
   nms = vapply(console_commands(), function(x) x$name, "")
   expect_true(all(c("help", "exit", "model", "mode", "plan", "tools", "env", "compact", "cost",
                     "context", "status", "clear", "resume", "fork", "doc", "skills", "skill",
-                    "mcp", "retry", "permissions") %in% nms))
+                    "mcp", "retry", "permissions", "calls") %in% nms))
   expect_true(all(vapply(console_commands(), function(x) inherits(x, "gptr_command"), NA)))
 })
 
@@ -680,4 +680,28 @@ test_that("/permissions shows and changes the rules of this R session", {
   expect_match(run_command(rs, "/permissions maybe x")$out, "^Use /permissions")
   r = run_command(rs, "/permissions allow r(fn:")
   expect_identical(r$res, "error")
+})
+
+test_that("/calls shows the last calls in full, oldest first (D-383)", {
+  skip_on_cran()
+  local_console_commands()
+  local_project(list("a.txt" = "hi"))
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  expect_identical(run_command(repl_state(idle_session(), new.env()), "/calls")$out,
+                   "No tool call yet.")
+  code = c("library(stats)", sprintf("x%d = %d", 1:29, 1:29))
+  fake = gptr_fake_provider(list(fake_tool("r", code = paste(code, collapse = "\n")),
+                                 fake_tool("r", code = "y = 2"), fake_tool("read", path = "a.txt"),
+                                 "done"))
+  s = peter("go", model = fake, envir = new.env(), mode = "auto")
+  rs = repl_state(s, new.env())
+  expect_identical(run_command(rs, "/calls")$out, "  | read  a.txt")
+  expect_identical(run_command(rs, "/calls 2")$out, c("  | r  y = 2", "  | read  a.txt"))
+  # the full rows whatever compact_calls says, all calls when n is more
+  all = c("  | r", paste0("    ", code[1:20]), "    # ... +10 more lines", "  | r  y = 2",
+          "  | read  a.txt")
+  expect_identical(run_command(rs, "/calls 3")$out, all)
+  expect_identical(run_command(rs, "/calls 9")$out, all)
+  expect_identical(run_command(rs, "/calls x")$out, "Use /calls [n], n a whole number above 0.")
+  expect_true(any(grepl("^  /calls ", help_text())))
 })
