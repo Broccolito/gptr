@@ -11,7 +11,8 @@ test_that("Claude discovery asks initialize and get_settings with the user's set
   expect_true(all(vapply(p$sent, function(f) identical(f$type, "control_request"), NA)))
   expect_identical(p$spawn$args, c("-p", "--input-format", "stream-json", "--output-format",
                                    "stream-json", "--verbose", "--no-session-persistence",
-                                   "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}'))
+                                   "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+                                   "--tools", "", "--disable-slash-commands"))
   expect_identical(p$spawn$env, c(PROFILE = "cli-claude"))
   expect_identical(p$spawn$wd, path_norm(tempdir()))
   expect_true(p$killed)
@@ -184,8 +185,11 @@ test_that("a model id the CLI does not list is passed as written, with one notic
   local_mocked_bindings(pcli_probe = function(path) list(bare_optout = NULL),
                         pcli_notice = function(cli) invisible(NULL))
   model = stub_model("claude", "my-router-model")
-  # nothing listed to compare with: no notice
-  expect_false(pcli_write_in(model, "my-router-model"))
+  # nothing listed to compare with (discovery not run, or failed): the notice says so
+  expect_message(expect_true(pcli_write_in(model, "unchecked-model")),
+                 paste("The model unchecked-model is not checked against the claude CLI's list;",
+                       "gptr passes it to claude --model as written."), fixed = TRUE)
+  expect_false(pcli_write_in(model, NULL))
   pcli_discover("claude")
   for (listed in c("large", "vendor-mid-3")) expect_false(pcli_write_in(model, listed))
   ctx = list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Hello")))
@@ -224,6 +228,18 @@ test_that("Codex runs keep the user's model provider through -c, never its crede
   i = match("-m", args)
   expect_identical(args[i + 0:(1L + length(route))], c("-m", "my-local-model", route))
   expect_false(any(grepl("not-a-secret-test-value", args, fixed = TRUE)))
+  # only Codex's documented keys without a credential or command go; the rest is named once
+  table = list(name = "GW", base_url = "https://gw.example/v1", query_params = list(k = "q"),
+               env_http_headers = list(`X-Key` = "GW_KEY"), auth = list(command = "token"),
+               capabilities = list(remote_compaction = "v2"), http_headers = list(`X-Key` = "h"),
+               gateway_oauth = list(credential_export = list(command = "token")), later = 1)
+  expect_message({
+    gw = pcli_codex_route(list(model_provider = "gw", model_providers = list(gw = table)))
+  }, "query_params, auth, http_headers, gateway_oauth, later of your Codex model provider gw",
+  fixed = TRUE)
+  expect_identical(gw, c("-c", 'model_provider="gw"', "-c", paste0(
+    'model_providers.gw={"name"="GW","base_url"="https://gw.example/v1",',
+    '"env_http_headers"={"X-Key"="GW_KEY"},"capabilities"={"remote_compaction"="v2"}}')))
   expect_identical(pcli_codex_route(list(model_provider = NULL)), character())
   expect_identical(pcli_toml_value(list(a = list(), b = list(1L, "x\""), c = NULL)),
                    '{"a"=[],"b"=[1,"x\\""]}')

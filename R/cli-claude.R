@@ -21,14 +21,17 @@ pcli_claude_quiet = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1", CLAUDE_CODE_DISABLE
 #' of an empty stream-json session (D-390, D-391): `initialize`, whose `models` give each
 #' selection's `resolvedModel` (else its `value`) as the id with its `displayName` and effort
 #' levels, and `get_settings`, whose `applied.model` is the model a session starts with under the
-#' user's own settings, which this child loads; when get_settings fails, the `default` selection
-#' of initialize. No user message is sent and no session is saved. `listed` holds every value
-#' and id the CLI accepts. Signals pcli_catalog_error() without initialize's model list.
+#' user's own settings, which this child loads (their SessionStart hooks run); when get_settings
+#' fails, the `default` selection of initialize. No user message is sent, no session is saved,
+#' and no MCP server, tool, skill or slash command is loaded (claude 2.1.323 reports the same
+#' models and settings without these flags). `listed` holds every value and id the CLI accepts.
+#' Signals pcli_catalog_error() without initialize's model list.
 #' @return list(models, default = chr(1) or NULL, listed = chr)
 #' @noRd
 pcli_claude_discover = function(path) {
   args = c("-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-           "--no-session-persistence", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}')
+           "--no-session-persistence", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+           "--tools", "", "--disable-slash-commands")
   ask = function(id, subtype) {
     list(type = "control_request", request_id = id, request = list(subtype = subtype))
   }

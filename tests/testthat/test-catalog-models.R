@@ -270,11 +270,10 @@ test_that("each models.dev price tier is read once; the legacy field mirrors the
   expect_identical(model_resolve("xai/grok-4.7")$prices$tier, c("default", ">200k"))
 })
 
-test_that("references resolve: exact, alias, family, normalised, owner, thinking", {
+test_that("references resolve: exact, alias, normalised, owner, thinking", {
   local_catalog()
   expect_equal(model_resolve("anthropic/claude-sonnet-5-5")$ref, "anthropic/claude-sonnet-5-5")
   expect_equal(model_resolve("sonnet")$ref, "anthropic/claude-sonnet-5-5")
-  expect_equal(model_resolve("claude-sonnet")$ref, "anthropic/claude-sonnet-5-5")
   expect_equal(model_resolve("claude-sonnet-5.5")$ref, "anthropic/claude-sonnet-5-5")
   expect_equal(model_resolve("claude-opus-5-5")$ref, "anthropic/claude-opus-5-5")
   expect_equal(model_resolve("openrouter/anthropic/claude-sonnet-5-5")$ref,
@@ -376,6 +375,28 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
   expect_error(model_resolve("claude_code"), "claude-cli", class = "gptr_error_unknown_model")
 })
 
+test_that("a name that is no catalog id or alias never resolves to a similar model (D-392)", {
+  local_catalog()
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  withr::local_options(gptr.quiet = FALSE)
+  # with its provider, a part of a catalog id or a family name is written in, as typed
+  for (ref in c("openai/gpt-6", "anthropic/claude-sonnet")) {
+    expect_message(model_resolve(ref), class = "gptr_message_model_write_in")
+    expect_identical(model_resolve(ref)$ref, ref)
+  }
+  # alone, it is refused, with the nearest catalog models suggested
+  err = expect_error(model_resolve("claude-sonnet"), "Did you mean: anthropic/claude-sonnet-5-5,",
+                     class = "gptr_error_unknown_model")
+  expect_identical(err$suggestions[1:2],
+                   c("anthropic/claude-sonnet-5-5", "anthropic/claude-sonnet-5"))
+  err = expect_error(model_resolve("gpt-6"), class = "gptr_error_unknown_model")
+  expect_identical(err$suggestions[[1L]], "openai/gpt-6.1-sol")
+  expect_null(model_resolve("gpt-6:high", strict = FALSE))
+  # a provider named alone without a model is not another provider's model
+  err = expect_error(model_resolve("bedrock"), class = "gptr_error_unknown_model")
+  expect_identical(err$suggestions, "bedrock/claude-opus-5-5")
+})
+
 test_that("an alias with no model in the catalog is unknown, not a fuzzy match", {
   local_catalog()
   catalog_discovered_set("claude-cli", list(list(provider = "claude-cli", id = "gemini")))
@@ -453,7 +474,7 @@ test_that("a provider named alone means its first model; alias separators match 
   }
   expect_identical(model_resolve("codex")$ref, "codex/default")
   expect_identical(model_resolve("codex-cli")$ref, "codex/default")
-  # the rule comes before the fuzzy step: the provider's own first model, not a similar id
+  # the provider's own first model, never a similar id
   expect_identical(model_resolve("typesafe")$ref, "typesafe/jev-latest")
   # sub-agents and plugin model switches resolve the same way
   expect_identical(run_model_resolve("claude-cli", NULL)$ref, "claude-cli/default")

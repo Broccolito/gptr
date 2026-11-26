@@ -28,10 +28,10 @@ token cost: Claude Code's stream-json control requests `initialize` (`models[]`,
 
 | D | Rule | Amends |
 |---|---|---|
-| D-390 | a CLI route's models come from its CLI: Claude Code's `initialize` and `get_settings` control requests, Codex's `app-server` `model/list` and `config/read` (`codex debug models` when the app-server cannot answer), in one bounded probe per CLI version and login, cached in the catalog's discovered layer; no model name is filtered or matched | P20 CLI model lists (`pcli_models()`) |
+| D-390 | a CLI route's models come from its CLI: Claude Code's `initialize` and `get_settings` control requests, Codex's `app-server` `model/list` and `config/read` (`codex debug models` when the app-server cannot answer), in one bounded probe per R session and CLI version (`gptr_models(refresh = TRUE)` asks again), cached in the catalog's discovered layer; no model name is filtered or matched | P20 CLI model lists (`pcli_models()`) |
 | D-391 | a route's `default` is the model the user's CLI uses by default; gptr shows it by name and starts from it | P20 `pcli_default_model()` |
-| D-392 | any model id may be written in for any route or provider; an id the catalog lacks is passed through with one notice and conservative capabilities | `04` model resolution (unknown ids refused) |
-| D-393 | gptr matches no model name: aliases, defaults, thinking styles, prompt presets and provider request shapes come from catalog data (models.dev and providers' list endpoints) | catalog aliases, `provider_default_models()`, provider adapters |
+| D-392 | any model id may be written in for any route or provider; an id the catalog lacks is passed through with one notice and conservative capabilities; a name is never resolved to a similar model | `04` model resolution (unknown ids refused) |
+| D-393 | gptr matches no model name: aliases, defaults, thinking styles, prompt presets and provider request shapes come from catalog data (models.dev and providers' list endpoints); the one exception is the Ollama `:cloud`/`-cloud` tag check, a fail-closed IC-74 privacy guard that predates P36 | catalog aliases, `provider_default_models()`, provider adapters |
 | D-394 | the shipped snapshot is built from models.dev by `dev/release` at release time and checked against providers' official lists | the 2026-10-03 seed |
 | D-395 | provider adapters follow the current APIs: Anthropic API version 2026-10-21, sampling parameters only where a model's data allows them, Gemini thinking levels, xAI and DeepSeek reasoning effort, vLLM `reasoning`, Ollama `/api/show` thinking levels, OpenRouter reasoning objects | provider adapters |
 

@@ -63,11 +63,14 @@ that provider, the `default_model` of `gptr_providers()`. For a default, use
 `gptr_config(model = ..., .scope = "user")`; pass `model = ...` to override it for one call.
 [Configuration](configuration.html) explains scope and precedence.
 
-Any model id can be written in. An id the catalog lacks, such as a model newer than your gptr,
-a router's name or a local server's tag, is sent as written with one notice. gptr then assumes
-only what a name tells: tool calls on a remote route (none on a local server), text input, no
-thinking level, and unknown limits and price. Refresh the provider's listing, or declare the
-model in provider settings as shown for Azure below, to give it its real capabilities.
+Any model id can be written in with its provider, as `"provider/id"`. An id the catalog lacks,
+such as a model newer than your gptr, a router's name or a local server's tag, is sent as
+written with one notice. gptr then assumes only what a name tells: tool calls on a remote route
+(none on a local server), text input, no thinking level, and unknown limits and price. Refresh
+the provider's listing, or declare the model in provider settings as shown for Azure below, to
+give it its real capabilities. A name alone that is neither a catalog id nor an alias is
+refused with the closest catalog references as suggestions; gptr never runs a similar model in
+its place.
 
 For a model that reasons, choose its effort with `.opts = list(thinking = "high")` or with a
 suffix on the reference, such as `"openai/gpt-6.2-sol:high"`; either way the level stays with the
@@ -229,11 +232,13 @@ session = peter("Inspect the columns of mtcars.", mtcars, model = "codex")
 Codex runs keep the model provider of your Codex configuration: `model_provider` with its
 `[model_providers.<id>]` table, `openai_base_url` and `model_catalog_json` travel with each run,
 so a Codex set up for Ollama, LM Studio or a router works through gptr, with its listed, default
-and written-in models. gptr never puts a provider's `experimental_bearer_token` or
-`http_headers` on the command line, where other users of the computer could read them, and says
-so; give them through `env_key` or `env_http_headers`. A Claude Code router set through
-`ANTHROPIC_BASE_URL` does not reach the `claude-cli` route, which removes that variable with the
-other API-billing settings; register the router as a provider (`?gptr_provider`) instead.
+and written-in models. Of that table, only the settings Codex documents that hold no credential
+and run no command go on the command line, where other users of the computer could read them.
+gptr names what it leaves out, such as `experimental_bearer_token`, `http_headers`,
+`query_params` or an `auth` command; give a key through `env_key` or `env_http_headers`. A Claude
+Code router set through `ANTHROPIC_BASE_URL` does not reach the `claude-cli` route, which removes
+that variable with the other API-billing settings; register the router as a provider
+(`?gptr_provider`) instead.
 
 These calls run a child process. The built-in `claude-cli` route uses the Claude Code CLI's
 signed-in plan/OAuth authentication and refuses API-key billing. For API-key use, explicitly

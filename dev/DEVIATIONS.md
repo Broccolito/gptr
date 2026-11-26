@@ -11119,20 +11119,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 ## D-390 - P36 A CLI route's models come from its CLI (2026-11-26)
 - Rule: `pcli_discover()`, the `discover()` of `claude-cli` and `codex`, asks the CLI through
   `pcli_talk()` (15 s, 4 MB of output, process tree killed, stderr dropped, the reactor runs), with
-  no prompt and no tokens: Claude Code `-p` in stream-json with the user's settings loaded sends
-  `initialize` and `get_settings`; `codex app-server` gets `initialize`, `initialized`,
+  no prompt and no tokens: Claude Code `-p` in stream-json with the user's settings loaded (for
+  `applied.model`; their SessionStart hooks run) and `--tools ""`, `--disable-slash-commands`
+  (claude 2.1.323 reports the same models and settings without them) sends `initialize` and
+  `get_settings`; `codex app-server` gets `initialize`, `initialized`,
   `model/list` (every page, at most 20) and `config/read`, else `codex debug models` (models not
   hidden). Ids and effort levels are kept as reported (Claude `resolvedModel`, else `value`; Codex
   `model`); no name is filtered. Rows enter the catalog's discovered layer (`catalog_inventory()`).
-- Rule: an answer, or a failure, is kept per CLI command (`pcli_cache_key()`: path and file time);
-  a run's `agent_start` (after the version probe) and `/model` ask when nothing is kept for that
-  command, `gptr_models(provider = , refresh = TRUE)` always. `pcli_models()` and the P20 lists go;
+- Rule: gptr asks once per R session and CLI version: an answer, or a failure, is kept in memory
+  per CLI command (`pcli_cache_key()`: path and file time, which an update changes); a run's
+  `agent_start` (after the version probe) and `/model` ask when nothing is kept for that
+  command, `gptr_models(provider = , refresh = TRUE)` asks again. `pcli_models()` and the P20 lists go;
   each built-in route declares only `default`.
 - Contract-visible: 04 section 7.20, 03 section 8.4 (not amended here); `?gptr_models`,
   `?gptr_egress`, the language-models article.
 - Tests: test-cli-discovery (11 blocks; fixtures/cli/ probe recordings); test-console-commands
   "/model on a CLI route lists the models its CLI reports and names the default"; test-live-cli
-  (shapes only). Evidence: progress/P36.md Task 1.
+  (shapes only). Evidence: progress/P36.md Task 1 and Review fixes.
 
 ## D-391 - P36 A route's default is the model the user's CLI starts with (2026-11-26)
 - Rule: `default` runs the model the CLI reports, passed as `--model` or `-m`, since gptr's runs
@@ -11153,18 +11156,24 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   with one notice per reference (`gptr_message_model_write_in`, naming the provider's listing when
   it has one): tool calls only on a remote chat or CLI route (never a local server, IC-74, or a
   classifier), text input, thinking `off`, unknown limits and price, `locality = "unknown"`. An
-  unknown provider or an empty id stays `unknown_model`; a substring of a catalog id still
-  resolves to it. A CLI route's notice comes once, from `pcli_write_in()` when the run is built.
+  unknown provider or an empty id stays `unknown_model`. Resolution is an exact (or
+  separator-normalised) id, a declared alias, a provider named alone, else this write-in; a name
+  alone that is none of these is `unknown_model` with suggestions (`model_near()`, then edit
+  distance), never a similar model by family or substring. A CLI route's notice comes once, from
+  `pcli_write_in()` when the run is built, saying when discovery had no list to check against.
 - Rule: Codex execs carry `config/read`'s `model_provider` with its `model_providers.<id>` table
-  (inline TOML), `openai_base_url` and `model_catalog_json` as `-c` overrides; the table's
-  `experimental_bearer_token` and `http_headers` never go on the command line (one notice). Claude
-  routers through `ANTHROPIC_BASE_URL` stay removed by the `cli-claude` billing guard.
+  (inline TOML), `openai_base_url` and `model_catalog_json` as `-c` overrides; of the table only
+  Codex's documented keys without a credential or command go (`pcli_codex_provider_keys`), and
+  the rest (`experimental_bearer_token`, `http_headers`, `query_params`, `auth`, `gateway_oauth`,
+  unknown keys) is named in one notice. Claude routers through `ANTHROPIC_BASE_URL` stay removed
+  by the `cli-claude` billing guard.
 - Contract-visible: 04 section 7.5 (`model_resolve()` row), section 4.9 (`local`), section 2.2
   (the message class), not amended here; `?gptr_models`, `?gptr_provider`.
 - Tests: test-catalog-models "an id the catalog lacks is written in once, with conservative
-  capabilities (D-392)"; test-cli-discovery "a model id the CLI does not list is passed as written,
+  capabilities (D-392)", "a name that is no catalog id or alias never resolves to a similar model
+  (D-392)"; test-cli-discovery "a model id the CLI does not list is passed as written,
   with one notice (D-392)", "Codex runs keep the user's model provider through -c, never its
-  credentials". Evidence: progress/P36.md Task 2.
+  credentials". Evidence: progress/P36.md Task 2 and Review fixes.
 
 ## D-393 - P36 gptr matches no model name: catalog data decides (2026-11-26)
 - Rule (data): `catalog_seed()`, `catalog_overrides()`, the alias and dated-suffix regexes,
@@ -11181,6 +11190,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   TRUE (`adp_budget_thinking()`), else named levels; bedrock-converse thinking for owner
   "anthropic". The Google version helpers, Bedrock's `anthropic\.claude` test, OpenRouter's id
   prefixes and `adp_level_effort()` go.
+- Exception: `catalog_ollama_cloud()`, the Ollama `:cloud` and `-cloud` tag check (P05), stays.
+  It is a fail-closed privacy guard, not a model choice: IC-74 (07 sections 2 and 2.1) makes
+  local-only inference reject cloud selectors before any state is sent, and the tag is the one
+  signal before discovery, or when a listing has no `remote_host` or `remote_model`.
 - Contract-visible: 04 sections 4.9, 7.5 (`preset_tools()`), 11.10, 03 section 8.4, IC-73, IC-80,
   not amended here; `?gptr_models`, `?gptr_config`, `?gptr_provider`, NEWS 1.3.0.
 - Tests: test-catalog-models "aliases follow the catalog's family data, never model names

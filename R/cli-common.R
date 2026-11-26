@@ -561,16 +561,21 @@ pcli_model_id = function(model) {
 }
 
 #' One notice for a model argument the CLI's discovery did not list (D-392): gptr passes any id as
-#' written, and the CLI decides; none when nothing was listed to compare with
+#' written, and the CLI decides; when discovery has not run or failed, the notice says the id was
+#' not checked
 #' @noRd
 pcli_write_in = function(model, id) {
   cli = sub("^cli-", "", model[["api"]] %||% "")
   listed = pcli_discovery(cli)$listed
-  if (is.null(id) || is.null(listed) || id %in% listed) return(invisible(FALSE))
+  if (is.null(id) || id %in% listed) return(invisible(FALSE))
   shown = doc_one_line(substr(id, 1L, 200L))
   flag = if (identical(cli, "claude")) "--model" else "-m"
-  gptr_inform(paste0("The ", cli, " CLI does not list the model ", shown, "; gptr passes it to ",
-                     cli, " ", flag, " as written."), "notice",
+  lead = if (is.null(listed)) {
+    paste0("The model ", shown, " is not checked against the ", cli, " CLI's list")
+  } else {
+    paste0("The ", cli, " CLI does not list the model ", shown)
+  }
+  gptr_inform(paste0(lead, "; gptr passes it to ", cli, " ", flag, " as written."), "notice",
               .once = paste0("cli_write_in:", cli, ":", id))
   invisible(TRUE)
 }

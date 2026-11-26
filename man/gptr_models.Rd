@@ -49,7 +49,9 @@ family; on a release-date tie the shortest id wins. Any \code{provider/id} of a 
 accepted: an id the catalog lacks is sent as written, with one notice, and gets only what a
 name can tell: tool calls on a remote chat or command-line route (none on a local server),
 text input, no thinking level, unknown limits and price. Declare its real capabilities in the
-provider's \code{models} setting (\code{\link[=gptr_config]{gptr_config()}}) or with \code{\link[=gptr_provider]{gptr_provider()}}.
+provider's \code{models} setting (\code{\link[=gptr_config]{gptr_config()}}) or with \code{\link[=gptr_provider]{gptr_provider()}}. A name without a
+provider that is neither a catalog id nor an alias is refused with the closest catalog
+references as suggestions; gptr never runs a similar model in its place.
 
 A catalog entry describes a route, not current account access. \code{availability} records what
 the last provider listing advertised, with its \code{checked_at} time; it does not verify inference
@@ -62,11 +64,13 @@ provider reports them. A \code{discover()} callback runs with \code{refresh = TR
 The \code{claude-cli} and \code{codex} routes ask your installed CLI which models it offers and which one
 it starts with: Claude Code through its stream-json \code{initialize} and \code{get_settings} control
 requests, Codex through \verb{codex app-server} (\code{model/list}, \code{config/read}), else
-\verb{codex debug models}. No prompt is sent and no tokens are spent. gptr asks once per R session
-and CLI version, when a run starts or at \verb{/model}, and again with \code{refresh = TRUE}, so a CLI
-update changes the list without a gptr release. The \code{default} row runs the model your CLI
-starts with and names it (\code{default (claude-opus-5-5)}); when the CLI cannot say, gptr passes no
-model flag and the CLI chooses.
+\verb{codex debug models}. No prompt is sent and no tokens are spent. Claude Code's probe starts
+with your settings, which name the model it starts with, so their SessionStart hooks run;
+tools and slash commands stay off. gptr asks once per R session and CLI version, when a run
+starts or at \verb{/model}, and again with \code{refresh = TRUE}, so a CLI update changes the list
+without a gptr release. The \code{default} row runs the model your CLI starts with and names it
+(\code{default (claude-opus-5-5)}); when the CLI cannot say, gptr passes no model flag and the CLI
+chooses.
 
 Copy a \code{ref} into the \code{model} argument of \code{\link[=peter]{peter()}} to choose that route. Ollama routes require
 current installed model evidence before inference; discovery does not pull models. See

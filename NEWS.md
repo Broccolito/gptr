@@ -16,12 +16,15 @@
 * Any model id can be written in, on every route and provider: `peter(model = "codex/<id>")`,
   `/model claude-cli/<id>`, `"openrouter/<id>"`, `"lmstudio/<id>"`. An id the catalog or the CLI
   does not list is sent as written with one notice, with tool calls on a remote route (none on a
-  local server), text input, no thinking level and unknown limits and price.
+  local server), text input, no thinking level and unknown limits and price. A name alone that is
+  neither a catalog id nor an alias is refused with suggestions, never swapped for a similar
+  model.
 * Codex runs keep your own model provider while gptr's isolation stays on: `model_provider` with
   its `[model_providers.<id>]` table, `openai_base_url` and `model_catalog_json` go to each run as
-  `-c` overrides, so a Codex set up for Ollama, LM Studio or a router works in gptr. A provider's
-  `experimental_bearer_token` and `http_headers` never go on the command line; give them through
-  `env_key` or `env_http_headers`.
+  `-c` overrides, so a Codex set up for Ollama, LM Studio or a router works in gptr. Only the
+  table's documented settings without credentials or commands go on the command line; tokens,
+  `http_headers`, `query_params` and `auth` commands stay off. Give a key through `env_key` or
+  `env_http_headers`.
 * The offline catalog is models.dev (MIT) of 2026-11-26 with gptr's reviewed corrections; it
   lists Gemini 4, Fable 5.2, Haiku 5.5, GPT-6.2 and Grok 4.x. gptr matches no model name: an alias
   is the newest active model of its models.dev family (`gpt` is `gpt-6.2-sol`, `gemini` is

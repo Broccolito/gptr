@@ -545,29 +545,29 @@ model_match_id = function(pat, ctg, sel) {
   NULL
 }
 
-#' Match by family (newest active, owner preferred) then substring within the selected rows
+#' References near a name within the selected rows, for suggestions only, never resolution
+#' (D-392): the newest active model of a family of that name, then the ids and names containing
+#' it, newest first (the owner's listings preferred)
 #' @noRd
-model_match_fuzzy = function(pat, ctg, sel) {
+model_near = function(pat, ctg, sel) {
   idx = ctg$index
   lp = tolower(pat)
   fam = sel & !is.na(idx$family) & tolower(idx$family) == lp & idx$status != "deprecated"
-  if (any(fam)) {
-    target = catalog_alias_target(list(family = idx$family[which(fam)[1]]),
-                                  idx[sel, , drop = FALSE])
-    if (!is.na(target)) return(list(entry = ctg$models[[target]], how = "family"))
+  target = if (any(fam)) {
+    catalog_alias_target(list(family = idx$family[which(fam)[1]]), idx[sel, , drop = FALSE])
   }
-  if (nchar(lp) >= 3L) {
-    part = which(sel & (grepl(lp, tolower(idx$id), fixed = TRUE) |
-                          grepl(lp, tolower(idx$name), fixed = TRUE)))
-    if (length(part)) {
-      own = part[!is.na(idx$owner[part]) & idx$provider[part] == idx$owner[part]]
-      if (length(own)) part = own
-      ord = order(idx$release_date[part], nchar(idx$id[part]), idx$id[part],
-                  decreasing = c(TRUE, FALSE, TRUE), method = "radix")
-      return(list(entry = ctg$models[[part[ord][1]]], how = "substring"))
-    }
+  part = if (nchar(lp) >= 3L) {
+    which(sel & (grepl(lp, tolower(idx$id), fixed = TRUE) |
+                   grepl(lp, tolower(idx$name), fixed = TRUE)))
+  } else {
+    integer()
   }
-  NULL
+  own = part[!is.na(idx$owner[part]) & idx$provider[part] == idx$owner[part]]
+  if (length(own)) part = own
+  ord = order(idx$release_date[part], nchar(idx$id[part]), idx$id[part],
+              decreasing = c(TRUE, FALSE, TRUE), method = "radix")
+  refs = c(target, idx$ref[part[ord]])
+  unique(refs[!is.na(refs)])
 }
 
 #' The model entry of a live fake provider (P01) that no registry record shows
@@ -598,10 +598,10 @@ model_alias_target = function(name, targets) {
   unname(targets[match(catalog_norm_id(name), catalog_norm_id(names(targets)))])
 }
 
-#' Resolve a reference without its thinking suffix: explicit provider-qualified matching,
-#' a declared alias, an unqualified id, a registered provider named alone (its first declared
-#' model, IC-19, else its reviewed default), then the fuzzy step. An unavailable alias never
-#' matches an unrelated id.
+#' Resolve a reference without its thinking suffix: explicit provider-qualified matching (else
+#' a write-in for a known provider), a declared alias, an unqualified id, a registered provider
+#' named alone (its first declared model, IC-19, else its reviewed default). Nothing else
+#' resolves: no name is matched to a similar model (D-392).
 #' @noRd
 model_match = function(pat, ctg) {
   idx = ctg$index
@@ -627,29 +627,24 @@ model_match = function(pat, ctg) {
         e = model_alias_entry(sub_alias, ctg)
         if (!is.null(e)) return(list(entry = e, how = "alias"))
       }
-      r = model_match_fuzzy(rest, ctg, sel)
-      if (!is.null(r)) return(r)
       return(list(entry = NULL, how = "unknown id for known provider", provider = pv, id = rest))
     }
   }
   e = model_alias_entry(alias, ctg)
   if (!is.null(e)) return(list(entry = e, how = "alias"))
   declared_alias = catalog_norm_id(pat) %in% catalog_norm_id(names(targets))
-  every = rep(TRUE, nrow(idx))
   if (!declared_alias) {
-    r = model_match_id(pat, ctg, every)
+    r = model_match_id(pat, ctg, rep(TRUE, nrow(idx)))
     if (!is.null(r)) return(r)
   }
   pv = model_provider_id(pat, ctg)
   id = if (!is.na(pv)) provider_get(pv)$models[[1L]]$id %||% ctg$defaults[[pv]][["model"]]
   e = if (rlang::is_string(id)) model_alias_entry(paste0(pv, "/", id), ctg)
   if (!is.null(e)) return(list(entry = e, how = "provider"))
-  # an alias with no model is not guessed ("gemini" with no Gemini Pro is no Gemini Flash)
+  # an alias with no model says so ("gemini" with no Gemini Pro is no Gemini Flash)
   if (declared_alias) {
     return(list(entry = NULL, how = "alias without a model", alias = pat))
   }
-  r = model_match_fuzzy(pat, ctg, every)
-  if (!is.null(r)) return(r)
   list(entry = NULL, how = "no match")
 }
 
@@ -700,21 +695,21 @@ model_lookup = function(text, ctg) {
   hit
 }
 
-#' Up to three suggestions for an unresolved reference (utils::adist(), report 09); a reference
-#' that starts with a known `provider/` is compared with that provider's references only
+#' Up to three suggestions for an unresolved reference: the references near it (model_near()),
+#' then the closest by utils::adist() (report 09); a known provider, named alone or as
+#' `provider/`, is compared with that provider's references only
 #' @noRd
 model_suggestions = function(text, ctg, candidates = NULL) {
   if (length(candidates)) return(utils::head(candidates, 3L))
   text = sub(":.*$", "", text)
-  pv = if (grepl("/", text, fixed = TRUE)) model_provider_id(sub("/.*$", "", text), ctg) else NA
-  known = if (is.na(pv)) {
-    unique(c(ctg$index$ref, ctg$index$id, names(ctg$aliases)))
-  } else {
-    ctg$index$ref[ctg$index$provider %in% pv]
-  }
+  idx = ctg$index
+  pv = model_provider_id(sub("/.*$", "", text), ctg)
+  sel = is.na(pv) | idx$provider %in% pv
+  known = if (is.na(pv)) unique(c(idx$ref, idx$id, names(ctg$aliases))) else idx$ref[sel]
   if (!length(known)) return(character())
+  near = model_near(if (is.na(pv)) text else sub("^[^/]*/", "", text), ctg, sel)
   d = utils::adist(tolower(text), tolower(known))[1, ]
-  known[order(d, known, method = "radix")][seq_len(min(3L, length(known)))]
+  utils::head(unique(c(near, known[order(d, known, method = "radix")])), 3L)
 }
 
 #' Clamp a requested thinking level to the supported ones: upwards first, then downwards; with
@@ -1769,7 +1764,9 @@ catalog_grepl = function(pattern, x) {
 #' accepted: an id the catalog lacks is sent as written, with one notice, and gets only what a
 #' name can tell: tool calls on a remote chat or command-line route (none on a local server),
 #' text input, no thinking level, unknown limits and price. Declare its real capabilities in the
-#' provider's `models` setting ([gptr_config()]) or with [gptr_provider()].
+#' provider's `models` setting ([gptr_config()]) or with [gptr_provider()]. A name without a
+#' provider that is neither a catalog id nor an alias is refused with the closest catalog
+#' references as suggestions; gptr never runs a similar model in its place.
 #'
 #' A catalog entry describes a route, not current account access. `availability` records what
 #' the last provider listing advertised, with its `checked_at` time; it does not verify inference
@@ -1782,11 +1779,13 @@ catalog_grepl = function(pattern, x) {
 #' The `claude-cli` and `codex` routes ask your installed CLI which models it offers and which one
 #' it starts with: Claude Code through its stream-json `initialize` and `get_settings` control
 #' requests, Codex through `codex app-server` (`model/list`, `config/read`), else
-#' `codex debug models`. No prompt is sent and no tokens are spent. gptr asks once per R session
-#' and CLI version, when a run starts or at `/model`, and again with `refresh = TRUE`, so a CLI
-#' update changes the list without a gptr release. The `default` row runs the model your CLI
-#' starts with and names it (`default (claude-opus-5-5)`); when the CLI cannot say, gptr passes no
-#' model flag and the CLI chooses.
+#' `codex debug models`. No prompt is sent and no tokens are spent. Claude Code's probe starts
+#' with your settings, which name the model it starts with, so their SessionStart hooks run;
+#' tools and slash commands stay off. gptr asks once per R session and CLI version, when a run
+#' starts or at `/model`, and again with `refresh = TRUE`, so a CLI update changes the list
+#' without a gptr release. The `default` row runs the model your CLI starts with and names it
+#' (`default (claude-opus-5-5)`); when the CLI cannot say, gptr passes no model flag and the CLI
+#' chooses.
 #'
 #' Copy a `ref` into the `model` argument of [peter()] to choose that route. Ollama routes require
 #' current installed model evidence before inference; discovery does not pull models. See
@@ -1837,8 +1836,11 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   if (!is.null(provider)) keep = keep & idx$provider == provider
   first = character()
   if (!is.null(query)) {
-    hit = tryCatch(model_resolve(query, strict = FALSE), gptr_error = function(e) NULL)
-    if (!is.null(hit)) first = hit$ref
+    # a search announces no write-in
+    hit = tryCatch(model_lookup(query, ctg), gptr_error = function(e) NULL)
+    if (!is.null(hit$entry) && !identical(hit$how, "write-in")) {
+      first = paste0(hit$entry$provider, "/", hit$entry$id)
+    }
     found = catalog_grepl(query, idx$ref) | catalog_grepl(query, idx$name) |
       catalog_grepl(query, idx$aliases)
     keep = keep & (found | idx$ref %in% first)

@@ -115,23 +115,32 @@ pcli_toml_value = function(x) {
   pcli_toml(x)
 }
 
+#' The keys of a Codex model provider table that hold no credential and run no command (Codex's
+#' configuration reference): the only ones pcli_codex_route() puts on a command line
+#' @noRd
+pcli_codex_provider_keys = c("name", "base_url", "env_key", "env_key_instructions",
+                             "env_http_headers", "wire_api", "requires_openai_auth",
+                             "request_max_retries", "stream_max_retries", "stream_idle_timeout_ms",
+                             "supports_websockets", "supports_standalone_web_search",
+                             "model_catalog_url", "capabilities")
+
 #' The `-c` overrides that keep the user's own Codex model provider under --ignore-user-config
 #' (D-392), from config/read: `model_provider` with its `model_providers` table, `openai_base_url`
 #' and `model_catalog_json`, so the models Codex lists, the user's default and any written-in id
-#' reach the server the user's Codex uses. A table's `experimental_bearer_token` and
-#' `http_headers` hold credentials: they never go on a command line, which other users of the
-#' computer can read, and gptr says so once.
+#' reach the server the user's Codex uses. Of the table only pcli_codex_provider_keys go: tokens,
+#' static headers, query parameters and auth commands never go on a command line, which other
+#' users of the computer can read, and gptr names what it left out once.
 #' @noRd
 pcli_codex_route = function(cfg) {
   id = pcli_chr(cfg[["model_provider"]])
   table = if (!is.null(id)) cfg[["model_providers"]][[id]]
-  held = intersect(c("experimental_bearer_token", "http_headers"),
-                   names(Filter(Negate(is.null), table)))
+  held = setdiff(names(Filter(Negate(is.null), table)), pcli_codex_provider_keys)
   if (length(held)) {
-    gptr_inform(paste0("gptr leaves the ", paste(held, collapse = " and "), " of your Codex model ",
+    gptr_inform(paste0("gptr leaves the ", paste(held, collapse = ", "), " of your Codex model ",
                        "provider ", id, " off the codex command line, where other users of this ",
-                       "computer could read it; give it through env_key or env_http_headers in ",
-                       "your Codex config."), "notice", .once = paste0("codex_route:", id))
+                       "computer could read them; give a key through env_key or ",
+                       "env_http_headers in your Codex config."), "notice",
+                .once = paste0("codex_route:", id))
   }
   out = character()
   for (k in c("model_provider", "openai_base_url", "model_catalog_json")) {
@@ -139,7 +148,7 @@ pcli_codex_route = function(cfg) {
     if (!is.null(v)) out = c(out, "-c", paste0(k, "=", pcli_toml(v)))
   }
   if (is.list(table) && !is.null(names(table))) {
-    table = table[setdiff(names(table), held)]
+    table = table[intersect(names(table), pcli_codex_provider_keys)]
     out = c(out, "-c", paste0("model_providers.", id, "=", pcli_toml_value(table)))
   }
   out
