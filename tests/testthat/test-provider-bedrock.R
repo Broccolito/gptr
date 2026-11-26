@@ -290,7 +290,7 @@ test_that("reasoning deltas are a signed thinking block; a guardrail stop is a r
 # ---- the Converse request body -----------------------------------------------------------------
 
 test_that("the body maps system, messages, tools, tool results, images and inference config", {
-  model = test_model(api, reasoning = FALSE, sampling = TRUE)
+  model = test_model(api, reasoning = FALSE, temperature = TRUE)
   turn = msg_assistant(list(block_text("Reading."),
                             block_tool_call("toolu_1|fc_2", "read", list(path = "a.R"))),
                        api = api, provider = "fixture", model = "fixture-1")
@@ -325,7 +325,7 @@ test_that("the body maps system, messages, tools, tool results, images and infer
   expect_identical(results[[2L]]$toolResult$status, "error")
   # a text-only model gets a note for an image; a thinking model gets no temperature, even one
   # whose data accepts sampling
-  model = test_model(api, input = "text", reasoning = TRUE, sampling = TRUE)
+  model = test_model(api, input = "text", reasoning = TRUE, temperature = TRUE)
   body = json_decode(bedrock_build(model, ctx, list(base_url = "https://h.test"))$body)
   expect_identical(body$messages[[1L]]$content[[4L]]$text, adp_image_note())
   expect_identical(body$inferenceConfig, list(maxTokens = 512L))
@@ -366,13 +366,13 @@ test_that("a model of owner anthropic gets Anthropic's thinking fields; others n
   expect_identical(body$inferenceConfig, list(maxTokens = 32000L))
   expect_identical(body_of(opus, "off")$additionalModelRequestFields,
                    list(thinking = list(type = "disabled")))
-  budget = test_model(api, id = "corp-claude-old", owner = "anthropic", thinking_budget = TRUE)
+  budget = test_model(api, id = "corp-claude-old", owner = "anthropic", thinking_budget = list())
   expect_identical(body_of(budget, "medium")$additionalModelRequestFields$thinking,
                    list(type = "enabled", budget_tokens = 8192L))
   expect_identical(names(body_of(test_model(api, id = opus$id, owner = "anthropic",
                                             reasoning = FALSE), "high")), today)
   # a sampling model without thinking keeps its temperature
-  plain_t = test_model(api, reasoning = FALSE, sampling = TRUE)
+  plain_t = test_model(api, reasoning = FALSE, temperature = TRUE)
   expect_identical(body_of(plain_t, NULL)$inferenceConfig,
                    list(maxTokens = 32000L, temperature = 0.2))
   # a registered record that does not name its owner, even with a Claude id: no thinking, said

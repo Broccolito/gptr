@@ -226,7 +226,7 @@ test_that("a direct child inherits its parent's model before the global default"
   pd$model = "claude-cli/claude-opus-5-5"
   sonnet = subagent_spec_complete(list(agent = test_agent("sonnet"), prompt = "x",
                                       parent = parent, model = "claude-cli/sonnet"), NULL)
-  expect_identical(sonnet$info$ref, "claude-cli/claude-sonnet-5-5")
+  expect_identical(sonnet$info$ref, "claude-cli/sonnet")
 })
 
 test_that("workers guard and request credentials for the resolved provider", {
@@ -287,7 +287,7 @@ test_that("workers freeze the effective System 1 role and its bounded policy", {
   expect_identical(w$settings$system1, paste0("emulate:", model_resolve("sonnet")$ref))
   expect_identical(w$key_provider, "anthropic")
   # an unresolvable setting a chat worker never uses ships as written and starts it (D-323)
-  for (bad in c("typesafe/jev-typo", "emulate:nosuchmodelxyz")) {
+  for (bad in c("nowhere/jev-typo", "emulate:nosuchmodelxyz")) {
     expect_warning(gptr_config(system1 = bad, .scope = "session"),
                    class = "gptr_warning_unknown_model_setting")
     expect_identical(build()$settings$system1, bad)

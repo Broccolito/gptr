@@ -31,11 +31,9 @@ A \code{gptr_models} data frame with columns \code{ref}, \code{provider}, \code{
 \code{max_output}, \code{input_price}, \code{output_price} (USD per million tokens, selected for today's
 date from the available catalog; \code{0} for verified local inference, \code{NA} when unknown),
 \code{reasoning} (\code{NA} when unknown), \code{aliases}, \code{status}, \code{availability} (\code{unknown},
-\code{advertised}, \code{unlisted}, or
-the latter two with \code{ (stale)}; a \code{claude-cli} or \code{codex} \code{default} row takes that of the
-full id it runs) and \code{checked_at} (UTC time of the last successful provider listing, \code{NA}
-when none). Unlisted models remain in the catalog. Catalog prices can be
-stale and are not an account quote.
+\code{advertised}, \code{unlisted}, or the latter two with \code{ (stale)}) and \code{checked_at} (UTC time of
+the last successful provider listing, \code{NA} when none). Unlisted models remain in the catalog.
+Catalog prices can be stale and are not an account quote.
 }
 \description{
 Searches the merged model catalog: the shipped snapshot (models.dev plus gptr's reviewed
@@ -49,8 +47,9 @@ the last provider listing advertised, with its \code{checked_at} time; it does n
 or billing access. Failed or expired listings are marked stale and keep the previous models.
 Providers other than Ollama with a native model-list API are inventoried before use after
 consent, at most once per five minutes in this R process; \code{refresh = TRUE} bypasses that
-cache. A \code{discover()} callback, such as the \code{claude} and \code{codex} command-line catalogs, runs
-only with \code{refresh = TRUE}.
+cache. A \code{discover()} callback runs with \code{refresh = TRUE}; the \code{claude-cli} and \code{codex} routes
+also ask their CLI when a run starts after the CLI command changed, and at \verb{/model} when it was
+not asked yet.
 Copy a \code{ref} into the
 \code{model} argument of \code{\link[=peter]{peter()}} to choose that route. Ollama routes require current installed
 model evidence before inference; discovery does not pull models. See

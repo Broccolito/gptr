@@ -9,7 +9,7 @@
 #' https://aistudio.google.com/docs/function-calling)
 #' @noRd
 google_levels = function(model) {
-  isTRUE(model$reasoning) && !isTRUE(adp_model_cap(model, "thinking_budget"))
+  isTRUE(model$reasoning) && !adp_budget_thinking(model)
 }
 
 #' A replayable thought signature: base64 with a length that is a multiple of 4

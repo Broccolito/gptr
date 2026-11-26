@@ -1039,8 +1039,9 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #'   result; an error keeps prior catalog entries. Report only actual capabilities and limits.
 #' @param status `function()` reporting cached provider status, or `NULL`.
 #' @param aliases Alternative names of the provider.
-#' @param local Endpoint locality hint permitting unknown model ids. Resolved model locality is
-#'   checked separately: a loopback server may route inference to a remote model.
+#' @param local Endpoint locality hint: a model id written in for a local server gets no tool
+#'   calls. Resolved model locality is checked separately: a loopback server may route inference
+#'   to a remote model.
 #' @param offline `TRUE` when no remote model is called (test providers).
 #' @param rate `list(requests_per_s, tokens_per_s)` static limits, or `NULL`.
 #' @return A spec of class `c("gptr_provider", "gptr_spec")`.
@@ -1050,15 +1051,15 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #' # Amazon Bedrock's Converse API through a SigV4 gateway (region and endpoint are record data):
 #' # the IAM key pair is read from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and
 #' # AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them. Thinking
-#' # levels are sent only to a Claude model whose `capabilities` declare adaptive thinking with
-#' # an effort (Claude 4.6 and later); other models get no thinking, with a message. The
-#' # bedrock-converse adapter does not request prompt caching, so each request sends the full
-#' # prompt at the uncached rate.
+#' # levels are sent only to a model whose record declares `owner = "anthropic"`: as adaptive
+#' # thinking with an effort, or as a token budget when the record gives a `thinking_budget`;
+#' # other models get no thinking, with a message. The bedrock-converse adapter does not request
+#' # prompt caching, so each request sends the full prompt at the uncached rate.
 #' gptr_provider("gateway", api = "bedrock-converse", base_url = "https://ai.corp.example/awsai",
 #'               auth = "AWS_SECRET_ACCESS_KEY", compat = list(region = "us-west-2"),
 #'               models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE,
-#'                                  reasoning = TRUE,
-#'                                  capabilities = list(adaptive_thinking = TRUE, effort = TRUE))))
+#'                                  reasoning = TRUE, owner = "anthropic",
+#'                                  thinking_effort = TRUE)))
 #' @export
 gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(),
                          type = c("chat", "classifier", "cli"), headers = list(), discover = NULL,

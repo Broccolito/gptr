@@ -739,14 +739,11 @@ catalog_num = function(x) {
   suppressWarnings(as.numeric(x[[1]]))
 }
 
-#' Model capabilities (contract section 4.9 plus forced_tool_choice, IC-71); a model that takes
-#' named effort levels thinks adaptively at the effort it is given unless its data says otherwise
+#' Model capabilities (contract section 4.9 plus forced_tool_choice, IC-71)
 #' @noRd
 model_capabilities = function(e, pinfo) {
-  effort = isTRUE(e[["thinking_effort"]])
   caps = list(mid_system = FALSE, tool_addition = FALSE, images_in_results = FALSE,
-              operator_role = FALSE, adaptive_thinking = effort, effort = effort,
-              forced_tool_choice = TRUE)
+              operator_role = FALSE, forced_tool_choice = TRUE)
   caps = utils::modifyList(caps, pinfo[["capabilities"]] %||% list())
   caps = utils::modifyList(caps, e[["capabilities"]] %||% list())
   lapply(caps, isTRUE)
@@ -774,6 +771,7 @@ model_record = function(e, ctg, provider = NULL) {
   known = function(x) if (rlang::is_bool(x)) x else NA
   record = list(ref = ref, provider = pid, id = id, name = as.character(e[["name"]] %||% id),
        family = as.character(e[["family"]] %||% NA_character_),
+       owner = if (rlang::is_string(e[["owner"]])) e[["owner"]] else NA_character_,
        api = as.character(e[["api"]] %||% p[["api"]] %||% info[["api"]] %||% NA_character_),
        type = type, release_date = as.character(e[["release_date"]] %||% NA_character_),
        context = catalog_num(context), max_output = catalog_num(e[["max_output"]]),
@@ -839,7 +837,8 @@ model_resolve = function(ref, strict = TRUE) {
                "unknown_model", ref = ref, suggestions = sugg)
   }
   rec = model_record(hit$entry, ctg)
-  if (identical(hit$how, "write-in")) {
+  # a CLI route says it when it builds the run, against the list its CLI gave (pcli_write_in())
+  if (identical(hit$how, "write-in") && !identical(rec$type, "cli")) {
     pid = rec$provider
     hint = if (catalog_listable(provider_get(pid))) {
       paste0(" gptr_models(provider = \"", pid, "\", refresh = TRUE) asks ", pid,
@@ -1769,8 +1768,9 @@ catalog_grepl = function(pattern, x) {
 #' or billing access. Failed or expired listings are marked stale and keep the previous models.
 #' Providers other than Ollama with a native model-list API are inventoried before use after
 #' consent, at most once per five minutes in this R process; `refresh = TRUE` bypasses that
-#' cache. A `discover()` callback, such as the `claude` and `codex` command-line catalogs, runs
-#' only with `refresh = TRUE`.
+#' cache. A `discover()` callback runs with `refresh = TRUE`; the `claude-cli` and `codex` routes
+#' also ask their CLI when a run starts after the CLI command changed, and at `/model` when it was
+#' not asked yet.
 #' Copy a `ref` into the
 #' `model` argument of [peter()] to choose that route. Ollama routes require current installed
 #' model evidence before inference; discovery does not pull models. See
@@ -1797,11 +1797,9 @@ catalog_grepl = function(pattern, x) {
 #'   `max_output`, `input_price`, `output_price` (USD per million tokens, selected for today's
 #'   date from the available catalog; `0` for verified local inference, `NA` when unknown),
 #'   `reasoning` (`NA` when unknown), `aliases`, `status`, `availability` (`unknown`,
-#'   `advertised`, `unlisted`, or
-#'   the latter two with ` (stale)`; a `claude-cli` or `codex` `default` row takes that of the
-#'   full id it runs) and `checked_at` (UTC time of the last successful provider listing, `NA`
-#'   when none). Unlisted models remain in the catalog. Catalog prices can be
-#'   stale and are not an account quote.
+#'   `advertised`, `unlisted`, or the latter two with ` (stale)`) and `checked_at` (UTC time of
+#'   the last successful provider listing, `NA` when none). Unlisted models remain in the catalog.
+#'   Catalog prices can be stale and are not an account quote.
 #' @examples
 #' gptr_models("sonnet")
 #' gptr_models(provider = "anthropic")
@@ -1850,14 +1848,9 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   inventory = the$catalog[["inventory"]] %||% list()
   state = lapply(unique(rows$provider), function(pid) {
     entry = inventory[[pid]]
-    p = provider_get(pid)
     entry$stale = !is.null(entry$error) || is.null(entry$checked) ||
       reactor_now() - entry$checked >= 300 ||
-      !identical(entry$route, catalog_inventory_route(p))
-    # a built-in CLI's `default` row is listed as the full id the CLI gets (03 8.4)
-    if (isTRUE(p[["api"]] %in% c("cli-claude", "cli-codex"))) {
-      entry$default = pcli_default_model(p[["api"]])
-    }
+      !identical(entry$route, catalog_inventory_route(provider_get(pid)))
     entry
   })
   names(state) = unique(rows$provider)
@@ -1866,7 +1859,6 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
     entry = state[[pid]]
     if (is.null(entry$checked_at)) return("unknown")
     id = rows$id[[i]]
-    if (identical(id, "default")) id = entry$default %||% id
     # an Ollama name without a tag means :latest, as preflight reads it
     tag = if (identical(pid, "ollama")) function(x) vapply(x, catalog_ollama_tag, "") else identity
     label = if (tag(id) %in% tag(entry$ids)) "advertised" else "unlisted"

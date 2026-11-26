@@ -550,9 +550,8 @@ adp_fixture_model = function(api, dir = NULL, type = "chat") {
            name = "Fixture model", family = "fixture", api = api, type = type,
            release_date = NA_character_, context = 200000, max_output = 8192, reasoning = TRUE,
            thinking_levels = c("off", "low", "medium", "high"), thinking = NULL,
-           thinking_budget = FALSE, sampling = FALSE,
            input = c("text", "image"), tool_call = TRUE, structured_output = TRUE,
-           cache_min = NA_real_,
+           temperature = FALSE, cache_min = NA_real_,
            capabilities = list(mid_system = TRUE, tool_addition = TRUE, images_in_results = TRUE),
            aliases = character(), status = "active", local = TRUE)
   f = if (is.null(dir)) "" else file.path(dir, "model.json")
@@ -799,14 +798,21 @@ adp_model_cap = function(model, name, default = FALSE) {
   if (is.null(v) || length(v) != 1L || is.na(v)) default else v
 }
 
-#' The temperature a request may carry, or NULL: only for a model whose data accepts sampling
-#' parameters, and for a reasoning model only with its thinking off (conservative: GPT-6.2
-#' refuses them, Gemini 3 asks for the default)
+#' The temperature a request may carry, or NULL: only for a model whose data accepts it
+#' (`temperature = TRUE`; unknown is no), and for a reasoning model only with its thinking off
+#' (conservative: GPT-6.2 refuses it, Gemini 3 asks for the default)
 #' @noRd
 adp_temperature = function(model, params) {
-  ok = isTRUE(adp_model_cap(model, "sampling")) &&
+  ok = isTRUE(model[["temperature"]]) &&
     (!isTRUE(model$reasoning) || identical(params$thinking, "off"))
   if (ok) params$temperature
+}
+
+#' Does the model think within a token budget rather than at named effort levels? Its data gives
+#' a `thinking_budget`; a model that also takes effort names gets the effort (D-393)
+#' @noRd
+adp_budget_thinking = function(model) {
+  !is.null(model[["thinking_budget"]]) && !isTRUE(model[["thinking_effort"]])
 }
 
 #' Does the model take image input? (images are otherwise replaced by a one-line note)
@@ -1208,7 +1214,7 @@ anthropic_thinking = function(model, params) {
   level = params$thinking
   if (identical(level, "off")) {
     if ("off" %in% unlist(model$thinking_levels)) out$thinking = list(type = "disabled")
-  } else if (!isTRUE(adp_model_cap(model, "thinking_budget"))) {
+  } else if (!adp_budget_thinking(model)) {
     out$thinking = list(type = "adaptive",
                         display = if (gptr_has_human()) "summarized" else "omitted")
     out$effort = params$effort %||% level

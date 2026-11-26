@@ -494,11 +494,11 @@ test_that("sampling parameters only where the model's data accepts them (D-395)"
                      thinking_levels = c("low", "medium", "high", "xhigh", "max"))
   expect_null(sent(sol62, "high"))
   expect_null(sent(test_model(api, reasoning = FALSE), NULL))
-  sol6 = test_model(api, id = "gpt-6-sol", sampling = TRUE,
+  sol6 = test_model(api, id = "gpt-6-sol", temperature = TRUE,
                     thinking_levels = c("off", "low", "medium", "high", "xhigh", "max"))
   expect_null(sent(sol6, "high"))
   expect_identical(sent(sol6, "off"), 0.2)
-  expect_identical(sent(test_model(api, reasoning = FALSE, sampling = TRUE), NULL), 0.2)
+  expect_identical(sent(test_model(api, reasoning = FALSE, temperature = TRUE), NULL), 0.2)
 })
 
 test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", {

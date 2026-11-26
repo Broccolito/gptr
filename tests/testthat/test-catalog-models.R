@@ -321,7 +321,8 @@ test_that("discovered CLI ids cannot redirect declared model aliases", {
 test_that("a model record has every contract field (04 section 4.9)", {
   local_catalog()
   r = model_resolve("sonnet")
-  expect_named(r, c("ref", "provider", "id", "name", "family", "api", "type", "release_date",
+  expect_named(r, c("ref", "provider", "id", "name", "family", "owner", "api", "type",
+                    "release_date",
                     "context", "max_output", "reasoning", "thinking_levels", "thinking",
                     "thinking_effort", "thinking_budget", "input", "tool_call",
                     "structured_output", "temperature", "prices", "cache_min", "max_images",
@@ -334,8 +335,7 @@ test_that("a model record has every contract field (04 section 4.9)", {
   expect_equal(r$cache_min, 512)
   expect_equal(r$max_images, 600)
   expect_named(r$capabilities, c("mid_system", "tool_addition", "images_in_results",
-                                 "operator_role", "adaptive_thinking", "effort",
-                                 "forced_tool_choice"))
+                                 "operator_role", "forced_tool_choice"))
   expect_false(r$capabilities$forced_tool_choice)
   expect_true(model_resolve("openai/gpt-6.1-sol")$capabilities$forced_tool_choice)
   expect_equal(r$thinking_levels, c("low", "medium", "high", "xhigh", "max"))
@@ -344,15 +344,13 @@ test_that("a model record has every contract field (04 section 4.9)", {
   # request-shape data the adapters read; unknown when the catalog has none (D-393)
   expect_identical(c(r$thinking_effort, r$temperature), c(NA, NA))
   expect_null(r$thinking_budget)
-  expect_false(r$capabilities$adaptive_thinking)
   local_settings(providers = list(anthropic = list(models = list(list(
     id = "claude-sonnet-5-5", thinking_effort = TRUE, temperature = FALSE,
-    thinking_budget = list(min = 1024))))))
+    thinking_budget = list(min = 1024), owner = "anthropic")))))
   r = model_resolve("sonnet")
   expect_identical(c(r$thinking_effort, r$temperature), c(TRUE, FALSE))
   expect_equal(r$thinking_budget, list(min = 1024))
-  # a model that takes named effort levels thinks adaptively, unless its data says otherwise
-  expect_true(r$capabilities$adaptive_thinking && r$capabilities$effort)
+  expect_identical(r$owner, "anthropic")
 })
 
 test_that("a thinking suffix the model lacks is announced with the level used (D-250)", {
@@ -429,8 +427,10 @@ test_that("an id the catalog lacks is written in once, with conservative capabil
                    list(id = "llama-x", thinking = "off"))
   expect_identical(model_resolve("typesafe/jev-1.99.0")$type, "classifier")
   expect_false(model_resolve("typesafe/jev-1.99.0")$tool_call)
-  # a CLI route takes any id its CLI accepts (a router's or a local model's name)
-  cli = model_resolve("codex/kimi-k3:cloud")
+  # a CLI route takes any id its CLI accepts (a router's or a local model's name), and says so
+  # when it builds the run, against its CLI's list (pcli_write_in())
+  withr::local_options(gptr.quiet = FALSE)
+  cli = expect_no_message(model_resolve("codex/kimi-k3:cloud"))
   expect_identical(c(cli$id, cli$api, cli$type), c("kimi-k3:cloud", "cli-codex", "cli"))
   expect_true(cli$tool_call)
 })

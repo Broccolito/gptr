@@ -523,7 +523,7 @@ test_that("named levels get adaptive thinking and effort; a budget model an enab
                                      list())$body)
   expect_equal(body$thinking, list(type = "adaptive", display = "omitted"))
   expect_identical(body$output_config$effort, "high")
-  haiku = test_model(api, id = "claude-haiku-4-5", max_output = 64000, thinking_budget = TRUE,
+  haiku = test_model(api, id = "claude-haiku-4-5", max_output = 64000, thinking_budget = list(),
                      thinking_levels = c("off", "minimal", "low", "medium", "high"))
   req = anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
                                            params = list(thinking = "medium", max_tokens = 4096L)),
@@ -541,7 +541,7 @@ test_that("named levels get adaptive thinking and effort; a budget model an enab
   expect_lt(body$thinking$budget_tokens, body$max_tokens)
   # API version 2026-10-21 refuses temperature, top_p and top_k on every model, even sampling
   # ones (https://platform.claude.com/docs/en/api/migration-2026-10-21)
-  for (m in list(test_model(api), haiku, test_model(api, reasoning = FALSE, sampling = TRUE))) {
+  for (m in list(test_model(api), haiku, test_model(api, reasoning = FALSE, temperature = TRUE))) {
     for (th in list("off", NULL)) {
       body = json_decode(anthropic_build(m, ctx_fixture(list(msg_user("hi")),
                                                         params = list(thinking = th,
@@ -737,7 +737,7 @@ test_that("provider headers never repeat an adapter header: betas join, the adap
                   local = TRUE, offline = TRUE)
   }
   haiku = test_model(api, id = "claude-haiku-4-5", provider = "p12-beta", max_output = 64000,
-                     thinking_budget = TRUE)
+                     thinking_budget = list())
   ctx = ctx_fixture(list(msg_user("hi")), params = list(thinking = "medium"))
   tok = fake_handle("ANTHROPIC_AUTH_TOKEN")
   p = rec(`anthropic-beta` = "context-1m-2025-08-07, interleaved-thinking-2025-05-14",
@@ -771,7 +771,7 @@ test_that("a budget model without room for the minimum budget sends no thinking 
   skip_on_cran()
   # the API needs 1024 <= budget_tokens < max_tokens
   haiku = test_model(api, id = "claude-haiku-4-5", max_output = 1024,
-                     thinking_budget = TRUE)
+                     thinking_budget = list())
   req = anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
                                            params = list(thinking = "high", max_tokens = 800L)),
                         list())

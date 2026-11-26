@@ -271,7 +271,7 @@ test_that("model helpers: thinking style from the model's data, never its id; si
   for (id in c("gemini-4-neon", "gemini-2.5-pro", "my-gemini-tune")) {
     expect_true(google_levels(test_model(api, provider = "google", id = id)), label = id)
     expect_false(google_levels(test_model(api, provider = "google", id = id,
-                                          thinking_budget = TRUE)), label = id)
+                                          thinking_budget = list())), label = id)
   }
   expect_false(google_levels(test_model(api, reasoning = FALSE)))
   expect_true(google_valid_sig("CiQBjz1rX3NpZ0NhbGw="))
@@ -382,7 +382,7 @@ test_that("tool-result images ride in functionResponse.parts on a level model (0
                                   list())$body)
   fr = body$contents[[3L]]$parts[[1L]]$functionResponse
   expect_identical(fr$parts[[1L]]$inlineData$data, png_b64())
-  old = test_model(api, provider = "google", id = "gemini-2.5-flash", thinking_budget = TRUE)
+  old = test_model(api, provider = "google", id = "gemini-2.5-flash", thinking_budget = list())
   body = json_decode(google_build(old, ctx_fixture(list(msg_user("plot"), asst, res)),
                                   list())$body)
   expect_identical(body$contents[[4L]]$parts[[1L]]$text, "Tool result image:")
@@ -408,7 +408,7 @@ test_that("thinking levels and budgets come from the model's data, forced calls 
   lite = test_model(api, provider = "google", id = "gemini-3.5-flash-lite",
                     thinking_levels = c("high", "minimal", "low", "medium"))
   expect_equal(config(lite, "off"), list(thinkingLevel = "MINIMAL"))
-  g25 = test_model(api, provider = "google", id = "gemini-2.5-flash", thinking_budget = TRUE,
+  g25 = test_model(api, provider = "google", id = "gemini-2.5-flash", thinking_budget = list(),
                    thinking_levels = c("off", "minimal", "low", "medium", "high"))
   expect_equal(config(g25, "medium"), list(includeThoughts = TRUE, thinkingBudget = 8192L))
   expect_equal(config(g25, "off"), list(thinkingBudget = 0L))
@@ -421,9 +421,9 @@ test_that("thinking levels and budgets come from the model's data, forced calls 
   }
   expect_null(temp(neon))
   expect_null(temp(test_model(api, reasoning = FALSE)))
-  expect_null(temp(test_model(api, sampling = TRUE)))
-  expect_identical(temp(test_model(api, sampling = TRUE), "off"), 0.2)
-  expect_identical(temp(test_model(api, reasoning = FALSE, sampling = TRUE)), 0.2)
+  expect_null(temp(test_model(api, temperature = TRUE)))
+  expect_identical(temp(test_model(api, temperature = TRUE), "off"), 0.2)
+  expect_identical(temp(test_model(api, reasoning = FALSE, temperature = TRUE)), 0.2)
   g3 = test_model(api, provider = "google", id = "gemini-3.8-flash")
   forced = list(tool_choice = list(type = "tool", name = "read"))
   body = json_decode(google_build(g3, ctx_fixture(list(msg_user("x")), params = forced),
@@ -538,7 +538,7 @@ test_that("a text-only model gets the omission note in the tool output, no image
                        provider = "google", model = "gemini-3.8-flash", stop_reason = "tool_use")
   drawn = msg_tool_result("fc_1", "r", list(block_text("drawn"), block_image(png_b64())))
   only = msg_tool_result("fc_1", "r", list(block_image(png_b64())))
-  for (budget in c(FALSE, TRUE)) {
+  for (budget in list(NULL, list())) {
     model = test_model(api, provider = "google", id = "gemini-3.8-flash", input = "text",
                        thinking_budget = budget)
     for (case in list(list(res = drawn, out = paste0("drawn\n", note)),

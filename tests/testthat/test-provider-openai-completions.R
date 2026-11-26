@@ -607,7 +607,7 @@ test_that("reasoning fields and temperature follow each model's data (D-393, D-3
   router = function(...) test_model(api, provider = "openrouter", id = "vendor/model", ...)
   expect_equal(body_of(router(thinking_levels = c("low", "high", "xhigh")), "xhigh")$reasoning,
                list(effort = "xhigh"))
-  expect_equal(body_of(router(thinking_budget = TRUE), "medium")$reasoning,
+  expect_equal(body_of(router(thinking_budget = list()), "medium")$reasoning,
                list(max_tokens = 8192L))
   expect_null(body_of(router(thinking_levels = c("low", "high")), "off")$reasoning)
   expect_equal(body_of(router(), "off")$reasoning, list(effort = "none"))
@@ -622,10 +622,10 @@ test_that("reasoning fields and temperature follow each model's data (D-393, D-3
   expect_identical(body_of(vl, "off")$reasoning_effort, "none")
   # temperature only where the data accepts sampling, to a thinking model only with thinking off
   expect_null(body_of(grok, "high", 0.2)$temperature)
-  expect_null(body_of(test_model(api, sampling = TRUE), "high", 0.2)$temperature)
-  expect_identical(body_of(test_model(api, sampling = TRUE), "off", 0.2)$temperature, 0.2)
+  expect_null(body_of(test_model(api, temperature = TRUE), "high", 0.2)$temperature)
+  expect_identical(body_of(test_model(api, temperature = TRUE), "off", 0.2)$temperature, 0.2)
   expect_null(body_of(test_model(api, reasoning = FALSE), NULL, 0.2)$temperature)
-  expect_identical(body_of(test_model(api, reasoning = FALSE, sampling = TRUE), NULL,
+  expect_identical(body_of(test_model(api, reasoning = FALSE, temperature = TRUE), NULL,
                            0.2)$temperature, 0.2)
 })
 
@@ -891,7 +891,7 @@ test_that("a resolved model whose record omits tool_call gets no tools (P05, IC-
                                     models = list(list(id = "corp-large"),
                                                   list(id = "corp-tools", tool_call = TRUE))))
   withr::defer(off())
-  for (ref in c("p12-resolve/corp-large", "lmstudio/qwen3-coder")) {
+  for (ref in c("p12-resolve/corp-large", "lmstudio/my-local-coder")) {
     m = model_resolve(ref)
     expect_false(m$tool_call)
     body = json_decode(completions_build(m, ctx_fixture(completions_turn2(m)), list())$body)

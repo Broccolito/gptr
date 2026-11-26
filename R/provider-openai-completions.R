@@ -559,7 +559,7 @@ completions_thinking = function(head, model, params, compat) {
   eff = params$effort %||% (if (on) level else NULL)
   fmt = compat$thinking_format %||% "openai"
   if (fmt == "openrouter") {
-    if (on && isTRUE(adp_model_cap(model, "thinking_budget"))) {
+    if (on && adp_budget_thinking(model)) {
       head$reasoning = list(max_tokens = adp_budget(level))
     } else if (on || none) {
       head$reasoning = list(effort = if (on) eff else "none")
