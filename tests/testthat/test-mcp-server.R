@@ -1054,3 +1054,18 @@ test_that("gptr_mcp_serve() validates its arguments and is refused from model co
   })
   expect_error(gptr_mcp_serve(envir = new.env()), class = "gptr_error_permission")
 })
+
+test_that("served R in mode auto refuses an outside delete when HOME is missing (S6)", {
+  skip_on_cran()
+  local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  victim = file.path(out, "canary.txt")
+  writeLines("canary", victim)
+  idle = local_served_session("auto")
+  withr::local_envvar(HOME = file.path(out, "no-home"))
+  res = expect_no_warning(mcp_dispatch_local(r_call(sprintf("unlink('%s')", victim)),
+                                             idle$session))$result
+  expect_true(res$isError)
+  expect_match(res$content[[1L]]$text, "a critical action (level 4)", fixed = TRUE)
+  expect_true(file.exists(victim))
+})

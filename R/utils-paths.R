@@ -154,7 +154,7 @@ gptr_user_dir = function(which = c("config", "cache", "data"), create = FALSE) {
                                          "XDG_DATA_HOME", "APPDATA", "LOCALAPPDATA")))
   kept = the$user_dir[[which]]
   if (!identical(kept$key, key)) {
-    kept = list(key = key, dir = tools::R_user_dir("gptr", which))
+    kept = list(key = key, dir = suppressWarnings(tools::R_user_dir("gptr", which)))
     the$user_dir[[which]] = kept
   }
   dir = kept$dir
@@ -485,7 +485,7 @@ path_class_context = function(root) {
     root_key = path_key(root),
     home_key = path_key(home),
     temp_key = path_key(tempdir()),
-    config_key = path_key(tools::R_user_dir("gptr", "config")),
+    config_key = path_key(gptr_user_dir("config")),
     control_files = path_key(c(
       env_target("R_PROFILE_USER", file.path(home, ".Rprofile")),
       env_target("R_ENVIRON_USER", file.path(home, ".Renviron")),

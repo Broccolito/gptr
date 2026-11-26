@@ -194,11 +194,12 @@ risk_lookup = function(fn, pkg = NA_character_, tab = risk_table("functions")) {
 
 # ---- flag rows (plan Task 2) -----------------------------------------------------------------
 
-#' path_class() that never fails: NA, a non-string or a path R cannot translate is "unknown"
+#' path_class() that never fails: NA, a non-string or a path R cannot translate is "unknown"; a
+#' warning never lowers a class (a missing HOME made R_user_dir() warn and deletes level 3, S6)
 #' @noRd
 risk_path_class = function(path, root = project_root()) {
   if (!is.character(path) || length(path) != 1L || is.na(path)) return("unknown")
-  tryCatch(path_class(path, root), error = function(e) "unknown", warning = function(w) "unknown")
+  tryCatch(suppressWarnings(path_class(path, root)), error = function(e) "unknown")
 }
 
 #' An empty flags data frame
@@ -267,7 +268,7 @@ risk_wipe_class = function(p, root) {
   if (up(c(root, user_home())) || grepl("^(/|[A-Za-z]:/)[^/]*\\z", key, perl = TRUE)) {
     return("critical")
   }
-  if (up(c(tools::R_user_dir("gptr", "config"), file.path(user_home(), ".R", "Makevars")))) {
+  if (up(c(gptr_user_dir("config"), file.path(user_home(), ".R", "Makevars")))) {
     return("control")
   }
   NA_character_

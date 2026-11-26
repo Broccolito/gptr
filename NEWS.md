@@ -1,5 +1,13 @@
 # gptr 1.3.0
 
+## Permissions
+
+* A path's class no longer drops when R warns while gptr reads it. With `HOME` naming a folder
+  that does not exist (a container, a service account, a CI runner), `tools::R_user_dir()` warns,
+  and gptr read every literal path as "unknown": deleting a file outside the project, `.git` or
+  `.env`, or writing gptr's settings, was level 3 instead of 4, so `"auto"` and `"yolo"` ran them
+  without asking (gptr 1.0.0 to 1.2.0). Found by an end-to-end test of gptr Agent.
+
 ## Serving R to local agents
 
 * gptr Agent, the bridge that lets an agent outside R work in a served session, now lives in
