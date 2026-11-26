@@ -37,7 +37,7 @@ Decisions taken with the maintainer:
 | PR #125 (`claude/v1.3.0` -> `main`) | draft, Auto-fix on. CI was running at `87d9550b` at the pause. Merge only on the maintainer's word. |
 | PR #126 (compact calls -> `claude/v1.3.0`) | MERGED after a 50/50 green CI. The remote branch was auto-deleted. |
 | PR #127 (models -> `claude/v1.3.0`) | draft, Auto-fix on, opened at the pause. Head `5674b3c4` = the P36 review fixes `86a2c3d8` plus a merge of `claude/v1.3.0`, after a clean resolution of the NEWS/DEVIATIONS/index conflicts. Merge it into `claude/v1.3.0` when CI is green, as was done for #126. |
-| P36 review fixes | `86a2c3d8` (workflow `wf_ddae1aea-e76`): write-ins pass as written (`model_near()` only suggests), the Codex provider-key allowlist, the Claude probe with `--tools ""` and `--disable-slash-commands`, the write-in notice before discovery, the D-390 wording, and the Ollama `:cloud` exception in D-393. Filtered suite 9,998 expectations, 0 failed, no lints. Its independent Sonnet check was still running at the pause; its result is in the workflow journal. |
+| P36 review fixes | `86a2c3d8` (workflow `wf_ddae1aea-e76`): write-ins pass as written (`model_near()` only suggests), the Codex provider-key allowlist, the Claude probe with `--tools ""` and `--disable-slash-commands`, the write-in notice before discovery, the D-390 wording, and the Ollama `:cloud` exception in D-393. Filtered suite 9,998 expectations, 0 failed, no lints. The independent Sonnet check passed with 13,521 tests (catalog, CLI, provider, console, config, model, perm and MCP filters), 0 failed, no lints. `model_resolve("openai/gpt-6")` is a write-in with one notice, and `sonnet` and `gemini` resolve to catalog models. |
 | Broccolito/GptrAgent | archived; README points to gptr. |
 | gptr main | `0280d953` (1.2.0, not on CRAN; CRAN has 1.1.0). |
 
@@ -114,7 +114,7 @@ Decisions taken with the maintainer:
 1. **Land P36.** Wait for PR #127's CI. If green, mark it ready and merge it into
    `claude/v1.3.0`, then pull. The check agent's verdict on `86a2c3d8` is in
    `~/.claude/projects/-Users-wgu-Desktop-gptr--claude-worktrees-gptr-biorouter-bridge-coord-2d1eed/c42cee05-e50f-4ed0-bb1d-632cecd22044/subagents/workflows/wf_ddae1aea-e76/journal.jsonl`.
-   Read it, and fix anything it failed before merging.
+   It passed.
 2. **Models live checks still open.** Run `/model` listing and a write-in in a terminal pty;
    RStudio only if the maintainer grants access. Live provider calls with `GPTR_LIVE_TESTS=true`
    were not run; keep the cost small and load keys only via `gptr_env()`.
@@ -158,7 +158,7 @@ Scripts are copied in `dev/progress/workflows-2026-11-26/` (the originals are in
 | gptr-compact-rstudio (`wf_28ccd010-dda`) | RStudio live check | 1 Sonnet | blocked: access declined |
 | gptr-models-research (`wf_e12801fc-cbe`) | CLI native discovery, gptr machinery, 3 provider surveys | 6 (Sonnet) | done; notes in `/private/tmp/claude-501/models-research.txt` |
 | gptr-models-build (`wf_d11e483b-e19`) | P36 implement (cli, catalog, providers), integrate, document, verify | 3 Opus (worktree) -> integrator -> docs -> 3 Sonnet | done (`cffee0a1`) |
-| gptr-models-fix (`wf_ddae1aea-e76`) | P36 review fixes | 1 Opus (worktree) + 1 Sonnet | fix done (`86a2c3d8`), check running at the pause |
+| gptr-models-fix (`wf_ddae1aea-e76`) | P36 review fixes | 1 Opus (worktree) + 1 Sonnet | done (`86a2c3d8`; check passed, 13,521 tests) |
 
 Patterns that worked (keep them):
 - **Isolated worktrees.** Implementers run in isolated worktrees (`isolation: 'worktree'`) and
