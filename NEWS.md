@@ -1,5 +1,14 @@
 # gptr 1.3.0
 
+## Serving R to local agents
+
+* An outside agent's R calls are recorded. A served `r` or `inspect` call that ran outside a
+  Peter turn is recorded on the server's session, as Peter's are (of a call that stopped
+  part-way, the expressions that ran; nothing in plan mode or for a refused call), so it persists
+  with the session and `gptr_last() |> peter()` continues after it. While `gptr_doc()` binds a
+  document, the call is also written into it as a direct R line, so `gptr_export()` turns the
+  agent's work into a runnable R script; an `inspect` call is left out unless it changed objects.
+
 # gptr 1.2.0
 
 Agents on the same computer can find a served R session by themselves and work in it with a

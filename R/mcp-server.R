@@ -338,7 +338,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   }, add = TRUE)
   res = if (identical(tool, "r")) {
     call$approved_level = as.integer(call$risk$level %||% 2L)
-    mcp_serve_r(call, env, run, s, ctx)
+    mcp_serve_r(call, env, run, s, ctx, inspect = identical(name, "inspect"))
   } else if (is.null(st)) {
     # nothing follows the tool here (no checkpoint tokens): forget at this frame's exit
     on.exit(env_size_forget(call, env), add = TRUE)
@@ -369,9 +369,12 @@ mcp_inspect_refusal = function(name, risk, st = NULL) {
 #' dispatch_nested() as the loop's `r` calls do; with no pump the idle gate
 #' decides each first (the marker's `gate`, mcp_nested_gate()). During a run its plots are drawn
 #' and its printed output shown as the loop's `r` tool does ("auto", tee for a depth-0 run with a
-#' human; P28 Task 31), else offscreen and silent (#42).
+#' human; P28 Task 31), else offscreen and silent (#42). A call that ran records a `gptr.mcp_r`
+#' entry where mcp_r_recording() says so; `inspect` is history but not code unless it changed
+#' objects, as the r tool's `record = false` (IC-48). With no run, a gptr_doc() binding gets it as
+#' the console's direct R line (console:direct, D-373).
 #' @noRd
-mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
+mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL, inspect = FALSE) {
   input = call$input
   .gptr_tool_run = run
   force(.gptr_tool_run)
@@ -401,13 +404,19 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
   res$images = c(res$images, gptr_r_call$images)
   ok = identical(res$status, "ok")
   if (record && (ok || isTRUE(res$n_done > 0L)) && mcp_r_recording(run, session)) {
-    data = list(code = input$code, record = TRUE, status = res$status,
-                outputs = r_doc_outputs(res))
+    data = list(code = input$code, record = !inspect || length(unlist(res$changes$objects)) > 0L,
+                status = res$status, outputs = r_doc_outputs(res))
     # a call that stopped part-way records what ran (doc_ran_part())
     if (!ok) data$n_done = as.integer(res$n_done)
     # what gptr_return() designated, as the r tool's details$value (doc_turn_r())
     data$value = r_new_value_name(session, n_values)
     session_append(session, list(type = "custom", custom_type = "gptr.mcp_r", data = data))
+    if (is.null(run) && data$record && !is.null(the$doc_binding$path)) {
+      ev_dispatch("console:direct", list(data = list(
+        code = input$code, status = res$status, n_done = data$n_done,
+        output = as.character(unlist(utils::head(res$outputs, res$n_done))),
+        created = as.character(res$changes$objects$added))), session = session)
+    }
   }
   out = format_eval_result(res, budget)
   err = Filter(function(e) identical(e$type, "error"), res$events %||% list())
@@ -452,10 +461,12 @@ mcp_nested_gate = function(name, input, ctx, sid = NULL, outer = NULL) {
   invisible(NULL)
 }
 
-#' Only the exact active token-owned run's document receives native R history. Standalone MCP
-#' calls, non-recording calls and plan/aborted/settled runs keep their existing behavior.
+#' Does a served r call record on `session`? With no run, outside plan mode (D-373); in a run, only
+#' the exact active token-owned run that records into a document and is not in plan mode, aborted
+#' or settled
 #' @noRd
 mcp_r_recording = function(run, session) {
+  if (is.null(run)) return(!is.null(session) && !identical(session_data(session)$mode, "plan"))
   inherits(run, "gptr_run") && !is.null(session) && identical(run$shell, session) &&
     identical(run$session, session_data(session)$id) &&
     identical(session_live(session)$run, run) && !is.null(run$opts$doc$path) &&
@@ -796,6 +807,11 @@ mcp_handle_new = function(st, tok, stop) {
 #' gptr session whose permission mode is `mode`, or the configured default when the server
 #' starts, independently of a chat's explicit mode; like any new session, it becomes
 #' [gptr_last()]. A running server keeps its original workspace and mode until stopped.
+#' An `r` or `inspect` call that ran is recorded on that session (of a call that stopped part-way,
+#' the expressions that ran; nothing in plan mode), so it persists with the session and
+#' `gptr_last() |> peter()` continues after it. While [gptr_doc()] binds a document, the call is
+#' also written there as a direct R line (`# direct R (no model)`), which [gptr_export()] keeps as
+#' runnable R; an `inspect` call that changed no object is inspection and is left out.
 #' Requests are answered at R's top-level idle prompt or during an outermost gptr wait. Serving
 #' pauses while Peter's own prompt waits (in every console), while other R code runs and during a
 #' nested tool wait. Where R has no idle prompt (Rscript, knitr, Quarto, or a Jupyter kernel
