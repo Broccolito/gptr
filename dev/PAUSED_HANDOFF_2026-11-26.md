@@ -33,10 +33,10 @@ Decisions taken with the maintainer:
 
 | Item | State |
 |---|---|
-| `claude/v1.3.0` | `87d9550b` and later, pushed: P34 (bridge, plugins, recording, CI and release workflow, docs), the S6 permission fix `25fcd26c`, P35 (PR #126), this handoff, and a timing-test fix (`87d9550b`: proc-spawn bound 0.1 s, best of five; macOS CI had measured 0.080 against `< 0.08`). CI was all green at `aea0d3fb`. |
+| `claude/v1.3.0` | the head after `c7a9fa0b`, pushed: ALL THREE campaigns, namely P34 (bridge, plugins, recording, CI and release workflow, docs), the S6 permission fix `25fcd26c`, P35 (PR #126), P36 (PR #127, merged `c7a9fa0b` after a 50/50 green CI), the timing-test fix `87d9550b` and this handoff. The R checks were last fully green at `aea0d3fb` (before P36). The merged head's CI starts with the next push or run. |
 | PR #125 (`claude/v1.3.0` -> `main`) | draft, Auto-fix on. CI was running at `87d9550b` at the pause. Merge only on the maintainer's word. |
 | PR #126 (compact calls -> `claude/v1.3.0`) | MERGED after a 50/50 green CI. The remote branch was auto-deleted. |
-| PR #127 (models -> `claude/v1.3.0`) | draft, Auto-fix on, opened at the pause. Head `5674b3c4` = the P36 review fixes `86a2c3d8` plus a merge of `claude/v1.3.0`, after a clean resolution of the NEWS/DEVIATIONS/index conflicts. Merge it into `claude/v1.3.0` when CI is green, as was done for #126. |
+| PR #127 (models -> `claude/v1.3.0`) | MERGED (`c7a9fa0b`) after a 50/50 green CI at `a01b4e1a`. |
 | PR #127 CI | the first run at `5674b3c4` failed: (a) `test-subagent-backends.R:972`, a stale expectation that `claude_code/sonnet` resolves to `claude-sonnet-5-5`, which only the removed fuzzy matcher did. Fixed in `a01b4e1a` (a CLI's own alias passes as written; 330 pass locally). (b) Windows `test-artifact-app.R:527`: "The artifact test child did not settle in 0.3 s", a timing flake in a file P36 does not touch. If it recurs, fix its timing at the root (memory `gptr-release-branch`: never accept a known failure). CI reran at `a01b4e1a` at the pause. |
 | P36 review fixes | `86a2c3d8` (workflow `wf_ddae1aea-e76`): write-ins pass as written (`model_near()` only suggests), the Codex provider-key allowlist, the Claude probe with `--tools ""` and `--disable-slash-commands`, the write-in notice before discovery, the D-390 wording, and the Ollama `:cloud` exception in D-393. Filtered suite 9,998 expectations, 0 failed, no lints. The independent Sonnet check passed with 13,521 tests (catalog, CLI, provider, console, config, model, perm and MCP filters), 0 failed, no lints. `model_resolve("openai/gpt-6")` is a write-in with one notice, and `sonnet` and `gemini` resolve to catalog models. |
 | Broccolito/GptrAgent | archived; README points to gptr. |
@@ -112,10 +112,8 @@ Decisions taken with the maintainer:
 
 ## 4. What remains, in order
 
-1. **Land P36.** Wait for PR #127's CI. If green, mark it ready and merge it into
-   `claude/v1.3.0`, then pull. The check agent's verdict on `86a2c3d8` is in
-   `~/.claude/projects/-Users-wgu-Desktop-gptr--claude-worktrees-gptr-biorouter-bridge-coord-2d1eed/c42cee05-e50f-4ed0-bb1d-632cecd22044/subagents/workflows/wf_ddae1aea-e76/journal.jsonl`.
-   It passed.
+1. **Confirm CI on PR #125 at the merged head.** P36 has landed. If no run is going, start one
+   (`gh workflow run` or an empty commit) and let Auto-fix report. Fix any failure at its root.
 2. **Models live checks still open.** Run `/model` listing and a write-in in a terminal pty;
    RStudio only if the maintainer grants access. Live provider calls with `GPTR_LIVE_TESTS=true`
    were not run; keep the cost small and load keys only via `gptr_env()`.
