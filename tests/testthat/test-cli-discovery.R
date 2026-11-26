@@ -1,154 +1,249 @@
 source(testthat::test_path("fixtures", "cli", "local-fake-cli.R"), local = TRUE)
 
-test_that("Codex discovery reads its CLI catalog without starting a turn", {
-  calls = list()
-  local_mocked_bindings(pcli_find = function(cli) structure("codex", cli = cli),
-    pcli_run = function(cmd, args, timeout = 30) {
-      calls[[length(calls) + 1L]] <<- args
-      output = if ("--help" %in% args) {
-        "Render the raw model catalog as JSON"
-      } else {
-        json_encode(list(models = list(list(slug = "fresh-model", display_name = "Fresh model",
-          visibility = "list", input_modalities = list("text", "image"),
-          supported_reasoning_levels = list(list(effort = "high"))),
-          list(slug = "other-model", display_name = "Other", visibility = "list"),
-          list(slug = "hidden", visibility = "hide"))))
-      }
-      list(status = 0L, stdout = output, stderr = "")
-    })
-  models = pcli_discover_models("codex")
-  expect_identical(vapply(models, function(m) m$id, ""), c("fresh-model", "other-model"))
-  expect_identical(models[[1L]]$input, c("text", "image"))
-  expect_identical(models[[1L]]$thinking_levels, "high")
-  expect_true(models[[1L]]$reasoning)
-  expect_null(models[[1L]]$context)
-  expect_null(models[[1L]]$max_output)
-  expect_null(models[[1L]]$tool_call)
-  expect_identical(calls, list(c("debug", "models", "--help"), c("debug", "models")))
+ids_of = function(rows) vapply(rows, function(m) m$id, "")
+
+test_that("Claude discovery asks initialize and get_settings with the user's settings loaded", {
+  talks = local_talks(fixture_lines("claude-discover-text.ndjson"))
+  rows = pcli_discover("claude")
+  p = talks$all[[1L]]
+  expect_identical(vapply(p$sent, function(f) f$request$subtype, ""),
+                   c("initialize", "get_settings"))
+  expect_true(all(vapply(p$sent, function(f) identical(f$type, "control_request"), NA)))
+  expect_identical(p$spawn$args, c("-p", "--input-format", "stream-json", "--output-format",
+                                   "stream-json", "--verbose", "--no-session-persistence",
+                                   "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}'))
+  expect_identical(p$spawn$env, c(PROFILE = "cli-claude"))
+  expect_identical(p$spawn$wd, path_norm(tempdir()))
+  expect_true(p$killed)
+  # the CLI's own `default` selection becomes the route's default row, named after the model the
+  # user's settings start with; the other selections are listed once by their resolved id
+  expect_identical(ids_of(rows), c("default", "vendor-large-3", "vendor-story-3", "vendor-mid-3",
+                                   "vendor-small-3", "vendor-story-2", "vendor-small-2-20250101"))
+  expect_identical(rows[[1L]]$name, "default (vendor-large-3)")
+  expect_identical(rows[[2L]]$name, "Large 3")
+  expect_identical(rows[[2L]]$thinking_levels, c("low", "medium", "high", "xhigh", "max"))
+  expect_identical(rows[[1L]]$thinking_levels, rows[[2L]]$thinking_levels)
+  expect_true(rows[[2L]]$reasoning)
+  expect_null(rows[[7L]]$reasoning)
+  expect_null(rows[[7L]]$thinking_levels)
+  expect_null(rows[[2L]]$context)
+  expect_identical(pcli_default_model("cli-claude"), "vendor-large-3")
+  expect_true(all(c("large", "mid", "vendor-mid-3") %in% pcli_discovery("claude")$listed))
 })
 
-test_that("Claude discovery uses only initialize and keeps full ids, never selection aliases", {
-  local_mocked_bindings(pcli_claude_catalog = function(args) {
-    expect_true(all(c("--tools", "--strict-mcp-config", "--setting-sources",
-                      "--disable-slash-commands", "--no-session-persistence") %in% args))
-    expect_false("--model" %in% args)
-    list(models = list(list(value = "sonnet", displayName = "Sonnet",
-      resolvedModel = "claude-new-sonnet", supportsEffort = TRUE,
-      supportedEffortLevels = list("low", "high")),
-      list(value = "claude-haiku-4-5", displayName = "Haiku 4.5"),
-      list(displayName = "No id"),
-      list(value = "opusplan", displayName = "Opus Plan"),
-      list(value = "default", resolvedModel = "default")))
-  })
-  models = pcli_discover_models("claude-cli")
-  expect_identical(vapply(models, function(m) m$id, ""), c("claude-new-sonnet", "claude-haiku-4-5"))
-  expect_null(models[[1L]]$name)
-  expect_identical(models[[2L]]$name, "Haiku 4.5")
-  expect_identical(models[[1L]]$thinking_levels, c("low", "high"))
-  expect_null(models[[1L]]$context)
-  expect_null(models[[1L]]$input)
-  expect_null(pcli_discover_models("other"))
+test_that("a router's ids stay as the CLI reports them; without get_settings initialize decides", {
+  local_talks(fixture_lines("claude-discover-router.ndjson"))
+  rows = pcli_discover("claude")
+  expect_true(all(c("my-local-model[1m]", "foo-local") %in% ids_of(rows)))
+  expect_identical(rows[[1L]]$name, "default (my-local-model[1m])")
+  expect_identical(pcli_default_model("cli-claude"), "my-local-model[1m]")
 })
 
-test_that("missing and failed CLI catalogs are distinct from a successful empty catalog", {
-  local_mocked_bindings(pcli_claude_catalog = function(args) list(models = list()))
-  expect_identical(pcli_discover_models("claude-cli"), list())
-  local_mocked_bindings(pcli_find = function(cli) structure("codex", cli = cli),
-    pcli_run = function(cmd, args, timeout = 30) list(status = 1L, stdout = "secret response"))
-  expect_null(pcli_discover_models("codex"))
+test_that("Codex discovery reads every model/list page and config/read over its app-server", {
+  talks = local_talks(fixture_lines("codex-discover-text.jsonl"))
+  rows = pcli_discover("codex")
+  p = talks$all[[1L]]
+  expect_identical(p$spawn$args, "app-server")
+  expect_identical(p$spawn$env, c(PROFILE = "cli-codex"))
+  expect_identical(vapply(p$sent, function(f) f$method, ""),
+                   c("initialize", "initialized", "model/list", "config/read", "model/list"))
+  expect_identical(p$sent[[1L]]$params$clientInfo$name, "gptr")
+  expect_identical(p$sent[[5L]]$params$cursor, "page-2")
+  expect_true(p$killed)
+  expect_identical(ids_of(rows), c("default", "vendor-pro-6", "vendor-std-6", "vendor-mini-6",
+                                   "vendor-std-5"))
+  # config/read's model is the default, not the list's isDefault one
+  expect_identical(pcli_default_model("cli-codex"), "vendor-std-6")
+  expect_identical(rows[[1L]]$name, "default (vendor-std-6)")
+  expect_identical(rows[[2L]]$name, "VENDOR-PRO-6")
+  expect_identical(rows[[2L]]$input, c("text", "image"))
+  expect_true("ultra" %in% rows[[2L]]$thinking_levels)
+  expect_null(rows[[2L]]$context)
+})
+
+test_that("Codex falls back to debug models; without config/read its isDefault model leads", {
+  talks = local_talks(alive = FALSE)
+  runs = list()
   local_mocked_bindings(pcli_run = function(cmd, args, timeout = 30) {
-    list(status = 0L, stdout = if ("--help" %in% args) "raw model catalog as JSON" else "secret")
+    runs[[length(runs) + 1L]] <<- args
+    list(status = 0L, timed_out = FALSE, stderr = "",
+         stdout = paste(fixture_lines("codex-debug-models.json"), collapse = "\n"))
   })
-  err = expect_error(pcli_discover_models("codex"), class = "gptr_error_provider")
-  expect_false(grepl("secret", conditionMessage(err), fixed = TRUE))
+  rows = pcli_discover("codex")
+  expect_identical(runs, list(c("debug", "models")))
+  expect_identical(ids_of(rows), c("vendor-std-6", "vendor-mini-6"))
+  expect_identical(rows[[1L]]$context, 272000)
+  expect_true(talks$all[[1L]]$killed)
+  expect_null(pcli_default_model("cli-codex"))
+  # an app-server whose config/read fails: the list's isDefault model is the default
+  talks$alive = TRUE
+  talks$lines = c(fixture_lines("codex-discover-text.jsonl")[1:3],
+                  '{"id":"gptr_config","error":{"code":-32603,"message":"no"}}')
+  pcli_discover("codex")
+  expect_identical(pcli_default_model("cli-codex"), "vendor-pro-6")
+  expect_length(runs, 1L)
 })
 
-test_that("Claude catalog sends one initialize frame and always retires its child", {
-  log = new.env(parent = emptyenv())
-  log$sent = character()
-  log$killed = FALSE
-  log$released = FALSE
-  process = new.env(parent = emptyenv())
-  process$write_input = function(text) log$sent = c(log$sent, text)
-  process$poll_io = function(timeout) NULL
-  process$read_error_lines = function() "unretained account diagnostics"
-  process$is_alive = function() TRUE
-  process$read_output_lines = function() {
-    json_encode(list(type = "control_response",
-      response = list(subtype = "success", request_id = "gptr_models",
-                      response = list(models = list(), account = list(secret = "discard")))))
-  }
-  local_mocked_bindings(pcli_find = function(cli) structure("claude", cli = cli),
-    child_env = function(profile, set) character(),
-    proc_spawn = function(...) process,
-    kill_all = function(p, grace) {
-      log$killed = TRUE
-    },
-    proc_release = function(p) {
-      log$released = TRUE
-    })
-  expect_identical(pcli_claude_catalog(character()), list(models = list()))
-  expect_length(log$sent, 1L)
-  frame = json_decode(log$sent[[1L]])
-  expect_identical(frame$type, "control_request")
-  expect_identical(frame$request$subtype, "initialize")
-  expect_identical(frame$request$skills, list())
-  expect_true(log$killed)
-  expect_true(log$released)
-  process$read_output_lines = function() character()
-  process$is_alive = function() FALSE
-  err = expect_error(pcli_claude_catalog(character()), class = "gptr_error_provider")
-  expect_false(grepl("account diagnostics", conditionMessage(err), fixed = TRUE))
+test_that("a CLI that fails, times out or lists nothing is kept apart from a successful list", {
+  talks = local_talks(alive = FALSE)
+  err = expect_error(pcli_discover("claude"), class = "gptr_error_provider")
+  expect_false(grepl("diagnostics", conditionMessage(err), fixed = TRUE))
+  # the failure is kept for this command, so runs do not ask again; nothing is listed
+  hit = pcli_discovery("claude")
+  expect_false(is.null(hit))
+  expect_null(hit$default)
+  expect_null(hit$listed)
+  expect_true(talks$all[[1L]]$killed)
+  # a CLI that never answers is stopped at the time limit
+  talks$alive = TRUE
+  clock = 0
+  local_mocked_bindings(reactor_now = function() {
+    clock <<- clock + 10
+    clock
+  })
+  expect_error(pcli_discover("claude"), class = "gptr_error_provider")
+  expect_true(talks$all[[2L]]$killed)
+  # an empty list is a successful listing of no models
+  talks$lines = c(fixture_lines("codex-discover-text.jsonl")[1L],
+                  '{"id":"gptr_list","result":{"data":[],"nextCursor":null}}',
+                  '{"id":"gptr_config","result":{"config":{"model":null},"origins":{}}}')
+  clock = -1e6
+  expect_identical(pcli_discover("codex"), list())
+  expect_identical(pcli_discovery("codex")$listed, character())
 })
 
-test_that("the Claude catalog waits through the reactor and CLI catalogs run only on refresh", {
-  fired = FALSE
-  timer = reactor_timer(reactor_now() + 0.05, function() fired <<- TRUE)
-  withr::defer(reactor_cancel(timer))
-  reads = 0L
-  process = new.env(parent = emptyenv())
-  process$write_input = function(text) NULL
-  process$poll_io = function(timeout) NULL
-  process$read_error_lines = function() character()
-  process$is_alive = function() TRUE
-  process$read_output_lines = function() {
-    reads <<- reads + 1L
-    if (!fired && reads < 200L) return(character())
-    json_encode(list(type = "control_response", response = list(subtype = "success",
-      request_id = "gptr_models", response = list(models = list()))))
-  }
-  local_mocked_bindings(pcli_find = function(cli) structure("claude", cli = cli),
-    child_env = function(profile, set) character(), proc_spawn = function(...) process,
-    kill_all = function(p, grace) NULL, proc_release = function(p) NULL)
-  expect_identical(pcli_claude_catalog(character()), list(models = list()))
-  expect_true(fired)
-  listed = 0L
-  local_mocked_bindings(check_running = function() FALSE, egress_check = function(...) TRUE,
-    replay_guard = function(...) TRUE, pcli_discover_models = function(provider) {
-      listed <<- listed + 1L
-      list(list(id = "claude-opus-5-5"))
-    })
+test_that("discovery is kept per CLI command, asked again for a new CLI, and on refresh", {
+  stamp = "v1"
+  talks = local_talks(fixture_lines("claude-discover-text.ndjson"))
+  local_mocked_bindings(pcli_cache_key = function(cmd) stamp, check_running = function() FALSE,
+                        egress_check = function(...) TRUE, replay_guard = function(...) TRUE)
   catalog_reset(discovered = TRUE)
   withr::defer(catalog_reset(discovered = TRUE))
-  p = provider_get("claude-cli")
-  expect_null(catalog_inventory(p))
-  expect_identical(listed, 0L)
-  expect_identical(catalog_inventory(p, refresh = TRUE), "claude-opus-5-5")
-  expect_identical(listed, 1L)
+  path = pcli_find("claude")
+  expect_identical(pcli_discovered("claude-cli", path)$default, "vendor-large-3")
+  expect_identical(pcli_discovered("claude-cli", path)$default, "vendor-large-3")
+  expect_length(talks$all, 1L)
+  # the rows reach the catalog: the default is named after its model, the others listed
+  expect_identical(model_resolve("claude-cli/default")$name, "default (vendor-large-3)")
+  expect_identical(model_resolve("claude-cli/vendor-mid-3")$name, "Mid 3")
+  found = gptr_models(provider = "claude-cli")
+  expect_true(all(found$availability == "advertised"))
+  stamp = "v2"
+  expect_null(pcli_discovery("claude", path))
+  expect_identical(pcli_discovered("claude-cli", path)$key, "v2")
+  expect_length(talks$all, 2L)
+  gptr_models(provider = "claude-cli", refresh = TRUE)
+  expect_length(talks$all, 3L)
+  # a provider without discover() (a fake CLI) never asks
+  off = gptr_register(pcli_fake_provider("claude"))
+  withr::defer(off())
+  pcli_cache_clear()
+  expect_null(pcli_discovered("fakeclaude", path))
+  expect_length(talks$all, 3L)
 })
 
-test_that("a CLI route's default row is advertised when the full id it runs is", {
-  local_mocked_bindings(check_running = function() FALSE, egress_check = function(...) TRUE,
-    replay_guard = function(...) TRUE, pcli_discover_models = function(provider) {
-      list(list(id = pcli_default_model(provider_get(provider)$api)))
-    })
+test_that("a run on a CLI route asks its CLI before the first request once its probe passes", {
+  talks = local_talks(fixture_lines("claude-discover-text.ndjson"))
+  probed = TRUE
+  local_mocked_bindings(pcli_probe = function(path) if (probed) list() else stop("bare"),
+                        check_running = function() FALSE, egress_check = function(...) TRUE,
+                        replay_guard = function(...) TRUE)
   catalog_reset(discovered = TRUE)
   withr::defer(catalog_reset(discovered = TRUE))
-  for (pid in c("claude-cli", "codex")) {
-    found = gptr_models(provider = pid, refresh = TRUE)
-    runs = paste0(pid, c("/default", paste0("/", pcli_default_model(provider_get(pid)$api))))
-    expect_identical(found$availability[found$ref %in% runs], c("advertised", "advertised"))
-    expect_true(all(found$availability[!found$ref %in% runs] == "unlisted"))
+  ctx = list(model = function() "claude-cli/default")
+  probed = FALSE
+  pcli_hook_start(list(), ctx)
+  expect_length(talks$all, 0L)
+  probed = TRUE
+  pcli_hook_start(list(), ctx)
+  pcli_hook_start(list(), ctx)
+  expect_length(talks$all, 1L)
+  expect_identical(pcli_default_model("cli-claude"), "vendor-large-3")
+  pcli_hook_start(list(), list(model = function() "fake/fake-1"))
+  expect_length(talks$all, 1L)
+})
+
+test_that("a route's default runs as the CLI's own: its reported model, else no model flag", {
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  default = list(id = "default", api = "cli-claude")
+  expect_null(pcli_model_id(default))
+  expect_false("--model" %in% pcli_claude_args(NULL, "/t/m.json", "/t/s.md"))
+  expect_false("-m" %in% pcli_codex_args(NULL, "/w", "read-only", "/r"))
+  expect_false("-m" %in% pcli_codex_args(NULL, "/w", "read-only", "/r", resume = "t1"))
+  expect_identical(pcli_model_id(list(id = "any-id", api = "cli-claude")), "any-id")
+  local_talks(fixture_lines("claude-discover-text.ndjson"))
+  pcli_discover("claude")
+  expect_identical(pcli_model_id(default), "vendor-large-3")
+})
+
+test_that("a model id the CLI does not list is passed as written, with one notice (D-392)", {
+  withr::local_options(gptr.quiet = FALSE)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  local_talks(fixture_lines("claude-discover-text.ndjson"))
+  local_mocked_bindings(pcli_probe = function(path) list(bare_optout = NULL),
+                        pcli_notice = function(cli) invisible(NULL))
+  model = stub_model("claude", "my-router-model")
+  # nothing listed to compare with: no notice
+  expect_false(pcli_write_in(model, "my-router-model"))
+  pcli_discover("claude")
+  for (listed in c("large", "vendor-mid-3")) expect_false(pcli_write_in(model, listed))
+  ctx = list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Hello")))
+  opts = stub_opts()
+  expect_message({
+    spec = pcli_claude_build(model, ctx, opts)
+  }, paste("The claude CLI does not list the model my-router-model; gptr passes it",
+           "to claude --model as written."), fixed = TRUE)
+  expect_identical(utils::tail(spec$start$args, 2L), c("--model", "my-router-model"))
+  expect_silent(pcli_write_in(model, "my-router-model"))
+  pcli_untrack("s0123456789")
+})
+
+test_that("Codex runs keep the user's model provider through -c, never its credentials", {
+  withr::local_options(gptr.quiet = FALSE)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  local_talks(fixture_lines("codex-discover-custom.jsonl"))
+  local_mocked_bindings(pcli_probe = function(path) list(resume = TRUE),
+                        pcli_notice = function(cli) invisible(NULL))
+  expect_message(pcli_discover("codex"),
+                 "experimental_bearer_token of your Codex model provider lm", fixed = TRUE)
+  route = c("-c", 'model_provider="lm"', "-c", 'openai_base_url="http://127.0.0.1:11434/v1"',
+            "-c", 'model_catalog_json="/home/user/catalog.json"',
+            "-c", paste0('model_providers.lm={"name"="LM","base_url"="http://127.0.0.1:1234/v1",',
+                         '"wire_api"="responses","env_key"="LM_API_KEY",',
+                         '"requires_openai_auth"=false,"stream_max_retries"=3}'))
+  expect_identical(pcli_discovery("codex")$route, route)
+  # the configured model the list lacks is the default, passed as written with the provider
+  ctx = list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Hello")))
+  opts = stub_opts()
+  expect_message({
+    spec = pcli_codex_build(stub_model("codex", "default"), ctx, opts)
+  }, "does not list the model my-local-model", fixed = TRUE)
+  withr::defer(unlink(opts$state$codex_relay, recursive = TRUE))
+  args = spec$start$args
+  i = match("-m", args)
+  expect_identical(args[i + 0:(1L + length(route))], c("-m", "my-local-model", route))
+  expect_false(any(grepl("not-a-secret-test-value", args, fixed = TRUE)))
+  expect_identical(pcli_codex_route(list(model_provider = NULL)), character())
+  expect_identical(pcli_toml_value(list(a = list(), b = list(1L, "x\""), c = NULL)),
+                   '{"a"=[],"b"=[1,"x\\""]}')
+  pcli_untrack("s0123456789")
+})
+
+test_that("a fake CLI process answers the discovery talk and is gone after it", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  for (cli in c("claude", "codex")) {
+    fake = local_fake_cli_path(cli, "text")
+    rows = pcli_discover(cli)
+    expect_identical(rows[[1L]]$id, "default")
+    expect_gt(length(rows), 3L)
+    expect_false(is.null(pcli_default_model(paste0("cli-", cli))))
+    pids = vapply(fake_log(fake, "discover"), function(r) as.integer(r[["pid"]]), 1L)
+    expect_length(pids, 1L)
+    expect_all_dead(pids)
+    expect_length(fake_argv(fake), 0L)
   }
 })
 
@@ -171,6 +266,11 @@ test_that("CLI identity records each request's reports separately from the selec
   other = model
   other$id = "different-request"
   expect_null(pcli_turn_new(other, opts)$response_model)
+  # when gptr selected no model, the CLI's own choice is recorded without a notice
+  pcli_cache_clear()
+  free = pcli_turn_new(stub_model("claude", "default"), stub_opts())
+  expect_silent(pcli_response_model(free, "cli-chosen"))
+  expect_identical(free$response_model, "cli-chosen")
 })
 
 test_that("a CLI notice retains the argument used even if its default changes", {

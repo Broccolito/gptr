@@ -7,7 +7,8 @@
 # 0.157.0; case "old" reports older versions, "bare-default"/"bare-optout" change the claude
 # help, "old"/"noresume" the codex help), logs its argv, pid, environment variable NAMES (never
 # values), stdin lines and the start ("turn") and end ("turn_done") of each claude turn as JSON
-# lines to <log file>.<pid>, and replays
+# lines to <log file>.<pid>, answers a model discovery talk (claude without
+# --system-prompt-file, `codex app-server`) from <fixtures dir>/<cli>-discover-<case>.*, and replays
 # <fixtures dir>/claude-<case>.ndjson or codex-<case>.jsonl line by line. Fixture lines that are
 # JSON objects with a "fake" key are directives:
 #   {"fake":"sleep","seconds":0.5}                       pause
@@ -128,6 +129,34 @@ if ("--help" %in% argv) {
     }
     out(c("Run Codex non-interactively", "", "Usage: codex exec [OPTIONS] [PROMPT] [COMMAND]",
           "", "Commands:", resume, "", "Options:", flags))
+  }
+  quit(save = "no", status = 0L)
+}
+
+# ---- model discovery: claude's control requests with no prompt, `codex app-server` ------------
+# Each request line read on stdin is answered with the next line of
+# <fixtures dir>/<cli>-discover-<case>.(ndjson|jsonl) whose request id (claude's request_id, the
+# JSON-RPC id) is the request's; the lines without one are written first.
+discover = if (identical(opt$cli, "claude")) !("--system-prompt-file" %in% argv) else
+  identical(argv[1L], "app-server")
+if (discover) {
+  log_line("discover", argv = I(argv))
+  ext = if (identical(opt$cli, "claude")) ".ndjson" else ".jsonl"
+  lines = readLines(file.path(opt$dir, paste0(opt$cli, "-discover-", opt$case, ext)),
+                    encoding = "UTF-8", warn = FALSE)
+  key = function(m) if (is.list(m)) if_null(m$request_id, if_null(m$response$request_id, m$id))
+  ids = vapply(lines, function(ln) as.character(if_null(key(from_json(ln)), "")), "")
+  out(lines[!nzchar(ids)])
+  inp = file("stdin", open = "r")
+  repeat {
+    ln = readLines(inp, n = 1L, encoding = "UTF-8", warn = FALSE)
+    if (!length(ln)) break
+    id = as.character(if_null(key(from_json(ln)), ""))
+    hit = which(nzchar(id) & ids == id)
+    if (length(hit)) {
+      out(lines[[hit[[1L]]]])
+      ids[[hit[[1L]]]] = ""
+    }
   }
   quit(save = "no", status = 0L)
 }
