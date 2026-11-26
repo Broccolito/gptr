@@ -14,7 +14,7 @@
 # that already runs keeps its mode, tools and workspace, and the record says what it really
 # serves. gptr Agent needs gptr 1.0 or later; plan mode needs gptr 1.2.0 or later.
 #
-# Part of gptr Agent (https://github.com/Broccolito/GptrAgent), Apache-2.0.
+# Part of gptr Agent (https://github.com/Broccolito/gptr, folder gptragent/), Apache-2.0.
 
 local({
   # where source() evaluates this file (the global environment, unless sourced locally)

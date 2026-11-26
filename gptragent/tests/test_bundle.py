@@ -72,6 +72,13 @@ class BundleTests(unittest.TestCase):
         skill = (ROOT / "skills/gptr-live-r/SKILL.md").read_text()
         self.assertIn(f"  version: {manifest['version']}", skill)
 
+    def test_the_bridge_is_released_with_gptr(self):
+        # Biorouter's updater compares manifest.version with the tag of manifest.repository's latest release
+        manifest = json.loads((ROOT / "manifest.json").read_text())
+        description = (ROOT.parent / "DESCRIPTION").read_text()
+        self.assertIn(f"\nVersion: {manifest['version']}\n", description)
+        self.assertEqual(manifest["repository"], "https://github.com/Broccolito/gptr")
+
     def test_one_gptr_floor_everywhere_it_is_stated(self):
         sys.path.insert(0, str(ROOT / "src"))
         try:
@@ -110,7 +117,7 @@ class BundleTests(unittest.TestCase):
     def test_disagreeing_versions_are_refused(self):
         work = self.copy()
         init = work / "src/gptragent/__init__.py"
-        init.write_text(init.read_text().replace('"0.', '"9.'))
+        init.write_text(init.read_text().replace('__version__ = "', '__version__ = "9'))
         with self.assertRaises(build_brxt.Refused) as caught:
             build_brxt.check(work)
         self.assertIn("disagree", caught.exception.message)

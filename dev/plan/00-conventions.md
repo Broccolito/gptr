@@ -56,6 +56,9 @@ inst/templates/          files written by gptr_init()
 inst/COPYRIGHTS          third-party attributions (Pi is MIT)
 vignettes/               precomputed vignettes (*.Rmd.orig -> *.Rmd)
 dev/                     specs, research, plans (excluded by .Rbuildignore)
+gptragent/               gptr Agent: the Python bridge for Biorouter, Claude Code and Codex
+                         (D-372, D-374; excluded by .Rbuildignore, with the root marketplaces
+                         .claude-plugin/ and .agents/)
 ```
 
 Area prefixes (the `<area>` in file names), final: `utils`, `json`, `ext`,

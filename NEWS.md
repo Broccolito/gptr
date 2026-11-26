@@ -1,3 +1,5 @@
+# gptr 1.3.0
+
 # gptr 1.2.0
 
 Agents on the same computer can find a served R session by themselves and work in it with a
