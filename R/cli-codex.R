@@ -9,30 +9,89 @@
 # read-only, Codex's own tools switched off, gptr's hook in front of every tool, never resumed,
 # and checked before its reply is kept.
 
-#' The installed Codex CLI's raw catalog (no app-server, thread or inference). Older CLIs
-#' without the documented debug command leave the shipped catalog in place.
+#' Codex's models and the model the user's Codex starts with, from its app-server over stdio
+#' (D-390, D-391): `model/list`, every page (each model's `model` slug as the id, with its display
+#' name, input modalities and reasoning efforts), and `config/read`, whose `model` is the user's
+#' configured model, else the list's `isDefault` one. No thread is started. When the app-server
+#' gives no list, `codex debug models`' catalog, without a default. `listed` holds the ids.
+#' @return list(models, default = chr(1) or NULL, listed = chr)
 #' @noRd
-pcli_codex_models = function() {
-  path = pcli_find("codex")
-  help = pcli_run(path, c("debug", "models", "--help"), timeout = 3)
-  if (!is.null(pcli_run_failure(help)) ||
-      !grepl("model catalog as JSON", help$stdout %||% "", fixed = TRUE)) return(NULL)
-  res = pcli_run(path, c("debug", "models"), timeout = 30)
-  if (!is.null(pcli_run_failure(res))) pcli_catalog_error("codex")
-  obj = tryCatch(json_decode(res$stdout), error = function(e) NULL)
-  if (!is.list(obj) || !is.list(obj$models)) pcli_catalog_error("codex")
-  out = list()
-  for (m in obj$models) {
-    if (!is.list(m) || !identical(m$visibility, "list")) next
-    id = pcli_chr(m$slug)
-    if (is.null(id) || !nzchar(id)) next
-    levels = pcli_model_strings(lapply(m$supported_reasoning_levels,
-                                       function(x) if (is.list(x)) x$effort))
-    out[[length(out) + 1L]] = compact(list(id = id, name = pcli_chr(m$display_name),
-      context = pcli_scalar_num(m$context_window), input = pcli_model_strings(m$input_modalities),
-      reasoning = if (length(levels)) TRUE, thinking_levels = levels))
+pcli_codex_discover = function(path) {
+  ask = function(id, method, params = json_obj()) list(id = id, method = method, params = params)
+  st = new.env(parent = emptyenv())
+  st$models = list()
+  st$pages = 0L
+  read = function(obj) {
+    id = if (is.list(obj) && is.null(obj[["method"]])) pcli_chr(obj[["id"]])
+    res = if (!is.null(id)) obj[["result"]]
+    if (identical(id, "gptr_init")) {
+      if (!is.list(res)) return(TRUE)
+      return(list(list(method = "initialized"), ask("gptr_list", "model/list"),
+                  ask("gptr_config", "config/read")))
+    }
+    if (identical(id, "gptr_config")) st$config = (if (is.list(res)) res[["config"]]) %||% list()
+    if (identical(id, "gptr_list")) {
+      if (!is.list(res) || !is.list(res[["data"]])) return(TRUE)
+      st$models = c(st$models, res[["data"]])
+      st$pages = st$pages + 1L
+      cursor = pcli_chr(res[["nextCursor"]])
+      if (!is.null(cursor) && st$pages < 20L) {
+        return(list(ask("gptr_list", "model/list", list(cursor = cursor))))
+      }
+      st$listed = TRUE
+    }
+    isTRUE(st$listed) && !is.null(st$config)
   }
-  out
+  hello = list(clientInfo = list(name = "gptr",
+                                 version = as.character(utils::packageVersion("gptr"))))
+  pcli_talk(path, "app-server", list(ask("gptr_init", "initialize", hello)), read,
+            env = child_env("cli-codex"))
+  if (!isTRUE(st$listed)) return(pcli_codex_debug(path))
+  rows = list()
+  own = NULL
+  for (m in st$models) {
+    id = if (is.list(m)) pcli_chr(m[["model"]]) %||% pcli_chr(m[["id"]])
+    if (is.null(id) || !nzchar(id)) next
+    if (isTRUE(m[["isDefault"]])) own = own %||% id
+    efforts = lapply(m[["supportedReasoningEfforts"]], function(x) {
+      if (is.list(x)) x[["reasoningEffort"]]
+    })
+    rows[[id]] = rows[[id]] %||% pcli_codex_row(id, m[["displayName"]], m[["inputModalities"]],
+                                                efforts)
+  }
+  cfg = st$config
+  list(models = unname(rows), default = pcli_chr(cfg[["model"]]) %||% own,
+       listed = as.character(names(rows)))
+}
+
+#' Codex's catalog from `codex debug models` (D-390), the models it does not hide; signals
+#' pcli_catalog_error() when it gives none
+#' @noRd
+pcli_codex_debug = function(path) {
+  res = pcli_run(path, c("debug", "models"), timeout = 15)
+  obj = if (is.null(pcli_run_failure(res))) {
+    tryCatch(json_decode(res$stdout), error = function(e) NULL)
+  }
+  if (!is.list(obj) || !is.list(obj[["models"]])) pcli_catalog_error("codex")
+  rows = list()
+  for (m in obj[["models"]]) {
+    id = if (is.list(m) && !identical(m[["visibility"]], "hide")) pcli_chr(m[["slug"]])
+    if (is.null(id) || !nzchar(id)) next
+    efforts = lapply(m[["supported_reasoning_levels"]], function(x) if (is.list(x)) x[["effort"]])
+    rows[[id]] = rows[[id]] %||% c(pcli_codex_row(id, m[["display_name"]], m[["input_modalities"]],
+                                                  efforts),
+                                   compact(list(context = pcli_scalar_num(m[["context_window"]]))))
+  }
+  list(models = unname(rows), listed = as.character(names(rows)))
+}
+
+#' A catalog row of a model Codex reports: its id, name, input modalities and reasoning efforts
+#' (a model with efforts reasons), each as reported
+#' @noRd
+pcli_codex_row = function(id, name, input, efforts) {
+  levels = pcli_model_strings(efforts)
+  compact(list(id = id, name = pcli_chr(name), input = pcli_model_strings(input),
+               reasoning = if (length(levels)) TRUE, thinking_levels = levels))
 }
 
 #' A TOML basic string
@@ -79,21 +138,23 @@ pcli_codex_confine = c(
 #'
 #' Under a coaching `role` the exec is confined (08 3.7): ephemeral and read-only, Codex's own
 #' tools off, gptr's hook for SessionStart and PreToolUse, and the person's credentials store.
-#' A run keeps gptr's relay; a coach has none and gets the strict reply `schema` file.
+#' A run keeps gptr's relay; a coach has none and gets the strict reply `schema` file. A NULL
+#' `model_id` passes no -m, so Codex chooses (D-391).
 #' @noRd
 pcli_codex_args = function(model_id, wd, sandbox, relay, resume = NULL, role = NULL,
                            schema = NULL) {
   mcp = if (!identical(role, "coach")) pcli_codex_mcp_args(relay)
+  model = if (!is.null(model_id)) c("-m", model_id)
   if (!is.null(resume)) {
     return(c("exec", "resume", resume, "--json", "--ignore-user-config", "--skip-git-repo-check",
-             "-m", model_id, mcp, "-c", paste0("sandbox_mode=", sandbox), "-"))
+             model, mcp, "-c", paste0("sandbox_mode=", sandbox), "-"))
   }
   if (is.null(role)) {
-    return(c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m", model_id,
+    return(c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", model,
              "-C", wd, mcp, "--sandbox", sandbox, "-"))
   }
   c("exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
-    "--skip-git-repo-check", "-m", model_id, "-C", wd, mcp, "--sandbox", "read-only",
+    "--skip-git-repo-check", model, "-C", wd, mcp, "--sandbox", "read-only",
     pcli_codex_confine, pcli_codex_hooks(role, relay), pcli_codex_auth_store(),
     if (!is.null(schema)) c("--output-schema", schema), "-")
 }

@@ -547,28 +547,13 @@ pcli_coach_preflight = function(cli, refuse) {
 
 # ---- status, plan status, model entries, provider records (Task 3) ----------------------------
 
-#' Full model id behind `<cli provider>/default` (CLI invocations always get full ids, 03 8.4):
-#' the newest Sonnet for claude and the newest GPT for codex from the catalog
-#'
-#' For codex the catalog's GPT is used only when it is one of the full ids pcli_models("codex")
-#' ships: the Codex catalog lags the API's, and a model the CLI advertises (discovery) may still
-#' be refused for the account (a ChatGPT login refuses gpt-6.1-sol), so `default` never follows
-#' discovery; an unlisted id falls back to gpt-6-sol (D-097). Resolution never starts discovery.
+#' The model the user's CLI starts with (D-391), as its discovery reported it, or NULL; starts no
+#' process
 #' @noRd
-pcli_default_model = function(api) {
-  codex = identical(api, "cli-codex")
-  m = tryCatch(model_resolve(if (codex) "gpt" else "sonnet", strict = FALSE),
-               error = function(e) NULL)
-  id = if (is.list(m)) m[["id"]] else NULL
-  ok = rlang::is_string(id) && nzchar(id)
-  if (ok && codex) {
-    ok = id %in% setdiff(vapply(pcli_models("codex"), function(x) x$id, ""), "default")
-  }
-  if (ok) return(id)
-  if (codex) "gpt-6-sol" else "claude-sonnet-5-5"
-}
+pcli_default_model = function(api) pcli_discovery(sub("^cli-", "", api %||% ""))$default
 
-#' The model id passed to a CLI: `default` resolves to a full id (contract 11.10)
+#' The model argument of a CLI run: the model's id, and for `default` the model the user's CLI
+#' starts with (D-391); NULL when that is unknown, so the CLI chooses
 #' @noRd
 pcli_model_id = function(model) {
   id = model[["id"]] %||% "default"
@@ -651,29 +636,86 @@ pcli_model_entry = function(id, name, input = "text", context = 200000, max_outp
        context = context, max_output = max_output, status = "active")
 }
 
-#' The model entries of the built-in plan routes: `default` plus the full ids the CLIs accept
-#' (07 3.13, 08 2.C; 03 8.4)
+#' The discover() callback of the claude-cli and codex routes (D-390): ask the CLI for its models
+#' and the model the user's CLI starts with, and keep the answer for the CLI's current command
+#' (pcli_cache_key()); a failed probe is kept too, so neither is repeated before the CLI changes
+#' or gptr_models(refresh = TRUE). The rows lead with `default`, named after that model and with
+#' its metadata. Catalog rows are metadata, not proof of account access; absent limits and
+#' capabilities stay absent.
 #' @noRd
-pcli_models = function(cli) {
-  if (identical(cli, "claude")) {
-    img = c("text", "image")
-    return(list(pcli_model_entry("default", "Claude plan default model (claude CLI)", img),
-                pcli_model_entry("claude-opus-5-5", "Claude Opus 5.5 (claude CLI)", img),
-                pcli_model_entry("claude-sonnet-5-5", "Claude Sonnet 5.5 (claude CLI)", img),
-                pcli_model_entry("claude-haiku-4-5", "Claude Haiku 4.5 (claude CLI)", img)))
+pcli_discover = function(cli) {
+  path = pcli_find(cli)
+  key = pcli_cache_key(path)
+  keep = function(x) {
+    cache = pcli_cache$models %||% list()
+    cache[[cli]] = c(list(key = key), x)
+    pcli_cache$models = cache
   }
-  list(pcli_model_entry("default", "ChatGPT plan default model (Codex CLI)", context = 272000),
-       pcli_model_entry("gpt-6-sol", "GPT-6 Sol (Codex CLI)", context = 272000),
-       pcli_model_entry("gpt-6-luna", "GPT-6 Luna (Codex CLI)", context = 272000))
+  keep(list())
+  found = if (identical(cli, "claude")) pcli_claude_discover(path) else pcli_codex_discover(path)
+  keep(found[setdiff(names(found), "models")])
+  id = found$default
+  if (is.null(id)) return(found$models)
+  same = Find(function(m) identical(m$id, id), found$models) %||% list()
+  same[c("id", "name")] = list("default", paste0("default (", id, ")"))
+  c(list(same), found$models)
 }
 
-#' Discover selectable CLI models without a model request. Catalog entries are metadata,
-#' not proof of account access; absent limits and capabilities stay absent.
+#' What the CLI's discovery reported (pcli_discover()), or NULL; with `path`, only for that
+#' command as it is now (pcli_cache_key()). Starts no process.
 #' @noRd
-pcli_discover_models = function(provider) {
-  if (identical(provider, "codex")) return(pcli_codex_models())
-  if (identical(provider, "claude-cli")) return(pcli_claude_models())
-  NULL
+pcli_discovery = function(cli, path = NULL) {
+  hit = (pcli_cache$models %||% list())[[cli]]
+  if (is.null(path) || identical(hit$key, pcli_cache_key(path))) hit
+}
+
+#' The discovery of a provider's CLI found at `path`, asked now through the catalog when nothing is
+#' kept for that command as it is now and the provider discovers (claude-cli, codex), so a new CLI
+#' version is asked again (D-390); never signals
+#' @noRd
+pcli_discovered = function(provider, path) {
+  p = provider_get(provider)
+  cli = sub("^cli-", "", p[["api"]] %||% "")
+  hit = pcli_discovery(cli, path)
+  if (is.null(hit) && is.function(p[["discover"]])) {
+    tryCatch(catalog_inventory(p, refresh = TRUE), error = function(e) NULL)
+    hit = pcli_discovery(cli, path)
+  }
+  hit
+}
+
+#' Talk JSON lines with a CLI child that gets no prompt and spends no tokens (model discovery,
+#' D-390): start it in its CLI's child environment under tempdir() with stdin open, write `send`,
+#' then give each decoded line to `read()`, which returns more lines to write, or TRUE when the
+#' talk is over. At most `timeout` seconds and 4 MB of output; the child's process tree is killed
+#' at the end and its stderr is never kept. The wait runs the reactor, as proc_run() does.
+#' @noRd
+pcli_talk = function(path, args, send, read, env, timeout = 15) {
+  p = proc_spawn(path[[1L]], c(as.character(path[-1L]), args), stdin = "|", env = env,
+                 wd = path_norm(tempdir()))
+  on.exit({
+    tryCatch(kill_all(p, grace = 0), error = function(e) NULL)
+    proc_release(p)
+  }, add = TRUE)
+  write = function(lines) for (x in lines) p$write_input(paste0(json_encode(x), "\n"))
+  write(send)
+  deadline = reactor_now() + timeout
+  bytes = 0
+  repeat {
+    alive = p$is_alive()
+    p$poll_io(0L)
+    lines = p$read_output_lines()
+    p$read_error_lines()
+    bytes = bytes + sum(nchar(lines, type = "bytes"))
+    if (bytes > 4 * 1024^2) return(invisible(NULL))
+    for (line in lines) {
+      more = read(tryCatch(json_decode(line), error = function(e) NULL))
+      if (isTRUE(more)) return(invisible(NULL))
+      if (is.list(more)) write(more)
+    }
+    if (!alive || reactor_now() >= deadline) return(invisible(NULL))
+    reactor_pump(until = function() !p$is_alive(), slice_ms = 50L, timeout = 0.05)
+  }
 }
 
 #' A sanitized CLI discovery failure: never include stdout, stderr or initialization account data
@@ -1022,13 +1064,15 @@ pcli_turn_new = function(model, opts) {
 }
 
 #' Keep CLI-reported identity separately from the selected model; surface reported differences
+#' (none when gptr selected no model and the CLI chose its own)
 #' @noRd
 pcli_response_model = function(s, model) {
   model = pcli_chr(model)
   if (is.null(model) || !nzchar(model)) return(invisible(NULL))
   previous = s$response_model
   s$response_model = model
-  if (!identical(previous, model) && !identical(s$selected_model, model)) {
+  if (!is.null(s$selected_model) && !identical(previous, model) &&
+      !identical(s$selected_model, model)) {
     shown = doc_one_line(substr(redact(model, "context"), 1L, 200L))
     selected = doc_one_line(substr(redact(s$selected_model, "context"), 1L, 200L))
     gptr_inform(paste0("The ", sub("^cli-", "", s$model$api), " CLI reports model ", shown,
@@ -1322,14 +1366,17 @@ pcli_hook_params = function(event, ctx) {
   list(params = list(cli_mode = ctx$mode(), cli_budget = list(turns = turns, cost = cost)))
 }
 
-#' `agent_start` hook: probe the CLI of a session on a plan route before its run's first request,
-#' so the probe's runs (about a second, then cached) never freeze its live row; a probe that
-#' fails is left to build(), which reports it (D-192)
+#' `agent_start` hook: probe the CLI of a session on a plan route, and once it passes ask it for
+#' its models when it changed (D-390), before its run's first request, so these runs (about a
+#' second, then cached) never freeze its live row; a probe that fails is left to build(), which
+#' reports it (D-192)
 #' @noRd
 pcli_hook_start = function(event, ctx) {
-  api = tryCatch(model_resolve(ctx$model(), strict = FALSE)[["api"]], error = function(e) NULL)
-  if (isTRUE(api %in% c("cli-claude", "cli-codex"))) {
-    tryCatch(pcli_probe(pcli_find(sub("^cli-", "", api))), error = function(e) NULL)
+  m = tryCatch(model_resolve(ctx$model(), strict = FALSE), error = function(e) NULL)
+  if (isTRUE(m[["api"]] %in% c("cli-claude", "cli-codex"))) {
+    path = tryCatch(pcli_find(sub("^cli-", "", m[["api"]])), error = function(e) NULL)
+    probed = !is.null(path) && !is.null(tryCatch(pcli_probe(path), error = function(e) NULL))
+    if (probed) pcli_discovered(m[["provider"]], path)
   }
   invisible(NULL)
 }
@@ -1387,14 +1434,16 @@ pcli_hook_forget = function(event, ctx) {
 #' builtin:cli: the plan routes, their process_jsonl adapters and hooks (contract 7.20, 10.3)
 #' @noRd
 builtin_cli = function(gptr) {
+  # `default` is the model the user's CLI starts with; the CLI lists the others (D-390, D-391)
   gptr$register(gptr_provider("claude-cli", api = "cli-claude", type = "cli",
-                              models = pcli_models("claude"),
-                              discover = function() pcli_discover_models("claude-cli"),
+                              models = list(list(id = "default", name = "default (claude CLI)",
+                                                 input = c("text", "image"))),
+                              discover = function() pcli_discover("claude"),
                               status = pcli_status("claude", "claude-cli", "cli-claude"),
                               aliases = "claude_code"))
   gptr$register(gptr_provider("codex", api = "cli-codex", type = "cli",
-                              models = pcli_models("codex"),
-                              discover = function() pcli_discover_models("codex"),
+                              models = list(list(id = "default", name = "default (Codex CLI)")),
+                              discover = function() pcli_discover("codex"),
                               status = pcli_status("codex", "codex", "cli-codex"),
                               aliases = c("codex", "codex-cli")))
   gptr$register(gptr_adapter("cli-claude", transport = "process_jsonl", build = pcli_claude_build,

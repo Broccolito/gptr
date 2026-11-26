@@ -238,8 +238,8 @@ cmd_exit = function(args, ctx) {
   }))
 }
 
-#' The full id a built-in CLI gets for the reference `ref` to its `default` (contract 11.10), else
-#' NULL: another CLI adapter decides what its `default` runs
+#' The model a built-in CLI starts with for the reference `ref` to its `default` (D-391), else
+#' NULL: unknown until the CLI is asked, and another CLI adapter decides what its `default` runs
 #' @noRd
 console_cli_default = function(ref) {
   m = model_canonical(ref)
@@ -249,22 +249,42 @@ console_cli_default = function(ref) {
 }
 
 #' A model reference as /model, its switch and /status show it: a built-in CLI's `default` with the
-#' full id the CLI gets (`claude-cli/default (claude-sonnet-5-5)`)
+#' model the CLI starts with (`claude-cli/default (claude-opus-5-5)`)
 #' @noRd
 cmd_model_label = function(ref) {
   id = console_cli_default(ref)
   if (is.null(id)) ref else paste0(ref, " (", id, ")")
 }
 
+#' The models a CLI route's CLI lists, for /model (D-390): its catalog rows, asked of the CLI when
+#' it has not been asked in this R session; nothing for another route or when the CLI cannot say
+#' @noRd
+cmd_model_list = function(ref) {
+  m = tryCatch(model_canonical(ref), error = function(e) NULL)
+  if (!identical(m$type, "cli")) return(character())
+  pid = sub("/.*$", "", m$ref)
+  rows = tryCatch({
+    rows = gptr::gptr_models(provider = pid)
+    if (all(is.na(rows$checked_at))) rows = gptr::gptr_models(provider = pid, refresh = TRUE)
+    rows
+  }, error = function(e) NULL)
+  if (!NROW(rows)) return(character())
+  c(paste0("The ", pid, " route lists (any other id: /model ", pid, "/<id>):"),
+    paste0("  ", format(rows$ref), "  ", console_escape(rows$name, newlines = FALSE)))
+}
+
 #' `/model [ref]`: on a session from the next request; before the first prompt for that prompt,
-#' checked now (IC-79) and kept as typed
+#' checked now (IC-79) and kept as typed. Without `ref`, the model and, on a CLI route, the models
+#' its CLI lists.
 #' @noRd
 cmd_model = function(args, ctx) {
   rs = console_repl_find()
   s = ctx$session
   if (!nzchar(args)) {
     model = if (!is.null(rs)) repl_model(rs) else s$model
-    return(paste0("Model: ", cmd_model_label(model %||% "the default model")))
+    # asked first, so the label names the default the CLI just reported
+    listed = if (!is.null(model)) cmd_model_list(model)
+    return(c(paste0("Model: ", cmd_model_label(model %||% "the default model")), listed))
   }
   if (!is.null(s)) {
     session_set_model(s, args, reason = "user")

@@ -159,6 +159,69 @@ stub_process = function(pid = 4242L) {
   p
 }
 
+# The lines of a recorded fixture
+fixture_lines = function(name) {
+  readLines(file.path(fake_cli_fixtures(), name), encoding = "UTF-8", warn = FALSE)
+}
+
+# A CLI child of a discovery talk (pcli_talk()) replaying recorded reply `lines`: those without a
+# request id first, then each frame written to it gets the next line with its request id
+# (claude's request_id, the JSON-RPC id). `alive = FALSE` is a child that already exited; the
+# frames it was sent, its spawn and whether its process tree was killed are kept in it.
+stub_talk = function(lines = character(), alive = TRUE) {
+  key = function(m) m$request_id %||% m$response$request_id %||% m$id
+  ids = vapply(lines, function(ln) as.character(key(json_decode(ln)) %||% ""), "",
+               USE.NAMES = FALSE)
+  p = new.env(parent = emptyenv())
+  p$out = lines[!nzchar(ids)]
+  p$sent = list()
+  p$alive = alive
+  p$killed = FALSE
+  p$write_input = function(text) {
+    for (ln in strsplit(text, "\n", fixed = TRUE)[[1L]]) {
+      frame = json_decode(ln)
+      p$sent[[length(p$sent) + 1L]] = frame
+      hit = which(nzchar(ids) & ids == (key(frame) %||% ""))
+      if (!length(hit)) next
+      p$out = c(p$out, lines[[hit[[1L]]]])
+      ids[[hit[[1L]]]] <<- ""
+    }
+  }
+  p$poll_io = function(timeout) NULL
+  p$read_output_lines = function() {
+    out = p$out
+    p$out = character()
+    out
+  }
+  p$read_error_lines = function() "account diagnostics that are never kept"
+  p$is_alive = function() p$alive
+  p
+}
+
+# Every discovery talk of the calling test gets a fresh stub_talk() child replaying the returned
+# environment's `lines` (changeable between talks, as `alive` is); its `all` holds the children
+# in spawn order, each with its spawn's command, arguments, environment and directory in `spawn`.
+# The CLI's command is its name; the discovery cache is cleared before and after.
+local_talks = function(lines = character(), alive = TRUE, .env = parent.frame()) {
+  talks = new.env(parent = emptyenv())
+  talks$lines = lines
+  talks$alive = alive
+  talks$all = list()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear(), envir = .env)
+  local_mocked_bindings(pcli_find = function(cli) structure(cli, cli = cli),
+    child_env = function(profile, set = NULL) c(PROFILE = profile),
+    proc_spawn = function(command, args, stdin, env, wd) {
+      p = stub_talk(talks$lines, talks$alive)
+      p$spawn = list(command = command, args = args, stdin = stdin, env = env, wd = wd)
+      talks$all[[length(talks$all) + 1L]] = p
+      p
+    },
+    kill_all = function(p, grace) p$killed = TRUE,
+    proc_release = function(p) invisible(NULL), .env = .env)
+  talks
+}
+
 # A normaliser of one turn whose wall-clock timer is cancelled when the test ends
 local_normaliser = function(parse, model, opts, .env = parent.frame()) {
   n = parse(model, opts)

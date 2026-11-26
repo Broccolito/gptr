@@ -59,6 +59,7 @@ test_that("manual setup shows API and local Ollama paths without discovering or 
   text = paste(out, collapse = "\n")
   expect_false(result)
   expect_match(text, 'gptr_login("openai", method = "key")', fixed = TRUE)
+  expect_match(text, 'gptr_config(model = "openai/<model>", .scope = "user")', fixed = TRUE)
   expect_match(text, 'gptr_models(provider = "ollama", refresh = TRUE)', fixed = TRUE)
   expect_match(text, 'gptr_config(model = "ollama/<installed-model>", .scope = "user")',
                 fixed = TRUE)

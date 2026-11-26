@@ -12,79 +12,67 @@
 # ---- build (Task 5) ----------------------------------------------------------------------------
 
 #' The variables that keep a claude child without auto memory, CLAUDE.md files or prompt history
-#' (the catalog child and coaching children)
+#' (the discovery child and coaching children)
 #' @noRd
 pcli_claude_quiet = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1",
                       CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")
 
-#' Initialize an empty Claude SDK session and retain only its model catalog; no user message
-#' is sent. Keep stdin open until the response, then retire the supervised child. The wait
-#' runs the reactor, as proc_run() does, so other sessions and timers stay live.
+#' Claude Code's models and the model the user's claude starts with, from two control requests
+#' of an empty stream-json session (D-390, D-391): `initialize`, whose `models` give each
+#' selection's `resolvedModel` (else its `value`) as the id with its `displayName` and effort
+#' levels, and `get_settings`, whose `applied.model` is the model a session starts with under the
+#' user's own settings, which this child loads; when get_settings fails, the `default` selection
+#' of initialize. No user message is sent and no session is saved. `listed` holds every value
+#' and id the CLI accepts. Signals pcli_catalog_error() without initialize's model list.
+#' @return list(models, default = chr(1) or NULL, listed = chr)
 #' @noRd
-pcli_claude_catalog = function(args) {
-  path = pcli_find("claude")
-  p = proc_spawn(path[[1L]], c(as.character(path[-1L]), args), stdin = "|",
-                 env = child_env("cli-claude", set = pcli_claude_quiet),
-                 wd = path_norm(tempdir()))
-  on.exit({
-    tryCatch(kill_all(p, grace = 0), error = function(e) NULL)
-    proc_release(p)
-  }, add = TRUE)
-  id = "gptr_models"
-  request = list(type = "control_request", request_id = id,
-                 request = list(subtype = "initialize", hooks = NULL, skills = list()))
-  p$write_input(paste0(json_encode(request), "\n"))
-  deadline = Sys.time() + 30
-  bytes = 0
-  repeat {
-    p$poll_io(0L)
-    lines = p$read_output_lines()
-    p$read_error_lines()
-    bytes = bytes + sum(nchar(lines, type = "bytes"))
-    if (bytes > 1024^2) pcli_catalog_error("claude")
-    for (line in lines) {
-      obj = tryCatch(json_decode(line), error = function(e) NULL)
-      if (!is.list(obj)) next
-      response = obj$response
-      if (!is.list(response) || !identical(obj$type, "control_response") ||
-          !identical(response$request_id, id)) next
-      if (!identical(response$subtype, "success") || !is.list(response$response) ||
-          !is.list(response$response$models)) pcli_catalog_error("claude")
-      return(list(models = response$response$models))
-    }
-    if (!p$is_alive() || Sys.time() >= deadline) pcli_catalog_error("claude")
-    reactor_pump(until = function() !p$is_alive(), slice_ms = 50L, timeout = 0.05)
-  }
-}
-
-#' The selectable models and effort levels reported by Claude's initialize response, as full
-#' ids (03 8.4): a selection's `value` when it is a `claude-` id, else its `resolvedModel`, which
-#' takes no alias display name; a selection alias (`sonnet`, `default`) is never a catalog id
-#' @noRd
-pcli_claude_models = function() {
+pcli_claude_discover = function(path) {
   args = c("-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-            "--system-prompt", "", "--tools", "", "--strict-mcp-config", "--mcp-config",
-            '{"mcpServers":{}}', "--setting-sources", "", "--disable-slash-commands",
-            "--no-session-persistence")
-  obj = pcli_claude_catalog(args)
-  out = list()
-  for (m in obj$models) {
-    if (!is.list(m)) next
-    value = pcli_chr(m$value)
-    id = Find(function(x) startsWith(x, "claude-"), c(value, pcli_chr(m$resolvedModel)))
-    if (is.null(id)) next
-    out[[length(out) + 1L]] = compact(list(id = id,
-      name = if (identical(id, value)) pcli_chr(m$displayName),
-      reasoning = if (isTRUE(m$supportsEffort) || isTRUE(m$supportsAdaptiveThinking)) TRUE,
-      thinking_levels = pcli_model_strings(m$supportedEffortLevels)))
+           "--no-session-persistence", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}')
+  ask = function(id, subtype) {
+    list(type = "control_request", request_id = id, request = list(subtype = subtype))
   }
-  out
+  got = list()
+  read = function(obj) {
+    r = if (is.list(obj) && identical(obj[["type"]], "control_response")) obj[["response"]]
+    id = if (is.list(r)) pcli_chr(r[["request_id"]])
+    if (is.null(id)) return(NULL)
+    got[[id]] <<- if (identical(r[["subtype"]], "success")) r[["response"]] %||% list() else list()
+    all(c("gptr_init", "gptr_settings") %in% names(got))
+  }
+  pcli_talk(path, args, list(ask("gptr_init", "initialize"), ask("gptr_settings", "get_settings")),
+            read, env = child_env("cli-claude", set = pcli_claude_quiet))
+  models = got[["gptr_init"]][["models"]]
+  if (!is.list(models)) pcli_catalog_error("claude")
+  rows = list()
+  listed = character()
+  own = NULL
+  for (m in models) {
+    value = if (is.list(m)) pcli_chr(m[["value"]])
+    id = if (is.list(m)) pcli_chr(m[["resolvedModel"]]) %||% value
+    if (is.null(id) || !nzchar(id)) next
+    listed = c(listed, value, id)
+    # the CLI's own `default` selection is the route's `default` row
+    if (identical(value, "default")) {
+      own = id
+      next
+    }
+    # the route's stream-json input carries images (pcli_claude_content())
+    effort = isTRUE(m[["supportsEffort"]]) || isTRUE(m[["supportsAdaptiveThinking"]])
+    rows[[id]] = rows[[id]] %||% compact(list(id = id, name = pcli_chr(m[["displayName"]]),
+      input = c("text", "image"), reasoning = if (effort) TRUE,
+      thinking_levels = pcli_model_strings(m[["supportedEffortLevels"]])))
+  }
+  applied = got[["gptr_settings"]][["applied"]]
+  default = (if (is.list(applied)) pcli_chr(applied[["model"]])) %||% own
+  list(models = unname(rows), default = default, listed = unique(listed))
 }
 
 #' The claude argv of architecture 8.3 in its exact order, then the budget flags (IC-65,
 #' IC-66), the documented --bare opt-out when the probe found one, and --resume (never --bare)
 #'
-#' A budget value that is not a positive finite number adds no flag (pcli_scalar_num());
+#' A NULL `model_id` passes no --model, so the CLI chooses (D-391). A budget value that is not a
+#' positive finite number adds no flag (pcli_scalar_num());
 #' `turns` is rounded down (at least 1), `cost` rounded to 4 decimals (at least 0.01), both
 #' written as plain decimal numbers whatever `OutDec` and `digits` say. A coaching `role` (08
 #' section 3.7) adds the flags that keep the session unsaved and without memory or prompts; a
@@ -99,7 +87,7 @@ pcli_claude_args = function(model_id, mcp_config, system_file, budget = NULL, op
            if (!coach) c("--mcp-config", mcp_config),
            "--permission-prompt-tool", "stdio", "--permission-mode", "default",
            if (coach) c("--disallowedTools", "*") else c("--allowedTools", "mcp__gptr__*"),
-           "--system-prompt-file", system_file, "--model", model_id)
+           "--system-prompt-file", system_file, if (!is.null(model_id)) c("--model", model_id))
   if (!is.null(role)) {
     args = c(args, "--no-session-persistence", "--permission-prompts", "none", "--settings",
              '{"autoMemoryEnabled":false}')
