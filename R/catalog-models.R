@@ -1758,22 +1758,38 @@ catalog_grepl = function(pattern, x) {
 
 #' List models from the model catalog
 #'
-#' Searches the merged model catalog: the shipped snapshot (models.dev plus gptr's reviewed
-#' prices and capabilities), a refreshed copy in `tools::R_user_dir("gptr", "cache")`, models
-#' declared by registered providers, user configuration and provider inventories. Offline
-#' by default: only `refresh = TRUE` touches the network.
+#' Searches the merged model catalog: the shipped snapshot (models.dev, MIT, with gptr's reviewed
+#' corrections, aliases and defaults), a refreshed copy in `tools::R_user_dir("gptr", "cache")`,
+#' models declared by registered providers, user configuration and provider inventories. A
+#' refresh keeps gptr's reviewed data. Offline by default: only `refresh = TRUE` touches the
+#' network.
+#'
+#' An alias such as `sonnet`, `gpt` or `gemini` names the newest active model of its models.dev
+#' family; on a release-date tie the shortest id wins. Any `provider/id` of a known provider is
+#' accepted: an id the catalog lacks is sent as written, with one notice, and gets only what a
+#' name can tell: tool calls on a remote chat or command-line route (none on a local server),
+#' text input, no thinking level, unknown limits and price. Declare its real capabilities in the
+#' provider's `models` setting ([gptr_config()]) or with [gptr_provider()].
 #'
 #' A catalog entry describes a route, not current account access. `availability` records what
 #' the last provider listing advertised, with its `checked_at` time; it does not verify inference
 #' or billing access. Failed or expired listings are marked stale and keep the previous models.
 #' Providers other than Ollama with a native model-list API are inventoried before use after
 #' consent, at most once per five minutes in this R process; `refresh = TRUE` bypasses that
-#' cache. A `discover()` callback runs with `refresh = TRUE`; the `claude-cli` and `codex` routes
-#' also ask their CLI when a run starts after the CLI command changed, and at `/model` when it was
-#' not asked yet.
-#' Copy a `ref` into the
-#' `model` argument of [peter()] to choose that route. Ollama routes require current installed
-#' model evidence before inference; discovery does not pull models. See
+#' cache. Their listings also give thinking levels, temperature support and retirement where the
+#' provider reports them. A `discover()` callback runs with `refresh = TRUE`.
+#'
+#' The `claude-cli` and `codex` routes ask your installed CLI which models it offers and which one
+#' it starts with: Claude Code through its stream-json `initialize` and `get_settings` control
+#' requests, Codex through `codex app-server` (`model/list`, `config/read`), else
+#' `codex debug models`. No prompt is sent and no tokens are spent. gptr asks once per R session
+#' and CLI version, when a run starts or at `/model`, and again with `refresh = TRUE`, so a CLI
+#' update changes the list without a gptr release. The `default` row runs the model your CLI
+#' starts with and names it (`default (claude-opus-5-5)`); when the CLI cannot say, gptr passes no
+#' model flag and the CLI chooses.
+#'
+#' Copy a `ref` into the `model` argument of [peter()] to choose that route. Ollama routes require
+#' current installed model evidence before inference; discovery does not pull models. See
 #' `vignette("language-models", package = "gptr")` for setup and [gptr_providers()] for
 #' credentials and reachability.
 #'
@@ -1787,7 +1803,8 @@ catalog_grepl = function(pattern, x) {
 #'   egress and replay checks. API discovery is bounded to four pages, four seconds total and
 #'   one second per request. A failed listing keeps prior models and reports the failed refresh
 #'   in the footer. A provider with neither (Bedrock Converse, an offline provider) is not
-#'   contacted. For Ollama it uses native `/api/version`, `/api/tags` and `/api/show` endpoints
+#'   contacted. For `claude-cli` and `codex` it asks the CLI, as above, within 15 seconds.
+#'   For Ollama it uses native `/api/version`, `/api/tags` and `/api/show` endpoints
 #'   with a one second limit per request. Ollama discovery requires a
 #'   loopback address under the default local-only policy; only an explicit human setting at
 #'   user or session scope can relax it (see [gptr_config()]).

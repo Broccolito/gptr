@@ -49,8 +49,9 @@
 #' otherwise.
 #'
 #' A new interactive console without an explicit or configured model first offers CLI selection
-#' or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
-#' cancellation (choose Cancel or press Enter) or manual setup returns without starting a session.
+#' or manual API/Ollama instructions. Selecting an available CLI saves `<route>/default`, the
+#' model that CLI starts with, at user scope; cancellation (choose Cancel or press Enter) or manual
+#' setup returns without starting a session.
 #' Existing sessions, explicit or configured models and `.stdin = TRUE` skip setup. CLI-reported
 #' login is not proof of online access or subscription billing. See
 #' `vignette("interactive-console", package = "gptr")`.
@@ -87,9 +88,11 @@
 #' @param ... A session to continue, the prompt, and context objects. A decision model reads a
 #'   named object under its name (`text = x`) and any other as `input`, so its answers and cache
 #'   entries never depend on how a variable is named or subset.
-#' @param model A model name (`sonnet`, `"anthropic/claude-sonnet-5-5"`), a provider or router spec
-#'   such as [gptr_fake_provider()], or `NULL` for the configured default. A call made by the
-#'   agent's own R code, and a team or fan-out it starts, uses the running session's model instead.
+#' @param model A model name (`sonnet`, `"anthropic/claude-sonnet-5-5"`, `"codex/default"`; an id
+#'   the catalog lacks is written in, see [gptr_models()]), a provider or router spec such as
+#'   [gptr_fake_provider()], or `NULL` for the configured default ([gptr_config()]). A call made by
+#'   the agent's own R code, and a team or fan-out it starts, uses the running session's model
+#'   instead.
 #' @param mode One of `plan`, `manual`, `edits`, `auto`, `yolo`; `NULL` for the configured default.
 #'   The plan a `plan` run proposes goes once, as a `<plan>` block, to the next top-level
 #'   `peter()` call from the same environment, within an hour and in another mode, whatever that

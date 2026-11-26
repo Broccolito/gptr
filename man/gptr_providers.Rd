@@ -39,7 +39,10 @@ for a reachable endpoint (a 401 without a key still proves reachability), otherw
 \code{unreachable}, or \verb{not checked} under \verb{R CMD check}. \code{egress} is \code{ack} when no
 acknowledgment is needed (offline providers, local servers at a loopback address) or the
 user has given it. Listing reads credentials only: it never registers an environment
-variable or binds it to a provider.
+variable or binds it to a provider. \code{default_model} is gptr's reviewed default where the
+catalog has one (Anthropic, OpenAI, Google, TypeSafe), \verb{<route>/default} for a command-line
+route (the model your CLI starts with, see \code{\link[=gptr_models]{gptr_models()}}), else the provider's newest
+catalog model.
 
 \code{ready} means the required configuration is present; it does not validate the credential,
 account quota or access to a specific model. \code{check = TRUE} tests reachability, not login.

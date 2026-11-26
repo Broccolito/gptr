@@ -1586,7 +1586,10 @@ provider_listing_row = function(id, p, err, check, reg, ctg) {
 #' `unreachable`, or `not checked` under `R CMD check`. `egress` is `ack` when no
 #' acknowledgment is needed (offline providers, local servers at a loopback address) or the
 #' user has given it. Listing reads credentials only: it never registers an environment
-#' variable or binds it to a provider.
+#' variable or binds it to a provider. `default_model` is gptr's reviewed default where the
+#' catalog has one (Anthropic, OpenAI, Google, TypeSafe), `<route>/default` for a command-line
+#' route (the model your CLI starts with, see [gptr_models()]), else the provider's newest
+#' catalog model.
 #'
 #' `ready` means the required configuration is present; it does not validate the credential,
 #' account quota or access to a specific model. `check = TRUE` tests reachability, not login.

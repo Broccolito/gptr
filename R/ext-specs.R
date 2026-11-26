@@ -1024,11 +1024,12 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #'   (`reasoning = TRUE`) lists the levels it accepts in `thinking_levels`, a subset of `"off"`,
 #'   `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` and `"max"`; without it `"off"` to
 #'   `"high"` is assumed. A requested level the model lacks becomes the nearest one it has, with a
-#'   message. A record's `prices` is a data frame or a list of price records: `input` and
-#'   `output` in USD per million tokens, optional `cache_read`, `cache_write_5m`,
-#'   `cache_write_1h`, `from` (a `"YYYY-MM-DD"` date) and `tier` (`"default"`, or `">Nk"` for
-#'   prompts above N thousand tokens, such as `">200k"`); it is checked here, and without it the
-#'   cost is unknown.
+#'   message. A level goes to the API as an effort name, or as a token budget for a record with
+#'   `thinking_budget = list(min = , max = )` and no `thinking_effort = TRUE`. A record's `prices`
+#'   is a data frame or a list of price records: `input` and `output` in USD per million tokens,
+#'   optional `cache_read`, `cache_write_5m`, `cache_write_1h`, `from` (a `"YYYY-MM-DD"` date) and
+#'   `tier` (`"default"`, or `">Nk"` for prompts above N thousand tokens, such as `">200k"`); it is
+#'   checked here, and without it the cost is unknown.
 #' @param compat Named list of compatibility switches for the adapter (for
 #'   `api = "bedrock-converse"`, `region`: the AWS region requests are signed for).
 #' @param type `"chat"`, `"classifier"` (System 1) or `"cli"`.

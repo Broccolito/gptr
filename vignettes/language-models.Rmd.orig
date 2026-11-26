@@ -39,7 +39,7 @@ after consent, using the configured credential. Without a provider, refresh upda
 models.dev catalog. The `availability` and `checked_at` columns describe the last provider listing;
 advertisement does not verify inference or billing access. A failed refresh keeps prior models.
 Providers with a native model-list API are also inventoried before real use, with a short
-process cache; CLI catalogs are listed only on refresh, and native Ollama preparation continues to
+process cache; the CLI routes ask their CLI (below), and native Ollama preparation continues to
 verify the selected installed model. See `?gptr_models` for limits.
 
 `gptr_providers(check_login = TRUE)` adds CLI-reported `signed in`, `not signed in` or `unknown`
@@ -56,16 +56,25 @@ gptr_providers(check = TRUE)
 gptr_providers(check_login = TRUE)
 ```
 
-Select a canonical `"provider/model"` reference to make the route explicit. Catalog aliases such
-as `sonnet` also work. For a default, use `gptr_config(model = ..., .scope = "user")`; pass
-`model = ...` to override it for one call. [Configuration](configuration.html) explains scope
-and precedence.
+Select a canonical `"provider/model"` reference to make the route explicit. An alias such as
+`sonnet`, `opus`, `haiku`, `gpt`, `gemini` or `flash` names the newest model of that family in
+the catalog, and `"anthropic"`, `"openai"` or `"google"` alone runs gptr's reviewed default for
+that provider, the `default_model` of `gptr_providers()`. For a default, use
+`gptr_config(model = ..., .scope = "user")`; pass `model = ...` to override it for one call.
+[Configuration](configuration.html) explains scope and precedence.
+
+Any model id can be written in. An id the catalog lacks, such as a model newer than your gptr,
+a router's name or a local server's tag, is sent as written with one notice. gptr then assumes
+only what a name tells: tool calls on a remote route (none on a local server), text input, no
+thinking level, and unknown limits and price. Refresh the provider's listing, or declare the
+model in provider settings as shown for Azure below, to give it its real capabilities.
 
 For a model that reasons, choose its effort with `.opts = list(thinking = "high")` or with a
-suffix on the reference, such as `"openai/gpt-6-sol:high"`; either way the level stays with the
+suffix on the reference, such as `"openai/gpt-6.2-sol:high"`; either way the level stays with the
 session for later turns. The levels are `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`,
 `"xhigh"` and `"max"`. A model without the requested level uses the next higher one it has,
-else the next lower, and says so.
+else the next lower, and says so. The levels a model takes, and whether gptr sends one as an
+effort or a token budget, come from its catalog data.
 
 ### API providers
 
@@ -77,15 +86,19 @@ Keep the file out of version control.
 | Route | Credential variable | Example reference |
 |---|---|---|
 | Anthropic | `ANTHROPIC_API_KEY` | `"anthropic/claude-sonnet-5-5"` |
-| OpenAI | `OPENAI_API_KEY` | `"openai/gpt-6-sol"` |
-| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `"google/gemini-3.8-flash"` |
+| OpenAI | `OPENAI_API_KEY` | `"openai/gpt-6.2-sol"` |
+| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `"google/gemini-4-hydrogen"` |
+| xAI | `XAI_API_KEY` | `"xai/grok-4.7"` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `"deepseek/deepseek-flash"` |
+| Mistral | `MISTRAL_API_KEY` | `"mistral/mistral-large-latest"` |
+| Groq, Together, Cerebras, Fireworks | `GROQ_API_KEY`, `TOGETHER_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY` | A model that `gptr_models()` lists for the provider |
 | OpenRouter | `OPENROUTER_API_KEY` | Any model that `gptr_models()` lists for OpenRouter |
 | Hosted System 1 | `TYPESAFE_API_KEY` (`jev-key` is a `.env` alias) | `"typesafe/jev-latest"` |
 
 ```{r, eval = FALSE}
 library(gptr)
 gptr_env("~/keys/models.env")
-gptr_config(model = "openai/gpt-6-sol", .scope = "user")
+gptr_config(model = "openai/gpt-6.2-sol", .scope = "user")
 session = peter("Explain the relationship between mpg and wt.", mtcars)
 session$text
 ```
@@ -192,18 +205,35 @@ request sends the full prompt at the uncached rate.
 Install and sign in to the `claude` or `codex` tool outside gptr, following that tool's own setup.
 The executable must be on `PATH`, or you can give its path with the `gptr.cli_path` option.
 Then choose `model = "claude-cli"` (alias `claude_code`) or `model = "codex"` (alias
-`codex-cli`); `/model` in the console accepts the same names.
+`codex-cli`); `/model` in the console accepts the same names. Either runs `default`, the model
+your CLI starts with: Claude Code's settings `model` or Codex's `config.toml` `model`. gptr names
+it in `/model`, `/status`, the status line and `gptr_models()`, as in
+`claude-cli/default (claude-opus-5-5)`; when the CLI cannot say, gptr passes no model flag and
+the CLI chooses.
 
-Refresh a CLI's advertised model choices with
-`gptr_models(provider = "codex", refresh = TRUE)`; use `"claude-cli"` for Claude Code.
-CLI inventories may contain cached or bundled choices and do not verify account access;
-see `?gptr_models` for listing limits.
+gptr asks the installed CLI which models it offers: Claude Code through its stream-json control
+requests, Codex through `codex app-server`, else `codex debug models`. No prompt is sent and no
+tokens are spent. It asks once per R session and CLI version, so a CLI update changes the list
+without a gptr release; `gptr_models(provider = "codex", refresh = TRUE)` asks now (use
+`"claude-cli"` for Claude Code), and `/model` on a CLI route lists what the CLI reported. Any
+other id is passed to the CLI as written, with one notice: `model = "codex/<id>"` or
+`/model claude-cli/<id>`. A listing does not verify account access.
 
 ```{r, eval = FALSE}
 options(gptr.cli_path = list(claude = "/path/to/claude", codex = "/path/to/codex"))
 gptr_providers(check = TRUE)
+gptr_models(provider = "codex", refresh = TRUE)
 session = peter("Inspect the columns of mtcars.", mtcars, model = "codex")
 ```
+
+Codex runs keep the model provider of your Codex configuration: `model_provider` with its
+`[model_providers.<id>]` table, `openai_base_url` and `model_catalog_json` travel with each run,
+so a Codex set up for Ollama, LM Studio or a router works through gptr, with its listed, default
+and written-in models. gptr never puts a provider's `experimental_bearer_token` or
+`http_headers` on the command line, where other users of the computer could read them, and says
+so; give them through `env_key` or `env_http_headers`. A Claude Code router set through
+`ANTHROPIC_BASE_URL` does not reach the `claude-cli` route, which removes that variable with the
+other API-billing settings; register the router as a provider (`?gptr_provider`) instead.
 
 These calls run a child process. The built-in `claude-cli` route uses the Claude Code CLI's
 signed-in plan/OAuth authentication and refuses API-key billing. For API-key use, explicitly
@@ -225,7 +255,7 @@ coach a harness. On a plan it runs at most two sessions at once. When a plan lim
 it starts nothing new and returns your starting harness. See
 [Harnesses and coaching](tailor-and-coach.html).
 
-### Local Ollama models
+### Local models
 
 Run Ollama separately and install the model you intend to use. Discover the installed models,
 then copy a returned reference into the call:
@@ -247,6 +277,11 @@ Conversational models return sessions. Clef and Clef Flash are native decision m
 Ollama 0.35.1 or later, and return logical, choice or score vectors. Their calls do not run an
 agent conversation. See [Typed decisions](system-one.html). A local model does not keep a
 later cloud call or network tool local.
+
+The `lmstudio`, `llamacpp` and `vllm` routes reach LM Studio, llama.cpp and vLLM at their default
+local addresses. `gptr_models(provider = "lmstudio", refresh = TRUE)` reads what the server
+reports; LM Studio's own listing includes tools, vision and context. A name the listing lacks,
+such as `"lmstudio/my-local-coder"`, is written in with text input and no tools.
 
 ## Work with a session
 
@@ -314,7 +349,7 @@ session as `e$session`.
 ```{r, eval = FALSE}
 session = tryCatch(
   peter("Fit mpg on wt and return the coefficients.", mtcars,
-        model = "openai/gpt-6-sol", mode = auto, budget = list(cost = 1, turns = 10)),
+        model = "openai/gpt-6.2-sol", mode = auto, budget = list(cost = 1, turns = 10)),
   gptr_error_permission = function(e) {
     message(conditionMessage(e))
     e$session

@@ -1,5 +1,47 @@
 # gptr 1.3.0
 
+## Models
+
+* The `claude-cli` and `codex` routes ask your installed CLI which models it offers and which one
+  it starts with: Claude Code through its stream-json control requests `initialize` and
+  `get_settings`, Codex through `codex app-server` (`model/list`, `config/read`), else
+  `codex debug models`. No prompt is sent and no tokens are spent. gptr asks once per R session
+  and CLI version, and on `gptr_models(provider = "codex", refresh = TRUE)`, so a CLI update
+  changes what gptr lists without a gptr release. `/model` on a CLI route lists those models.
+* `claude-cli/default` and `codex/default` run the model your CLI starts with (Claude Code's
+  settings `model`, Codex's `config.toml` `model`), named in `/model`, `/status`, the status line
+  and `gptr_models()`, as in `claude-cli/default (claude-opus-5-5)`. When the CLI cannot say,
+  gptr passes no model flag and the CLI chooses; `codex/default` no longer falls back to a fixed
+  model.
+* Any model id can be written in, on every route and provider: `peter(model = "codex/<id>")`,
+  `/model claude-cli/<id>`, `"openrouter/<id>"`, `"lmstudio/<id>"`. An id the catalog or the CLI
+  does not list is sent as written with one notice, with tool calls on a remote route (none on a
+  local server), text input, no thinking level and unknown limits and price.
+* Codex runs keep your own model provider while gptr's isolation stays on: `model_provider` with
+  its `[model_providers.<id>]` table, `openai_base_url` and `model_catalog_json` go to each run as
+  `-c` overrides, so a Codex set up for Ollama, LM Studio or a router works in gptr. A provider's
+  `experimental_bearer_token` and `http_headers` never go on the command line; give them through
+  `env_key` or `env_http_headers`.
+* The offline catalog is models.dev (MIT) of 2026-11-26 with gptr's reviewed corrections; it
+  lists Gemini 4, Fable 5.2, Haiku 5.5, GPT-6.2 and Grok 4.x. gptr matches no model name: an alias
+  is the newest active model of its models.dev family (`gpt` is `gpt-6.2-sol`, `gemini` is
+  `gemini-4-neon`), and the default, small and System 1 models are reviewed catalog data
+  (`claude-sonnet-5-5`, `gpt-6.2-sol`, `gemini-4-hydrogen`; `claude-haiku-5-5`, `gpt-6-luna`,
+  `gemini-3.5-flash-lite`; `typesafe/jev-latest`). `model = "openai"` runs OpenAI's default.
+* Provider listings report more: reasoning efforts (OpenRouter, Anthropic, xAI), mandatory
+  reasoning and expiry (OpenRouter), lifecycle (Anthropic), limits (Cerebras, vLLM, llama.cpp)
+  and Ollama's thinking levels. LM Studio is listed from its own API, with tools, vision and
+  context.
+* Requests follow the model's data, not its name. Anthropic requests use API version 2026-10-21
+  and no longer send a temperature. Thinking `off` turns thinking off where a model allows it
+  (Claude Haiku 5.5, Opus 5, Sonnet 5 and 4.x). Gemini 4 gets `xhigh`; Grok 4.5 and later,
+  DeepSeek, Ollama and vLLM get their reasoning effort by name; OpenRouter respects mandatory
+  reasoning and budget models and sends `cache_control` only where cache writes are billed.
+* A `bedrock-converse` model gets Anthropic's thinking fields when its record says
+  `owner = "anthropic"`, not when its id contains `anthropic.claude`. The
+  `supports_reasoning_effort` compatibility switch is removed; a value in your settings is
+  ignored.
+
 # gptr 1.2.0
 
 Agents on the same computer can find a served R session by themselves and work in it with a

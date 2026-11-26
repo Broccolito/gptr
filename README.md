@@ -69,8 +69,9 @@ With no default model set, the console offers the available CLI routes
 and saves your choice. Enter `/exit` to return to R. CLI sign-in is
 separate from API credentials.
 
-Use `gptr_models(provider = "codex", refresh = TRUE)` to refresh that
-CLI's advertised model choices; see `?gptr_models` for listing limits.
+gptr asks your CLI which models it offers and starts from the one it
+uses by default; `/model` lists them, and any other id is passed to the
+CLI as written (`/model codex/<id>`).
 
 **Local Ollama model.** Start Ollama separately and install a chat model
 that supports tool calls. Select an installed model, for example:
