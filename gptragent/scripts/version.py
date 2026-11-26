@@ -1,12 +1,13 @@
 """Move the version in every place it is written, together.
 
-    uv run python scripts/version.py 0.3.0
+    uv run python scripts/version.py 1.4.0
 
 It rewrites manifest.json, pyproject.toml, src/gptragent/__init__.py, the README's
 "Current version" line and the bundled skill's metadata version. The User-Agent the bridge
 sends to gptr is built from __version__, so it moves with them. It refuses a version that does
-not move forward. Then run uv lock, the tests and scripts/build_brxt.py before tagging
-v<version>.
+not move forward. Then run uv lock, the tests and scripts/build_brxt.py. The bundle is released
+with gptr: the tag is gptr's release tag v<version>, and <version> must equal DESCRIPTION's
+Version.
 """
 
 from __future__ import annotations
@@ -51,7 +52,8 @@ def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("Usage: uv run python scripts/version.py X.Y.Z")
     old = bump(ROOT, sys.argv[1])
-    print(f"{old} -> {sys.argv[1]}. Now run: uv lock, the tests, scripts/build_brxt.py, then tag v{sys.argv[1]}.")
+    print(f"{old} -> {sys.argv[1]}. Now run: uv lock, the tests, scripts/build_brxt.py. The tag is gptr's "
+          f"release tag v{sys.argv[1]}, so DESCRIPTION's Version must be {sys.argv[1]} too.")
     return 0
 
 
