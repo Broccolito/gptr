@@ -9,9 +9,10 @@ acting. Nothing here authorizes merging into `main`, a GitHub release or a CRAN 
 | Item | State |
 |---|---|
 | `claude/v1.3.0` | the release candidate: P34, P35, P36, the review ledger `dev/progress/review-1.3.0.md` (R130-01..R130-30) and its fixes, the CI flake fix, and (if section 2 says it landed) the default `auto` mode. CI was all green at 5dfaca5b. |
-| PR #125 | draft, `claude/v1.3.0` -> `main`, Auto-fix on (bound to the 2026-11-27 session). |
-| win-builder | R-devel uploads: the 5dfaca5b tarball (sha256 `6331534f…`) at 01:44 UTC and the final adc9a2b0 tarball (sha256 `ce7159ed…`, CRAN-mode check Status OK, 123 s locally) at 03:29 UTC; results go by email to the maintainer. Ask them for the final one's "Check time in seconds" (must be well under 600 s). |
-| Biorouter | the orchestration session `local_784f49b2-8d15-45ee-b259-95798f22449b` waits for the tag, the release URL and the `SHA256SUMS` line of `gptragent.brxt` after a published v1.3.0. |
+| PR #125 | MERGED into `main` (a78ca77e, 2026-11-27 04:13 UTC) on the maintainer's "merge when green", after every check passed on 11214460. `main`'s CI is green on a78ca77e (35 R-CMD-check jobs, Windows-check, gptragent, pkgdown). |
+| PR #128 | cran-comments results, the early-update sentence, auto's writes outside the project, the macOS check's `--no-manual`, and this checkpoint; merging waits for the maintainer's word. |
+| win-builder | R-devel uploads: the 5dfaca5b tarball (sha256 `6331534f…`) at 01:44 UTC and the final adc9a2b0 tarball (sha256 `ce7159ed…`, CRAN-mode check Status OK, 123 s locally) at 03:29 UTC; results go by email to the maintainer. Results: the first 515 s, the final (`O9eY6F7FZVG4`) Status OK, check 516 s, installation 90 s, no NOTE. |
+| Biorouter | the orchestration session `local_784f49b2-8d15-45ee-b259-95798f22449b` (no longer listed on 2026-11-27; the running "Biorouter campaign orchestration takeover", `local_c020cda1-baf3-4f13-a92e-54a740c29fe4`, is likely its successor: confirm with the maintainer) waits for the tag, the release URL and the `SHA256SUMS` line of `gptragent.brxt` after a published v1.3.0. |
 
 ## 2. The default `auto` mode (maintainer's request of 2026-11-27)
 
@@ -25,13 +26,23 @@ it), and the Biorouter WP-14 harness's S5 serves without a mode to test manual a
 
 ## 3. Remaining, in order
 
-1. Land section 2, CI green on the pushed head.
-2. Release gates: fill `cran-comments.md`'s "R CMD check results" placeholder (tarball sha256,
-   macOS and win-builder results and times, installed size 8.3 Mb, every CI check green) and its
-   reverse-dependency date; rebuild the tarball from the final head and rerun the CRAN-mode check;
-   re-upload to win-builder if the package changed after 5dfaca5b.
-3. Ask the maintainer: merge #125; publish release v1.3.0 (deploys gptr Agent to Biorouter); CRAN
-   submission; a CRAN 1.1.x patch for S6; their Codex default `gpt-6.1-sol`.
+1. PR #128 (docs: cran-comments results, this checkpoint): merge on the maintainer's word once CI
+   is green; `main`'s CI is green on a78ca77e, check it again after #128.
+2. On the maintainer's word only: publish the GitHub release `v1.3.0` from main (not a prerelease;
+   the `gptragent` release job attaches `gptragent.brxt`, `gptragent-1.3.0.brxt` and `SHA256SUMS`,
+   and Biorouter installs pick it up at their next launch). Then send the Biorouter orchestration
+   session (`local_784f49b2-8d15-45ee-b259-95798f22449b`) the tag, the asset URL
+   `https://github.com/Broccolito/gptr/releases/download/v1.3.0/gptragent.brxt` and the
+   `SHA256SUMS` line. It is the `gptragent` release job's first run (v1.2.0 has no bundle): watch
+   `gh run list -R Broccolito/gptr --workflow gptragent.yaml --event release` and rerun it if it
+   fails. Draft command and notes (the NEWS 1.3.0 section plus a Source package section for the
+   archive): `gh release create v1.3.0 -R Broccolito/gptr --target <main head sha> --title "gptr
+   1.3.0" --notes-file <notes> --latest`, optionally attaching `gptr_1.3.0.tar.gz`.
+3. On the maintainer's word only: the CRAN submission of the archive recorded in `cran-comments.md`
+   (rebuild from main's head if any package file changed since a78ca77e, and rerun win-builder).
+4. Decisions to put to the maintainer: a CRAN 1.1.x patch for S6; their Codex default
+   `gpt-6.1-sol`; the auto default's consent wording for CRAN; the Biorouter harness's S5 needs
+   `mode = "manual"`.
 
 ## 4. Environment
 
@@ -44,12 +55,13 @@ creating `chk` first). Another session's vitest suite kept the load near 250 on 
 ## 5. Resume prompt
 
 ```text
-Resume gptr's 1.3.0 release. Work in a git worktree on branch claude/v1.3.0 (git fetch origin).
-Read dev/PAUSED_HANDOFF_2026-11-27.md first, then dev/PROGRESS.md's current checkpoint, CLAUDE.md
-and dev/plan/00-conventions.md. Refresh: git log --oneline -5 origin/claude/v1.3.0, gh pr checks
-125 -R Broccolito/gptr, mcp__ccd_session_mgmt__get_usage. Bind PR #125 (mcp__ccd_pr__bind_pr) and
-turn Auto-fix on (mcp__ccd_pr__set_monitor). Then follow the handoff's section 3. Stop and ask the
-maintainer before merging into main, publishing the v1.3.0 release or submitting to CRAN. Hold the
-token cap: from about 93% of the weekly window start no new workflow; from about 95% wind down,
-push and write the next handoff.
+Resume gptr's 1.3.0 release. gptr 1.3.0 is merged into main (PR #125, a78ca77e). Work in a git
+worktree off origin/main. Read dev/PAUSED_HANDOFF_2026-11-27.md first (on main once PR #128
+merges, else on branch claude/v1.3.0-cran-results), then dev/PROGRESS.md's current checkpoint,
+CLAUDE.md and dev/plan/00-conventions.md. Refresh: git log --oneline -3 origin/main, gh pr list -R
+Broccolito/gptr, gh pr checks 128 -R Broccolito/gptr, mcp__ccd_session_mgmt__get_usage. Then
+follow the handoff's section 3. Stop and ask the maintainer before merging PR #128, publishing
+the v1.3.0 GitHub release (it deploys gptr Agent to every Biorouter install) or submitting to
+CRAN. Hold the token cap: from about 93% of the weekly window start no new workflow; from about
+95% wind down, push and write the next handoff.
 ```
