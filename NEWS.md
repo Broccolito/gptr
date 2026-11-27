@@ -1,5 +1,16 @@
 # gptr 1.3.0
 
+gptr Agent now ships with gptr, as a Biorouter bundle and Claude Code and Codex plugins, and an
+outside agent's R calls are recorded, so a served session stays a runnable document. A tool call
+takes one console row, and the `claude-cli` and `codex` routes take their models and their
+default from the installed CLI; any model id can be written in, and the catalog is refreshed.
+The permission fix for a missing `HOME` is a security fix for every earlier 1.x release. Unlike
+1.2.0, this release changes what existing users see: `compact_calls` is on by default,
+`codex/default` runs the model your Codex starts with (no fixed fallback), an alias is the newest
+model of its family (`gpt` is `gpt-6.2-sol`, `gemini` is `gemini-4-neon`), and a
+`supports_reasoning_effort` setting is ignored. 1.2.0 was not released on CRAN, so its section is
+new there too.
+
 ## Permissions
 
 * A path's class no longer drops when R warns while gptr reads it. With `HOME` naming a folder
