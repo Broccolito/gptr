@@ -1,22 +1,24 @@
 ## Submission
 
-This is a resubmission. The incoming pretests archived the first submission of 1.1.0 for one
-NOTE, possibly misspelled words in DESCRIPTION (Naur, Wason): that sentence is removed, so the
-Description matches 1.0.0's apart from one URL. They archived the second for "Overall checktime
-11 min > 10 min" on Windows R-devel: CRAN now runs 7 test files instead of 38, which cuts the
-tests' time by about 80%. The package code is unchanged.
+This is a minor update (1.1.0 -> 1.3.0); 1.2.0 was not released on CRAN, so this update carries
+its changes too. NEWS.md lists each change. No exported function or argument was removed.
 
-This is a minor update (1.0.0 -> 1.1.0); 1.0.1 was not released on CRAN, so this update carries its
-fixes too. 1.1.0 makes each agent tool call cheaper: an object's size is computed once per version
-of it, long character data is sized from a sample and shown as an estimate, each call is classified
-once, and project scans are bounded per request. Undo of objects now keeps old values by reference
-instead of writing them to disk before a call, keeps its memory and disk limits after every call,
-and reports a change made after a turn as a conflict instead of overwriting it; its four options
-`gptr.undo_*` are replaced by one setting, `undo`. 1.0.1 fixed a long delay before the first agent
-response by bounding automatic file checkpoint scans across folder sizes and layouts, fixed MCP
-waits and plugin setup diagnostics, corrected help pages, and added model listings, sub-agent model
-selection, hidden credential entry and clearer console progress. NEWS.md lists each change. No
-exported function was removed or changed incompatibly.
+1.2.0 lets agents on the same computer find a served R session and work in it with a read-only
+tool: `gptr_mcp_serve(advertise = TRUE)` writes a discovery record (see Consent and side effects),
+the server offers `inspect`, R code that runs only when gptr classifies it as read-only, and
+`mode =` chooses the served session's permission mode. A server started as before behaves as
+before, apart from also offering `inspect`.
+
+1.3.0 records an outside agent's served R calls on the server's session and in a bound document,
+shows each tool call as one console row, asks the installed 'Claude Code' or 'Codex' CLI which
+models it offers and which one it starts with, accepts any model id, and refreshes the offline
+model catalog (models.dev, MIT; its notice is in `inst/COPYRIGHTS`). It fixes a permission
+defect: with `HOME` naming a folder that does not exist, `tools::R_user_dir()` warned and gptr
+classed literal paths as unknown, so deleting a file outside the project ran without asking in
+the `auto` and `yolo` modes. Some defaults change for existing users, as NEWS.md says: the
+compact console view is on (`gptr_config(compact_calls = FALSE)` restores the full one),
+`codex/default` runs the model the user's 'Codex' starts with, and a model alias names the
+newest model of its family.
 
 The preceding major update (0.7.0 -> 1.0.0) was a complete rewrite by the same maintainer. gptr now
 runs language model agents in an existing R session, where generated code can inspect and modify
@@ -31,8 +33,9 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 ## Consent and side effects
 
 * At load time the package only stops child processes that an earlier gptr session left running
-  when it was killed or crashed, and deletes their records in its own cache directory: no network
-  access, no new files, no option or environment changes.
+  when it was killed or crashed, and deletes their records and the discovery records of R
+  processes that are gone in its own cache directory: no network access, no new files, no option
+  or environment changes.
 * Files are written only into a path the user passes (for example `gptr_init(path)`, which has
   no default path), into a project `.gptr/` directory once it exists, into documents the user
   named with `gptr_doc()` or confirmed interactively, into `tools::R_user_dir("gptr")`
@@ -65,6 +68,21 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 * The external programs named in SystemRequirements (an 'Ollama' server, 'claude', 'codex',
   'quarto' and a 'Chrome'-family browser) are optional: gptr starts or contacts them only when
   the user selects a feature that needs them, and the package passes its checks without them.
+* The `claude-cli` and `codex` routes ask the installed CLI which models it offers only when the
+  user starts a run on that route, types `/model` there or calls
+  `gptr_models(provider = "codex", refresh = TRUE)` (or `"claude-cli"`): gptr starts the CLI as a
+  child process, sends no prompt and spends no tokens, and keeps the answer for the R session and
+  CLI version. 'Claude Code' loads the user's settings for this, so their SessionStart hooks run.
+* Only `gptr_mcp_serve(advertise = TRUE)`, or a label in place of `TRUE`, writes a discovery
+  record, so that a local client finds the served session: `serve-<pid>.json` in
+  `file.path(tools::R_user_dir("gptr", "cache"), "mcp-serve")`, holding the server's loopback
+  address and bearer token, R's process id, the working folder and versions, readable only by the
+  user on Unix (mode 0600 in a folder of mode 0700). gptr removes it when the server stops, when
+  gptr is unloaded and when R exits; model code that reads it meets the secret guard.
+* The repository's `gptragent/` folder (gptr Agent, a Python bridge for Biorouter, which is also
+  the 'Claude Code' and 'Codex' plugin) and the plugin marketplaces `.claude-plugin/` and
+  `.agents/` are outside the package: `.Rbuildignore` excludes them, so the tarball holds no
+  Python code and installing gptr installs no plugin.
 * The help page `?gptr_security` documents what the package does on the user's behalf and where
   its protections end, and `?gptr_egress` documents what is sent to providers.
 * Precedents on CRAN with the same kind of behavior: 'btw' 1.5.0 (an opt-in tool that runs
@@ -108,7 +126,7 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 * Local: macOS (aarch64), R 4.6.1: the full offline test suite, and `R CMD check --as-cran` of
   the submission archive with CRAN's remote incoming checks.
-* win-builder: Windows, R-devel (2026-11-17 r90926 ucrt), the submission archive.
+* win-builder: Windows, R-devel, the submission archive.
 * GitHub Actions, `R CMD check --as-cran`, each job failing on any warning: the whole offline test
   suite in shards on macOS (release), Windows (release) and Ubuntu (release, under `LC_ALL=C`), and
   CRAN's test list on Ubuntu (oldrel-1, oldrel-4), Ubuntu without Suggests and Windows (oldrel-4).
@@ -118,22 +136,13 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## R CMD check results
 
-The submission archive `gptr_1.1.0.tar.gz` (sha256
-`cacbe4416be5a1dd0ddc13a8120eda301290e3646c14f467191bb6b2fba1c1f4`), built with R 4.6.1:
-
-* macOS (aarch64), R 4.6.1, `R CMD check --as-cran` with CRAN's remote incoming checks: 0 errors,
-  0 warnings, 0 notes.
-* win-builder, Windows R-devel: 0 errors, 0 warnings, 0 notes; check time 504 s (R code checks
-  275 s, tests 41 s), installation 88 s.
-
-Every GitHub Actions check above passes on the archive's commit.
+<filled at the final check: the archive `gptr_1.3.0.tar.gz` and its `sha256`, its macOS and win-builder results with check times, its installed size, and that every GitHub Actions check above passes on its commit>
 
 ## Installed size
 
-The submission archive's check on macOS reports 8.3 Mb installed: R 6.1 Mb and doc 1.5 Mb. R is the
-byte-compiled code of 129 R files, with no data sets and no compiled code; doc holds the 15 HTML
-vignettes. Current R versions report the size as INFO; the older R 4.2 check reported it as a NOTE
-while keeping the package source.
+The installed size (above) is mostly `R`, the byte-compiled code of 129 R files, with no data sets
+and no compiled code, and `doc`, the 15 HTML vignettes. Current R versions report the size as
+INFO; the older R 4.2 check reported it as a NOTE while keeping the package source.
 
 ## Reverse dependencies
 
