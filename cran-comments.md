@@ -1,7 +1,9 @@
 ## Submission
 
 This is a minor update (1.1.0 -> 1.3.0); 1.2.0 was not released on CRAN, so this update carries
-its changes too. NEWS.md lists each change. No exported function or argument was removed.
+its changes too. It follows 1.1.0 (published 2026-11-19) this soon because it fixes a permission
+defect of every earlier 1.x release, described below. NEWS.md lists each change. No exported
+function or argument was removed.
 
 1.2.0 lets agents on the same computer find a served R session and work in it with a read-only
 tool: `gptr_mcp_serve(advertise = TRUE)` writes a discovery record (see Consent and side effects),
@@ -47,11 +49,12 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   `gptr_mcp_serve()` (by default the caller's frame), or in a separate R process for worker
   sub-agents. Model code runs only after the user gives `peter()` a prompt or serves the session
   with `gptr_mcp_serve()`. In the default `auto` permission mode it then runs without a question
-  per action, as the user's own code would: it can create and change objects and files and start
-  processes. gptr asks the user first (a served session refuses) before actions its static
-  classifier labels critical (deleting the project, files outside it or protected files such as
-  `.git` and `.env`, `rm(list = ls())`, moving the working directory out of the project, changing
-  gptr's own configuration or R startup files) and before reading a registered secret, and it
+  per action, as the user's own code would: it can create and change objects and files, files
+  outside the project included, and start processes. gptr asks the user first (a served session
+  refuses) before actions its static classifier labels critical (deleting the project, files
+  outside it or protected files such as `.git` and `.env`, `rm(list = ls())`, moving the working
+  directory out of the project, changing gptr's own configuration or R startup files) and before
+  reading a registered secret, and it
   refuses code that would end or pause R. The user can choose `manual` with
   `gptr_config(mode = "manual", .scope = "user")`, which asks before every action the classifier
   does not label read-only. The classifier is advisory, not a security boundary, as
@@ -147,8 +150,8 @@ The submission archive `gptr_1.3.0.tar.gz` (sha256
 `ce7159ede33b7cdf29db27049247f7d323ff656d52117ad94a141752eee213d4`; its package files are those
 of `main` at a78ca77e):
 
-* macOS, `R CMD check --as-cran` with `NOT_CRAN` unset: Status OK, 0 errors, 0 warnings, 0 notes,
-  in 123 s; CRAN's remote incoming checks: OK.
+* macOS, `R CMD check --as-cran --no-manual` with `NOT_CRAN` unset: Status OK, 0 errors,
+  0 warnings, 0 notes, in 123 s; a second run with CRAN's remote incoming checks: OK.
 * win-builder, Windows R-devel (2026-11-17 r90926 ucrt): Status OK, installation 90 s, check
   516 s (R code 284 s, tests 42 s, examples 30 s, PDF manual 24 s).
 * GitHub Actions: every check above passes on the merged head (11214460), including both
