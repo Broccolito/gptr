@@ -593,6 +593,11 @@ test_that("reasoning fields and temperature follow each model's data (D-393, D-3
                     thinking_levels = c("low", "medium", "high", "xhigh"))
   expect_identical(body_of(grok, "xhigh")$reasoning_effort, "xhigh")
   expect_false("reasoning_effort" %in% names(body_of(grok, "off")))
+  # a model whose data takes no effort names gets none (Grok 4.20 reasoning)
+  g420 = test_model(api, provider = "xai", id = "grok-4.20-0309-reasoning",
+                    thinking_effort = FALSE)
+  expect_false("reasoning_effort" %in% names(body_of(g420, "high")))
+  expect_false("reasoning_effort" %in% names(body_of(g420, "off")))
   # DeepSeek V4: the thinking toggle and an effort of its levels; disabled carries no effort
   ds = test_model(api, provider = "deepseek", id = "deepseek-v4-pro",
                   thinking_levels = c("off", "low", "high", "max"))

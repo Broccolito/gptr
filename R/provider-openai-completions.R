@@ -547,7 +547,8 @@ completions_tools = function(tools, compat) {
 
 #' The thinking request fields of a compat thinking_format (report 09 section 3.4) from the
 #' model's data: a level is sent by name (xAI, DeepSeek, vLLM, Ollama, which maps it to `think`)
-#' or as an OpenRouter budget, and `off` only where the levels list it
+#' unless the data says the model takes no effort, or as an OpenRouter budget, and `off` only
+#' where the levels list it
 #' (https://openrouter.ai/docs/guides/best-practices/reasoning-tokens,
 #' https://docs.x.ai/docs/guides/reasoning, https://docs.ollama.com/api/openai-compatibility)
 #' @noRd
@@ -576,7 +577,7 @@ completions_thinking = function(head, model, params, compat) {
     head$chat_template_kwargs = list(enable_thinking = on, preserve_thinking = TRUE)
   } else if (fmt == "together") {
     head$reasoning = list(enabled = on)
-  } else if (on || none) {
+  } else if (!isFALSE(model$thinking_effort) && (on || none)) {
     head$reasoning_effort = if (on) eff else "none"
   }
   head
