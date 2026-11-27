@@ -17,6 +17,12 @@ maintainer's word.
   none blocker or high; one fix pass (`wf_a7de6e39-4ae`, six Opus implementers on disjoint files,
   each checked by Sonnet) fixed 29, R130-21 stays as intended. R130-30 (`/calls` empty on a CLI
   route) was found in RStudio and fixed in 76e71903.
+- The default permission mode is `auto` (D-396, the maintainer's 2026-11-27 request; workflow
+  `wf_99bf52df-f62`, Opus implementer and Sonnet check): one source of truth for the default, the
+  gate unchanged; the prompt is `peter> ` in auto and `peter[<mode>]> ` in every other mode, and the
+  banner names the mode only outside auto. Served sessions, non-interactive runs and sub-agents
+  follow the setting. Docs, NEWS, `cran-comments.md` (consent), the cheat sheet, seven vignettes and
+  specs 03/04 say so.
 - Live, 2026-11-27. Terminal pty: Claude Code and Codex discovery (refresh 3.1 s and 1.6 s, cached
   0.03 s), named defaults, write-ins, a Claude Code default turn and a Codex `gpt-6-sol` turn; the
   two live discovery tests pass. The maintainer's `~/.codex/config.toml` default `gpt-6.1-sol` is
@@ -31,10 +37,15 @@ maintainer's word.
   `R CMD check --as-cran` Status OK with no NOTE in 215 s locally under load (tests 10 s, R code
   63 s), tarball sha256 `6331534f…`; the affected test files (57, 13,789 tests) FAIL 0; lint clean;
   `document()` no diff; check-docs and check-files 0 problems. win-builder R-devel: uploaded
-  2026-11-27 01:44 UTC, result by email to the maintainer. CI CRAN-mode lanes at 219b4e22: Ubuntu
+  2026-11-27 01:44 UTC, result by email to the maintainer. On the final head adc9a2b0 (D-396
+  in): CRAN-mode check Status OK with no NOTE in 123 s (R code 45 s, installed size 8.3 Mb),
+  tarball sha256 `ce7159ed…`, uploaded to win-builder R-devel at 03:29 UTC. CI CRAN-mode lanes at 219b4e22: Ubuntu
   devel 323 s of 480, Windows 290 s of 600; no job above 13 min of 20.
-- Open: L-72 (symlink classified by its target); the auto default's CRAN wording and the Biorouter
-  harness's S5, which serves without a mode to test manual asking; win-builder's check time.
+- Open: L-72 (symlink classified by its target); the auto default's CRAN wording (for the
+  maintainer to approve) and the Biorouter harness's S5, which serves without a mode to test manual
+  asking and now needs `mode = "manual"`; win-builder's check time of the final tarball;
+  dev/release/tests/test-interactive-examples.R's two failures, which predate 1.3.0's last changes
+  (its `gptr_mcp_serve()` stub lacks `mode` and `advertise`).
 
 Next, on the maintainer's word only: merge PR #125, publish the GitHub release `v1.3.0` (it deploys
 gptr Agent to every Biorouter install; then send the Biorouter orchestration session the tag, the
