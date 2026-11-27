@@ -365,10 +365,10 @@ class Bridge:
                 f"finish within {int(wait)} s. Nothing in this call ran. Wait for it, or ask the "
                 "user to stop it with Esc or Ctrl-C in R.", True)
         try:
-            remaining = max(1.0, wait - (self._clock() - started))
             for attempt in (1, 2):
                 session = self._session(rec)
                 try:
+                    remaining = max(1.0, wait - (self._clock() - started))
                     return rec, live, session.call_tool(tool, arguments, remaining)
                 except CallError as error:
                     if attempt == 1 and error.kind in RETRY_AFTER_REDISCOVERY:

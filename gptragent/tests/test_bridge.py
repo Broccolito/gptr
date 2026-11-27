@@ -381,6 +381,24 @@ class RetryTests(BridgeCase):
         fake.fail_next = [404]
         self.assertFalse(self.bridge().call("r", {"code": "1"})["isError"])
 
+    def test_a_retry_waits_only_for_the_time_left(self):
+        fake = self.fake()
+        self.advertise(fake, 410)
+        fake.fail_next = [401]
+        now, waits = [0.0], []
+        call_tool = server.GptrSession.call_tool
+
+        def timed(session, name, arguments, wait):
+            waits.append(wait)
+            now[0] += 100.0
+            return call_tool(session, name, arguments, wait)
+
+        bridge = Bridge(env=self.env, probe=lambda: self.probe, scan=alive_scan, clock=lambda: now[0])
+        with mock.patch.object(server.GptrSession, "call_tool", timed):
+            result = bridge.call("r", {"code": "1", "timeout": 200})
+        self.assertFalse(result["isError"], text_of(result))
+        self.assertEqual(waits, [200 + server.ANSWER_MARGIN, 100 + server.ANSWER_MARGIN])
+
     def test_a_second_401_is_not_retried_again(self):
         fake = self.fake()
         self.advertise(fake, 405)
