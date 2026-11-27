@@ -235,15 +235,18 @@ mcp_pumped = function(run) !is.null(run) && reactor_depth() > 0L
 #' run), it is reported as `tool_execution_start`/`_end` under its gate's call id, the end with
 #' the result's `content` and `details` and the execution time, and its approval's control tokens
 #' end with it, as for a call of the agent loop (IC-53, D-192); a refused call's end says why
-#' it did not run (`refused`)
+#' it did not run (`refused`). The call is kept in the session's live state for /calls, since
+#' it is no message of the session (D-383)
 #' @noRd
 mcp_serve_call = function(target, name, args, id, schema) {
-  run = session_live(target$session)$run
+  live = session_live(target$session)
+  run = live$run
   if (is.null(run) || identical(run_current(), run)) {
     return(mcp_serve_exec(target, name, args, id, schema))
   }
   st = new.env(parent = emptyenv())
   cid = paste0("mcp_", id)
+  live$served_calls = c(live$served_calls, list(list(id = cid, name = name, arguments = args)))
   run_emit(run, "tool_execution_start", tool_call_id = cid, tool_name = name,
            input = if (is.list(args)) args else json_obj())
   on.exit({

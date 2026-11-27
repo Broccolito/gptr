@@ -240,8 +240,8 @@ changed or removed (`+ fit, s`), an edit as one row with the lines it added and 
 written file's size, or an error's message in up to six wrapped rows. What R code prints shows
 at most 5 rows a call, then `(+N more lines)`; what the model receives is unchanged. `/calls`
 prints this session's last tool call whole, all its code and what an edit or a write changes,
-and `/calls 3` the last three; a sub-agent's calls and the steps a CLI route runs itself are not
-among them. An approval always shows the code it asks about. To see every call's code as it runs
+and `/calls 3` the last three, including the calls a CLI route makes to gptr's tools; a
+sub-agent's calls and the steps a CLI route runs itself, such as Codex's shell, are not among them. An approval always shows the code it asks about. To see every call's code as it runs
 (at most 20 rows) and all of its output, turn the setting off:
 
 

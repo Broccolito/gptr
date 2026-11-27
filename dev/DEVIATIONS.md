@@ -11193,8 +11193,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   with every code row (`console_tool_line(compact = FALSE, n = Inf)`), then a path tool's change
   rows as its approval shows them (`ui_request_change()`: an edit's old and new text, a write's
   content), uncut, at the live rows' column (the command's margin is taken off); `No tool call
-  yet.` before one. A sub-agent's calls and a CLI route's steps are not messages of the session,
-  so they are not listed. Amended by the P35 review (2026-11-26): whole calls, the live column, `n`
+  yet.` before one. A sub-agent's calls and a CLI route's own steps (Codex's shell) are not
+  listed. Amended by the 1.3.0 live check (2026-11-27, RStudio): the calls a CLI route makes to
+  gptr's tools are no messages of the session either, so `mcp_serve_call()` keeps them in the
+  session's live state (`served_calls`) and `/calls` lists them after the messages' calls. Amended by the P35 review (2026-11-26): whole calls, the live column, `n`
   only digits.
 - Contract-visible: 03 section 6.17 (the command list); the interactive-console vignette, `?peter`,
   the cheat sheet.

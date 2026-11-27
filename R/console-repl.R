@@ -1444,7 +1444,8 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' rows); what R code prints shows at most 5 rows a call, then `(+N more lines)`; what the model
 #' receives is unchanged. An approval shows the code it asks about. `/calls [n]` prints this
 #' session's last `n` tool calls whole (default 1): all their code, and what an edit or a write
-#' changes; a sub-agent's calls and the steps a CLI route runs itself are not among them.
+#' changes, including the calls a CLI route makes to gptr's tools; a sub-agent's calls and the
+#' steps a CLI route runs itself, such as Codex's shell, are not among them.
 #' `gptr_config(compact_calls = FALSE)` shows every call's code as it runs (at most 20 rows) and
 #' all its output.
 #'

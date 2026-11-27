@@ -50,8 +50,9 @@ new there too.
   at most 5 rows a call, then `(+N more lines)`; what the model receives is unchanged. An
   approval still shows the whole code it asks about.
 * `/calls` prints this session's last tool call whole, all its code and what an edit or a write
-  changes, `/calls 3` the last three; a sub-agent's calls and the steps a CLI route runs itself
-  are not among them.
+  changes, `/calls 3` the last three, including the calls a CLI route makes to gptr's tools; a
+  sub-agent's calls and the steps a CLI route runs itself, such as Codex's shell, are not among
+  them.
 * `gptr_config(compact_calls = FALSE)` shows every call's code as it runs and all its output, as
   before; `.scope = "user"` keeps that for every session.
 

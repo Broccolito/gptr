@@ -180,6 +180,16 @@ test_that("a call served in a live run is reported as a tool call of the run (D-
   expect_identical(failed$details$error, "no answer")
 })
 
+test_that("/calls shows a call a CLI route made to gptr's tools (D-383)", {
+  box = new.env()
+  serve_in_run(function(event, ctx) {
+    box$session = ctx$session
+    mcp_dispatch_local(r_call("a = 1\nb = 2", id = 6L), ctx$session)
+  })
+  rows = cmd_calls("", list(session = box$session))
+  expect_true(any(grepl("a = 1", rows, fixed = TRUE)) && any(grepl("b = 2", rows, fixed = TRUE)))
+})
+
 test_that("the end of a served call that was refused says why it did not run (console-3)", {
   local_permission_rules()
   gptr_permissions(deny = "r(fn:writeLines)")

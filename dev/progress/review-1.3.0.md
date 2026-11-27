@@ -38,6 +38,7 @@ Sonnet, no repair round needed) and the coordinator's integration recorded each 
 | R130-27 | nit | docs | `vignettes/interactive-console.Rmd.orig:220` | Vignette says a call's 'lines' are counted, but the contract counts non-blank lines | fixed (`b1215fbc`, `cbb93cb3`) |
 | R130-28 | low | console-ci | `R/console-repl.R:1075` | The console banner shows claude-cli/default without naming the model it runs | fixed (`0b6eb2c4`, `cbb93cb3`) |
 | R130-29 | low | cli | `R/cli-claude.R:648` | A Claude CLI error ends with '..' when the CLI's detail already ends in a period | fixed (`dc671a80`) |
+| R130-30 | medium | console-ci | `R/console-commands.R:385` | `/calls` lists nothing on a CLI route: the calls the CLI makes to gptr's tools are no messages of the session | fixed (this commit) |
 
 ## Details
 
@@ -156,3 +157,13 @@ Fix: In repl_model() (or where the banner builds its model field) use the same '
 **R130-29** (low; lenses: live). Live pty: /model claude-cli/claude-sonnet-9-9-test then a prompt printed 'error: The claude CLI ended the turn: it reported an error: There's an issue with the selected model (claude-sonnet-9-9-test). It may not exist or you may not have access to it. Run --model to pick a different model..' (paste0(..., what, '.') after a detail that ends in '.').
 
 Fix: Append the final period only when the text does not already end in sentence punctuation; add a test.
+
+**R130-30** (medium; lens: live, RStudio 2026-11-27). On the default `claude-cli` route an `r` call
+showed as a compact row with `(+3 more lines)`, and `/calls` then said "No tool call yet.": the
+calls a CLI route makes to gptr's tools reach the console as tool events (`mcp_serve_call()`) but
+never as `tool_call` blocks of the session's messages, which is all `/calls` read. The maintainer's
+request was compact rows with the full calls available from the history.
+
+Fix: `mcp_serve_call()` keeps each call of a live run in the session's live state
+(`served_calls`), and `/calls` lists them after the messages' calls; D-383, NEWS, `?peter` and the
+console article say so.

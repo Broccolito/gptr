@@ -378,7 +378,9 @@ cmd_env = function(args, ctx) {
   if (length(lines)) lines else "(no objects)"
 }
 
-#' `/calls [n]`: the last `n` tool calls of the session's messages (default 1), oldest first, whole
+#' `/calls [n]`: the last `n` tool calls (default 1) of the session's messages, then of the calls a
+#' CLI route made to gptr's tools in this R session (the live state's `served_calls`), oldest first,
+#' whole
 #' whatever compact_calls says: every code row, and the change rows of a path tool as its approval
 #' shows them (an edit's old and new text, a write's content), at the live rows' column (D-383)
 #' @noRd
@@ -388,7 +390,9 @@ cmd_calls = function(args, ctx) {
     return("Use /calls [n], n a whole number above 0.")
   }
   s = ctx$session
-  calls = if (!is.null(s)) unlist(lapply(s$messages, msg_calls), recursive = FALSE)
+  calls = if (!is.null(s)) {
+    c(unlist(lapply(s$messages, msg_calls), recursive = FALSE), session_live(s)$served_calls)
+  }
   if (!length(calls)) return("No tool call yet.")
   rows = unlist(lapply(utils::tail(calls, as.numeric(n)), function(b) {
     call = list(id = b$id, name = b$name, input = b$arguments %||% list())
