@@ -397,6 +397,21 @@ test_that("the banner: dim lines at column 2 with the keys bold, then a blank li
   expect_match(rows[[1L]], "\033[38;5;", fixed = TRUE)
 })
 
+test_that("the banner names the model a CLI's default runs as /model does, asking no CLI", {
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  asked = new.env()
+  local_mocked_bindings(pcli_discover = function(cli) asked$cli = cli)
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  rs = repl_state(NULL, new.env())
+  rs$model = "claude-cli/default"
+  first = function() utils::capture.output(repl_banner(rs))[[1L]]
+  expect_match(first(), " - claude-cli/default - manual - ", fixed = TRUE)
+  pcli_cache$models = list(claude = list(default = "claude-opus-5-5"))
+  expect_match(first(), " - claude-cli/default (claude-opus-5-5) - manual - ", fixed = TRUE)
+  expect_null(asked$cli)
+})
+
 test_that("the banner names the console's key and promises nothing it lacks (review, Task 26)", {
   skip_on_cran()
   local_gptr_options(interactive = TRUE)

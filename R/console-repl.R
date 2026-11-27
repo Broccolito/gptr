@@ -1049,7 +1049,8 @@ console_wait = function(rs, ss, pump) {
 
 #' The banner (architecture 6.17, NS-1; D-245): dim lines at column 2 as a notice, their terms
 #' joined by the separator in rows of whole terms (console_terms()), in ASCII `gptr <version> -
-#' <model> - <mode> - .gptr/ found`, `objects: ` and up to six names of the evaluation environment,
+#' <model> - <mode> - .gptr/ found` with the model as /model names it (cmd_model_label()),
+#' `objects: ` and up to six names of the evaluation environment,
 #' then the keys in bold, `/help lists commands - tab completes after @ ! / - ctrl-c twice leaves`:
 #' the tab only where the REPL completes (after ! and / in RStudio's console, which puts other words
 #' in backticks), the console's own interrupt key, which does not pause at the prompt. Where the
@@ -1072,7 +1073,8 @@ repl_banner = function(rs) {
   fate = console_typed_fate()
   console_notice(paste(c(
     sym$dim(console_terms(c(paste("gptr", utils::packageVersion("gptr")),
-                            console_escape(c(repl_model(rs), repl_mode(rs)), FALSE), ws), width)),
+                            console_escape(c(cmd_model_label(repl_model(rs)), repl_mode(rs)),
+                                           FALSE), ws), width)),
     if (length(nms)) {
       sym$dim(paste0("objects: ", console_escape(paste(utils::head(nms, 6L), collapse = ", "),
                                                  FALSE), more))
