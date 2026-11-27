@@ -6,7 +6,7 @@ inspects, analyses, plots and fixes the objects in memory through
 permission settings, and gptr records each call that runs, so the work can be replayed as a
 script.
 
-Current version: **1.3.0**
+Current version: **1.3.1**
 
 gptr Agent is released with gptr: its version is gptr's, and its bundle is attached to gptr's
 GitHub releases.
