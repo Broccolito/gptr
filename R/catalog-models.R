@@ -1780,7 +1780,7 @@ catalog_grepl = function(pattern, x) {
 #' it starts with: Claude Code through its stream-json `initialize` and `get_settings` control
 #' requests, Codex through `codex app-server` (`model/list`, `config/read`), else
 #' `codex debug models`. No prompt is sent and no tokens are spent. Claude Code's probe starts
-#' with your settings, which name the model it starts with, so their SessionStart hooks run;
+#' with your settings, which name the model it starts with, so their `SessionStart` hooks run;
 #' tools and slash commands stay off. gptr asks once per R session and CLI version, when a run
 #' starts or at `/model`, and again with `refresh = TRUE`, so a CLI update changes the list
 #' without a gptr release. The `default` row runs the model your CLI starts with and names it
