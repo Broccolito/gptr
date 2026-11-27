@@ -34,12 +34,13 @@ gptr_provider(
 (\code{reasoning = TRUE}) lists the levels it accepts in \code{thinking_levels}, a subset of \code{"off"},
 \code{"minimal"}, \code{"low"}, \code{"medium"}, \code{"high"}, \code{"xhigh"} and \code{"max"}; without it \code{"off"} to
 \code{"high"} is assumed. A requested level the model lacks becomes the nearest one it has, with a
-message. A level goes to the API as an effort name, or as a token budget for a record with
-\code{thinking_budget = list(min = , max = )} and no \code{thinking_effort = TRUE}. A record's \code{prices}
-is a data frame or a list of price records: \code{input} and \code{output} in USD per million tokens,
-optional \code{cache_read}, \code{cache_write_5m}, \code{cache_write_1h}, \code{from} (a \code{"YYYY-MM-DD"} date) and
-\code{tier} (\code{"default"}, or \code{">Nk"} for prompts above N thousand tokens, such as \code{">200k"}); it is
-checked here, and without it the cost is unknown.}
+message. A level goes to the API as an effort name, or as a token budget within \code{min} and
+\code{max} for a record with \code{thinking_budget = list(min = , max = )} and no
+\code{thinking_effort = TRUE}. A record's \code{prices} is a data frame or a list of price records:
+\code{input} and \code{output} in USD per million tokens, optional \code{cache_read}, \code{cache_write_5m},
+\code{cache_write_1h}, \code{from} (a \code{"YYYY-MM-DD"} date) and \code{tier} (\code{"default"}, or \code{">Nk"} for
+prompts above N thousand tokens, such as \code{">200k"}); it is checked here, and without it the
+cost is unknown.}
 
 \item{compat}{Named list of compatibility switches for the adapter (for
 \code{api = "bedrock-converse"}, \code{region}: the AWS region requests are signed for).}

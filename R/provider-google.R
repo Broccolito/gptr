@@ -319,7 +319,7 @@ google_generation = function(model, params) {
   } else if (identical(level, "off")) {
     gen$thinkingConfig = list(thinkingBudget = 0L)
   } else {
-    budget = if (is.null(level)) -1L else adp_budget(level)
+    budget = if (is.null(level)) -1L else adp_budget(level, model)
     gen$thinkingConfig = list(includeThoughts = TRUE, thinkingBudget = budget)
   }
   gen

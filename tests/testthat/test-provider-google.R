@@ -413,6 +413,11 @@ test_that("thinking levels and budgets come from the model's data, forced calls 
   expect_equal(config(g25, "medium"), list(includeThoughts = TRUE, thinkingBudget = 8192L))
   expect_equal(config(g25, "off"), list(thinkingBudget = 0L))
   expect_equal(config(g25, NULL), list(includeThoughts = TRUE, thinkingBudget = -1L))
+  # a level's budget stays within the range the model's data gives
+  g25$thinking_budget = list(min = 4096, max = 12000)
+  expect_equal(config(g25, "minimal")$thinkingBudget, 4096L)
+  expect_equal(config(g25, "medium")$thinkingBudget, 8192L)
+  expect_equal(config(g25, "high")$thinkingBudget, 12000L)
   # temperature only where the data accepts sampling, and to a thinking model only with
   # thinking off (Gemini 3 asks for the default)
   temp = function(model, thinking = "high") {

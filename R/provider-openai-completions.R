@@ -561,7 +561,7 @@ completions_thinking = function(head, model, params, compat) {
   fmt = compat$thinking_format %||% "openai"
   if (fmt == "openrouter") {
     if (on && adp_budget_thinking(model)) {
-      head$reasoning = list(max_tokens = adp_budget(level))
+      head$reasoning = list(max_tokens = adp_budget(level, model))
     } else if (on || none) {
       head$reasoning = list(effort = if (on) eff else "none")
     }

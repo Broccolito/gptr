@@ -997,10 +997,13 @@ adp_operator_text = function(m) {
   paste(vapply(m$content, function(b) b$text %||% "", ""), collapse = "\n")
 }
 
-#' Thinking budget in tokens for budget-based models (report 03 section 5.5 defaults)
+#' Thinking budget in tokens for budget-based models (report 03 section 5.5 defaults), within the
+#' model's `thinking_budget` range
 #' @noRd
-adp_budget = function(level) {
-  switch(level, minimal = 1024L, low = 2048L, medium = 8192L, 16384L)
+adp_budget = function(level, model) {
+  b = switch(level, minimal = 1024L, low = 2048L, medium = 8192L, 16384L)
+  r = model[["thinking_budget"]]
+  as.integer(min(max(b, r[["min"]]), r[["max"]]))
 }
 
 #' Assemble a JSON body: the head fields, the extra members, then the growing array last
@@ -1219,7 +1222,7 @@ anthropic_thinking = function(model, params) {
                         display = if (gptr_has_human()) "summarized" else "omitted")
     out$effort = params$effort %||% level
   } else if (!is.null(level)) {
-    out$budget = adp_budget(level)
+    out$budget = adp_budget(level, model)
     out$thinking = list(type = "enabled", budget_tokens = out$budget)
     out$betas = "interleaved-thinking-2025-05-14"
   }
