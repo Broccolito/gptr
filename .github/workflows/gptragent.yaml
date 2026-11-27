@@ -40,8 +40,8 @@ jobs:
       run:
         working-directory: gptragent
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.13.9"
       - name: The lock matches pyproject.toml
@@ -72,7 +72,7 @@ jobs:
       run:
         working-directory: gptragent
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/system-libraries
         if: runner.os == 'Linux'
       - uses: r-lib/actions/setup-r@v2
@@ -89,7 +89,7 @@ jobs:
         timeout-minutes: 5
         working-directory: .
         run: R CMD INSTALL --no-docs --no-multiarch .
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.13.9"
       - run: uv sync --locked --python 3.13
@@ -107,7 +107,7 @@ jobs:
       run:
         working-directory: gptragent
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/system-libraries
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -118,7 +118,7 @@ jobs:
         with:
           packages: any::gptr any::httpuv any::later any::openssl
           dependencies: '"hard"'
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.13.9"
       - run: uv sync --locked --python 3.13
@@ -135,7 +135,7 @@ jobs:
     name: gptragent plugins
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -167,12 +167,13 @@ jobs:
       run:
         working-directory: gptragent
     env:
-      GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.13.9"
       - name: Refuse a prerelease, a draft, or a tag other than v plus both versions
@@ -198,6 +199,8 @@ jobs:
         run: uv run python -m unittest discover -s tests -v
       - name: Build, keeping every bundled skill path of the previous gptr release that has a bundle
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           previous=$(gh api "repos/$GH_REPO/releases?per_page=100" --jq '[.[] | select(.tag_name != env.RELEASE_TAG
             and (.draft or .prerelease | not) and any(.assets[]; .name == "gptragent.brxt"))][0].tag_name // empty')
@@ -210,4 +213,6 @@ jobs:
           fi
       - name: Attach the bundle to this release, leaving latest unchanged
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: gh release upload "$RELEASE_TAG" dist/gptragent.brxt "dist/gptragent-${RELEASE_TAG#v}.brxt" dist/SHA256SUMS --clobber
