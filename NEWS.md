@@ -77,7 +77,7 @@ new there too.
   `-c` overrides, so a Codex set up for Ollama, LM Studio or a router works in gptr. Only the
   table's documented settings without credentials or commands go on the command line; tokens,
   `http_headers`, `query_params` and `auth` commands stay off. Give a key through `env_key` or
-  `env_http_headers`.
+  `env_http_headers`: gptr passes the environment variables they name to Codex.
 * The offline catalog is models.dev (MIT) of 2026-11-26 with gptr's reviewed corrections; it
   lists Gemini 4, Fable 5.2, Haiku 5.5, GPT-6.2 and Grok 4.x. gptr matches no model name: an alias
   is the newest active model of its models.dev family (`gpt` is `gpt-6.2-sol`, `gemini` is
