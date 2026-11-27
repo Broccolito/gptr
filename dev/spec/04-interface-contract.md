@@ -1532,15 +1532,25 @@ gptr_mcp_add("fs", command = "npx", args = c("-y", "@modelcontextprotocol/server
 #### `gptr_mcp_serve()` — P18, `mcp-server.R` [stable]
 
 ```r
-gptr_mcp_serve(tools = c("r", "read", "edit", "write"), envir = parent.frame(), port = NULL,
-               stop = FALSE)
+gptr_mcp_serve(tools = c("inspect", "r", "read", "edit", "write"), envir = parent.frame(),
+               port = NULL, stop = FALSE, mode = NULL, advertise = FALSE)
 ```
 
 Serves the live session over loopback Streamable HTTP (both MCP eras): binds `127.0.0.1` on `port` (`NULL` = a
 free port from `port_candidates()`, never `httpuv::randomPort()`, IC-61), requires a 192-bit bearer token
 (`openssl::rand_bytes(24)`, hex), validates `Origin`, and runs every call through the permission gate as a nested
-call of a dedicated session (`kind = "chat"`, label `mcp`) whose home is `envir`. gptr's own CLI routes do not use
-it (IC-79). Needs httpuv, later and openssl (`gptr_error_missing_package`). Returns a
+call of a dedicated session (`kind = "chat"`, the new `gptr_last()`) whose home is `envir` and whose mode is `mode`
+(`"plan"`, `"manual"`, `"edits"` or `"auto"`; `NULL` = the configured default); a running server refuses another
+mode (`gptr_error_invalid_argument`). `inspect` is annotated read-only and runs R code only when it classifies at
+risk level 0, in every mode, refusing anything else unrun. An `r` or `inspect` call served with no live run that
+ran (not refused, not in plan mode; of a call stopped part-way, the expressions that ran) is recorded on the
+dedicated session and, with a `gptr_doc()` binding, written there as a direct R line (§11.5); an `inspect` call
+that changed no object is history only (IC-48, D-373). `advertise = TRUE`, or a label, writes the discovery record
+`serve-<pid>.json` in `file.path(tools::R_user_dir("gptr", "cache"), "mcp-serve")` (0600 in a 0700 folder on
+Unix), also for a running server: the url, port, token, pid, working folder, label (by default the folder's name),
+mode, tools and the R, gptr and front-end versions. It is removed at stop, unload and R's exit, a gone process's
+record at the next load, and reading it is a guarded secret read. gptr's own CLI routes do not use the server
+(IC-79). Needs httpuv, later and openssl (`gptr_error_missing_package`). Returns a
 `gptr_mcp_handle` (§5.11): `$url`, `$port`, `$token_env` (the name `GPTR_MCP_TOKEN`; the token itself is only
 placed in `$config` snippets marked as secret), `$config` (client snippets for Codex,
 Claude Code, Claude Desktop, Cursor with a tool timeout of at least 3,600 s), `$stop()`. One server per process:

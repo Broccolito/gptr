@@ -11137,8 +11137,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   changed objects (IC-48). With no run and a `gptr_doc()` binding the call goes out on P14's
   `console:direct` channel, so the bound .R, .Rmd or .qmd gets a direct R line that
   `gptr_export()` keeps; a call stopped part-way sends `n_done` and records what ran.
-- Contract-visible: 04 IC-58/IC-65 recording rule; 11.5 transcript row (direct R lines also come
-  from served R); `console:direct` gains an optional `n_done`; `?gptr_mcp_serve`.
+- Contract-visible: 04 §6.3 `gptr_mcp_serve()` recording rule, with §11.5's direct R line
+  (R130-15); `console:direct` gains an optional `n_done`; `?gptr_mcp_serve`.
 - Tests: test-mcp-recording.R "plan and non-recording runs record no code, failed R what ran,
   idle R its session" and "idle served R records on the server's session and its bound document
   (D-373)". Evidence: progress/P34.md Task 2.
