@@ -58,9 +58,10 @@ new there too.
 * The `claude-cli` and `codex` routes ask your installed CLI which models it offers and which one
   it starts with: Claude Code through its stream-json control requests `initialize` and
   `get_settings`, Codex through `codex app-server` (`model/list`, `config/read`), else
-  `codex debug models`. No prompt is sent and no tokens are spent. gptr asks once per R session
-  and CLI version, and on `gptr_models(provider = "codex", refresh = TRUE)`, so a CLI update
-  changes what gptr lists without a gptr release. `/model` on a CLI route lists those models.
+  `codex debug models`. No prompt is sent and no tokens are spent; Claude Code's probe loads your
+  settings, so your SessionStart hooks run. gptr asks once per R session and CLI version, and on
+  `gptr_models(provider = "codex", refresh = TRUE)`, so a CLI update changes what gptr lists
+  without a gptr release. `/model` on a CLI route lists those models.
 * `claude-cli/default` and `codex/default` run the model your CLI starts with (Claude Code's
   settings `model`, Codex's `config.toml` `model`), named in `/model`, `/status`, the status line
   and `gptr_models()`, as in `claude-cli/default (claude-opus-5-5)`. When the CLI cannot say,

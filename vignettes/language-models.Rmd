@@ -236,11 +236,12 @@ the CLI chooses.
 
 gptr asks the installed CLI which models it offers: Claude Code through its stream-json control
 requests, Codex through `codex app-server`, else `codex debug models`. No prompt is sent and no
-tokens are spent. It asks once per R session and CLI version, so a CLI update changes the list
-without a gptr release; `gptr_models(provider = "codex", refresh = TRUE)` asks now (use
-`"claude-cli"` for Claude Code), and `/model` on a CLI route lists what the CLI reported. Any
-other id is passed to the CLI as written, with one notice: `model = "codex/<id>"` or
-`/model claude-cli/<id>`. A listing does not verify account access.
+tokens are spent; Claude Code's probe loads your settings, so your SessionStart hooks run. It
+asks once per R session and CLI version, so a CLI update changes the list without a gptr
+release; `gptr_models(provider = "codex", refresh = TRUE)` asks now (use `"claude-cli"` for
+Claude Code), and `/model` on a CLI route lists what the CLI reported. Any other id is passed to
+the CLI as written, with one notice: `model = "codex/<id>"` or `/model claude-cli/<id>`. A
+listing does not verify account access.
 
 
 ``` r
