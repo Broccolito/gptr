@@ -689,21 +689,6 @@ pcli_discovery = function(cli, path = NULL) {
   if (is.null(path) || identical(hit$key, pcli_cache_key(path))) hit
 }
 
-#' The discovery of a provider's CLI found at `path`, asked now through the catalog when nothing is
-#' kept for that command as it is now and the provider discovers (claude-cli, codex), so a new CLI
-#' version is asked again (D-390); never signals
-#' @noRd
-pcli_discovered = function(provider, path) {
-  p = provider_get(provider)
-  cli = sub("^cli-", "", p[["api"]] %||% "")
-  hit = pcli_discovery(cli, path)
-  if (is.null(hit) && is.function(p[["discover"]])) {
-    tryCatch(catalog_inventory(p, refresh = TRUE), error = function(e) NULL)
-    hit = pcli_discovery(cli, path)
-  }
-  hit
-}
-
 #' Talk JSON lines with a CLI child that gets no prompt and spends no tokens (model discovery,
 #' D-390): start it in its CLI's child environment under tempdir() with stdin open, write `send`,
 #' then give each decoded line to `read()`, which returns more lines to write, or TRUE when the
@@ -1387,16 +1372,21 @@ pcli_hook_params = function(event, ctx) {
 }
 
 #' `agent_start` hook: probe the CLI of a session on a plan route, and once it passes ask it for
-#' its models when it changed (D-390), before its run's first request, so these runs (about a
-#' second, then cached) never freeze its live row; a probe that fails is left to build(), which
-#' reports it (D-192)
+#' its models through the catalog when nothing is kept for its command as it is now and its
+#' provider discovers (claude-cli, codex; D-390), before its run's first request, so these runs
+#' (about a second, then cached) never freeze its live row; a probe that fails is left to build(),
+#' which reports it (D-192)
 #' @noRd
 pcli_hook_start = function(event, ctx) {
   m = tryCatch(model_resolve(ctx$model(), strict = FALSE), error = function(e) NULL)
   if (isTRUE(m[["api"]] %in% c("cli-claude", "cli-codex"))) {
-    path = tryCatch(pcli_find(sub("^cli-", "", m[["api"]])), error = function(e) NULL)
+    cli = sub("^cli-", "", m[["api"]])
+    path = tryCatch(pcli_find(cli), error = function(e) NULL)
     probed = !is.null(path) && !is.null(tryCatch(pcli_probe(path), error = function(e) NULL))
-    if (probed) pcli_discovered(m[["provider"]], path)
+    p = if (probed && is.null(pcli_discovery(cli, path))) provider_get(m[["provider"]])
+    if (is.function(p[["discover"]])) {
+      tryCatch(catalog_inventory(p, refresh = TRUE), error = function(e) NULL)
+    }
   }
   invisible(NULL)
 }

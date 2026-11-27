@@ -116,13 +116,16 @@ test_that("a CLI that fails, times out or lists nothing is kept apart from a suc
 test_that("discovery is kept per CLI command, asked again for a new CLI, and on refresh", {
   stamp = "v1"
   talks = local_talks(fixture_lines("claude-discover-text.ndjson"))
-  local_mocked_bindings(pcli_cache_key = function(cmd) stamp, check_running = function() FALSE,
-                        egress_check = function(...) TRUE, replay_guard = function(...) TRUE)
+  local_mocked_bindings(pcli_cache_key = function(cmd) stamp, pcli_probe = function(path) list(),
+                        check_running = function() FALSE, egress_check = function(...) TRUE,
+                        replay_guard = function(...) TRUE)
   catalog_reset(discovered = TRUE)
   withr::defer(catalog_reset(discovered = TRUE))
   path = pcli_find("claude")
-  expect_identical(pcli_discovered("claude-cli", path)$default, "vendor-large-3")
-  expect_identical(pcli_discovered("claude-cli", path)$default, "vendor-large-3")
+  ctx = list(model = function() "claude-cli/default")
+  pcli_hook_start(list(), ctx)
+  pcli_hook_start(list(), ctx)
+  expect_identical(pcli_discovery("claude", path)$default, "vendor-large-3")
   expect_length(talks$all, 1L)
   # the rows reach the catalog: the default is named after its model, the others listed
   expect_identical(model_resolve("claude-cli/default")$name, "default (vendor-large-3)")
@@ -131,7 +134,8 @@ test_that("discovery is kept per CLI command, asked again for a new CLI, and on 
   expect_true(all(found$availability == "advertised"))
   stamp = "v2"
   expect_null(pcli_discovery("claude", path))
-  expect_identical(pcli_discovered("claude-cli", path)$key, "v2")
+  pcli_hook_start(list(), ctx)
+  expect_identical(pcli_discovery("claude", path)$key, "v2")
   expect_length(talks$all, 2L)
   gptr_models(provider = "claude-cli", refresh = TRUE)
   expect_length(talks$all, 3L)
@@ -139,7 +143,8 @@ test_that("discovery is kept per CLI command, asked again for a new CLI, and on 
   off = gptr_register(pcli_fake_provider("claude"))
   withr::defer(off())
   pcli_cache_clear()
-  expect_null(pcli_discovered("fakeclaude", path))
+  pcli_hook_start(list(), list(model = function() "fakeclaude/default"))
+  expect_null(pcli_discovery("claude", path))
   expect_length(talks$all, 3L)
 })
 
