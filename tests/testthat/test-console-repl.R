@@ -370,6 +370,22 @@ test_that("a console opened in yolo shows the yolo notice with its banner (IC-78
   expect_length(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 3L)
 })
 
+test_that("the prompt and the banner name the mode only when it is not auto, the default (D-396)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(quiet = TRUE)
+  rs = repl_state(NULL, new.env())
+  rs$model = "fake/fake-1"
+  first = function() utils::capture.output(repl_banner(rs))[[1L]]
+  expect_identical(repl_mode(rs), "auto")
+  expect_identical(repl_prompt(rs), "peter> ")
+  expect_no_match(first(), "auto", fixed = TRUE)
+  for (m in c("manual", "edits", "plan", "yolo")) {
+    rs$mode = m
+    expect_identical(repl_prompt(rs), paste0("peter[", m, "]> "))
+    expect_match(first(), paste0(" - fake/fake-1 - ", m, " - "), fixed = TRUE)
+  }
+})
+
 # The banner's rows in front end `fe`, its reader completing or not, on Windows or not
 banner_rows = function(fe = "terminal", complete = TRUE, env = new.env(), windows = FALSE) {
   local_mocked_bindings(front_end = function() fe, is_windows = function() windows)
@@ -388,8 +404,7 @@ test_that("the banner: dim lines at column 2 with the keys bold, then a blank li
   b = function(x) as.character(cli::style_bold(x))
   ws = if (is.null(workspace_dir())) "no .gptr/" else ".gptr/ found"
   expect_identical(rows, c(
-    paste0("  ", d(paste0("gptr ", utils::packageVersion("gptr"), " · fake/fake-1 · ",
-                          "auto · ", ws))),
+    paste0("  ", d(paste0("gptr ", utils::packageVersion("gptr"), " · fake/fake-1 · ", ws))),
     paste0("  ", d("objects: alpha, fuel")),
     paste0("  ", b("/help"), d(" lists commands · "), b("tab"),
            d(" completes after @ ! / · "), b("ctrl-c"), d(" twice leaves")),
@@ -406,9 +421,9 @@ test_that("the banner names the model a CLI's default runs as /model does, askin
   rs = repl_state(NULL, new.env())
   rs$model = "claude-cli/default"
   first = function() utils::capture.output(repl_banner(rs))[[1L]]
-  expect_match(first(), " - claude-cli/default - auto - ", fixed = TRUE)
+  expect_match(first(), " - claude-cli/default - ", fixed = TRUE)
   pcli_cache$models = list(claude = list(default = "claude-opus-5-5"))
-  expect_match(first(), " - claude-cli/default (claude-opus-5-5) - auto - ", fixed = TRUE)
+  expect_match(first(), " - claude-cli/default (claude-opus-5-5) - ", fixed = TRUE)
   expect_null(asked$cli)
 })
 
@@ -1250,7 +1265,7 @@ test_that("in IRkernel peter() without a prompt starts the console on gptr_readl
   })
   expect_false(res$visible)
   expect_null(res$value)
-  expect_match(out[[1L]], "^gptr .* - fake/fake-1 - [a-z]+ - ")
+  expect_match(out[[1L]], "^gptr .* - fake/fake-1 - ")
   expect_true(any(grepl("session   (none yet", out, fixed = TRUE)))
   expect_length(box$answers, 0L)
 })

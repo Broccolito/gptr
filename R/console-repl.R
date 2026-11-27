@@ -1049,8 +1049,9 @@ console_wait = function(rs, ss, pump) {
 
 #' The banner (architecture 6.17, NS-1; D-245): dim lines at column 2 as a notice, their terms
 #' joined by the separator in rows of whole terms (console_terms()), in ASCII `gptr <version> -
-#' <model> - <mode> - .gptr/ found` with the model as /model names it (cmd_model_label()),
-#' `objects: ` and up to six names of the evaluation environment,
+#' <model> - <mode> - .gptr/ found` with the model as /model names it (cmd_model_label()) and the
+#' mode only when it is not auto, as the prompt shows it (D-396), `objects: ` and up to six names of
+#' the evaluation environment,
 #' then the keys in bold, `/help lists commands - tab completes after @ ! / - ctrl-c twice leaves`:
 #' the tab only where the REPL completes (after ! and / in RStudio's console, which puts other words
 #' in backticks), the console's own interrupt key, which does not pause at the prompt. Where the
@@ -1071,10 +1072,12 @@ repl_banner = function(rs) {
   width = max(20L, cli::console_width() - 2L * nchar(console_pad()))
   terms = function(x) console_terms(x, width, sym$dim(sep))
   fate = console_typed_fate()
+  mode = repl_mode(rs)
   console_notice(paste(c(
     sym$dim(console_terms(c(paste("gptr", utils::packageVersion("gptr")),
-                            console_escape(c(cmd_model_label(repl_model(rs)), repl_mode(rs)),
-                                           FALSE), ws), width)),
+                            console_escape(c(cmd_model_label(repl_model(rs)),
+                                             if (!identical(mode, "auto")) mode), FALSE), ws),
+                          width)),
     if (length(nms)) {
       sym$dim(paste0("objects: ", console_escape(paste(utils::head(nms, 6L), collapse = ", "),
                                                  FALSE), more))
@@ -1085,7 +1088,7 @@ repl_banner = function(rs) {
     if (!is.null(fate)) {
       terms(c(sym$dim(fate), paste0(key(esc, ", then "), key("s", ", to steer"))))
     }), collapse = "\n"))
-  mode_notice(repl_mode(rs))
+  mode_notice(mode)
   console_write("")
 }
 
