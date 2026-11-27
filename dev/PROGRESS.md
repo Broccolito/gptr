@@ -1,12 +1,16 @@
-## Current checkpoint — gptr 1.3.0 on main, 2026-11-27
+## Current checkpoint — gptr 1.3.0 released, CRAN submission pending, 2026-11-27
 
 gptr 1.1.0 is on CRAN; 1.2.0 (0280d953) was not submitted, so 1.3.0 carries it. On the
 maintainer's word ("merge when green"), PR #125 merged `claude/v1.3.0` into `main` (a78ca77e,
 04:13 UTC) after every check passed on 11214460: the three campaigns of 2026-11-26, their review
 and fix pass, and the maintainer's 2026-11-27 request that `auto` be the default permission mode.
 The final archive (sha256 `ce7159ed…`): win-builder Windows R-devel Status OK, check 516 s,
-installation 90 s; `cran-comments.md` records the results. The GitHub release `v1.3.0` and the
-CRAN submission wait for the maintainer's word.
+installation 90 s; `cran-comments.md` records the results. On the maintainer's word PR #128
+merged (f35c2cab), the GitHub release `v1.3.0` was published at f35c2cab (05:01 UTC; its first
+`gptragent` release run passed all 8 jobs and attached the bundle, sha256 `2cbe62f3…`), the
+Biorouter session got the tag, the asset URL and the `SHA256SUMS` line, and the archive was
+uploaded to CRAN (about 05:18 UTC), waiting for the maintainer's email confirmation. No separate
+1.1.x patch: 1.3.0 carries the S6 fix.
 
 - P34 bridge ([plan](plan/P34-agent-plugins.md), [log](progress/P34.md), D-372..D-374), P35 compact
   calls ([plan](plan/P35-compact-calls.md), [log](progress/P35.md), D-380..D-383), P36 models
@@ -50,16 +54,14 @@ CRAN submission wait for the maintainer's word.
   it. `cran-comments.md` now says why 1.3.0 follows 1.1.0 this soon and that auto writes files
   outside the project without asking (level 3), and names the macOS check's `--no-manual` and its
   separate incoming-checks run.
-- Open: L-72 (symlink classified by its target); the auto default's CRAN wording (drafted in PR
-  #128, for the maintainer to approve) and the Biorouter harness's S5, which serves without a mode
-  to test manual asking and now needs `mode = "manual"`;
+- Open: L-72 (symlink classified by its target); the Biorouter harness's S5, which serves without
+  a mode to test manual asking and now needs `mode = "manual"` (the Biorouter session was told);
   dev/release/tests/test-interactive-examples.R's two failures, which predate 1.3.0's last changes
   (its `gptr_mcp_serve()` stub lacks `mode` and `advertise`).
 
-Next, on the maintainer's word only: merge PR #128, publish the GitHub release `v1.3.0` (it deploys
-gptr Agent to every Biorouter install; then send the Biorouter orchestration session the tag, the
-asset URL and the `SHA256SUMS` line), submit to CRAN. Decisions for the maintainer: a CRAN 1.1.x
-patch for the S6 missing-HOME fail-open, and their Codex config default.
+Next: the maintainer confirms the CRAN submission by email; record CRAN's pretest and publication
+results; a resubmission only on the maintainer's word. The maintainer's Codex config default
+(`gpt-6.1-sol`, rejected for their ChatGPT login) is theirs to change.
 
 ## Historical checkpoint — gptr 1.1.0 on CRAN, 2026-11-19
 
