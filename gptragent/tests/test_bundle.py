@@ -80,8 +80,6 @@ class BundleTests(unittest.TestCase):
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
         self.assertEqual(project["version"], manifest["version"])
         self.assertEqual(project["dependencies"], [])
-        skill = (ROOT / "skills/gptr-live-r/SKILL.md").read_text()
-        self.assertIn(f"  version: {manifest['version']}", skill)
 
     def test_the_bridge_is_released_with_gptr(self):
         # Biorouter's updater compares manifest.version with the tag of manifest.repository's latest release

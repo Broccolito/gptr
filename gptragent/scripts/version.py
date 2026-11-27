@@ -3,8 +3,8 @@
     uv run python scripts/version.py 1.4.0
 
 It rewrites manifest.json, pyproject.toml, src/gptragent/__init__.py, the README's
-"Current version" line, the bundled skill's metadata version, the Claude Code and Codex plugin
-manifests and the plugin's entry in the Claude Code marketplace (../.claude-plugin). The
+"Current version" line, the Claude Code and Codex plugin manifests and the plugin's entry in the
+Claude Code marketplace (../.claude-plugin). The
 User-Agent the bridge sends to gptr is built from __version__, so it moves with them. It refuses
 a version that does not move forward. Then run uv lock, the tests and scripts/build_brxt.py. The
 bundle is released with gptr: the tag is gptr's release tag v<version>, and <version> must equal
@@ -37,8 +37,6 @@ def bump(root: Path, version: str) -> str:
         (root / "src" / package / "__init__.py", r'(?m)^__version__ = "[^"]+"', f'__version__ = "{version}"'),
         (root / "README.md", r"Current version: \*\*\d+\.\d+\.\d+\*\*", f"Current version: **{version}**"),
     ]
-    edits += [(path, r"(?m)^  version: \d+\.\d+\.\d+$", f"  version: {version}")
-              for path in sorted((root / "skills").glob("*/SKILL.md"))]
     edits += [(path, r'"version": "[^"]+"', f'"version": "{version}"')
               for path in (root / ".claude-plugin" / "plugin.json", root / ".codex-plugin" / "plugin.json",
                            root.parent / ".claude-plugin" / "marketplace.json")]
