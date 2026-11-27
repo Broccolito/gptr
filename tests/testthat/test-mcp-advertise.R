@@ -216,6 +216,14 @@ test_that("an outside client's instructions guide it; the CLI routes keep their 
   init = mcp_test_post(h$url, mcp_test_msg("server/discover"), token = h$token)$json$result
   expect_false(grepl("inspect", init$instructions, fixed = TRUE))
   expect_false(grepl("never reload", init$instructions, fixed = TRUE))
+  # an inspect-only server asks for no change and names no r tool
+  gptr_mcp_serve(stop = TRUE)
+  h = local_advertised(envir = new.env(), tools = "inspect")
+  init = mcp_test_post(h$url, mcp_test_msg("server/discover"), token = h$token)$json$result
+  expect_match(init$instructions, "Use inspect to look", fixed = TRUE)
+  expect_false(grepl("Change objects", init$instructions, fixed = TRUE))
+  res = mcp_test_post(h$url, tool_call("inspect", "y = 1"), token = h$token)$json$result
+  expect_match(res$content[[1L]]$text, "(local). Nothing in this call ran.", fixed = TRUE)
   fake = local_fake_provider(list("ok"))
   s = peter("hello", model = fake, envir = new.env(), mode = "auto")
   local = mcp_dispatch_local(mcp_test_msg("server/discover"), s)$result

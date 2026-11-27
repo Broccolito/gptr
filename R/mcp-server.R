@@ -37,10 +37,13 @@ mcp_server_instructions = function(target) {
             paste("Use inspect to look (ls.str(), str(x), peter$describe(x)) before changing",
                   "anything: it runs only code gptr classifies as read-only.")
           },
-          "Change objects in place under their names; a new R process, such as Rscript from a",
-          "shell, does not have them. Every call passes the user's permission settings: when one",
-          "is refused, tell the user what the refusal says they can do, and do not reword the",
-          "code to get around it."), collapse = " ")
+          if (any(c("r", "edit", "write") %in% tools)) {
+            paste("Change objects in place under their names; a new R process, such as Rscript",
+                  "from a shell, does not have them.")
+          },
+          "Every call passes the user's permission settings: when one is refused, tell the user",
+          "what the refusal says they can do, and do not reword the code to get around it."),
+        collapse = " ")
 }
 
 #' The schema of the served `r` tool: no person watches an MCP caller, so it offers the
@@ -314,7 +317,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     return(gptr_tool_result(call$blocked, is_error = TRUE))
   }
   call$risk = call$risk %||% call_risk(call, ctx, run)
-  refused = mcp_inspect_refusal(name, call$risk, st)
+  refused = mcp_inspect_refusal(name, call$risk, target$tools, st)
   if (!is.null(refused)) return(refused)
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
@@ -324,7 +327,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   }
   if (is.list(d$input)) call$input = d$input
   call$risk = d$risk %||% call$risk
-  refused = mcp_inspect_refusal(name, call$risk, st)
+  refused = mcp_inspect_refusal(name, call$risk, target$tools, st)
   if (!is.null(refused)) return(refused)
   tokens = NULL
   if (!is.null(st)) {
@@ -350,15 +353,16 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
 }
 
 #' The refusal of a served `inspect` call whose risk is above level 0 (marking a reported call's
-#' `st` refused), or NULL
+#' `st` refused), or NULL; it points to `r` when `tools` (NULL: the defaults) serve it
 #' @noRd
-mcp_inspect_refusal = function(name, risk, st = NULL) {
+mcp_inspect_refusal = function(name, risk, tools, st = NULL) {
   level = as.integer(risk$level %||% 2L)
   if (!identical(name, "inspect") || identical(level, 0L)) return(NULL)
   if (!is.null(st)) st$refused = "inspect runs level-0 code only"
   gptr_tool_result(paste0("inspect runs only code gptr classifies as read-only (level 0); this ",
                           "code is level ", level, " (", risk$label %||% "unclassified", "). ",
-                          "Use r for it. Nothing in this call ran."), is_error = TRUE)
+                          if ("r" %in% (tools %||% mcp_default_tools())) "Use r for it. ",
+                          "Nothing in this call ran."), is_error = TRUE)
 }
 
 #' Evaluate the served r call `call` in `env` through the eval.r service (the evaluator kind,
