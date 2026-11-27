@@ -559,10 +559,12 @@ test_that("a command line that reads a registered secret or a .env file is a sou
   }
 })
 
-test_that("gptr's credential store is a guarded read, through a computed path too (FIX-37)", {
+test_that("auth.json and serve-<pid>.json are guarded reads, by a computed path too (FIX-37)", {
   local_vault()
   for (code in c("readLines(file.path(tools::R_user_dir('gptr', 'config'), 'auth.json'))",
-                 "jsonlite::fromJSON('~/.config/R/gptr/auth.json')")) {
+                 "jsonlite::fromJSON('~/.config/R/gptr/auth.json')",
+                 "readLines(file.path(d, 'serve-4242.json'))",
+                 "readLines('/u/.cache/R/gptr/mcp-serve/serve-4242.json')")) {
     scan = secret_scan(code)
     expect_identical(scan$level, 3L, label = code)
     expect_true(scan$guard, label = code)
