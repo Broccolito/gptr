@@ -142,6 +142,10 @@ test_that("the orphan sweep kills children of dead owners and spares the rest", 
   local_project()
   dead = processx::process$new(rscript_path(), c("--vanilla", "-e", "invisible(0)"))
   dead$wait(10000)
+  # $wait() returns whether or not the owner exited; the sweep needs pid_alive() to read it gone
+  deadline = Sys.time() + 10
+  while (pid_alive(dead$get_pid()) && Sys.time() < deadline) Sys.sleep(0.05)
+  expect_false(pid_alive(dead$get_pid()))
   plant = function(id, pid, create_time, owner) {
     seed_artifact(id)
     dir.create(file.path(artifact_dir(id), "run"), showWarnings = FALSE)
