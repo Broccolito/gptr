@@ -130,8 +130,9 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## Test environments
 
-* Local: macOS (aarch64), R 4.6.1: the full offline test suite, and `R CMD check --as-cran` of
-  the submission archive with CRAN's remote incoming checks.
+* Local: macOS (aarch64), R 4.6.1: the test files this release changed (71 files, 18,099
+  expectations), and `R CMD check --as-cran` of the submission archive with CRAN's remote
+  incoming checks.
 * win-builder: Windows, R-devel, the submission archive.
 * GitHub Actions, `R CMD check --as-cran`, each job failing on any warning: the whole offline test
   suite in shards on macOS (release), Windows (release) and Ubuntu (release, under `LC_ALL=C`), and
@@ -142,7 +143,16 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## R CMD check results
 
-<filled at the final check: the archive `gptr_1.3.0.tar.gz` and its `sha256`, its macOS and win-builder results with check times, its installed size, and that every GitHub Actions check above passes on its commit>
+The submission archive `gptr_1.3.0.tar.gz` (sha256
+`ce7159ede33b7cdf29db27049247f7d323ff656d52117ad94a141752eee213d4`; its package files are those
+of `main` at a78ca77e):
+
+* macOS, `R CMD check --as-cran` with `NOT_CRAN` unset: Status OK, 0 errors, 0 warnings, 0 notes,
+  in 123 s; CRAN's remote incoming checks: OK.
+* win-builder, Windows R-devel (2026-11-17 r90926 ucrt): Status OK, installation 90 s, check
+  516 s (R code 284 s, tests 42 s, examples 30 s, PDF manual 24 s).
+* GitHub Actions: every check above passes on the merged head (11214460), including both
+  CRAN-mode jobs within their 480 s and 600 s budgets.
 
 ## Installed size
 
@@ -152,6 +162,6 @@ INFO; the older R 4.2 check reported it as a NOTE while keeping the package sour
 
 ## Reverse dependencies
 
-`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-11-17:
+`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-11-26:
 none.
 No package depends on, imports, links to or suggests gptr.

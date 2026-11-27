@@ -1,10 +1,12 @@
-## Current checkpoint — gptr 1.3.0 release candidate, 2026-11-27
+## Current checkpoint — gptr 1.3.0 on main, 2026-11-27
 
-gptr 1.1.0 is on CRAN; 1.2.0 (`main` 0280d953) was not submitted, so 1.3.0 carries it. The release
-branch `claude/v1.3.0` (PR #125, draft, Auto-fix on) holds the three campaigns of 2026-11-26, their
-review and fix pass, and the maintainer's 2026-11-27 request that `auto` be the default permission
-mode. Nothing is merged into `main`, released on GitHub or submitted to CRAN: those wait for the
-maintainer's word.
+gptr 1.1.0 is on CRAN; 1.2.0 (0280d953) was not submitted, so 1.3.0 carries it. On the
+maintainer's word ("merge when green"), PR #125 merged `claude/v1.3.0` into `main` (a78ca77e,
+04:13 UTC) after every check passed on 11214460: the three campaigns of 2026-11-26, their review
+and fix pass, and the maintainer's 2026-11-27 request that `auto` be the default permission mode.
+The final archive (sha256 `ce7159ed…`): win-builder Windows R-devel Status OK, check 516 s,
+installation 90 s; `cran-comments.md` records the results. The GitHub release `v1.3.0` and the
+CRAN submission wait for the maintainer's word.
 
 - P34 bridge ([plan](plan/P34-agent-plugins.md), [log](progress/P34.md), D-372..D-374), P35 compact
   calls ([plan](plan/P35-compact-calls.md), [log](progress/P35.md), D-380..D-383), P36 models

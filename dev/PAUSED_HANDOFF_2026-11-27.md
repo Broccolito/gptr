@@ -9,8 +9,8 @@ acting. Nothing here authorizes merging into `main`, a GitHub release or a CRAN 
 | Item | State |
 |---|---|
 | `claude/v1.3.0` | the release candidate: P34, P35, P36, the review ledger `dev/progress/review-1.3.0.md` (R130-01..R130-30) and its fixes, the CI flake fix, and (if section 2 says it landed) the default `auto` mode. CI was all green at 5dfaca5b. |
-| PR #125 | draft, `claude/v1.3.0` -> `main`, Auto-fix on (bound to the 2026-11-27 session). |
-| win-builder | R-devel uploads: the 5dfaca5b tarball (sha256 `6331534f…`) at 01:44 UTC and the final adc9a2b0 tarball (sha256 `ce7159ed…`, CRAN-mode check Status OK, 123 s locally) at 03:29 UTC; results go by email to the maintainer. Ask them for the final one's "Check time in seconds" (must be well under 600 s). |
+| PR #125 | MERGED into `main` (a78ca77e, 2026-11-27 04:13 UTC) on the maintainer's "merge when green", after every check passed on 11214460. |
+| win-builder | R-devel uploads: the 5dfaca5b tarball (sha256 `6331534f…`) at 01:44 UTC and the final adc9a2b0 tarball (sha256 `ce7159ed…`, CRAN-mode check Status OK, 123 s locally) at 03:29 UTC; results go by email to the maintainer. Results: the first 515 s, the final (`O9eY6F7FZVG4`) Status OK, check 516 s, installation 90 s, no NOTE. |
 | Biorouter | the orchestration session `local_784f49b2-8d15-45ee-b259-95798f22449b` waits for the tag, the release URL and the `SHA256SUMS` line of `gptragent.brxt` after a published v1.3.0. |
 
 ## 2. The default `auto` mode (maintainer's request of 2026-11-27)
