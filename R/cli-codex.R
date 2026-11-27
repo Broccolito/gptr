@@ -95,9 +95,16 @@ pcli_codex_row = function(id, name, input, efforts) {
                reasoning = if (length(levels)) TRUE, thinking_levels = levels))
 }
 
-#' A TOML basic string
+#' A TOML basic string: backslash and quote escaped, control characters as `\uXXXX`
 #' @noRd
-pcli_toml = function(x) paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x), "\"")
+pcli_toml = function(x) {
+  x = gsub("([\\\\\"])", "\\\\\\1", x)
+  ctl = gregexpr("[[:cntrl:]]", x)
+  regmatches(x, ctl) = lapply(regmatches(x, ctl), function(ch) {
+    sprintf("\\u%04X", vapply(ch, utf8ToInt, 1L, USE.NAMES = FALSE))
+  })
+  paste0("\"", x, "\"")
+}
 
 #' A decoded JSON value as an inline TOML value: objects as inline tables (keys quoted, null
 #' members left out), arrays, booleans, numbers and strings
@@ -125,8 +132,9 @@ pcli_codex_provider_keys = c("name", "base_url", "env_key", "env_key_instruction
                              "model_catalog_url", "capabilities")
 
 #' The `-c` overrides that keep the user's own Codex model provider under --ignore-user-config
-#' (D-392), from config/read: `model_provider` with its `model_providers` table, `openai_base_url`
-#' and `model_catalog_json`, so the models Codex lists, the user's default and any written-in id
+#' (D-392), from config/read: `model_provider` with its `model_providers` table (the id quoted in
+#' the value, as Codex splits an override's key at every dot), `openai_base_url` and
+#' `model_catalog_json`, so the models Codex lists, the user's default and any written-in id
 #' reach the server the user's Codex uses. Of the table only pcli_codex_provider_keys go: tokens,
 #' static headers, query parameters and auth commands never go on a command line, which other
 #' users of the computer can read, and gptr names what it left out once.
@@ -148,8 +156,8 @@ pcli_codex_route = function(cfg) {
     if (!is.null(v)) out = c(out, "-c", paste0(k, "=", pcli_toml(v)))
   }
   if (is.list(table) && !is.null(names(table))) {
-    table = table[intersect(names(table), pcli_codex_provider_keys)]
-    out = c(out, "-c", paste0("model_providers.", id, "=", pcli_toml_value(table)))
+    table = list(table[intersect(names(table), pcli_codex_provider_keys)])
+    out = c(out, "-c", paste0("model_providers=", pcli_toml_value(stats::setNames(table, id))))
   }
   out
 }

@@ -213,9 +213,10 @@ test_that("Codex runs keep the user's model provider through -c, never its crede
                  "experimental_bearer_token of your Codex model provider lm", fixed = TRUE)
   route = c("-c", 'model_provider="lm"', "-c", 'openai_base_url="http://127.0.0.1:11434/v1"',
             "-c", 'model_catalog_json="/home/user/catalog.json"',
-            "-c", paste0('model_providers.lm={"name"="LM","base_url"="http://127.0.0.1:1234/v1",',
+            "-c", paste0('model_providers={"lm"={"name"="LM",',
+                         '"base_url"="http://127.0.0.1:1234/v1",',
                          '"wire_api"="responses","env_key"="LM_API_KEY",',
-                         '"requires_openai_auth"=false,"stream_max_retries"=3}'))
+                         '"requires_openai_auth"=false,"stream_max_retries"=3}}'))
   expect_identical(pcli_discovery("codex")$route, route)
   # the configured model the list lacks is the default, passed as written with the provider
   ctx = list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Hello")))
@@ -238,11 +239,17 @@ test_that("Codex runs keep the user's model provider through -c, never its crede
   }, "query_params, auth, http_headers, gateway_oauth, later of your Codex model provider gw",
   fixed = TRUE)
   expect_identical(gw, c("-c", 'model_provider="gw"', "-c", paste0(
-    'model_providers.gw={"name"="GW","base_url"="https://gw.example/v1",',
-    '"env_http_headers"={"X-Key"="GW_KEY"},"capabilities"={"remote_compaction"="v2"}}')))
+    'model_providers={"gw"={"name"="GW","base_url"="https://gw.example/v1",',
+    '"env_http_headers"={"X-Key"="GW_KEY"},"capabilities"={"remote_compaction"="v2"}}}')))
   expect_identical(pcli_codex_route(list(model_provider = NULL)), character())
   expect_identical(pcli_toml_value(list(a = list(), b = list(1L, "x\""), c = NULL)),
                    '{"a"=[],"b"=[1,"x\\""]}')
+  # an id Codex's key path would split, and text with control characters, stay valid TOML
+  odd = pcli_codex_route(list(model_provider = "my.prov=1", model_providers = list(
+    `my.prov=1` = list(name = "P", env_key_instructions = "Line one\n\tline two\r\001"))))
+  expect_identical(odd, c("-c", 'model_provider="my.prov=1"', "-c", paste0(
+    'model_providers={"my.prov=1"={"name"="P",',
+    '"env_key_instructions"="Line one\\u000A\\u0009line two\\u000D\\u0001"}}')))
   pcli_untrack("s0123456789")
 })
 
