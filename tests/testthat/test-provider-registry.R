@@ -2373,3 +2373,103 @@ test_that("invalid settings for one provider mark its row, never the listing", {
   expect_true(all(builtin_ids %in% df$id))
   expect_equal(df$status[df$id == "ollama"], "ready")
 })
+
+# ---- native model listings as catalog data (P36, D-393) ----------------------------------------
+# OpenRouter and Cerebras answers were recorded from their public endpoints on 2026-11-26; the
+# others follow the shapes their documentation gives (keys or a running server would be needed).
+
+fx_listing = function(name) {
+  jsonlite::fromJSON(test_path("fixtures", "models", name), simplifyVector = FALSE)
+}
+
+local_listing = function(body, .env = parent.frame()) {
+  urls = new.env(parent = emptyenv())
+  urls$seen = character()
+  testthat::local_mocked_bindings(
+    check_running = function() FALSE, provider_credential = function(...) NULL,
+    catalog_http_request = function(url, ...) {
+      urls$seen = c(urls$seen, url)
+      list(status = 200L, headers = list(), body = charToRaw(json_encode(body)))
+    }, .env = .env)
+  urls
+}
+
+listed = function(rows) stats::setNames(rows, vapply(rows, function(r) r$id, ""))
+
+test_that("native listings give thinking, sampling and retirement data, never name rules", {
+  local_listing(fx_listing("listing-openrouter.json"))
+  or = listed(provider_models(provider_get("openrouter")))
+  sol = or[["openai/gpt-6.2-sol"]]
+  # mandatory reasoning: the model's own effort names, and no "off"
+  expect_identical(sol$thinking_levels, c("low", "medium", "high", "xhigh", "max"))
+  expect_true(sol$reasoning && sol$thinking_effort && sol$tool_call)
+  expect_false(sol$temperature)
+  expect_equal(c(sol$context, sol$max_output), c(1050000, 128000))
+  expect_identical(sol$input, c("text", "image"))
+  ds = or[["deepseek/deepseek-v4.1-flash-1017"]]
+  expect_identical(ds$thinking_levels, c("off", "low", "high", "max"))
+  expect_true(ds$temperature)
+  expect_false(or[["google/gemini-omni-1.2-flash"]]$tool_call)
+  # an expiration date retires the model; reasoning without effort names keeps gptr's levels
+  safety = or[["nvidia/nemotron-3.5-content-safety"]]
+  expect_identical(safety$status, "deprecated")
+  expect_true(safety$reasoning)
+  expect_null(safety$thinking_effort)
+  expect_null(or[["inclusionai/lingsante-3.1-air-vl"]]$status)
+
+  local_listing(fx_listing("listing-cerebras.json"))
+  cb = listed(provider_models(provider_get("cerebras")))
+  expect_equal(c(cb[["qwen-3.8-27b"]]$context, cb[["qwen-3.8-27b"]]$max_output), c(65536, 32768))
+  expect_identical(cb[["qwen-3.8-27b"]]$input, c("text", "image"))
+  expect_true(cb[["gpt-oss-120b"]]$tool_call && cb[["gpt-oss-120b"]]$reasoning &&
+                cb[["gpt-oss-120b"]]$temperature)
+
+  local_listing(fx_listing("listing-anthropic.json"))
+  an = listed(provider_models(provider_get("anthropic")))
+  expect_identical(an[["claude-fixture-6"]]$thinking_levels,
+                   c("low", "medium", "high", "xhigh", "max"))
+  expect_true(an[["claude-fixture-6"]]$thinking_effort)
+  expect_false(an[["claude-fixture-4"]]$thinking_effort)
+  expect_identical(an[["claude-fixture-4"]]$status, "deprecated")
+
+  compatible = fx_listing("listing-compatible.json")
+  local_listing(compatible$xai)
+  grok = provider_models(provider_get("xai"))[[1]]
+  expect_identical(grok$thinking_levels, c("low", "medium", "high", "xhigh"))
+  expect_equal(grok$context, 500000)
+  local_listing(compatible$llamacpp)
+  gguf = provider_models(provider_get("llamacpp"))[[1]]
+  expect_equal(gguf$context, 262144)
+  expect_identical(gguf$input, c("text", "image"))
+  local_listing(compatible$vllm)
+  expect_equal(provider_models(provider_get("vllm"))[[1]]$context, 65536)
+})
+
+test_that("LM Studio is listed from its native endpoint with tools, vision and reasoning", {
+  urls = local_listing(fx_listing("listing-compatible.json")$lmstudio)
+  rows = listed(provider_models(provider_get("lmstudio")))
+  expect_identical(urls$seen, "http://localhost:1234/api/v1/models")
+  expect_named(rows, c("qwen/qwen3.8-9b", "google/gemma-4-e2b"))
+  qwen = rows[["qwen/qwen3.8-9b"]]
+  expect_equal(qwen$context, 32768)
+  expect_true(qwen$tool_call && qwen$thinking_effort)
+  expect_identical(qwen$input, c("text", "image"))
+  expect_identical(qwen$thinking_levels, c("off", "low", "medium", "high"))
+  gemma = rows[["google/gemma-4-e2b"]]
+  expect_false(gemma$tool_call)
+  expect_equal(gemma$context, 131072)
+  expect_null(gemma$reasoning)
+})
+
+test_that("discovered thinking and sampling data reach the model record", {
+  local_listing(fx_listing("listing-openrouter.json"))
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  catalog_discover(provider_get("openrouter"))
+  rec = model_resolve("openrouter/openai/gpt-6.2-sol")
+  expect_true(rec$thinking_effort)
+  expect_false(rec$temperature)
+  expect_identical(rec$thinking_levels, c("low", "medium", "high", "xhigh", "max"))
+  expect_identical(model_resolve("openrouter/nvidia/nemotron-3.5-content-safety")$status,
+                   "deprecated")
+})

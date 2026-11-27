@@ -105,7 +105,7 @@ layers when settings are resolved. The file's `version` field is format metadata
 | `model` | `NULL`: try configured Anthropic, OpenAI, Google, Claude Code CLI, then Codex CLI routes in that order. Set a canonical reference for other routes or reproducible routing. |
 | `small_model` | `NULL`: the main model's small sibling when available, otherwise the main model. |
 | `system1` | `NULL`: hosted Jev when its key exists, otherwise a verified local decision model already discovered. Set an explicit typed model or opt-in `"emulate:<model>"` route. |
-| `mode` | `"manual"`; also `"plan"`, `"edits"`, `"auto"`, `"yolo"`. An untrusted project file can only tighten it; a trusted one sets any mode but `"yolo"`. |
+| `mode` | `"auto"`; also `"plan"`, `"manual"`, `"edits"`, `"yolo"`. An untrusted project file can only tighten it; a trusted one sets any mode but `"yolo"`. |
 | `preset` | `"standard"`; built-in alternatives are `"minimal"`, `"readonly"`, `"extended"`. |
 | `tools` | Enable/disable lists and model-glob preset mappings: `list(enable = ..., disable = ..., presets = ...)`. |
 | `budget` | `list(tokens = 2000000, cost = 5, turns = NULL)` per top-level call; `NULL` entries remove individual limits. |
@@ -187,6 +187,7 @@ gptr_config(undo = list(memory = 4e9), .scope = "user")
 | `subagents` | `max_depth = 1`, `max_active = 8`, `max_workers = NULL`, `max_cli = 4`, `max_tasks = 8`; workers default to at most four. |
 | `ui`, `frontend` | `NULL` selects by context; set the name of a registered UI or front end. |
 | `type_ahead` | What Enter does with a message typed in a terminal console while the agent works (Tab does the other); in other consoles, what a typed line does: `"steer"` reaches the agent at its next step, `"follow_up"` is the next prompt once the run ends. |
+| `compact_calls` | `TRUE`: each tool call is one console row, its first non-blank line and `(+N more lines)`, and what R code prints shows at most 5 rows a call; `/calls` shows recent calls in full. `FALSE` shows every call's code (at most 20 rows) and all its output. |
 | `store`, `evaluator` | `"jsonl"` and `"r"`; extension selection for session storage and R evaluation. |
 
 [Extending gptr](extending-gptr.html) explains registered components. MCP tools are

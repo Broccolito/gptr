@@ -25,8 +25,14 @@ file < \verb{options(gptr.*)} < this R session. With named arguments, sets those
 }
 \details{
 \code{model}, \code{small_model}, \code{system1}, \code{mode} and \code{preset} take bare names (\code{mode = plan}); \code{NULL}
-removes a key from the scope. \code{egress} (the providers you allow automatic context to go to) is
-accepted only at user scope. \code{mode = yolo} and turning off local-only Ollama inference
+removes a key from the scope. Unset, \code{model} and \code{system1} come from the catalog's reviewed
+defaults of the first ready route: Anthropic, OpenAI, Google, then a detected command-line
+tool (System 1: TypeSafe, else an installed local classifier); \code{small_model} is that route's
+small default, else \code{model}. \code{model = openai}, a provider with a reviewed default named alone,
+means that default; any \code{provider/id} is accepted (\code{\link[=gptr_models]{gptr_models()}}).
+
+\code{egress} (the providers you allow automatic context to go to) is accepted only at user scope.
+\code{mode = yolo} and turning off local-only Ollama inference
 (\code{providers = list(ollama = list(local_only = FALSE))}) are accepted only at user or session
 scope; a project can only keep local-only inference on. A change called from model code
 during a run needs an allowing permission decision (a person's, in every mode but \code{yolo}; see
@@ -43,9 +49,10 @@ root, not from R's working directory.
 \section{Choosing controls}{
 
 Use settings for defaults such as \code{model}, \code{mode}, \code{context}, \code{budget}, \code{record}, \code{replay}, the
-\code{undo} limits (\code{\link[=gptr_rewind]{gptr_rewind()}}) and registered extension selections. Use \link{gptr_options} for
-transport timeouts, output caps, file checkpoint retention and concurrency. Arguments to
-\code{\link[=peter]{peter()}} choose values for one call, within inherited safety restrictions.
+\code{undo} limits (\code{\link[=gptr_rewind]{gptr_rewind()}}), \code{compact_calls} (\code{TRUE}: one console row per tool call, the
+\verb{/calls} command of \code{\link[=peter]{peter()}} showing calls in full) and registered extension selections. Use
+\link{gptr_options} for transport timeouts, output caps, file checkpoint retention and concurrency.
+Arguments to \code{\link[=peter]{peter()}} choose values for one call, within inherited safety restrictions.
 \code{vignette("configuration", package = "gptr")} groups all core settings and options and explains
 trust and scope.
 }

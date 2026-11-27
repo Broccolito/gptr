@@ -353,7 +353,7 @@ subagent_spec_complete = function(spec, parent_run) {
   pd = session_data(out$parent)
   # `[[` because `$` would match a missing `mode` partially to `model`
   out$info = subagent_model_info(spec[["model"]] %||% a[["model"]] %||% pd$model, pd$id)
-  mode = spec[["mode"]] %||% parent_run$mode %||% setting_get("mode", default = "manual")
+  mode = spec[["mode"]] %||% parent_run$mode %||% setting_get("mode")
   out$mode = subagent_mode_tighten(subagent_mode_tighten(parent_run$mode, mode), a[["mode"]])
   out$depth = as.integer(spec$depth %||% ((parent_run$depth %||% 0L) + 1L))
   out$export = subagent_chr(spec$export %||% a$export)

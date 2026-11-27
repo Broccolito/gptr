@@ -9,35 +9,167 @@
 # read-only, Codex's own tools switched off, gptr's hook in front of every tool, never resumed,
 # and checked before its reply is kept.
 
-#' The installed Codex CLI's raw catalog (no app-server, thread or inference). Older CLIs
-#' without the documented debug command leave the shipped catalog in place.
+#' Codex's models and the model the user's Codex starts with, from its app-server over stdio
+#' (D-390, D-391): `model/list`, every page (each model's `model` slug as the id, with its display
+#' name, input modalities and reasoning efforts), and `config/read`, whose `model` is the user's
+#' configured model, else the list's `isDefault` one, and the model provider settings every exec
+#' then carries (pcli_codex_route()). No thread is started. When the app-server gives no list,
+#' `codex debug models`' catalog, without a default. `listed` holds the ids.
+#' @return list(models, default = chr(1) or NULL, listed = chr, route = list(args, env))
 #' @noRd
-pcli_codex_models = function() {
-  path = pcli_find("codex")
-  help = pcli_run(path, c("debug", "models", "--help"), timeout = 3)
-  if (!is.null(pcli_run_failure(help)) ||
-      !grepl("model catalog as JSON", help$stdout %||% "", fixed = TRUE)) return(NULL)
-  res = pcli_run(path, c("debug", "models"), timeout = 30)
-  if (!is.null(pcli_run_failure(res))) pcli_catalog_error("codex")
-  obj = tryCatch(json_decode(res$stdout), error = function(e) NULL)
-  if (!is.list(obj) || !is.list(obj$models)) pcli_catalog_error("codex")
-  out = list()
-  for (m in obj$models) {
-    if (!is.list(m) || !identical(m$visibility, "list")) next
-    id = pcli_chr(m$slug)
-    if (is.null(id) || !nzchar(id)) next
-    levels = pcli_model_strings(lapply(m$supported_reasoning_levels,
-                                       function(x) if (is.list(x)) x$effort))
-    out[[length(out) + 1L]] = compact(list(id = id, name = pcli_chr(m$display_name),
-      context = pcli_scalar_num(m$context_window), input = pcli_model_strings(m$input_modalities),
-      reasoning = if (length(levels)) TRUE, thinking_levels = levels))
+pcli_codex_discover = function(path) {
+  ask = function(id, method, params = json_obj()) list(id = id, method = method, params = params)
+  st = new.env(parent = emptyenv())
+  st$models = list()
+  st$pages = 0L
+  read = function(obj) {
+    id = if (is.list(obj) && is.null(obj[["method"]])) pcli_chr(obj[["id"]])
+    res = if (!is.null(id)) obj[["result"]]
+    if (identical(id, "gptr_init")) {
+      if (!is.list(res)) return(TRUE)
+      return(list(list(method = "initialized"), ask("gptr_list", "model/list"),
+                  ask("gptr_config", "config/read")))
+    }
+    if (identical(id, "gptr_config")) st$config = (if (is.list(res)) res[["config"]]) %||% list()
+    if (identical(id, "gptr_list")) {
+      if (!is.list(res) || !is.list(res[["data"]])) return(TRUE)
+      st$models = c(st$models, res[["data"]])
+      st$pages = st$pages + 1L
+      cursor = pcli_chr(res[["nextCursor"]])
+      if (!is.null(cursor) && st$pages < 20L) {
+        return(list(ask("gptr_list", "model/list", list(cursor = cursor))))
+      }
+      st$listed = TRUE
+    }
+    isTRUE(st$listed) && !is.null(st$config)
   }
-  out
+  hello = list(clientInfo = list(name = "gptr",
+                                 version = as.character(utils::packageVersion("gptr"))))
+  pcli_talk(path, "app-server", list(ask("gptr_init", "initialize", hello)), read,
+            env = child_env("cli-codex"))
+  if (!isTRUE(st$listed)) return(pcli_codex_debug(path))
+  rows = list()
+  own = NULL
+  for (m in st$models) {
+    id = if (is.list(m)) pcli_chr(m[["model"]]) %||% pcli_chr(m[["id"]])
+    if (is.null(id) || !nzchar(id)) next
+    if (isTRUE(m[["isDefault"]])) own = own %||% id
+    efforts = lapply(m[["supportedReasoningEfforts"]], function(x) {
+      if (is.list(x)) x[["reasoningEffort"]]
+    })
+    rows[[id]] = rows[[id]] %||% pcli_codex_row(id, m[["displayName"]], m[["inputModalities"]],
+                                                efforts)
+  }
+  cfg = st$config
+  list(models = unname(rows), default = pcli_chr(cfg[["model"]]) %||% own,
+       listed = as.character(names(rows)), route = pcli_codex_route(cfg))
 }
 
-#' A TOML basic string
+#' Codex's catalog from `codex debug models` (D-390), the models it does not hide; signals
+#' pcli_catalog_error() when it gives none
 #' @noRd
-pcli_toml = function(x) paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x), "\"")
+pcli_codex_debug = function(path) {
+  res = pcli_run(path, c("debug", "models"), timeout = 15)
+  obj = if (is.null(pcli_run_failure(res))) {
+    tryCatch(json_decode(res$stdout), error = function(e) NULL)
+  }
+  if (!is.list(obj) || !is.list(obj[["models"]])) pcli_catalog_error("codex")
+  rows = list()
+  for (m in obj[["models"]]) {
+    id = if (is.list(m) && !identical(m[["visibility"]], "hide")) pcli_chr(m[["slug"]])
+    if (is.null(id) || !nzchar(id)) next
+    efforts = lapply(m[["supported_reasoning_levels"]], function(x) if (is.list(x)) x[["effort"]])
+    rows[[id]] = rows[[id]] %||% c(pcli_codex_row(id, m[["display_name"]], m[["input_modalities"]],
+                                                  efforts),
+                                   compact(list(context = pcli_scalar_num(m[["context_window"]]))))
+  }
+  list(models = unname(rows), listed = as.character(names(rows)))
+}
+
+#' A catalog row of a model Codex reports: its id, name, input modalities and reasoning efforts
+#' (a model with efforts reasons), each as reported
+#' @noRd
+pcli_codex_row = function(id, name, input, efforts) {
+  levels = pcli_model_strings(efforts)
+  compact(list(id = id, name = pcli_chr(name), input = pcli_model_strings(input),
+               reasoning = if (length(levels)) TRUE, thinking_levels = levels))
+}
+
+#' A TOML basic string: backslash and quote escaped, control characters as `\uXXXX`
+#' @noRd
+pcli_toml = function(x) {
+  x = gsub("([\\\\\"])", "\\\\\\1", x)
+  ctl = gregexpr("[[:cntrl:]]", x)
+  regmatches(x, ctl) = lapply(regmatches(x, ctl), function(ch) {
+    sprintf("\\u%04X", vapply(ch, utf8ToInt, 1L, USE.NAMES = FALSE))
+  })
+  paste0("\"", x, "\"")
+}
+
+#' A decoded JSON value as an inline TOML value: objects as inline tables (keys quoted, null
+#' members left out), arrays, booleans, numbers and strings
+#' @noRd
+pcli_toml_value = function(x) {
+  if (is.list(x) && !is.null(names(x))) {
+    x = Filter(Negate(is.null), x)
+    if (!length(x)) return("{}")
+    return(paste0("{", paste0(pcli_toml(names(x)), "=", vapply(x, pcli_toml_value, ""),
+                              collapse = ","), "}"))
+  }
+  if (is.list(x)) return(paste0("[", paste(vapply(x, pcli_toml_value, ""), collapse = ","), "]"))
+  if (is.logical(x)) return(if (isTRUE(x)) "true" else "false")
+  if (is.numeric(x)) return(format(x, scientific = FALSE, trim = TRUE, digits = 15L))
+  pcli_toml(x)
+}
+
+#' The keys of a Codex model provider table that hold no credential and run no command (Codex's
+#' configuration reference): the only ones pcli_codex_route() puts on a command line
+#' @noRd
+pcli_codex_provider_keys = c("name", "base_url", "env_key", "env_key_instructions",
+                             "env_http_headers", "wire_api", "requires_openai_auth",
+                             "request_max_retries", "stream_max_retries", "stream_idle_timeout_ms",
+                             "supports_websockets", "supports_standalone_web_search",
+                             "model_catalog_url", "capabilities")
+
+#' The `-c` overrides that keep the user's own Codex model provider under --ignore-user-config
+#' (D-392), from config/read: `model_provider` with its `model_providers` table (the id quoted in
+#' the value, as Codex splits an override's key at every dot), `openai_base_url` and
+#' `model_catalog_json`, so the models Codex lists, the user's default and any written-in id
+#' reach the server the user's Codex uses. Of the table only pcli_codex_provider_keys go, and no
+#' value with a URL that holds a user name or password: tokens, static headers, query parameters
+#' and auth commands never go on a command line, which other users of the computer can read, and
+#' gptr names what it left out once. `env` names the variables the table's env_key and
+#' env_http_headers read, which the exec gets from R's environment.
+#' @return list(args = chr, env = chr)
+#' @noRd
+pcli_codex_route = function(cfg) {
+  id = pcli_chr(cfg[["model_provider"]])
+  table = Filter(Negate(is.null), if (!is.null(id)) cfg[["model_providers"]][[id]])
+  login = function(v) any(grepl("://[^/?#]*@", unlist(v)))
+  keep = names(table) %in% pcli_codex_provider_keys & !vapply(table, login, NA)
+  held = names(table)[!keep]
+  out = character()
+  for (k in c("model_provider", "openai_base_url", "model_catalog_json")) {
+    v = pcli_chr(cfg[[k]])
+    if (is.null(v)) next
+    if (login(v)) held = c(held, k) else out = c(out, "-c", paste0(k, "=", pcli_toml(v)))
+  }
+  if (length(held)) {
+    gptr_inform(paste0("gptr leaves the ", paste(held, collapse = ", "), " of your Codex model ",
+                       "provider ", id %||% "openai", " off the codex command line, where other ",
+                       "users of this computer could read them; give a key through env_key or ",
+                       "env_http_headers in your Codex config."), "notice",
+                .once = paste0("codex_route:", id))
+  }
+  env = character()
+  if (is.list(table) && !is.null(names(table))) {
+    table = table[keep]
+    out = c(out, "-c", paste0("model_providers=",
+                              pcli_toml_value(stats::setNames(list(table), id))))
+    env = as.character(unlist(table[c("env_key", "env_http_headers")]))
+  }
+  list(args = out, env = env[grepl("^[A-Za-z_][A-Za-z0-9_]*$", env) & !duplicated(toupper(env))])
+}
 
 #' The `-c` overrides that make gptr's stdio relay Codex's `gptr` MCP server (IC-65, IC-79):
 #' `Rscript --vanilla --default-packages=base <mcp_relay.R> <mailbox> <seconds>`, the paths as
@@ -79,21 +211,23 @@ pcli_codex_confine = c(
 #'
 #' Under a coaching `role` the exec is confined (08 3.7): ephemeral and read-only, Codex's own
 #' tools off, gptr's hook for SessionStart and PreToolUse, and the person's credentials store.
-#' A run keeps gptr's relay; a coach has none and gets the strict reply `schema` file.
+#' A run keeps gptr's relay; a coach has none and gets the strict reply `schema` file. A NULL
+#' `model_id` passes no -m, so Codex chooses (D-391); `route` follows it (pcli_codex_route()).
 #' @noRd
 pcli_codex_args = function(model_id, wd, sandbox, relay, resume = NULL, role = NULL,
-                           schema = NULL) {
+                           schema = NULL, route = NULL) {
   mcp = if (!identical(role, "coach")) pcli_codex_mcp_args(relay)
+  model = c(if (!is.null(model_id)) c("-m", model_id), route)
   if (!is.null(resume)) {
     return(c("exec", "resume", resume, "--json", "--ignore-user-config", "--skip-git-repo-check",
-             "-m", model_id, mcp, "-c", paste0("sandbox_mode=", sandbox), "-"))
+             model, mcp, "-c", paste0("sandbox_mode=", sandbox), "-"))
   }
   if (is.null(role)) {
-    return(c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m", model_id,
+    return(c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", model,
              "-C", wd, mcp, "--sandbox", sandbox, "-"))
   }
   c("exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
-    "--skip-git-repo-check", "-m", model_id, "-C", wd, mcp, "--sandbox", "read-only",
+    "--skip-git-repo-check", model, "-C", wd, mcp, "--sandbox", "read-only",
     pcli_codex_confine, pcli_codex_hooks(role, relay), pcli_codex_auth_store(),
     if (!is.null(schema)) c("--output-schema", schema), "-")
 }
@@ -460,6 +594,7 @@ pcli_codex_build = function(model, context, opts) {
   pcli_codex_settle(state)
   state$pcli_request_id = context[["request_id"]]
   state$pcli_model_arg = pcli_model_id(model)
+  pcli_write_in(model, state$pcli_model_arg)
   pcli_track(opts[["session"]], state)
   path = pcli_find("codex")
   probe = pcli_probe(path)
@@ -480,8 +615,10 @@ pcli_codex_build = function(model, context, opts) {
   }
   resume = if (isTRUE(probe$resume) && is.null(role)) state$codex_thread else NULL
   wd = path_norm(getwd())
+  route = pcli_discovery("codex")$route
   args = pcli_codex_args(state$pcli_model_arg, wd, sandbox, state$codex_relay, resume = resume,
-                         role = role, schema = schema)
+                         role = role, schema = schema, route = route$args)
+  key = vapply(as.character(route$env), Sys.getenv, "", unset = NA)
   state$cli_api = "cli-codex"
   state$codex_sandbox = sandbox
   state$codex_cap = pcli_codex_cap(par)
@@ -493,7 +630,7 @@ pcli_codex_build = function(model, context, opts) {
     state$codex_root = root
   }
   list(start = list(command = path[[1L]], args = c(as.character(path[-1L]), args),
-                    env_profile = "cli-codex", env = character(), wd = wd),
+                    env_profile = "cli-codex", env = key[!is.na(key)], wd = wd),
        send = list(json_verbatim(pcli_codex_prompt(context, fresh = is.null(resume),
                                                   provider = model$provider))),
        close_stdin = TRUE)

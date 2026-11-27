@@ -180,6 +180,16 @@ test_that("a call served in a live run is reported as a tool call of the run (D-
   expect_identical(failed$details$error, "no answer")
 })
 
+test_that("/calls shows a call a CLI route made to gptr's tools (D-383)", {
+  box = new.env()
+  serve_in_run(function(event, ctx) {
+    box$session = ctx$session
+    mcp_dispatch_local(r_call("a = 1\nb = 2", id = 6L), ctx$session)
+  })
+  rows = cmd_calls("", list(session = box$session))
+  expect_true(any(grepl("a = 1", rows, fixed = TRUE)) && any(grepl("b = 2", rows, fixed = TRUE)))
+})
+
 test_that("the end of a served call that was refused says why it did not run (console-3)", {
   local_permission_rules()
   gptr_permissions(deny = "r(fn:writeLines)")
@@ -853,6 +863,7 @@ test_that("an r call through the server is gated: read-only runs, writes wait fo
   skip_without_server()
   e = new.env()
   e$d = mtcars
+  local_gptr_options(mode = "manual")
   h = gptr_mcp_serve(envir = e)
   withr::defer(gptr_mcp_serve(stop = TRUE))
   call = function(code) mcp_test_post(h$url, r_call(code), token = h$token)$json$result
@@ -864,8 +875,8 @@ test_that("an r call through the server is gated: read-only runs, writes wait fo
   expect_match(res$content[[1L]]$text, "Permission denied", fixed = TRUE)
   expect_false(exists("x", envir = e, inherits = FALSE))
   # the dedicated session keeps the mode it started with, like any session (IC-58): a new mode
-  # setting applies once the server is started again
-  local_gptr_options(mode = "auto")
+  # setting, here the default auto (D-396), applies once the server is started again
+  local_gptr_options(mode = NULL)
   expect_true(call("x = 1")$isError)
   gptr_mcp_serve(stop = TRUE)
   h = gptr_mcp_serve(envir = e)
@@ -879,7 +890,7 @@ test_that("the user's token has a dedicated chat session; its usage stays its ow
   x = local_served_session("auto")
   own = gptr_usage(x$session)
   e = new.env()
-  h = gptr_mcp_serve(envir = e)
+  h = gptr_mcp_serve(envir = e, mode = "manual")
   withr::defer(gptr_mcp_serve(stop = TRUE))
   st = the$mcp_server
   s = st$user$session
@@ -1053,4 +1064,19 @@ test_that("gptr_mcp_serve() validates its arguments and is refused from model co
                how_to_allow = "run it yourself", session = NULL)
   })
   expect_error(gptr_mcp_serve(envir = new.env()), class = "gptr_error_permission")
+})
+
+test_that("served R in mode auto refuses an outside delete when HOME is missing (S6)", {
+  skip_on_cran()
+  local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  victim = file.path(out, "canary.txt")
+  writeLines("canary", victim)
+  idle = local_served_session("auto")
+  withr::local_envvar(HOME = file.path(out, "no-home"))
+  res = expect_no_warning(mcp_dispatch_local(r_call(sprintf("unlink('%s')", victim)),
+                                             idle$session))$result
+  expect_true(res$isError)
+  expect_match(res$content[[1L]]$text, "a critical action (level 4)", fixed = TRUE)
+  expect_true(file.exists(victim))
 })

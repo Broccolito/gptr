@@ -1372,14 +1372,20 @@ doc_on_session_tree = function(event, ctx) {
 #' (doc_split_lines()). A line whose `status` is not "ok" (an error, interrupt or
 #' timeout; no status is a line that ran) is kept inert (`#~ `, no output) under
 #' `# direct R (no model; <status>)`, so the transcript still re-sources as one session (IC-49)
-#' and an interrupted computation does not run again
+#' and an interrupted computation does not run again; one that says how many expressions ran
+#' (`n_done`, served R, D-373) records those as a line that ran (doc_ran_part())
 #' @noRd
 doc_on_console_direct = function(event, ctx) {
   data = event$data %||% list()
   code = as_utf8(paste(as.character(data$code %||% character()), collapse = "\n"))
   if (!length(code) || !nzchar(trimws(code))) return(NULL)
-  code = doc_direct_code(doc_split_lines(code))
   st = data$status
+  part = if (!is.null(data$n_done)) doc_ran_part(list(code = code, n_done = data$n_done))
+  if (!is.null(part)) {
+    code = part$code
+    st = part$status
+  }
+  code = doc_direct_code(doc_split_lines(code))
   created = as_utf8(as.character(data$created %||% character()))
   ok = is.null(st) || identical(st, "ok")
   lines = if (ok) {

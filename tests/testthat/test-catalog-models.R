@@ -1,74 +1,91 @@
 # Tests for R/catalog-models.R (plan P05): snapshot structure, models.dev conversion, merge
 # layers, the resolver, defaults, explicit refresh and gptr_models().
 
-test_that("the shipped snapshot has the documented structure (04 section 11.10)", {
+test_that("the shipped snapshot is models.dev with gptr's reviewed data (D-393, D-394)", {
   path = system.file("extdata", "models.json.gz", package = "gptr")
   expect_true(nzchar(path))
-  expect_lt(file.size(path), 1e6)
+  expect_lt(file.size(path), 2e5)
   snap = catalog_read(path)
   expect_identical(snap$schema_version, 1L)
+  expect_identical(snap$converter, catalog_converter)
   expect_match(snap$generated, "^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+  expect_match(snap$source, "models.dev", fixed = TRUE)
   expect_true(all(c("anthropic", "openai", "google", "ollama", "typesafe") %in%
                     names(snap$providers)))
   expect_equal(snap$providers$anthropic$api, "anthropic-messages")
   expect_equal(unlist(snap$providers$google$env), c("GEMINI_API_KEY", "GOOGLE_API_KEY"))
   refs = vapply(snap$models, function(m) paste0(m$provider, "/", m$id), "")
-  expect_true(all(c("anthropic/claude-sonnet-5-5", "anthropic/claude-opus-5-5",
-                    "anthropic/claude-haiku-4-5", "openai/gpt-6-sol", "google/gemini-3.8-flash",
-                    "typesafe/jev-latest") %in% refs))
+  expect_true(all(sub("/.*$", "", refs) %in% names(snap$providers)))
+  # every family alias and every default names a model the snapshot carries
+  targets = vapply(snap$aliases, catalog_alias_target, "",
+                   idx = catalog_index(stats::setNames(snap$models, refs)))
   expect_true(all(c("sonnet", "opus", "haiku", "gemini", "flash", "gpt", "jev", "claude_code",
-                    "codex") %in% names(snap$aliases)))
-  sonnet = snap$models[[match("anthropic/claude-sonnet-5-5", refs)]]
-  expect_equal(sonnet$prices[[1]]$input, 2)
+                    "codex") %in% names(targets)))
+  expect_false(anyNA(targets))
+  expect_identical(names(snap$defaults)[1:3], c("anthropic", "openai", "google"))
+  defaults = unlist(lapply(names(snap$defaults), function(p) {
+    paste0(p, "/", unlist(snap$defaults[[p]]))
+  }))
+  expect_true(all(defaults %in% refs))
+  # the reviewed corrections ship too, so a refreshed models.dev catalog keeps them
+  sonnet = snap$models[[match(targets[["sonnet"]], refs)]]
   expect_equal(sonnet$cache_min, 512)
   expect_false(sonnet$capabilities$forced_tool_choice)
+  patch = Filter(function(m) identical(m$id, sonnet$id), snap$overrides$models)
+  expect_equal(patch[[1]]$cache_min, 512)
 })
 
-test_that("models.dev entries are pruned and converted; overrides only patch", {
-  api = list(
-    anthropic = list(id = "anthropic", env = list("ANTHROPIC_API_KEY"), models = list(
-      `claude-sonnet-5-5` = list(
-        id = "claude-sonnet-5-5", name = "Claude Sonnet 5.5", family = "claude-sonnet",
-        reasoning = TRUE, tool_call = TRUE, structured_output = TRUE, release_date = "2026-09",
-        reasoning_options = list(list(type = "effort",
-                                      values = list("low", "medium", "high", "xhigh", "max"))),
-        modalities = list(input = list("text", "image", "pdf", "video"), output = list("text")),
-        limit = list(context = 1e6, output = 128000),
-        cost = list(input = 3, output = 15, cache_read = 0.3, cache_write = 3.75,
-                    context_over_200k = list(input = 6, output = 22.5)),
-        canonical_model_id = "anthropic/claude-sonnet-5-5"
-      ),
-      `old-model` = list(id = "old-model", tool_call = TRUE, status = "deprecated",
-                         modalities = list(input = list("text"), output = list("text"))),
-      `no-tools` = list(id = "no-tools", tool_call = FALSE,
-                        modalities = list(input = list("text"), output = list("text")))
-    )),
-    elsewhere = list(id = "elsewhere", models = list(x = list(id = "x", tool_call = TRUE)))
-  )
-  decision = list(`typesafe/jev-latest` = list(
-    id = "typesafe/jev-latest", type = "decision", name = "Jev", release_date = "2026-09-15",
-    limit = list(context = 64000, output = 0), structured_output = TRUE
-  ))
+fx_modelsdev = function(name) {
+  jsonlite::fromJSON(test_path("fixtures", "models", name), simplifyVector = FALSE)
+}
+
+test_that("models.dev entries are pruned and converted; reviewed data only patches", {
+  api = fx_modelsdev("modelsdev-api.json")
+  decision = fx_modelsdev("modelsdev-decision.json")
   x = catalog_from_modelsdev(api, decision)
-  expect_setequal(names(x), c("anthropic/claude-sonnet-5-5", "typesafe/jev-latest"))
+  # deprecated (Sonnet 4.5, Gemini 2.5 Flash) and image-output (gpt-image-2) models are pruned
+  expect_false(any(c("anthropic/claude-sonnet-4-5", "google/gemini-2.5-flash",
+                     "openai/gpt-image-2") %in% names(x)))
   s = x[["anthropic/claude-sonnet-5-5"]]
   expect_equal(as.character(s$thinking_levels), c("low", "medium", "high", "xhigh", "max"))
+  expect_true(s$thinking_effort)
+  expect_null(s$thinking_budget)
+  expect_false(s$temperature)
   expect_equal(as.character(s$input), c("text", "image", "pdf"))
-  expect_equal(s$release_date, "2026-09-01")
-  expect_equal(vapply(s$prices, function(p) p$tier, ""), c("default", ">200k"))
   expect_equal(s$owner, "anthropic")
-  expect_equal(x[["typesafe/jev-latest"]]$type, "classifier")
-  snap = catalog_snapshot(api, decision, generated = "2026-09-30")
-  expect_equal(snap$source, "models.dev (MIT) + gptr overrides")
+  # a toggle with effort names turns thinking off; a budget model keeps gptr's level scale
+  expect_equal(as.character(x[["anthropic/claude-haiku-5-5"]]$thinking_levels),
+               c("off", "low", "medium", "high", "xhigh", "max"))
+  expect_equal(vapply(x[["anthropic/claude-haiku-5-5"]]$prices, function(p) p$tier, ""),
+               c("default", ">100k"))
+  h = x[["anthropic/claude-haiku-4-5"]]
+  expect_equal(as.character(h$thinking_levels), c("off", "minimal", "low", "medium", "high"))
+  expect_false(h$thinking_effort)
+  expect_equal(h$thinking_budget, list(min = 1024))
+  expect_true(h$temperature)
+  expect_equal(x[["google/gemini-2.5-flash-lite"]]$thinking_budget, list(min = 512, max = 24576))
+  expect_identical(x[["typesafe/jev-latest"]]$type, "classifier")
+  reviewed = list(
+    overrides = list(providers = list(typesafe = list(api = "typesafe-system-one")),
+                     models = list(list(provider = "anthropic", id = "claude-sonnet-5-5",
+                                        cache_min = 512),
+                                   list(provider = "anthropic", id = "absent", cache_min = 1))),
+    aliases = list(sonnet = list(provider = "anthropic", family = "claude-sonnet")),
+    defaults = list(anthropic = list(model = "claude-sonnet-5-5")))
+  snap = catalog_snapshot(api, decision, reviewed, generated = "2026-11-26")
+  expect_identical(snap$converter, catalog_converter)
+  expect_equal(snap$source, "models.dev (MIT)")
   refs = vapply(snap$models, function(m) paste0(m$provider, "/", m$id), "")
   expect_identical(refs, sort(refs, method = "radix"))
-  merged = snap$models[[match("anthropic/claude-sonnet-5-5", refs)]]
-  expect_equal(merged$prices[[1]]$input, 2)
-  expect_equal(merged$name, "Claude Sonnet 5.5")
-  offline = catalog_snapshot(generated = "2026-09-30")
-  expect_equal(offline$source, "gptr seed + overrides")
-  expect_true(all(vapply(offline$models, function(m) !is.null(m$name), NA)))
-  expect_type(json_encode(offline), "character")
+  expect_equal(snap$models[[match("anthropic/claude-sonnet-5-5", refs)]]$cache_min, 512)
+  # a patch adds no model; a decision model of a provider gptr lacks is dropped
+  expect_false(any(c("anthropic/absent", "cloudflare/clef") %in% refs))
+  expect_true("typesafe/jev-1.14.0" %in% refs)
+  expect_identical(snap[names(reviewed)], reviewed)
+  offline = catalog_snapshot(reviewed = reviewed, generated = "2026-11-26")
+  expect_equal(offline$source, "gptr reviewed data")
+  expect_length(offline$models, 0L)
+  expect_type(json_encode(snap), "character")
 })
 
 test_that("native decisions bypass chat pruning and retain typed IC-74 metadata", {
@@ -192,11 +209,31 @@ fx_models = function() {
   )
 }
 
+fx_reviewed = function() {
+  family = function(provider, family) list(provider = provider, family = family)
+  list(
+    overrides = list(
+      providers = list(anthropic = list(capabilities = list(operator_role = TRUE))),
+      models = list(list(provider = "anthropic", id = "claude-sonnet-5-5", cache_min = 512,
+                         max_images = 600, prices = list(list(input = 2, output = 10)),
+                         capabilities = list(mid_system = TRUE, forced_tool_choice = FALSE)))),
+    aliases = list(sonnet = family("anthropic", "claude-sonnet"),
+                   opus = family("anthropic", "claude-opus"),
+                   haiku = family("anthropic", "claude-haiku"),
+                   gemini = family("google", "gemini"), flash = family("google", "gemini-flash"),
+                   gpt = family("openai", "gpt-sol"), jev = list(ref = "typesafe/jev-latest"),
+                   claude_code = list(ref = "claude-cli/default"),
+                   codex = list(ref = "codex/default")),
+    defaults = list(anthropic = list(model = "claude-sonnet-5-5", small = "claude-haiku-4-5"),
+                    openai = list(model = "gpt-6.1-sol", small = "gpt-6-luna"),
+                    typesafe = list(system1 = "jev-latest")))
+}
+
 local_catalog = function(models = fx_models(), .env = parent.frame()) {
   dir = withr::local_tempdir(.local_envir = .env)
   path = file.path(dir, "models.json")
-  snap = list(schema_version = 1L, generated = "2026-09-30", source = "test fixture",
-              providers = list(), models = models, aliases = list())
+  snap = c(list(schema_version = 1L, generated = "2026-09-30", source = "test fixture",
+                providers = list(), models = models), fx_reviewed())
   writeLines(json_encode(snap), path, useBytes = TRUE)
   testthat::local_mocked_bindings(
     catalog_snapshot_path = function() path,
@@ -233,11 +270,10 @@ test_that("each models.dev price tier is read once; the legacy field mirrors the
   expect_identical(model_resolve("xai/grok-4.7")$prices$tier, c("default", ">200k"))
 })
 
-test_that("references resolve: exact, alias, family, normalised, owner, thinking", {
+test_that("references resolve: exact, alias, normalised, owner, thinking", {
   local_catalog()
   expect_equal(model_resolve("anthropic/claude-sonnet-5-5")$ref, "anthropic/claude-sonnet-5-5")
   expect_equal(model_resolve("sonnet")$ref, "anthropic/claude-sonnet-5-5")
-  expect_equal(model_resolve("claude-sonnet")$ref, "anthropic/claude-sonnet-5-5")
   expect_equal(model_resolve("claude-sonnet-5.5")$ref, "anthropic/claude-sonnet-5-5")
   expect_equal(model_resolve("claude-opus-5-5")$ref, "anthropic/claude-opus-5-5")
   expect_equal(model_resolve("openrouter/anthropic/claude-sonnet-5-5")$ref,
@@ -253,28 +289,43 @@ test_that("references resolve: exact, alias, family, normalised, owner, thinking
   jev = model_resolve("jev")
   expect_equal(jev$type, "classifier")
   expect_equal(jev$api, "typesafe-system-one")
+  # a provider named alone without declared models takes its reviewed default
+  expect_equal(model_resolve("openai")$ref, "openai/gpt-6.1-sol")
+})
+
+test_that("aliases follow the catalog's family data, never model names (D-393)", {
+  local_catalog(c(fx_models(), list(
+    fx_model("anthropic", "claude-sonnet-6", "claude-sonnet", "2026-12-01"),
+    utils::modifyList(fx_model("anthropic", "claude-sonnet-7", "claude-sonnet", "2027-01-01"),
+                      list(status = "deprecated")),
+    fx_model("openai", "gpt-6.2-sol-healthcare", "gpt-sol-healthcare", "2026-11-24"))))
+  expect_equal(model_resolve("sonnet")$ref, "anthropic/claude-sonnet-6")
+  expect_equal(model_resolve("gpt")$ref, "openai/gpt-6.1-sol")
+  # on a release-date tie the shortest id wins: the undated id, not its dated twin
+  expect_equal(model_resolve("haiku")$ref, "anthropic/claude-haiku-4-5")
+  expect_equal(catalog_get()$alias_targets[["flash"]], NA_character_)
 })
 
 test_that("discovered CLI ids cannot redirect declared model aliases", {
   local_catalog()
   aliases = c("sonnet", "opus", "haiku")
   before = vapply(aliases, function(alias) model_resolve(alias)$ref, "")
-  full_sonnet = model_resolve("sonnet")$id
   catalog_discovered_set("claude-cli", lapply(c(aliases, "default"), function(id) {
     list(provider = "claude-cli", id = id)
   }))
   expect_identical(vapply(aliases, function(alias) model_resolve(alias)$ref, ""), before)
   expect_identical(model_resolve("claude-cli/sonnet")$ref, "claude-cli/sonnet")
-  expect_identical(pcli_model_id(model_resolve("claude-cli/default")), full_sonnet)
 })
 
 test_that("a model record has every contract field (04 section 4.9)", {
   local_catalog()
   r = model_resolve("sonnet")
-  expect_named(r, c("ref", "provider", "id", "name", "family", "api", "type", "release_date",
+  expect_named(r, c("ref", "provider", "id", "name", "family", "owner", "api", "type",
+                    "release_date",
                     "context", "max_output", "reasoning", "thinking_levels", "thinking",
-                    "input", "tool_call", "structured_output", "prices", "cache_min",
-                    "max_images", "capabilities", "aliases", "status", "local"))
+                    "thinking_effort", "thinking_budget", "input", "tool_call",
+                    "structured_output", "temperature", "prices", "cache_min", "max_images",
+                    "capabilities", "aliases", "status", "local"))
   expect_equal(r$api, "anthropic-messages")
   expect_equal(r$aliases, "sonnet")
   expect_s3_class(r$prices, "data.frame")
@@ -283,13 +334,22 @@ test_that("a model record has every contract field (04 section 4.9)", {
   expect_equal(r$cache_min, 512)
   expect_equal(r$max_images, 600)
   expect_named(r$capabilities, c("mid_system", "tool_addition", "images_in_results",
-                                 "operator_role", "adaptive_thinking", "effort",
-                                 "forced_tool_choice"))
+                                 "operator_role", "forced_tool_choice"))
   expect_false(r$capabilities$forced_tool_choice)
   expect_true(model_resolve("openai/gpt-6.1-sol")$capabilities$forced_tool_choice)
-  expect_equal(r$thinking_levels, c("off", "low", "medium", "high", "xhigh", "max"))
-  expect_equal(model_resolve("sonnet:off")$thinking, "off")
+  expect_equal(r$thinking_levels, c("low", "medium", "high", "xhigh", "max"))
+  expect_equal(model_resolve("haiku:off")$thinking, "off")
   expect_equal(model_resolve("opus:off")$thinking, "low")
+  # request-shape data the adapters read; unknown when the catalog has none (D-393)
+  expect_identical(c(r$thinking_effort, r$temperature), c(NA, NA))
+  expect_null(r$thinking_budget)
+  local_settings(providers = list(anthropic = list(models = list(list(
+    id = "claude-sonnet-5-5", thinking_effort = TRUE, temperature = FALSE,
+    thinking_budget = list(min = 1024), owner = "anthropic")))))
+  r = model_resolve("sonnet")
+  expect_identical(c(r$thinking_effort, r$temperature), c(TRUE, FALSE))
+  expect_equal(r$thinking_budget, list(min = 1024))
+  expect_identical(r$owner, "anthropic")
 })
 
 test_that("a thinking suffix the model lacks is announced with the level used (D-250)", {
@@ -309,77 +369,103 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
   expect_true("claude-sonnet-5-5" %in% err$suggestions)
   expect_equal(err$ref, "claude-sonet-5-5")
   expect_null(model_resolve("sonnet:turbo", strict = FALSE))
-  expect_error(model_resolve("anthropic/claude-nope"), class = "gptr_error_unknown_model")
+  expect_error(model_resolve("nowhere/claude-nope"), class = "gptr_error_unknown_model")
   expect_error(model_resolve(42), class = "gptr_error_invalid_argument")
   local_without_builtin("cli")
   expect_error(model_resolve("claude_code"), "claude-cli", class = "gptr_error_unknown_model")
 })
 
+test_that("a name that is no catalog id or alias never resolves to a similar model (D-392)", {
+  local_catalog()
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  withr::local_options(gptr.quiet = FALSE)
+  # with its provider, a part of a catalog id or a family name is written in, as typed
+  for (ref in c("openai/gpt-6", "anthropic/claude-sonnet")) {
+    expect_message(model_resolve(ref), class = "gptr_message_model_write_in")
+    expect_identical(model_resolve(ref)$ref, ref)
+  }
+  # alone, it is refused, with the nearest catalog models suggested
+  err = expect_error(model_resolve("claude-sonnet"), "Did you mean: anthropic/claude-sonnet-5-5,",
+                     class = "gptr_error_unknown_model")
+  expect_identical(err$suggestions[1:2],
+                   c("anthropic/claude-sonnet-5-5", "anthropic/claude-sonnet-5"))
+  err = expect_error(model_resolve("gpt-6"), class = "gptr_error_unknown_model")
+  expect_identical(err$suggestions[[1L]], "openai/gpt-6.1-sol")
+  expect_null(model_resolve("gpt-6:high", strict = FALSE))
+  # a provider named alone without a model is not another provider's model
+  err = expect_error(model_resolve("bedrock"), class = "gptr_error_unknown_model")
+  expect_identical(err$suggestions, "bedrock/claude-opus-5-5")
+})
+
 test_that("an alias with no model in the catalog is unknown, not a fuzzy match", {
-  local_catalog(catalog_snapshot(generated = "2026-10-22")$models)
+  local_catalog()
   catalog_discovered_set("claude-cli", list(list(provider = "claude-cli", id = "gemini")))
   expect_identical(model_resolve("claude-cli/gemini")$ref, "claude-cli/gemini")
-  for (ref in c("gemini", "gemini:high")) {
-    expect_error(model_resolve(ref), "alias 'gemini' .*gptr_models\\(refresh = TRUE\\)",
+  for (ref in c("gemini", "gemini:high", "flash")) {
+    expect_error(model_resolve(ref), "alias '.*' .*gptr_models\\(refresh = TRUE\\)",
                  class = "gptr_error_unknown_model")
   }
   expect_null(model_resolve("gemini", strict = FALSE))
-  expect_identical(model_resolve("flash")$ref, "google/gemini-3.8-flash")
   # a registered provider named alone still runs its first declared model (IC-19)
   off = gptr_register(gptr_provider("gemini", api = "openai-completions",
                                     base_url = "https://corp.example/v1",
                                     models = list(list(id = "corp-gemini", tool_call = TRUE))))
   withr::defer(off())
   expect_identical(model_resolve("gemini")$ref, "gemini/corp-gemini")
-  premium = list(input = 4, output = 18, cache_read = 0.4)
-  pro = list(id = "gemini-3.1-pro-preview", name = "Gemini 3.1 Pro Preview", family = "gemini-pro",
-             tool_call = TRUE, reasoning = TRUE, release_date = "2026-02-19",
-             limit = list(context = 1048576, output = 65536),
-             modalities = list(input = list("text", "image"), output = list("text")),
-             cost = list(input = 2, output = 12, cache_read = 0.2, context_over_200k = premium,
-                         tiers = list(c(premium, list(tier = list(type = "context",
-                                                                  size = 200000))))))
-  api = list(google = list(id = "google", models = list(`gemini-3.1-pro-preview` = pro)))
-  local_catalog(catalog_snapshot(api, generated = "2026-10-22")$models)
-  expect_identical(model_resolve("gemini")$ref, "google/gemini-3.1-pro-preview")
+  api = fx_modelsdev("modelsdev-api.json")
+  local_catalog(catalog_snapshot(api, reviewed = fx_reviewed(), generated = "2026-11-26")$models)
+  expect_identical(model_resolve("gemini")$ref, "google/gemini-4-neon")
+  expect_identical(model_resolve("flash")$ref, "google/gemini-3.8-flash")
 })
 
-test_that("an unknown id points to explicit provider discovery without doing I/O", {
-  local_catalog(catalog_snapshot(generated = "2026-10-22")$models)
-  hint = 'gptr_models\\(provider = "groq", refresh = TRUE\\)'
-  for (ref in c("groq/llama-x", "groq/llama-x:high")) {
-    err = expect_error(model_resolve(ref), hint, class = "gptr_error_unknown_model")
-    expect_identical(err$suggestions, character())
-  }
-  # a route with catalog rows keeps its suggestions and also names the explicit refresh
-  err = expect_error(model_resolve("anthropic/claude-nope"), class = "gptr_error_unknown_model")
-  expect_gt(length(err$suggestions), 0L)
-  expect_match(conditionMessage(err), 'provider = "anthropic"', fixed = TRUE)
-  # custom compatible providers use their own endpoint too
-  off = gptr_register(gptr_provider("versa", api = "openai-completions",
-                                    base_url = "https://versa.example/v1"))
+test_that("an id the catalog lacks is written in once, with conservative capabilities (D-392)", {
+  local_catalog()
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  withr::local_options(gptr.quiet = FALSE)
+  msg = expect_message(model_resolve("anthropic/claude-opus-9"),
+                       class = "gptr_message_model_write_in")
+  expect_match(conditionMessage(msg), "claude-opus-9 is not in the model catalog", fixed = TRUE)
+  expect_match(conditionMessage(msg), 'gptr_models(provider = "anthropic", refresh = TRUE)',
+               fixed = TRUE)
+  rec = expect_no_message(model_resolve("anthropic/claude-opus-9"))
+  expect_identical(c(rec$ref, rec$api, rec$type), c("anthropic/claude-opus-9",
+                                                    "anthropic-messages", "chat"))
+  expect_true(rec$tool_call)
+  expect_false(rec$reasoning)
+  expect_identical(rec$thinking_levels, "off")
+  expect_identical(rec$input, "text")
+  expect_true(is.na(rec$context) && is.na(rec$max_output))
+  expect_identical(nrow(rec$prices), 0L)
+  # no hint that would do nothing for a provider without a listing API or discover()
+  off = gptr_register(gptr_provider("brx", api = "bedrock-converse",
+                                    base_url = "https://brx.example"))
   withr::defer(off())
-  err = expect_error(model_resolve("versa/x"), class = "gptr_error_unknown_model")
-  expect_match(conditionMessage(err), 'provider = "versa"', fixed = TRUE)
-  # a provider without a listing API or discover() gets no hint that would do nothing
-  off2 = gptr_register(gptr_provider("brx", api = "bedrock-converse",
-                                     base_url = "https://brx.example"))
-  withr::defer(off2())
-  err = expect_error(model_resolve("brx/x"), class = "gptr_error_unknown_model")
-  expect_no_match(conditionMessage(err), "gptr_models(", fixed = TRUE)
+  msg = expect_message(model_resolve("brx/x"), class = "gptr_message_model_write_in")
+  expect_no_match(conditionMessage(msg), "gptr_models(", fixed = TRUE)
+  # a thinking suffix stays a level
+  withr::local_options(gptr.quiet = TRUE)
+  expect_identical(model_resolve("groq/llama-x:high")[c("id", "thinking")],
+                   list(id = "llama-x", thinking = "off"))
+  expect_identical(model_resolve("typesafe/jev-1.99.0")$type, "classifier")
+  expect_false(model_resolve("typesafe/jev-1.99.0")$tool_call)
+  # a CLI route takes any id its CLI accepts (a router's or a local model's name), and says so
+  # when it builds the run, against its CLI's list (pcli_write_in())
+  withr::local_options(gptr.quiet = FALSE)
+  cli = expect_no_message(model_resolve("codex/kimi-k3:cloud"))
+  expect_identical(c(cli$id, cli$api, cli$type), c("kimi-k3:cloud", "cli-codex", "cli"))
+  expect_true(cli$tool_call)
 })
 
-test_that("a reference that names a provider gets suggestions from that provider only (#44)", {
+test_that("a provider with no id gets suggestions from that provider only (#44)", {
   local_catalog()
   ids = paste0("gpt-5.6-", c("sol", "luna", "terra"), "-2026-07-09")
   off = gptr_register(gptr_provider("versa", api = "openai-responses",
                                     base_url = "https://versa.example/v1",
                                     models = lapply(ids, function(id) list(id = id))))
   withr::defer(off())
-  for (ref in c("versa/gpt-9-nonexistent", "versa/", "versa/gpt-9:high")) {
-    err = expect_error(model_resolve(ref), class = "gptr_error_unknown_model")
-    expect_setequal(err$suggestions, paste0("versa/", ids))
-  }
+  err = expect_error(model_resolve("versa/"), 'provider = "versa"',
+                     class = "gptr_error_unknown_model")
+  expect_setequal(err$suggestions, paste0("versa/", ids))
 })
 
 test_that("a provider named alone means its first model; alias separators match (IC-19)", {
@@ -388,13 +474,16 @@ test_that("a provider named alone means its first model; alias separators match 
   }
   expect_identical(model_resolve("codex")$ref, "codex/default")
   expect_identical(model_resolve("codex-cli")$ref, "codex/default")
-  # the rule comes before the fuzzy step: the provider's own first model, not a similar id
+  # the provider's own first model, never a similar id
   expect_identical(model_resolve("typesafe")$ref, "typesafe/jev-latest")
   # sub-agents and plugin model switches resolve the same way
   expect_identical(run_model_resolve("claude-cli", NULL)$ref, "claude-cli/default")
   expect_identical(kernel_model_ref("codex-cli", "high"), "codex/default:high")
-  # a registered provider that declares no model stays unknown
-  expect_error(model_resolve("openai"), class = "gptr_error_unknown_model")
+  # a registered provider with neither a declared model nor a reviewed default stays unknown
+  off = gptr_register(gptr_provider("bareprov", api = "openai-completions",
+                                    base_url = "https://bare.example/v1"))
+  withr::defer(off())
+  expect_error(model_resolve("bareprov"), class = "gptr_error_unknown_model")
 })
 
 test_that("local providers accept unknown ids; a provider added by data resolves (INFRA-17)", {
@@ -673,17 +762,17 @@ test_that("a loopback server's listed models join the catalog only on request", 
   local_mocked_bindings(
     check_running = function() FALSE,
     catalog_http_request = function(url, headers = list(), timeout = 30, ...) {
-      expect_equal(url, "http://localhost:1234/v1/models")
+      expect_equal(url, "http://127.0.0.1:8080/v1/models")
       expect_equal(timeout, 1)
       list(status = 200L, headers = list(),
            body = charToRaw('{"data":[{"id":"llama3.2:3b"},{"id":"qwen3.5:9b"}]}'))
     }
   )
-  expect_equal(nrow(gptr_models(provider = "lmstudio")), 0L)
-  found = gptr_models(provider = "lmstudio", refresh = TRUE)
-  expect_setequal(found$ref, c("lmstudio/llama3.2:3b", "lmstudio/qwen3.5:9b"))
+  expect_equal(nrow(gptr_models(provider = "llamacpp")), 0L)
+  found = gptr_models(provider = "llamacpp", refresh = TRUE)
+  expect_setequal(found$ref, c("llamacpp/llama3.2:3b", "llamacpp/qwen3.5:9b"))
   # IC-74: a listed name grants no tools, vision or locality
-  m = model_resolve("lmstudio/qwen3.5:9b")
+  m = model_resolve("llamacpp/qwen3.5:9b")
   expect_false(m$tool_call)
   expect_identical(m$input, "text")
   expect_identical(m$locality, "unknown")
@@ -717,7 +806,7 @@ test_that("model_default() follows the settings, then the first available key", 
   expect_null(model_default("chat"))
   expect_null(model_default("system1"))
   withr::local_envvar(OPENAI_API_KEY = "sk-test-openai-000000000000")
-  expect_equal(model_default("chat"), "openai/gpt-6-sol")
+  expect_equal(model_default("chat"), "openai/gpt-6.1-sol")
   expect_equal(model_default("small"), "openai/gpt-6-luna")
   withr::local_envvar(TYPESAFE_API_KEY = "ts-test-000000000000")
   expect_equal(model_default("system1"), "typesafe/jev-latest")
@@ -734,7 +823,7 @@ test_that("model_default() skips providers disabled in the settings", {
                         model_key_present = function(id, vars) id %in% c("anthropic", "openai"))
   expect_equal(model_default("chat"), "anthropic/claude-sonnet-5-5")
   local_settings(providers = list(anthropic = list(enabled = FALSE)))
-  expect_equal(model_default("chat"), "openai/gpt-6-sol")
+  expect_equal(model_default("chat"), "openai/gpt-6.1-sol")
 })
 
 test_that("a detected subscription CLI is the last default route", {
@@ -802,8 +891,11 @@ test_that("a cache converted by an older gptr is ignored and downloaded again in
   })
   expect_true(catalog_refresh())
   expect_null(seen$headers[["if-none-match"]])
-  expect_identical(catalog_read(cache)$converter, 2L)
-  expect_identical(catalog_read_base()$source, "models.dev (MIT) + gptr overrides")
+  expect_identical(catalog_read(cache)$converter, catalog_converter)
+  expect_identical(catalog_read_base()$source, "models.dev (MIT)")
+  # the refreshed cache carries the shipped reviewed data, which wins over its own copy
+  expect_equal(catalog_read(cache)[names(fx_reviewed())], fx_reviewed())
+  expect_equal(catalog_read_base()$aliases, fx_reviewed()$aliases)
 })
 
 test_that("resolution is offline: builtins and gptr_models('sonnet') start no transfer", {
@@ -838,6 +930,27 @@ test_that("an untagged Ollama catalog name is advertised when its :latest tag is
   found = gptr_models(provider = "ollama", refresh = TRUE)
   expect_identical(found$availability[found$ref == "ollama/clef-flash"], "advertised")
   expect_identical(found$availability[found$ref == "ollama/clef"], "unlisted")
+})
+
+test_that("Ollama's /api/show thinking values are the model's thinking levels (D-393)", {
+  ep = list(origin = "http://127.0.0.1:11434", path = "/v1", loopback = TRUE)
+  describe = function(values) {
+    show = list(capabilities = list("completion", "tools", "thinking"),
+                thinking = if (!is.null(values)) list(values = values))
+    catalog_ollama_describe("ollama", list(name = "m:1b"), show, "0.40.16", ep, NULL)$entry
+  }
+  named = describe(list(FALSE, "low", "medium", "high"))
+  expect_identical(as.character(named$thinking_levels), c("off", "low", "medium", "high"))
+  expect_true(named$thinking_effort)
+  on = describe(list(TRUE))
+  expect_identical(as.character(on$thinking_levels), c("low", "medium", "high"))
+  expect_false(on$thinking_effort)
+  # [false] alone means no thinking
+  expect_false(describe(list(FALSE))$reasoning)
+  # without the metadata the thinking capability keeps gptr's on/off scale
+  old = describe(NULL)
+  expect_identical(as.character(old$thinking_levels), c("off", "low", "medium", "high"))
+  expect_null(old$thinking_effort)
 })
 
 test_that("native Ollama discovery reads version, tags and show only on explicit request", {
@@ -1140,7 +1253,9 @@ test_that("a System 2 call prepares its selected Ollama model as System 1 does",
   withr::local_options(gptr.replay = "replay")
   run = run_new(session_new("router:r", "auto", home = new.env()), list(), NULL)
   expect_error(run_target(run), class = "gptr_error_not_recorded")
-  local_settings(providers = list(ollama = list(base_url = "http://192.0.2.10:11434/v1")))
+  # the mocked reader returns no setting it is not given: the session takes its mode from here
+  local_settings(mode = "auto",
+                 providers = list(ollama = list(base_url = "http://192.0.2.10:11434/v1")))
   expect_error(ask(), class = "gptr_error_untrusted")
   expect_identical(srv$calls, rep(found, 2L))
 })

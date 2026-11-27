@@ -183,7 +183,7 @@ test_that("a terminal fanout keeps its roster, phases and the parent's composer"
   utf8 = l10n_info()[["UTF-8"]]
   person = if (utf8) "\u203a" else ">>"
   sep = if (utf8) " \u00b7 " else " - "
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait(paste0("sub-agents 0/3 done", sep, "2 active", sep, "1 pending")))
   expect_true(pty$wait("active   alpha (kid/kid-1), beta (kid/kid-1)"))
@@ -198,10 +198,10 @@ test_that("a terminal fanout keeps its roster, phases and the parent's composer"
   pty$paste("next-draft")
   expect_true(pty$wait(paste0(person, " next-draft"), timeout = 30), info = pty$all)
   expect_true(pty$wait("PARENT STEER [use-median]", timeout = 60), info = pty$all)
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("\r")
   expect_true(pty$wait("NEXT [next-draft]", timeout = 30), info = pty$all)
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD STEERS 0"))
   expect_true(pty$wait("ROW CLEARED TRUE"))

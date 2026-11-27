@@ -713,7 +713,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   3. Without image input each tool-result image becomes "(image omitted: this model does not accept
      images)" in `functionResponse.response` after the text, once per image, with no image content;
      with image input unchanged (`functionResponse.parts` on Gemini 3, a following "Tool result
-     image:" content on 2.5) (D-023 item 4, D-029 item 3).
+     image:" content on 2.5) (D-023 item 4, D-029 item 3). Amended by D-395:
+     `functionResponse.parts` on a model with thinking levels, not by version.
 - Contract-visible: none; no section amended.
 - Tests: test-provider-google.R: 3 blocks (resolved headers, no tools without tool calling, omission
   note in the tool output); `gptr_check()` 30 checks, 0 failed. Evidence: progress/P12.md Task 9.
@@ -2299,6 +2300,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
      `pcli_models("codex")`, else the fallback `gpt-6-sol` (contract 11.10; architecture 8.4; the
      shipped catalog's `gpt-6.1-sol` is not on the Codex route, 08 2.C); claude keeps the catalog
      passthrough; adding a confirmed id to `pcli_models("codex")` lets the alias reach it.
+     Superseded by D-391: `default` is the model the user's CLI starts with.
   2. `status(check = TRUE)` calls `pcli_probe()` (which runs `pcli_version()` first), so a recorded
      capability problem stays reported (contract 7.20); local runs only, never a model request.
   3. `pcli_plan_set()` reads an `info` or `unifiedWindows` that is not a list as empty, and a field
@@ -11113,3 +11115,237 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: the whole suite unchanged under `NOT_CRAN=true`. Evidence: the pretest log
   (incoming_pretest/gptr_1.1.0_20261119_044917), the local timing table and win-builder's check time
   in progress/P33.md.
+
+## D-372 - P34 gptr Agent is hosted and released in gptr (2026-11-26)
+- Rule: the bridge lives in the top-level `gptragent/` folder, outside the R package
+  (`.Rbuildignore`, conventions section 3); its id `gptragent`, Python package and asset name
+  `gptragent.brxt` are unchanged. Its version is `DESCRIPTION`'s Version and its manifest
+  repository `https://github.com/Broccolito/gptr`, because Biorouter's updater compares the tag of
+  that repository's latest release with the installed `manifest.version`. A published gptr
+  release `vX.Y.Z` (never a prerelease or draft) gets `gptragent.brxt`, `gptragent-X.Y.Z.brxt` and
+  `SHA256SUMS` from `.github/workflows/gptragent.yaml`, which refuses a tag other than `v` + both
+  versions. Broccolito/GptrAgent is archived with no final release (maintainer, 2026-11-26).
+- Contract-visible: none in the R package; Biorouter's card and catalog move to Broccolito/gptr.
+- Tests: gptragent/tests/test_bundle.py `test_the_bridge_is_released_with_gptr`. Evidence:
+  progress/P34.md Task 1.
+
+## D-373 - P34 An outside agent's served R calls are recorded (2026-11-26)
+- Rule: an `r` or `inspect` call served with no live run that ran (status ok, or stopped part-way
+  with expressions done), was not refused and is not in plan mode appends the run path's
+  `gptr.mcp_r` entry to the served session (for `gptr_mcp_serve()`, its dedicated session,
+  `gptr_last()`); inside a run the old rule stands. `inspect` is history, not code, unless it
+  changed objects (IC-48). With no run and a `gptr_doc()` binding the call goes out on P14's
+  `console:direct` channel, so the bound .R, .Rmd or .qmd gets a direct R line that
+  `gptr_export()` keeps; a call stopped part-way sends `n_done` and records what ran.
+- Contract-visible: 04 §6.3 `gptr_mcp_serve()` recording rule, with §11.5's direct R line
+  (R130-15); `console:direct` gains an optional `n_done`; `?gptr_mcp_serve`.
+- Tests: test-mcp-recording.R "plan and non-recording runs record no code, failed R what ran,
+  idle R its session" and "idle served R records on the server's session and its bound document
+  (D-373)". Evidence: progress/P34.md Task 2.
+
+## D-374 - P34 gptragent/ is the gptr plugin for Claude Code and Codex (2026-11-26)
+- Rule: `gptragent/.claude-plugin/plugin.json` and `gptragent/.codex-plugin/plugin.json` declare
+  the plugin `gptr` with one inline MCP server `gptr`; root marketplaces
+  `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` (both named `gptr`)
+  list `./gptragent`. Claude Code runs `uv run --no-project --python ">=3.11" --directory
+  ${CLAUDE_PLUGIN_ROOT}/src python -m gptragent`; Codex expands no variable in a plugin's MCP
+  config, so it runs the same command with `cwd = "./src"`, `tool_timeout_sec = 300`,
+  `startup_timeout_sec = 60` and `env_vars` forwarding the discovery variables. The bridge's
+  texts name no host. `scripts/version.py` moves the plugin versions and `build_brxt.py` refuses a
+  mismatch; the `.brxt` allowlist is unchanged.
+- Contract-visible: none in the R package.
+- Tests: gptragent/tests/test_plugins.py; test_bundle.py (plugin versions); test_bridge.py (no
+  host named). Evidence: progress/P34.md Task 3.
+
+## D-380 - P35 The compact_calls setting, on by default (2026-11-26)
+- Rule: the core flag setting `compact_calls`, default `TRUE`; `gptr.compact_calls` is its option
+  layer, and it is changed with `gptr_config(compact_calls = FALSE, .scope = )` as any setting.
+  The console reads it with `setting_get("compact_calls", session)` where it renders a call
+  (`console_tool_line()`) and once per evaluation (`eval_open()`). No other option or command.
+- Contract-visible: 04 section 11.2 (`compact_calls` row); `?gptr_config`, the configuration
+  vignette, the cheat sheet.
+- Tests: gptr-config (the names, default, validation, layers and print). Evidence: progress/P35.md
+  Task 2.
+
+## D-381 - P35 A compact call is one row; printed output shows 5 rows a call (2026-11-26)
+- Rule: with `compact_calls`, a call that would expand to code rows (more than one line, or one
+  that does not fit) is its head and its first non-blank line, cut before a dim `(+N more lines)`
+  counting the other non-blank lines (D-187); other calls are unchanged. An edit's result is always
+  `edited <path> · +a -r`. The printed output of `r` code (output, messages and warnings) shows at
+  most 5 rows a call, then one dim `    (+N more lines)` after the call; the model's result is
+  unchanged. With `FALSE` every row is as before (D-207, D-245).
+- Contract-visible: 04 IC-82 (tool calls, printed output).
+- Tests: console-render (compact rows of r, write, edit, MCP, codex_shell and an error; FALSE;
+  the output cap). Evidence: progress/P35.md Task 2.
+
+## D-382 - P35 An approval prints the code of a call drawn compact (2026-11-26)
+- Rule: `last_call` is `c(<session id>, <call id>, "compact")` for a call drawn compact, and
+  `ui_call_shown()` returns `"full"`, `"compact"` or `""`. Under a compact call the ask prints its
+  code rows (`console_code_rows(..., 20L, width)`, the block the full call line draws), then the
+  question; the `?` view leaves out code that fits 20 rows and shows a longer call's code, at most
+  40 rows, as after a full call block (D-243). A call the console did not draw keeps its one row.
+- Contract-visible: 04 IC-77 (the approval's call line), IC-82.
+- Tests: console-ui (an approval of a compact call; its ? view). Evidence: progress/P35.md Task 2.
+
+## D-383 - P35 /calls [n] shows the last calls in full (2026-11-26)
+- Rule: `/calls [n]` (default 1, a positive whole number) prints the last `n` `tool_call` blocks of
+  the session's messages (`msg_calls()` over `s$messages`), oldest first, whole: the full call rows
+  with every code row (`console_tool_line(compact = FALSE, n = Inf)`), then a path tool's change
+  rows as its approval shows them (`ui_request_change()`: an edit's old and new text, a write's
+  content), uncut, at the live rows' column (the command's margin is taken off); `No tool call
+  yet.` before one. A sub-agent's calls and a CLI route's own steps (Codex's shell) are not
+  listed. Amended by the 1.3.0 live check (2026-11-27, RStudio): the calls a CLI route makes to
+  gptr's tools are no messages of the session either, so `mcp_serve_call()` keeps them in the
+  session's live state (`served_calls`) and `/calls` lists them after the messages' calls. Amended by the P35 review (2026-11-26): whole calls, the live column, `n`
+  only digits.
+- Contract-visible: 03 section 6.17 (the command list); the interactive-console vignette, `?peter`,
+  the cheat sheet.
+- Tests: console-commands (`/calls`, `/calls 2`, before a call, a bad `n`, `/help`). Evidence:
+  progress/P35.md Task 3.
+
+## D-390 - P36 A CLI route's models come from its CLI (2026-11-26)
+- Rule: `pcli_discover()`, the `discover()` of `claude-cli` and `codex`, asks the CLI through
+  `pcli_talk()` (15 s, 4 MB of output, process tree killed, stderr dropped, the reactor runs), with
+  no prompt and no tokens: Claude Code `-p` in stream-json with the user's settings loaded (for
+  `applied.model`; their SessionStart hooks run) and `--tools ""`, `--disable-slash-commands`
+  (claude 2.1.323 reports the same models and settings without them) sends `initialize` and
+  `get_settings`; `codex app-server` gets `initialize`, `initialized`,
+  `model/list` (every page, at most 20) and `config/read`, else `codex debug models` (models not
+  hidden). Ids and effort levels are kept as reported (Claude `resolvedModel`, else `value`; Codex
+  `model`); no name is filtered. Rows enter the catalog's discovered layer (`catalog_inventory()`).
+- Rule: gptr asks once per R session and CLI version: an answer, or a failure, is kept in memory
+  per CLI command (`pcli_cache_key()`: path and file time, which an update changes); a run's
+  `agent_start` (after the version probe) and `/model` ask when nothing is kept for that
+  command, `gptr_models(provider = , refresh = TRUE)` asks again. `pcli_models()` and the P20 lists go;
+  each built-in route declares only `default`.
+- Contract-visible: 04 section 7.20, 03 section 8.4 (not amended here); `?gptr_models`,
+  `?gptr_egress`, the language-models article.
+- Tests: test-cli-discovery (11 blocks; fixtures/cli/ probe recordings); test-console-commands
+  "/model on a CLI route lists the models its CLI reports and names the default"; test-live-cli
+  (shapes only). Evidence: progress/P36.md Task 1 and Review fixes.
+
+## D-391 - P36 A route's default is the model the user's CLI starts with (2026-11-26)
+- Rule: `default` runs the model the CLI reports, passed as `--model` or `-m`, since gptr's runs
+  keep `--setting-sources ""` and `--ignore-user-config`: Claude `get_settings` `applied.model`,
+  else initialize's default row; Codex `config/read` `model`, else the `isDefault` row. Unknown:
+  no model flag, the CLI chooses, no notice. Supersedes D-097 item 1 (the fixed list and the
+  `gpt-6-sol` fallback).
+- Rule: `pcli_default_model()` names it in `/model`, `/status`, the status line and the `default`
+  row of `gptr_models()` (`default (<id>)`). First-run setup saves `<cli>/default` without a probe,
+  which would ask the egress question during setup.
+- Contract-visible: 04 section 7.20, 03 section 8.4 (`codex/default`), not amended here; `?peter`.
+- Tests: test-cli-discovery "a route's default runs as the CLI's own: its reported model, else no
+  model flag"; test-console-commands "/model and /status name the model a CLI's default runs
+  (#44)". Evidence: progress/P36.md Task 1.
+
+## D-392 - P36 Any model id may be written in, for every route and provider (2026-11-26)
+- Rule: `model_resolve()` of `<known provider>/<id>` the catalog lacks returns the id as typed,
+  with one notice per reference (`gptr_message_model_write_in`, naming the provider's listing when
+  it has one): tool calls only on a remote chat or CLI route (never a local server, IC-74, or a
+  classifier), text input, thinking `off`, unknown limits and price, `locality = "unknown"`. An
+  unknown provider or an empty id stays `unknown_model`. Resolution is an exact (or
+  separator-normalised) id, a declared alias, a provider named alone, else this write-in; a name
+  alone that is none of these is `unknown_model` with suggestions (`model_near()`, then edit
+  distance), never a similar model by family or substring. A CLI route's notice comes once, from
+  `pcli_write_in()` when the run is built, saying when discovery had no list to check against.
+- Rule: Codex execs carry `config/read`'s `model_provider` with its `model_providers.<id>` table
+  (inline TOML), `openai_base_url` and `model_catalog_json` as `-c` overrides; of the table only
+  Codex's documented keys without a credential or command go (`pcli_codex_provider_keys`), and
+  the rest (`experimental_bearer_token`, `http_headers`, `query_params`, `auth`, `gateway_oauth`,
+  unknown keys) is named in one notice. Claude routers through `ANTHROPIC_BASE_URL` stay removed
+  by the `cli-claude` billing guard.
+- Contract-visible: 04 section 7.5 (`model_resolve()` row), section 4.9 (`local`), section 2.2
+  (the message class), not amended here; `?gptr_models`, `?gptr_provider`.
+- Tests: test-catalog-models "an id the catalog lacks is written in once, with conservative
+  capabilities (D-392)", "a name that is no catalog id or alias never resolves to a similar model
+  (D-392)"; test-cli-discovery "a model id the CLI does not list is passed as written,
+  with one notice (D-392)", "Codex runs keep the user's model provider through -c, never its
+  credentials". Evidence: progress/P36.md Task 2 and Review fixes.
+
+## D-393 - P36 gptr matches no model name: catalog data decides (2026-11-26)
+- Rule (data): `catalog_seed()`, `catalog_overrides()`, the alias and dated-suffix regexes,
+  `provider_default_models()` and the shipped preset globs go. `dev/release/catalog-reviewed.json`
+  (each entry with its source) holds `overrides`, `aliases` (a models.dev family, or a `ref`) and
+  per-route `defaults` (`model`, `small`, `system1`); the snapshot carries it, a refresh keeps it.
+  An alias is the newest non-deprecated model of its family (a tie: the shortest id);
+  `model_default()` and a provider named alone take `defaults`, then a detected CLI; settings win.
+  The `extended` preset applies where `cache_min` exceeds the projected standard prefix.
+- Rule (record): `thinking_effort` (TRUE, FALSE, NA), `thinking_budget` (NULL or `list(min, max)`),
+  `temperature` (TRUE, FALSE, NA) and `owner`, filled by models.dev and by native listings
+  (`provider_models()`, Ollama `/api/show`); `capabilities` loses `adaptive_thinking` and `effort`.
+  Adapters read only these: a budget where `thinking_budget` is set and `thinking_effort` is not
+  TRUE (`adp_budget_thinking()`), else named levels; bedrock-converse thinking for owner
+  "anthropic". The Google version helpers, Bedrock's `anthropic\.claude` test, OpenRouter's id
+  prefixes and `adp_level_effort()` go.
+- Exception: `catalog_ollama_cloud()`, the Ollama `:cloud` and `-cloud` tag check (P05), stays.
+  It is a fail-closed privacy guard, not a model choice: IC-74 (07 sections 2 and 2.1) makes
+  local-only inference reject cloud selectors before any state is sent, and the tag is the one
+  signal before discovery, or when a listing has no `remote_host` or `remote_model`.
+- Contract-visible: 04 sections 4.9, 7.5 (`preset_tools()`), 11.10, 03 section 8.4, IC-73, IC-80,
+  not amended here; `?gptr_models`, `?gptr_config`, `?gptr_provider`, NEWS 1.3.0.
+- Tests: test-catalog-models "aliases follow the catalog's family data, never model names
+  (D-393)"; test-prompt-sections; test-provider-registry (native listings); the provider adapter
+  files. Evidence: progress/P36.md Tasks 3 and 4.
+
+## D-394 - P36 The shipped snapshot is built from models.dev at release time (2026-11-26)
+- Rule: `dev/release/catalog-snapshot.R` builds `inst/extdata/models.json.gz` from models.dev
+  `api.json` and its decision list with gptr's converter (version 3; older caches are ignored),
+  keeps gptr's providers, adds the reviewed data and stops when an alias or default names no
+  model; an entry gptr cannot convert is skipped (respan/span-01, context 0, failed the whole
+  conversion). Release: review `catalog-reviewed.json` against the providers' official lists, then
+  run it. `dev/catalog/build_models.R` is deleted; the snapshot test keeps its 200 KB ceiling.
+- 2026-11-26: 704 models, 23.6 KB gzipped, source "models.dev (MIT)". Reviewed: claude-mythos-5-2
+  added; the GPT-6 healthcare variants get their own family; Sonnet 5.5 cache read 0.10. Left to
+  write-in: claude-mythos-5-1, claude-mythos-5, gpt-6-cyber, gpt-6-rosalind, chat-latest and two
+  Groq previews. Conflicts kept for lack of a confirmed source: in progress/P36.md Task 3.
+- Contract-visible: 04 section 11.10 (not amended here); supersedes the 2026-10-03 seed.
+- Tests: test-catalog-models "the shipped snapshot is models.dev with gptr's reviewed data (D-393,
+  D-394)". Evidence: progress/P36.md Task 3.
+
+## D-395 - P36 Provider adapters follow the current APIs (2026-11-26)
+- Rule: Anthropic sends `anthropic-version: 2026-10-21` and never temperature, top_p or top_k (the
+  version's only break gptr hits); a budget model gets `enabled` with `budget_tokens`, others
+  `adaptive` with `output_config.effort`; `off` is `disabled` only where the levels list it, and a
+  forced `tool_choice` is allowed with thinking disabled.
+- Rule: `adp_temperature()` sends a temperature only where `temperature` is TRUE (NA is no), to a
+  reasoning model only with thinking `off`. Gemini: `thinkingBudget` (`off` 0, unset -1) for a
+  budget model, else `thinkingLevel` as listed (`off` the lowest listed); function-call ids always;
+  tool-result images in `functionResponse.parts` on level models (amends D-035 item 3).
+- Rule: xAI, DeepSeek, Ollama and vLLM get `reasoning_effort` by name, `none` only where `off` is
+  listed; OpenRouter gets `reasoning.max_tokens` for a budget model, else `reasoning.effort`,
+  never `none` when reasoning is mandatory, and `cache_control` only where prices bill cache
+  writes. The `supports_reasoning_effort` compat field is removed (a user's value is ignored).
+- Contract-visible: IC-80 (owner, temperature), 04 section 4.9, not amended here; NEWS 1.3.0.
+- Tests: test-provider-anthropic "off is `disabled` where the levels list it, else no thinking
+  field (D-395)"; test-provider-openai-responses, test-provider-openai-completions,
+  test-provider-google, test-provider-bedrock. Evidence: progress/P36.md Task 4.
+
+## D-396 - 1.3.0 The default permission mode is auto (2026-11-26)
+- Rule: the `mode` setting's default is `"auto"` (the maintainer's request); the permission gate is
+  unchanged, so auto keeps every question and refusal it had: level-4 and control actions, reads
+  of registered secrets and secret-to-network flows ask; a computed `system()` command and the
+  evaluator guard's calls (`q()`, `readline()`) are refused; deny and ask rules apply. Readers
+  take the setting's own default: `setting_get("mode")` loses its `default = "manual"` (the
+  settings service is builtin:gateway's, which no filter removes), and `context_provide_mode()`,
+  `/mode` and `/status` without a session read the setting. A served session without `mode`, a
+  non-interactive run, sub-agents, rebuilt and replayed sessions and the codex route's sandbox
+  (workspace-write in auto, IC-65) follow the setting as before. An untrusted project's mode still
+  only tightens (IC-52), now from auto: without a stricter user setting every mode a project may
+  save applies there, and `gptr_config(mode = )` in it no longer warns (`settings_untrusted_warn()`
+  compares with the default). Kept: `agent_mode()` reads Claude Code's `permissionMode: default`
+  as `manual` (that name asks on first use; it is no gptr default), and `pcli_params()` gives a
+  direct adapter call without a mode `manual` (the strictest mapping).
+- Rule: the console prompt is `peter> ` in auto and `peter[<mode>]> ` in every other mode (it was
+  `peter> ` in manual), and the banner names the mode only when it is not auto. `/mode`, `/status`
+  and `/mcp serve` name it in every mode; the yolo notice stays.
+- Contract-visible: 04 section 11.2 (`mode` row), 03 sections 6.8.1, 6.17 and the risk table;
+  `?gptr_security`, `?peter`, `?gptr_mcp_serve`, the README, the vignettes, the cheat sheet, gptr
+  Agent's README, NEWS 1.3.0, cran-comments.
+- Tests: gptr-config "gptr_config() without arguments returns the effective settings" (auto, from
+  the default layer); its layer tests set a user `manual` where they test tightening and save a
+  tighter untrusted project mode without a warning. gptr-gateway "a fresh session takes the auto
+  default; the mode setting chooses another (D-396)"; console-repl "the prompt and the banner
+  name the mode only when it is not auto, the default (D-396)". mcp-server serves in `manual`
+  where it tests refusals, and a restart without a mode setting serves in auto; NS-1 and the
+  console tests that answer approvals open in `manual` (their pty waits read `peter[manual]> `),
+  the others read `peter> ` in auto.

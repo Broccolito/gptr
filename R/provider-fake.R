@@ -93,7 +93,7 @@ fake_model_record = function(name, type, api, log) {
     cache_min = NA_real_,
     capabilities = list(
       mid_system = FALSE, tool_addition = TRUE, images_in_results = TRUE,
-      operator_role = FALSE, adaptive_thinking = FALSE, effort = FALSE
+      operator_role = FALSE
     ),
     aliases = character(), status = "active", local = TRUE, fake = log
   )

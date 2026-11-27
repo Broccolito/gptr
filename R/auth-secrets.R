@@ -462,9 +462,9 @@ scan_secret_path_re = paste0(
 )
 # A .env file by its name: `.env`, `.env.<suffix>`, `<name>.env` or `.Renviron` (not `x.env.csv`),
 # gptr's credential store `auth.json` wherever R_user_dir() puts it, and the discovery records of
-# gptr_mcp_serve(advertise = TRUE), which hold a server's token (`mcp-serve/serve-<pid>.json`)
+# gptr_mcp_serve(advertise = TRUE), which hold a server's token (`serve-<pid>.json`)
 scan_env_file_re = paste0("(^|[/\\\\])(\\.env(\\.[A-Za-z0-9_-]+)?|[^/\\\\]+\\.env|\\.Renviron|",
-                          "auth\\.json|mcp-serve[/\\\\]serve-[0-9]+\\.json)$")
+                          "auth\\.json|serve-[0-9]+\\.json)$")
 scan_read_funs = c("readLines", "readRDS", "readChar", "readBin", "scan", "file", "read.table",
                    "read.csv", "read.delim", "readRenviron", "fromJSON", "read_json", "read_yaml",
                    "yaml.load_file", "fread", "read_csv", "read_lines", "read_file", "vroom",

@@ -23,8 +23,9 @@ gptr_mcp_serve(
 \item{stop}{\code{TRUE} to stop the server.}
 
 \item{mode}{The permission mode of the server's session: \code{"plan"}, \code{"manual"}, \code{"edits"} or
-\code{"auto"}; \code{NULL} for the configured default. A running server keeps its mode: another one is
-an error until the server is stopped.}
+\code{"auto"}; \code{NULL} for the configured default, \code{"auto"} unless you set another, in which a
+client can create and change objects (\code{"manual"} lets it only read). A running server keeps
+its mode: another one is an error until the server is stopped.}
 
 \item{advertise}{\code{TRUE} to write the discovery record for local clients, or a label (a string)
 to show them; \code{FALSE} writes none. Advertising a running server writes its record.}
@@ -44,6 +45,11 @@ asking you; \code{r} runs whatever your permission settings allow. The calls bel
 gptr session whose permission mode is \code{mode}, or the configured default when the server
 starts, independently of a chat's explicit mode; like any new session, it becomes
 \code{\link[=gptr_last]{gptr_last()}}. A running server keeps its original workspace and mode until stopped.
+An \code{r} or \code{inspect} call that ran is recorded on that session (of a call that stopped part-way,
+the expressions that ran; nothing in plan mode), so it persists with the session and
+\code{gptr_last() |> peter()} continues after it. While \code{\link[=gptr_doc]{gptr_doc()}} binds a document, the call is
+also written there as a direct R line (\verb{# direct R (no model)}), which \code{\link[=gptr_export]{gptr_export()}} keeps as
+runnable R; an \code{inspect} call that changed no object is inspection and is left out.
 Requests are answered at R's top-level idle prompt or during an outermost gptr wait. Serving
 pauses while Peter's own prompt waits (in every console), while other R code runs and during a
 nested tool wait. Where R has no idle prompt (Rscript, knitr, Quarto, or a Jupyter kernel

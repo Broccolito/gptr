@@ -3,27 +3,13 @@
 # only. Unreported usage stays unknown (IC-74). Stream fields are read with `[[` (no `$` partial
 # matching) and typed before use (04 sections 2.2, 4.2).
 
-#' The Gemini major version of a model id, NA when unknown
+#' Does the model's data give thinking named levels (thinkingLevel) rather than a budget? The
+#' API reference ties thinkingLevel to Gemini 3 and later, which also take images in a
+#' functionResponse (https://aistudio.google.com/api-reference/generate-content,
+#' https://aistudio.google.com/docs/function-calling)
 #' @noRd
-google_major = function(id) {
-  m = regmatches(tolower(id), regexec("^gemini(?:-live)?-([0-9]+)", tolower(id), perl = TRUE))
-  m = m[[1L]]
-  if (length(m) < 2L) NA_integer_ else as.integer(m[[2L]])
-}
-
-#' Does the model take thinkingLevel (Gemini 3.x) rather than thinkingBudget (2.5)?
-#' (Pi usesGoogleThinkingLevel(), google-shared.ts:72-83)
-#' @noRd
-google_uses_level = function(id) {
-  id = tolower(id)
-  grepl("gemini-3(\\.[0-9]+)?-(pro|flash)", id) ||
-    id %in% c("gemini-flash-latest", "gemini-flash-lite-latest") || grepl("gemma-?4", id)
-}
-
-#' Do function calls and responses carry ids for this model? (Pi requiresToolCallId)
-#' @noRd
-google_needs_id = function(id) {
-  isTRUE(google_major(id) >= 3L) || grepl("^(claude-|gpt-oss-)", tolower(id))
+google_levels = function(model) {
+  isTRUE(model$reasoning) && !adp_budget_thinking(model)
 }
 
 #' A replayable thought signature: base64 with a length that is a multiple of 4
@@ -31,23 +17,6 @@ google_needs_id = function(id) {
 google_valid_sig = function(s) {
   is.character(s) && length(s) == 1L && !is.na(s) && nzchar(s) && nchar(s) %% 4L == 0L &&
     grepl("^[A-Za-z0-9+/]+={0,2}$", s)
-}
-
-#' The thinking budget of a Gemini 2.5 model for a level, -1 (dynamic) when unknown
-#' @noRd
-google_budget = function(id, level) {
-  id = tolower(id)
-  lv = if (level %in% c("xhigh", "max")) "high" else level
-  tab = if (grepl("2\\.5-pro", id)) {
-    c(minimal = 128L, low = 2048L, medium = 8192L, high = 32768L)
-  } else if (grepl("2\\.5-flash-lite", id)) {
-    c(minimal = 512L, low = 2048L, medium = 8192L, high = 24576L)
-  } else if (grepl("2\\.5-flash", id)) {
-    c(minimal = 128L, low = 2048L, medium = 8192L, high = 24576L)
-  } else {
-    NULL
-  }
-  if (is.null(tab) || !(lv %in% names(tab))) -1L else tab[[lv]]
 }
 
 #' A Google error object -> class suffix, HTTP status and retryability (09 section 2.1)
@@ -269,7 +238,6 @@ google_user = function(m, images) {
 #' @noRd
 google_assistant = function(m, model) {
   same = handoff_same_model(m, model)
-  needs_id = google_needs_id(model$id)
   parts = list()
   for (b in m$content) {
     type = b$type %||% ""
@@ -286,8 +254,8 @@ google_assistant = function(m, model) {
       }
     } else if (type == "tool_call") {
       sig = if (same && google_valid_sig(b$thought_signature)) b$thought_signature else NULL
-      fc = list(name = b$name, args = if (length(b$arguments)) b$arguments else json_obj())
-      if (needs_id) fc$id = id_sanitize(b$id, 64L)
+      fc = list(name = b$name, args = if (length(b$arguments)) b$arguments else json_obj(),
+                id = id_sanitize(b$id, 64L))
       p = c(list(functionCall = fc), if (!is.null(sig)) list(thoughtSignature = sig))
     }
     if (!is.null(p)) parts[[length(parts) + 1L]] = p
@@ -297,12 +265,12 @@ google_assistant = function(m, model) {
 }
 
 #' The Gemini contents of a group of tool results: one user content of functionResponse parts
-#' Images go in functionResponse.parts on Gemini 3+, else a following user content; a text-only
-#' model gets the omission note once per image (D-023 item 4, D-029.3).
+#' with the call ids (an optional field of every model). Images go in functionResponse.parts on
+#' a model with thinking levels, else a following user content; a text-only model gets the
+#' omission note once per image (D-023 item 4, D-029.3).
 #' @noRd
 google_tool_results = function(group, model) {
-  needs_id = google_needs_id(model$id)
-  v3 = isTRUE(google_major(model$id) >= 3L)
+  inline = google_levels(model)
   images = adp_images_ok(model)
   parts = list()
   extra = list()
@@ -315,11 +283,11 @@ google_tool_results = function(group, model) {
       imgs = list()
     }
     fr = list(name = r$tool_name,
-              response = if (isTRUE(r$is_error)) list(error = txt) else list(output = txt))
-    if (needs_id) fr$id = id_sanitize(r$tool_call_id, 64L)
+              response = if (isTRUE(r$is_error)) list(error = txt) else list(output = txt),
+              id = id_sanitize(r$tool_call_id, 64L))
     imgs = lapply(imgs, google_image, images = images)
-    if (length(imgs) && v3) fr$parts = imgs
-    if (length(imgs) && !v3) extra = c(extra, imgs)
+    if (length(imgs) && inline) fr$parts = imgs
+    if (length(imgs) && !inline) extra = c(extra, imgs)
     parts[[length(parts) + 1L]] = list(functionResponse = fr)
   }
   out = list(list(role = "user", parts = parts))
@@ -329,29 +297,29 @@ google_tool_results = function(group, model) {
   out
 }
 
-#' The generationConfig of a request: maxOutputTokens, temperature and thinkingConfig
-#' (thinkingLevel for Gemini 3.x, thinkingBudget for 2.5; 09 sections 2.1 and 4.5)
+#' The generationConfig of a request: maxOutputTokens, temperature and thinkingConfig from the
+#' model's data: a listed level as thinkingLevel (`off`, which these models cannot reach, as
+#' the lowest listed level), else a thinkingBudget (0 off, -1 dynamic; 09 sections 2.1, 4.5)
 #' @noRd
 google_generation = function(model, params) {
   gen = json_obj()
   if (!is.null(params$max_tokens)) gen$maxOutputTokens = as.integer(params$max_tokens)
-  if (!is.null(params$temperature)) gen$temperature = params$temperature
+  gen$temperature = adp_temperature(model, params)
   if (!isTRUE(model$reasoning)) return(gen)
   level = params$thinking
-  if (google_uses_level(model$id)) {
+  if (google_levels(model)) {
     if (is.null(level)) {
       gen$thinkingConfig = list(includeThoughts = TRUE)
     } else if (identical(level, "off")) {
-      low = if ("minimal" %in% unlist(model$thinking_levels)) "MINIMAL" else "LOW"
-      gen$thinkingConfig = list(thinkingLevel = low)
+      low = setdiff(intersect(catalog_thinking_levels, unlist(model$thinking_levels)), "off")
+      if (length(low)) gen$thinkingConfig = list(thinkingLevel = toupper(low[[1L]]))
     } else {
-      lv = if (level %in% c("xhigh", "max")) "high" else level
-      gen$thinkingConfig = list(includeThoughts = TRUE, thinkingLevel = toupper(lv))
+      gen$thinkingConfig = list(includeThoughts = TRUE, thinkingLevel = toupper(level))
     }
   } else if (identical(level, "off")) {
     gen$thinkingConfig = list(thinkingBudget = 0L)
   } else {
-    budget = if (is.null(level)) -1L else google_budget(model$id, level)
+    budget = if (is.null(level)) -1L else adp_budget(level, model)
     gen$thinkingConfig = list(includeThoughts = TRUE, thinkingBudget = budget)
   }
   gen
@@ -406,7 +374,8 @@ google_build = function(model, context, opts) {
     r = run$role
     group = run$msgs
     if (r == "tool_result") {
-      key = paste(c("google", "results", model$id, images, vapply(group, adp_msg_key, "")),
+      key = paste(c("google", "results", model$id, images, google_levels(model),
+                    vapply(group, adp_msg_key, "")),
                   collapse = "|")
       el = adp_memo(opts, key, function() {
         paste(vapply(google_tool_results(group, model), json_encode, ""), collapse = ",")

@@ -220,7 +220,7 @@ s = peter("Fit mpg on wt.", mtcars,
         <p>Live calls follow Set up. <code>mtcars</code> is built in; quoted model names are strings. In functions use <code>envir = new.env()</code> to keep objects.</p>
         <dl>
           <dt>fit_s = peter("Fit mpg ~ wt as fit.",
-  mtcars, mode = "auto")</dt><dd>Prompt, then data. <code>auto</code> permits ordinary changes in scripts; critical actions still ask.</dd>
+  mtcars, mode = "auto")</dt><dd>Prompt, then data. <code>auto</code>, the default, permits ordinary changes; critical actions still ask.</dd>
           <dt>fit_s$text; fit_s$value; fit_s$turns</dt><dd>Answer, newest <code>gptr_return()</code> value (else NULL), prompt count.</dd>
           <dt>peter("Summarize.", mtcars,
   budget = list(tokens = 5e4, turns = 5))</dt><dd>Per-call limits; <code>turns</code> counts model requests.</dd>
@@ -277,7 +277,7 @@ session |&gt; peter()</dt><dd>Interactive R: bind a transcript, then chat. <code
           <tr><td><code>/model</code> <code>/mode</code></td><td>Show or switch either</td></tr>
           <tr><td><code>/status</code></td><td>Session, model, mode</td></tr>
           <tr><td><code>/cost</code> <code>/env</code></td><td>Tokens and cost; objects</td></tr>
-          <tr><td><code>/tools</code></td><td>Tools and helpers</td></tr>
+          <tr><td><code>/tools</code> <code>/calls</code></td><td>Tools; this session's calls</td></tr>
           <tr><td><code>/compact</code></td><td>Compact the history</td></tr>
           <tr><td><code>/clear</code></td><td>New chat, same objects</td></tr>
           <tr><td><code>/resume</code> <code>/fork</code></td><td>Resume or fork a session</td></tr>
@@ -291,7 +291,7 @@ session |&gt; peter()</dt><dd>Interactive R: bind a transcript, then chat. <code
           <tr><td><code>/exit</code></td><td>Leave; return the session</td></tr>
         </table>
         <h3>While an answer runs</h3>
-        <p>In a terminal (not Windows) type, then Enter steers and Tab follows up. Ctrl-C (RStudio, R.app: Esc) pauses: <b>[s]</b>teer, <b>[f]</b>ollow-up, <b>[c]</b>ontinue, <b>[a]</b>bort, <b>[b]</b>ackground. Approvals: <b>[y]</b>es, <b>[a]</b>lways (session), <b>[p]</b> always (project), <b>[n]</b>o (<code>n &lt;text&gt;</code> says what to do instead).</p>
+        <p>In a terminal (not Windows) type, then Enter steers and Tab follows up. Ctrl-C (RStudio, R.app: Esc) pauses: <b>[s]</b>teer, <b>[f]</b>ollow-up, <b>[c]</b>ontinue, <b>[a]</b>bort, <b>[b]</b>ackground. Approvals: <b>[y]</b>es, <b>[a]</b>lways (session), <b>[p]</b> always (project), <b>[n]</b>o (<code>n &lt;text&gt;</code> says what to do instead). A call is one row and <code>/calls</code> shows it whole; <code>gptr_config(compact_calls = FALSE)</code> shows its code as it runs.</p>
       </section>
     </div>
 
@@ -348,7 +348,7 @@ abstracts[rct]; sum(rct)</dt><dd>P(yes); subset and count these typed answers.</
     </div>
   </div>
   <footer class="foot">
-    <span>gptr 1.1.0 · Apache License 2.0</span>
+    <span>gptr 1.3.0 · Apache License 2.0</span>
     <span class="spacer"></span>
     <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-11</span>
   </footer>
@@ -399,7 +399,7 @@ abstracts[rct]; sum(rct)</dt><dd>P(yes); subset and count these typed answers.</
           <tr><td><code>plan</code></td><td>Read only; next top-level call gets the plan</td></tr>
           <tr><td><code>manual</code></td><td>Reads run; classified changes ask</td></tr>
           <tr><td><code>edits</code></td><td>Also allows file edits in the project</td></tr>
-          <tr><td><code>auto</code></td><td>Critical actions and secret reads ask</td></tr>
+          <tr><td><code>auto</code></td><td>Default; critical acts, secret reads ask</td></tr>
           <tr><td><code>yolo</code></td><td>Broad; critical and secret-flow guards remain</td></tr>
         </table>
         <dl>
@@ -540,7 +540,7 @@ h = gptr_tailor(readRDS("h.rds"))</dt><dd>Rebuild a saved harness; checks it and
     </div>
   </div>
   <footer class="foot">
-    <span>gptr 1.1.0 · Apache License 2.0</span>
+    <span>gptr 1.3.0 · Apache License 2.0</span>
     <span class="spacer"></span>
     <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-11</span>
   </footer>

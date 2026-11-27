@@ -343,29 +343,6 @@ test_that("status(check = TRUE) finds and versions a CLI", {
   expect_true(st$available)
 })
 
-test_that("CLI invocations always get full model ids", {
-  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) {
-    list(id = paste0(ref, "-9-9"))
-  })
-  expect_identical(pcli_model_id(list(id = "default", api = "cli-claude")), "sonnet-9-9")
-  # D-097: the catalog's newest GPT reaches codex only when the Codex route lists it
-  expect_identical(pcli_model_id(list(id = "default", api = "cli-codex")), "gpt-6-sol")
-  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) {
-    if (identical(ref, "gpt")) return(list(id = "fresh-cli-model"))
-    if (identical(ref, "codex/fresh-cli-model")) {
-      return(list(id = "fresh-cli-model", provider = "codex"))
-    }
-    NULL
-  })
-  # an advertised Codex model is not proof the account may use it (a ChatGPT login refuses some)
-  expect_identical(pcli_model_id(list(id = "default", api = "cli-codex")), "gpt-6-sol")
-  expect_identical(pcli_model_id(list(id = "claude-opus-5-5", api = "cli-claude")),
-                   "claude-opus-5-5")
-  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) stop("no catalog"))
-  expect_identical(pcli_default_model("cli-claude"), "claude-sonnet-5-5")
-  expect_identical(pcli_default_model("cli-codex"), "gpt-6-sol")
-})
-
 test_that("a rate_limit_event becomes the provider's plan status", {
   skip_on_cran()
   pcli_cache_clear()
@@ -383,11 +360,12 @@ test_that("a rate_limit_event becomes the provider's plan status", {
   expect_equal(plan$seven_day, 0.34)
 })
 
-test_that("the plan routes list `default` and full ids; fake CLI records are offline", {
-  skip_on_cran()
-  ids = vapply(pcli_models("claude"), function(m) m$id, "")
-  expect_identical(ids, c("default", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5"))
-  expect_identical(pcli_models("codex")[[1]]$id, "default")
+test_that("the plan routes declare `default` and ask their CLI; fake CLI records are offline", {
+  for (pid in c("claude-cli", "codex")) {
+    p = provider_get(pid)
+    expect_identical(vapply(p$models, function(m) m$id, ""), "default")
+    expect_true(is.function(p$discover))
+  }
   p = pcli_fake_provider("codex")
   expect_s3_class(p, "gptr_provider")
   expect_identical(p$id, "fakecodex")
@@ -396,20 +374,6 @@ test_that("the plan routes list `default` and full ids; fake CLI records are off
   expect_true(p$offline)
   expect_identical(vapply(p$models, function(m) m$id, ""), c("gpt-6-sol", "default"))
   expect_true("check" %in% names(formals(p$status)))
-})
-
-# ---- Task 3 review round 1 (D-097) --------------------------------------------------------------
-
-test_that("codex/default is always a model the Codex route lists", {
-  skip_on_cran()
-  listed = setdiff(vapply(pcli_models("codex"), function(m) m$id, ""), "default")
-  # the shipped catalog's newest GPT (gpt-6.1-sol) is absent from the Codex catalog (08 2.C)
-  expect_true(pcli_default_model("cli-codex") %in% listed)
-  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) list(id = "gpt-6-luna"))
-  expect_identical(pcli_default_model("cli-codex"), "gpt-6-luna")
-  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) list(id = "gpt-6.1-sol"))
-  expect_identical(pcli_default_model("cli-codex"), "gpt-6-sol")
-  expect_identical(pcli_model_id(list(id = "default", api = "cli-codex")), "gpt-6-sol")
 })
 
 test_that("status(check = TRUE) keeps a capability problem the probe finds", {
@@ -834,8 +798,7 @@ test_that("builtin:cli registers the codex route and its adapter", {
   expect_identical(codex$api, "cli-codex")
   expect_identical(codex$type, "cli")
   expect_true(all(c("codex", "codex-cli") %in% codex$aliases))
-  expect_identical(vapply(codex$models, function(m) m$id, ""),
-                   c("default", "gpt-6-sol", "gpt-6-luna"))
+  expect_identical(vapply(codex$models, function(m) m$id, ""), "default")
   a = registry_get("adapter", "cli-codex")
   expect_identical(a$transport, "process_jsonl")
   expect_identical(a$build, pcli_codex_build)

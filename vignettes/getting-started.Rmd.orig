@@ -63,10 +63,10 @@ session$value
 ```
 
 Prompts are always quoted strings. Identifiers such as the mode can be bare names, the way
-`library(gptr)` needs no quotes: `mode = auto` and `mode = "auto"` are the same. The `auto` mode
-lets ordinary agent actions run without asking, while retaining the critical and secret guards.
-This guide needs it because nobody is there to answer. At the console the default mode,
-`manual`, asks before changes unless a permission rule already allows them.
+`library(gptr)` needs no quotes: `mode = auto` and `mode = "auto"` are the same. The `auto` mode,
+the default, lets ordinary agent actions run without asking, while retaining the critical and
+secret guards; naming it keeps this guide's examples independent of the mode you configured.
+`manual` asks before changes unless a permission rule already allows them.
 
 `session$text` is the final answer, and `session$value` is the value the tool selected with
 `gptr_return()`.

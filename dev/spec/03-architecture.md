@@ -521,7 +521,7 @@ redacted, encrypted reasoning, parallel tools, overload, truncation), `fixtures/
 | `.github/workflows/R-CMD-check.yaml` | the full offline suite as gated shards: `R CMD check` on Ubuntu release under `LC_ALL=C` (4 shards, two testthat workers) and on macOS (5, serial), and the connection gate on Ubuntu release (9 shards of `devtools::test()`, the connection table compared per shard) [IC-59]; the `gates` job carries their required contexts, `ubuntu-latest (release)` and `connections left open` both from the connection shards and `ubuntu-latest (devel)` from the cran-mode job; checks with CRAN's test list on Ubuntu oldrel-1, oldrel-4 and release without Suggests; the `ubuntu-latest (devel, NOT_CRAN=false)` budget job and copy-safety on R-release and R-devel, all three without Suggests; a `bench` job running the token ratchet with rtiktoken [IC-73]; every job 20 minutes (a gate 5), check and test steps 16 (CI-107) | P01 |
 | `.github/workflows/Windows-check.yaml` | Windows release as ten serial shards (the native fixtures in shard 1) behind the required gate `windows-latest (release)`; `windows-latest (oldrel-4)`, one check with CRAN's test list; the cran job (D-239, CI-107) | P01 |
 | `dev/style.R` | `gptr_style()` styler helper (conventions §4) | P01 |
-| `dev/catalog/build_models.R` | builds `inst/extdata/models.json.gz` from models.dev | P05 |
+| `dev/release/catalog-snapshot.R`, `dev/release/catalog-reviewed.json` | builds `inst/extdata/models.json.gz` from models.dev with the reviewed corrections (D-394) | P36 |
 | `dev/bench/tokens/run.R` and the NS-2/NS-3 golden transcripts | the token ratchet runner, from M1 [IC-73] | P07 (fixtures added by P10, P13, P15, P18, P19, P22, P23) |
 | `dev/bench/tokens/` (other fixtures, `live.R`), `dev/bench/polyglot/`, `dev/bench/shiny-html/`, `dev/bench/cache-sim/`, `dev/bench/perf/` | token-efficiency and performance benchmark suite (§12.6) | P24 |
 | `vignettes/*.Rmd.orig -> *.Rmd` | precomputed: getting-started, system-one, script-as-history, extending-gptr, token-efficiency | P25 |
@@ -1492,7 +1492,7 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 
 #### 6.8.1 Modes and levels
 
-| Level | Meaning (classifier) | plan | manual (default) | edits | auto | yolo [IC-78] |
+| Level | Meaning (classifier) | plan | manual | edits | auto (default) [D-396] | yolo [IC-78] |
 |---|---|---|---|---|---|---|
 | 0 | **known** read-only R (level 0 means "known read-only", not "nothing flagged"), reads inside the project, namespace reads | allow | allow | allow | allow | allow |
 | 1 | new objects, reads outside the project (a command run in a directory outside it reads that directory [D-262]), calls of unlisted functions from packages outside base/stats/utils/methods/graphics/grDevices/tools [IC-54] | only allowlisted read-only calls run, in a scratch child env (discarded); anything else and other tools deny | ask | ask | allow | allow |
@@ -2184,7 +2184,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   [D-244]); a warning
   near the readline line limit (4,095 bytes on
   R < 4.5, 8,190 on R >= 4.5 [18 fact-check]); optional history through `utils::timestamp()`
-  (`gptr.history`). Banner [D-245]: dim lines at column 2, `gptr 1.0.0 · <model> · <mode> · .gptr/ found`,
+  (`gptr.history`). Banner [D-245]: dim lines at column 2, `gptr 1.0.0 · <model> · <mode> · .gptr/ found`
+  (the mode only when it is not `auto`, as the prompt `peter[<mode>]> ` names it [D-396]),
   `objects: ` and up to six names, then the keys in bold, `/help lists commands · tab completes after @ ! / ·
   ctrl-c twice leaves` (the tab only where the REPL completes, after `! /` in RStudio's console; the console's
   own key, `esc` in RStudio, R.app and Rgui, which does not pause at the prompt), in Positron a line `text typed
@@ -2345,7 +2346,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   the compaction request and the next request's estimate as a ledger row, from which it measures the context
   left [D-245]),
   `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
-  `/skills`, `/skill:<name>`, `/mcp [serve]`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
+  `/skills`, `/skill:<name>`, `/mcp [serve]`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, `/calls [n]`
+  (the last `n` tool calls of the session's messages whole, D-383), plus prompt
   templates as `/<name> args`, registered when a session starts and by the console (the `templates.sync`
   service) before `/help`, a `/` completion and a call of a name unknown, so a template works as the first input
   and a template saved since is found (D-252). Commands are recorded as comments in transcripts. Their output,
@@ -3482,7 +3484,7 @@ reload the 5 GB object for every fix.
 | Risk | Likelihood / impact | Mitigation |
 |---|---|---|
 | A CRAN reviewer objects to evaluating model code in the caller's environment or to document writes | medium / high | every evaluation and write is user-initiated and consented; examples use the fake provider and `envir = new.env()`; a "Security considerations" help page; precedents (btw, aisdk) cited in cran-comments [13 §1] |
-| In-process evaluation cannot be sandboxed; `auto` can damage the session or files | high / high | `manual` default; modes, rules, critical and secret guards, protect-size escalation; checkpoints and rewind; documented "not a security boundary" [18, G6, G7] |
+| In-process evaluation cannot be sandboxed; `auto` can damage the session or files | high / high | modes (`auto` the default [D-396], `manual` one setting away), rules, critical and secret guards, protect-size escalation; checkpoints and rewind; documented "not a security boundary" [18, G6, G7] |
 | Copy-safety regressions from future code or R versions (one stray quosure, `match.arg()`, list or closure brings back multi-GB copies) | medium / high | rules R1-R10 (§6.4); fresh-process tracemem suite over every entry point incl. function-frame homes on R-release and R-devel; review checklist in every plan touching user objects [G3 fact-check] |
 | Values that capture environments (lm terms, closures) keep a function-frame home alive | medium / low | inherent to R; documented; by-name designation for kept homes |
 | Interrupt menu, background pumping and readline behaviour unverified in RStudio, Positron, Jupyter, Rgui and Windows consoles | medium / medium | abort-only fallback; UI abstraction; background is experimental with a support matrix; manual test checklist in P14 and P21 [02 §7, 18 §7, G3] |

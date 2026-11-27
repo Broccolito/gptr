@@ -37,10 +37,13 @@ mcp_server_instructions = function(target) {
             paste("Use inspect to look (ls.str(), str(x), peter$describe(x)) before changing",
                   "anything: it runs only code gptr classifies as read-only.")
           },
-          "Change objects in place under their names; a new R process, such as Rscript from a",
-          "shell, does not have them. Every call passes the user's permission settings: when one",
-          "is refused, tell the user what the refusal says they can do, and do not reword the",
-          "code to get around it."), collapse = " ")
+          if (any(c("r", "edit", "write") %in% tools)) {
+            paste("Change objects in place under their names; a new R process, such as Rscript",
+                  "from a shell, does not have them.")
+          },
+          "Every call passes the user's permission settings: when one is refused, tell the user",
+          "what the refusal says they can do, and do not reword the code to get around it."),
+        collapse = " ")
 }
 
 #' The schema of the served `r` tool: no person watches an MCP caller, so it offers the
@@ -232,15 +235,18 @@ mcp_pumped = function(run) !is.null(run) && reactor_depth() > 0L
 #' run), it is reported as `tool_execution_start`/`_end` under its gate's call id, the end with
 #' the result's `content` and `details` and the execution time, and its approval's control tokens
 #' end with it, as for a call of the agent loop (IC-53, D-192); a refused call's end says why
-#' it did not run (`refused`)
+#' it did not run (`refused`). The call is kept in the session's live state for /calls, since
+#' it is no message of the session (D-383)
 #' @noRd
 mcp_serve_call = function(target, name, args, id, schema) {
-  run = session_live(target$session)$run
+  live = session_live(target$session)
+  run = live$run
   if (is.null(run) || identical(run_current(), run)) {
     return(mcp_serve_exec(target, name, args, id, schema))
   }
   st = new.env(parent = emptyenv())
   cid = paste0("mcp_", id)
+  live$served_calls = c(live$served_calls, list(list(id = cid, name = name, arguments = args)))
   run_emit(run, "tool_execution_start", tool_call_id = cid, tool_name = name,
            input = if (is.list(args)) args else json_obj())
   on.exit({
@@ -314,7 +320,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     return(gptr_tool_result(call$blocked, is_error = TRUE))
   }
   call$risk = call$risk %||% call_risk(call, ctx, run)
-  refused = mcp_inspect_refusal(name, call$risk, st)
+  refused = mcp_inspect_refusal(name, call$risk, target$tools, st)
   if (!is.null(refused)) return(refused)
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
@@ -324,7 +330,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   }
   if (is.list(d$input)) call$input = d$input
   call$risk = d$risk %||% call$risk
-  refused = mcp_inspect_refusal(name, call$risk, st)
+  refused = mcp_inspect_refusal(name, call$risk, target$tools, st)
   if (!is.null(refused)) return(refused)
   tokens = NULL
   if (!is.null(st)) {
@@ -338,7 +344,7 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   }, add = TRUE)
   res = if (identical(tool, "r")) {
     call$approved_level = as.integer(call$risk$level %||% 2L)
-    mcp_serve_r(call, env, run, s, ctx)
+    mcp_serve_r(call, env, run, s, ctx, inspect = identical(name, "inspect"))
   } else if (is.null(st)) {
     # nothing follows the tool here (no checkpoint tokens): forget at this frame's exit
     on.exit(env_size_forget(call, env), add = TRUE)
@@ -350,15 +356,16 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
 }
 
 #' The refusal of a served `inspect` call whose risk is above level 0 (marking a reported call's
-#' `st` refused), or NULL
+#' `st` refused), or NULL; it points to `r` when `tools` (NULL: the defaults) serve it
 #' @noRd
-mcp_inspect_refusal = function(name, risk, st = NULL) {
+mcp_inspect_refusal = function(name, risk, tools, st = NULL) {
   level = as.integer(risk$level %||% 2L)
   if (!identical(name, "inspect") || identical(level, 0L)) return(NULL)
   if (!is.null(st)) st$refused = "inspect runs level-0 code only"
   gptr_tool_result(paste0("inspect runs only code gptr classifies as read-only (level 0); this ",
                           "code is level ", level, " (", risk$label %||% "unclassified", "). ",
-                          "Use r for it. Nothing in this call ran."), is_error = TRUE)
+                          if ("r" %in% (tools %||% mcp_default_tools())) "Use r for it. ",
+                          "Nothing in this call ran."), is_error = TRUE)
 }
 
 #' Evaluate the served r call `call` in `env` through the eval.r service (the evaluator kind,
@@ -369,9 +376,12 @@ mcp_inspect_refusal = function(name, risk, st = NULL) {
 #' dispatch_nested() as the loop's `r` calls do; with no pump the idle gate
 #' decides each first (the marker's `gate`, mcp_nested_gate()). During a run its plots are drawn
 #' and its printed output shown as the loop's `r` tool does ("auto", tee for a depth-0 run with a
-#' human; P28 Task 31), else offscreen and silent (#42).
+#' human; P28 Task 31), else offscreen and silent (#42). A call that ran records a `gptr.mcp_r`
+#' entry where mcp_r_recording() says so; `inspect` is history but not code unless it changed
+#' objects, as the r tool's `record = false` (IC-48). With no run, a gptr_doc() binding gets it as
+#' the console's direct R line (console:direct, D-373).
 #' @noRd
-mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
+mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL, inspect = FALSE) {
   input = call$input
   .gptr_tool_run = run
   force(.gptr_tool_run)
@@ -401,13 +411,19 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
   res$images = c(res$images, gptr_r_call$images)
   ok = identical(res$status, "ok")
   if (record && (ok || isTRUE(res$n_done > 0L)) && mcp_r_recording(run, session)) {
-    data = list(code = input$code, record = TRUE, status = res$status,
-                outputs = r_doc_outputs(res))
+    data = list(code = input$code, record = !inspect || length(unlist(res$changes$objects)) > 0L,
+                status = res$status, outputs = r_doc_outputs(res))
     # a call that stopped part-way records what ran (doc_ran_part())
     if (!ok) data$n_done = as.integer(res$n_done)
     # what gptr_return() designated, as the r tool's details$value (doc_turn_r())
     data$value = r_new_value_name(session, n_values)
     session_append(session, list(type = "custom", custom_type = "gptr.mcp_r", data = data))
+    if (is.null(run) && data$record && !is.null(the$doc_binding$path)) {
+      ev_dispatch("console:direct", list(data = list(
+        code = input$code, status = res$status, n_done = data$n_done,
+        output = as.character(unlist(utils::head(res$outputs, res$n_done))),
+        created = as.character(res$changes$objects$added))), session = session)
+    }
   }
   out = format_eval_result(res, budget)
   err = Filter(function(e) identical(e$type, "error"), res$events %||% list())
@@ -452,10 +468,12 @@ mcp_nested_gate = function(name, input, ctx, sid = NULL, outer = NULL) {
   invisible(NULL)
 }
 
-#' Only the exact active token-owned run's document receives native R history. Standalone MCP
-#' calls, non-recording calls and plan/aborted/settled runs keep their existing behavior.
+#' Does a served r call record on `session`? With no run, outside plan mode (D-373); in a run, only
+#' the exact active token-owned run that records into a document and is not in plan mode, aborted
+#' or settled
 #' @noRd
 mcp_r_recording = function(run, session) {
+  if (is.null(run)) return(!is.null(session) && !identical(session_data(session)$mode, "plan"))
   inherits(run, "gptr_run") && !is.null(session) && identical(run$shell, session) &&
     identical(run$session, session_data(session)$id) &&
     identical(session_live(session)$run, run) && !is.null(run$opts$doc$path) &&
@@ -796,6 +814,11 @@ mcp_handle_new = function(st, tok, stop) {
 #' gptr session whose permission mode is `mode`, or the configured default when the server
 #' starts, independently of a chat's explicit mode; like any new session, it becomes
 #' [gptr_last()]. A running server keeps its original workspace and mode until stopped.
+#' An `r` or `inspect` call that ran is recorded on that session (of a call that stopped part-way,
+#' the expressions that ran; nothing in plan mode), so it persists with the session and
+#' `gptr_last() |> peter()` continues after it. While [gptr_doc()] binds a document, the call is
+#' also written there as a direct R line (`# direct R (no model)`), which [gptr_export()] keeps as
+#' runnable R; an `inspect` call that changed no object is inspection and is left out.
 #' Requests are answered at R's top-level idle prompt or during an outermost gptr wait. Serving
 #' pauses while Peter's own prompt waits (in every console), while other R code runs and during a
 #' nested tool wait. Where R has no idle prompt (Rscript, knitr, Quarto, or a Jupyter kernel
@@ -833,8 +856,9 @@ mcp_handle_new = function(st, tok, stop) {
 #' @param port A port, or `NULL` for a free one.
 #' @param stop `TRUE` to stop the server.
 #' @param mode The permission mode of the server's session: `"plan"`, `"manual"`, `"edits"` or
-#'   `"auto"`; `NULL` for the configured default. A running server keeps its mode: another one is
-#'   an error until the server is stopped.
+#'   `"auto"`; `NULL` for the configured default, `"auto"` unless you set another, in which a
+#'   client can create and change objects (`"manual"` lets it only read). A running server keeps
+#'   its mode: another one is an error until the server is stopped.
 #' @param advertise `TRUE` to write the discovery record for local clients, or a label (a string)
 #'   to show them; `FALSE` writes none. Advertising a running server writes its record.
 #' @return A `gptr_mcp_handle` with `$url`, `$port`, `$token_env`, `$config` and `$stop()`;
@@ -874,8 +898,7 @@ gptr_mcp_serve = function(tools = c("inspect", "r", "read", "edit", "write"),
     arg_abort(mode, "mode", paste0("NULL or \"", session_data(running)$mode,
                                    "\", the mode of the running MCP server"))
   }
-  mcp_serve_open(envir, mode %||% setting_get("mode", default = "manual"), unique(tools), port,
-                 advertise)
+  mcp_serve_open(envir, mode %||% setting_get("mode"), unique(tools), port, advertise)
 }
 
 #' Start the server with a dedicated session in `mode` (the configured default, or the chat's

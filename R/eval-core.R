@@ -213,6 +213,9 @@ eval_open = function(st) {
   st$pad = console_pad()
   st$colors = console_colors()
   st$echo = st$tee && st$guard && nzchar(st$pad)
+  # compact_calls shows at most 5 rows of a call's output (D-381)
+  st$echo_left = if (st$echo && !isFALSE(setting_get("compact_calls"))) 5L else Inf
+  st$echo_hidden = 0L
   st$split = st$tee && !st$echo
   st$width = max(20L, cli::console_width() - nchar(st$pad))
   st$frame = sys.nframe() - 1L
@@ -299,16 +302,26 @@ eval_flush = function(st) {
 #' Show printed output in the console margin as a tool's result rows are (D-245): each line at
 #' column 4, registered secrets redacted (as the question above it shows them), escaped, dim in the
 #' console's colours and cut to its width, written by the writer below this evaluation with its own
-#' sink lifted; a sink the code left on top keeps the output
+#' sink lifted; a sink the code left on top keeps the output. At most `st$echo_left` rows of a call
+#' show, the others are counted, and `txt = NULL` writes their count, `(+N more lines)` (D-381)
 #' @noRd
-eval_echo = function(st, txt) {
+eval_echo = function(st, txt = NULL) {
   if (sink.number() != st$sink_n) return(invisible())
   sink()
   on.exit(sink(st$con, split = st$split), add = TRUE)
   rlang::local_options(cli.num_colors = st$colors)
   sym = console_style()
-  txt = redact(txt, "context")
-  lines = console_escape(strsplit(sub("\n$", "", txt), "\n", fixed = TRUE)[[1L]], FALSE)
+  if (is.null(txt)) {
+    lines = paste0("(+", st$echo_hidden, " more lines)")
+  } else {
+    txt = redact(txt, "context")
+    lines = console_escape(strsplit(sub("\n$", "", txt), "\n", fixed = TRUE)[[1L]], FALSE)
+    n = length(lines)
+    lines = lines[seq_len(min(n, st$echo_left))]
+    st$echo_left = st$echo_left - length(lines)
+    st$echo_hidden = st$echo_hidden + n - length(lines)
+    if (n && !length(lines)) return(invisible())
+  }
   rows = console_cut(paste0("    ", lines), st$width, sym$ellipsis)
   rows = ifelse(nzchar(lines), sym$dim(rows), "")
   gptr_message_write(paste0(rows, "\n", collapse = ""), "stdout", from = st$frame)
@@ -673,6 +686,7 @@ eval_outputs_since = function(st, start) {
 eval_finish = function(st) {
   eval_capture_plot(st, TRUE)
   eval_flush(st)
+  if (isTRUE(st$echo_hidden > 0L)) eval_echo(st)
   eval_restore(st)
   st$state1 = eval_session_state()
   eval_plots_done(st)

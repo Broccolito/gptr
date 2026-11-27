@@ -1536,7 +1536,7 @@ test_that("a session rebuilt for a replay takes model, mode and frozen prompt fr
   expect_null(session_by_id(id))
   r = session_replay_new("a1b2c3", list(session = id, turn = "1"), envir = new.env(), doc = NULL)
   expect_identical(list(r$turns, r$text, r$model, r$mode),
-                   list(1L, "first answer", "fake/fake-1", "manual"))
+                   list(1L, "first answer", "fake/fake-1", "auto"))
   expect_identical(session_data(r)$frozen$t0, "T0-first")
   expect_identical(roles(r), c("user", "assistant"))
 })

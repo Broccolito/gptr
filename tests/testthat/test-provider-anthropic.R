@@ -515,7 +515,7 @@ test_that("signed and redacted thinking replay byte for byte only to the same mo
   expect_identical(kinds[[1L]], "text")
 })
 
-test_that("adaptive models get adaptive thinking and effort; budget models an enabled budget", {
+test_that("named levels get adaptive thinking and effort; a budget model an enabled budget", {
   skip_on_cran()
   body = json_decode(anthropic_build(test_model(api),
                                      ctx_fixture(list(msg_user("hi")),
@@ -523,8 +523,8 @@ test_that("adaptive models get adaptive thinking and effort; budget models an en
                                      list())$body)
   expect_equal(body$thinking, list(type = "adaptive", display = "omitted"))
   expect_identical(body$output_config$effort, "high")
-  haiku = test_model(api, id = "claude-haiku-4-5", max_output = 64000,
-                     capabilities = list(adaptive_thinking = FALSE, effort = FALSE))
+  haiku = test_model(api, id = "claude-haiku-4-5", max_output = 64000, thinking_budget = list(),
+                     thinking_levels = c("off", "minimal", "low", "medium", "high"))
   req = anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
                                            params = list(thinking = "medium", max_tokens = 4096L)),
                         list())
@@ -539,19 +539,39 @@ test_that("adaptive models get adaptive thinking and effort; budget models an en
                                      list())$body)
   expect_identical(body$max_tokens, 8192L)
   expect_lt(body$thinking$budget_tokens, body$max_tokens)
-  # report 07 section 2.3: a temperature is never sent to a 5.x (adaptive) model
-  cold = json_decode(anthropic_build(test_model(api),
-                                     ctx_fixture(list(msg_user("hi")),
-                                                 params = list(thinking = "off",
-                                                               temperature = 0.2)),
-                                     list())$body)
-  expect_null(cold$thinking)
-  expect_null(cold$temperature)
-  warm = json_decode(anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
-                                                        params = list(temperature = 0.2)),
-                                     list())$body)
-  expect_null(warm$thinking)
-  expect_identical(warm$temperature, 0.2)
+  # API version 2026-10-21 refuses temperature, top_p and top_k on every model, even sampling
+  # ones (https://platform.claude.com/docs/en/api/migration-2026-10-21)
+  for (m in list(test_model(api), haiku, test_model(api, reasoning = FALSE, temperature = TRUE))) {
+    for (th in list("off", NULL)) {
+      body = json_decode(anthropic_build(m, ctx_fixture(list(msg_user("hi")),
+                                                        params = list(thinking = th,
+                                                                      temperature = 0.2)),
+                                         list())$body)
+      expect_false(any(c("temperature", "top_p", "top_k") %in% names(body)))
+    }
+  }
+})
+
+test_that("off is `disabled` where the levels list it, else no thinking field (D-395)", {
+  skip_on_cran()
+  # Haiku 5.5 and Opus 4.8 accept thinking disabled; Opus 5.5 and Fable 5.2 refuse it (HTTP 400)
+  # (https://platform.claude.com/docs/en/build-with-claude/thinking)
+  build = function(model, params) {
+    json_decode(anthropic_build(model, ctx_fixture(list(msg_user("hi")), params = params),
+                                list())$body)
+  }
+  haiku = test_model(api, thinking_levels = c("off", "low", "medium", "high", "xhigh", "max"))
+  body = build(haiku, list(thinking = "off"))
+  expect_equal(body$thinking, list(type = "disabled"))
+  expect_null(body$output_config)
+  opus = test_model(api, thinking_levels = c("low", "medium", "high", "xhigh", "max"))
+  expect_false("thinking" %in% names(build(opus, list(thinking = "off"))))
+  # a forced tool choice stays possible with thinking disabled, never with thinking on
+  forced = list(type = "tool", name = "read")
+  yes = test_model(api, capabilities = list(forced_tool_choice = TRUE))
+  expect_equal(build(yes, list(thinking = "off", tool_choice = forced))$tool_choice, forced)
+  expect_null(build(yes, list(thinking = "low", tool_choice = forced))$tool_choice)
+  expect_identical(build(yes, list(thinking = "max"))$output_config$effort, "max")
 })
 
 test_that("returns = uses output_config.format and keeps the tools (IC-71, INFRA-25)", {
@@ -653,7 +673,7 @@ test_that("credentials stay handles: x-api-key, or Bearer with the oauth beta", 
   expect_identical(req$url, "https://api.anthropic.com/v1/messages")
   expect_identical(req$method, "POST")
   expect_identical(req$headers$`x-api-key`, key)
-  expect_identical(req$headers$`anthropic-version`, "2023-06-01")
+  expect_identical(req$headers$`anthropic-version`, "2026-10-21")
   expect_identical(req$stream, "sse")
   tok = fake_handle("ANTHROPIC_AUTH_TOKEN")
   req = anthropic_build(test_model(api), ctx_fixture(list(msg_user("x"))), list(credential = tok))
@@ -717,7 +737,7 @@ test_that("provider headers never repeat an adapter header: betas join, the adap
                   local = TRUE, offline = TRUE)
   }
   haiku = test_model(api, id = "claude-haiku-4-5", provider = "p12-beta", max_output = 64000,
-                     capabilities = list(adaptive_thinking = FALSE, effort = FALSE))
+                     thinking_budget = list())
   ctx = ctx_fixture(list(msg_user("hi")), params = list(thinking = "medium"))
   tok = fake_handle("ANTHROPIC_AUTH_TOKEN")
   p = rec(`anthropic-beta` = "context-1m-2025-08-07, interleaved-thinking-2025-05-14",
@@ -733,7 +753,7 @@ test_that("provider headers never repeat an adapter header: betas join, the adap
                                              sep = ","))
   # the adapter's wire format and credential stay; a second credential is never added
   expect_identical(h$accept, "text/event-stream")
-  expect_identical(h$`anthropic-version`, "2023-06-01")
+  expect_identical(h$`anthropic-version`, "2026-10-21")
   expect_identical(h$authorization, list("Bearer ", tok))
   expect_false("x-api-key" %in% tolower(names(h)))
   expect_identical(h$`x-org`, "p12")
@@ -751,7 +771,7 @@ test_that("a budget model without room for the minimum budget sends no thinking 
   skip_on_cran()
   # the API needs 1024 <= budget_tokens < max_tokens
   haiku = test_model(api, id = "claude-haiku-4-5", max_output = 1024,
-                     capabilities = list(adaptive_thinking = FALSE, effort = FALSE))
+                     thinking_budget = list())
   req = anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
                                            params = list(thinking = "high", max_tokens = 800L)),
                         list())

@@ -60,7 +60,7 @@ repl_eval_env = function(rs) {
 #' @noRd
 repl_mode = function(rs) {
   if (!is.null(rs$session)) return(rs$session$mode)
-  rs$mode %||% setting_get("mode", default = "manual")
+  rs$mode %||% setting_get("mode")
 }
 
 #' The model as a label; a resolved model may be a provider or router spec
@@ -72,11 +72,11 @@ repl_model = function(rs) {
   as.character(m %||% setting_get("model") %||% "the default model")[1L]
 }
 
-#' The prompt: `"peter> "` in manual mode, `"peter[<mode>]> "` otherwise
+#' The prompt: `"peter> "` in auto mode, the default, `"peter[<mode>]> "` otherwise (D-396)
 #' @noRd
 repl_prompt = function(rs) {
   mode = repl_mode(rs)
-  if (identical(mode, "manual")) "peter> " else paste0("peter[", mode, "]> ")
+  if (identical(mode, "auto")) "peter> " else paste0("peter[", mode, "]> ")
 }
 
 #' The persistent stdin connection of `peter(.stdin = TRUE)` (tests mock this function): a fresh
@@ -1049,7 +1049,9 @@ console_wait = function(rs, ss, pump) {
 
 #' The banner (architecture 6.17, NS-1; D-245): dim lines at column 2 as a notice, their terms
 #' joined by the separator in rows of whole terms (console_terms()), in ASCII `gptr <version> -
-#' <model> - <mode> - .gptr/ found`, `objects: ` and up to six names of the evaluation environment,
+#' <model> - <mode> - .gptr/ found` with the model as /model names it (cmd_model_label()) and the
+#' mode only when it is not auto, as the prompt shows it (D-396), `objects: ` and up to six names of
+#' the evaluation environment,
 #' then the keys in bold, `/help lists commands - tab completes after @ ! / - ctrl-c twice leaves`:
 #' the tab only where the REPL completes (after ! and / in RStudio's console, which puts other words
 #' in backticks), the console's own interrupt key, which does not pause at the prompt. Where the
@@ -1070,9 +1072,12 @@ repl_banner = function(rs) {
   width = max(20L, cli::console_width() - 2L * nchar(console_pad()))
   terms = function(x) console_terms(x, width, sym$dim(sep))
   fate = console_typed_fate()
+  mode = repl_mode(rs)
   console_notice(paste(c(
     sym$dim(console_terms(c(paste("gptr", utils::packageVersion("gptr")),
-                            console_escape(c(repl_model(rs), repl_mode(rs)), FALSE), ws), width)),
+                            console_escape(c(cmd_model_label(repl_model(rs)),
+                                             if (!identical(mode, "auto")) mode), FALSE), ws),
+                          width)),
     if (length(nms)) {
       sym$dim(paste0("objects: ", console_escape(paste(utils::head(nms, 6L), collapse = ", "),
                                                  FALSE), more))
@@ -1083,7 +1088,7 @@ repl_banner = function(rs) {
     if (!is.null(fate)) {
       terms(c(sym$dim(fate), paste0(key(esc, ", then "), key("s", ", to steer"))))
     }), collapse = "\n"))
-  mode_notice(repl_mode(rs))
+  mode_notice(mode)
   console_write("")
 }
 
@@ -1311,7 +1316,9 @@ repl_setup = function(rs) {
       "Configure an API provider in R:",
       '  gptr_login("openai", method = "key")',
       '  # Or load an existing key file with gptr_env("~/keys/.env").',
-      '  gptr_config(model = "openai/gpt-6-sol", .scope = "user")',
+      '  gptr_models(provider = "openai", refresh = TRUE)',
+      "  # Replace <model> with a model from this listing, or write in any model id.",
+      '  gptr_config(model = "openai/<model>", .scope = "user")',
       "Or use an installed local Ollama model:",
       '  gptr_models(provider = "ollama", refresh = TRUE)',
       "  # Replace <installed-model> with a local chat model from this listing.",
@@ -1434,6 +1441,16 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'   (other fences are prompt text), a `"""` block is a multi-line prompt, and a trailing
 #'   backslash continues a line;
 #' * a slash command such as `/model`, `/mode`, `/cost` or `/exit`; `/help` lists them all.
+#'
+#' Each tool call shows as one row: the tool, the first line of its code and `(+N more lines)`,
+#' then what changed (an edit's added and removed lines, an error's message in up to six wrapped
+#' rows); what R code prints shows at most 5 rows a call, then `(+N more lines)`; what the model
+#' receives is unchanged. An approval shows the code it asks about. `/calls [n]` prints this
+#' session's last `n` tool calls whole (default 1): all their code, and what an edit or a write
+#' changes, including the calls a CLI route makes to gptr's tools; a sub-agent's calls and the
+#' steps a CLI route runs itself, such as Codex's shell, are not among them.
+#' `gptr_config(compact_calls = FALSE)` shows every call's code as it runs (at most 20 rows) and
+#' all its output.
 #'
 #' In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 #' and `... ` waits for Enter (text typed there is added); a pasted fence or `"""` block is read

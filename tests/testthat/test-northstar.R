@@ -38,7 +38,7 @@ test_that("NS-1: the console clusters, runs !expr and switches mode without relo
   ns_inputs(c("cluster the cells and show me the markers for the three largest clusters",
               "!dim(markers)", "/mode auto", "/exit"))
   out = ns_capture({
-    s = peter(model = fake, envir = e)
+    s = peter(model = fake, envir = e, mode = manual)
   })
   expect_s3_class(s, "gptr_session")
   expect_true(exists("markers", envir = e, inherits = FALSE))
@@ -47,7 +47,8 @@ test_that("NS-1: the console clusters, runs !expr and switches mode without relo
   expect_identical(s$mode, "auto")
   expect_length(fake_requests(fake), 2L)
   expect_identical(sum(ui$log$method == "permission"), 1L)
-  # the banner names the mode (Task 26 of P28: `gptr <version> - <model> - manual - ...`)
+  # the banner names a mode other than auto (Task 26 of P28, D-396:
+  # `gptr <version> - <model> - manual - ...`)
   sep = console_style()$sep
   expect_true(any(grepl(paste0(sep, "manual", sep), out, fixed = TRUE)))
 })

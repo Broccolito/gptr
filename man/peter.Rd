@@ -17,15 +17,18 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 named object under its name (\code{text = x}) and any other as \code{input}, so its answers and cache
 entries never depend on how a variable is named or subset.}
 
-\item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}), a provider or router spec
-such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default. A call made by the
-agent's own R code, and a team or fan-out it starts, uses the running session's model instead.}
+\item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}, \code{"codex/default"}; an id
+the catalog lacks is written in, see \code{\link[=gptr_models]{gptr_models()}}), a provider or router spec such as
+\code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default (\code{\link[=gptr_config]{gptr_config()}}). A call made by
+the agent's own R code, and a team or fan-out it starts, uses the running session's model
+instead.}
 
-\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.
-The plan a \code{plan} run proposes goes once, as a \verb{<plan>} block, to the next top-level
-\code{peter()} call from the same environment, within an hour and in another mode, whatever that
-call asks: a script runs the plan with \code{peter("Go ahead.", mode = auto)}. Another \code{peter()}
-call first, or a next call inside a loop or a run, discards it;
+\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default,
+\code{auto} unless \code{\link[=gptr_config]{gptr_config()}} sets another (see \link{gptr_security}). The plan a \code{plan} run
+proposes goes once, as a \verb{<plan>} block, to the next top-level \code{peter()} call from the same
+environment, within an hour and in another mode, whatever that call asks: a script runs the
+plan with \code{peter("Go ahead.", mode = auto)}. Another \code{peter()} call first, or a next call
+inside a loop or a run, discards it;
 \code{options(gptr.plan_handoff = FALSE)} turns the hand-off off. Interactively a \code{plan} run then
 asks whether to execute the plan: a mode chosen there is the session's, and its next prompt,
 such as \verb{Go ahead.}, runs the plan.}
@@ -149,8 +152,9 @@ prompt opens the console when someone can answer, and signals \code{gptr_error_n
 otherwise.
 
 A new interactive console without an explicit or configured model first offers CLI selection
-or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
-cancellation (choose Cancel or press Enter) or manual setup returns without starting a session.
+or manual API/Ollama instructions. Selecting an available CLI saves \verb{<route>/default}, the
+model that CLI starts with, at user scope; cancellation (choose Cancel or press Enter) or manual
+setup returns without starting a session.
 Existing sessions, explicit or configured models and \code{.stdin = TRUE} skip setup. CLI-reported
 login is not proof of online access or subscription billing. See
 \code{vignette("interactive-console", package = "gptr")}.
@@ -183,6 +187,16 @@ privacy boundary. A fenced block marked \code{r}, \code{R}, \code{{r}} or unmark
 backslash continues a line;
 \item a slash command such as \verb{/model}, \verb{/mode}, \verb{/cost} or \verb{/exit}; \verb{/help} lists them all.
 }
+
+Each tool call shows as one row: the tool, the first line of its code and \verb{(+N more lines)},
+then what changed (an edit's added and removed lines, an error's message in up to six wrapped
+rows); what R code prints shows at most 5 rows a call, then \verb{(+N more lines)}; what the model
+receives is unchanged. An approval shows the code it asks about. \verb{/calls [n]} prints this
+session's last \code{n} tool calls whole (default 1): all their code, and what an edit or a write
+changes, including the calls a CLI route makes to gptr's tools; a sub-agent's calls and the
+steps a CLI route runs itself, such as Codex's shell, are not among them.
+\code{gptr_config(compact_calls = FALSE)} shows every call's code as it runs (at most 20 rows) and
+all its output.
 
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 and \code{... } waits for Enter (text typed there is added); a pasted fence or \verb{"""} block is read

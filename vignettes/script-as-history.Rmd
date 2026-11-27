@@ -181,12 +181,11 @@ turn cut `dat`) stays on and replays with the restored value. Names are read wit
 a column or formula term named like such an object can turn a line off, and a name reached
 through a string, as in `get("fit")`, is not seen.
 
-Recording also needs the agent's code to run. In the default `manual` mode, code that changes
-objects, such as storing `top` above, waits for approval. Nobody can approve under `Rscript`,
-or in `rmarkdown::render()` even from the console, so the run stops with
-`gptr_error_permission` and no block is written. For such a run, set auto mode for this R
-session first, pass `mode = auto` to the call, or add `gptr_permissions()` rules. Replaying a
-fresh block needs no approval.
+Recording also needs the agent's code to run. In `manual` mode, code that changes objects, such
+as storing `top` above, waits for approval. Nobody can approve under `Rscript`, or in
+`rmarkdown::render()` even from the console, so the run stops with `gptr_error_permission` and
+no block is written. For such a run, keep the default `auto` mode, pass `mode = auto` to the
+call, or add `gptr_permissions()` rules. Replaying a fresh block needs no approval.
 
 
 ``` r

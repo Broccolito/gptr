@@ -41,7 +41,7 @@ settings_core = function() {
     rec("model", NULL, "ident", "Default model reference (null: the first available route)."),
     rec("small_model", NULL, "ident", "Small model (null: the small sibling of model)."),
     rec("system1", NULL, "ident", "System 1 model (null: typesafe/jev-latest when a key exists)."),
-    rec("mode", "manual", "choice", "Permission mode.", choices = session_modes,
+    rec("mode", "auto", "choice", "Permission mode.", choices = session_modes,
         tighten = session_modes),
     rec("preset", "standard", "chr", "Tool and prompt preset."),
     rec("tools", json_obj(), "object", "Tool enable and disable lists and per-model presets."),
@@ -92,6 +92,8 @@ settings_core = function() {
         paste("What Enter does with a message typed in a terminal console while the agent works",
               "(Tab does the other); in other consoles, what a typed line does."),
         choices = c("steer", "follow_up")),
+    rec("compact_calls", TRUE, "flag",
+        "Show tool calls in one abbreviated line in the console; /calls shows them in full."),
     rec("store", "jsonl", "chr", "Session store."),
     rec("evaluator", "r", "chr", "R evaluator."),
     rec("providers", json_obj(), "providers",
@@ -1423,8 +1425,14 @@ settings_model_warn = function(patch, scope) {
 #' file < `options(gptr.*)` < this R session. With named arguments, sets those keys in one scope.
 #'
 #' `model`, `small_model`, `system1`, `mode` and `preset` take bare names (`mode = plan`); `NULL`
-#' removes a key from the scope. `egress` (the providers you allow automatic context to go to) is
-#' accepted only at user scope. `mode = yolo` and turning off local-only Ollama inference
+#' removes a key from the scope. Unset, `model` and `system1` come from the catalog's reviewed
+#' defaults of the first ready route: Anthropic, OpenAI, Google, then a detected command-line
+#' tool (System 1: TypeSafe, else an installed local classifier); `small_model` is that route's
+#' small default, else `model`. `model = openai`, a provider with a reviewed default named alone,
+#' means that default; any `provider/id` is accepted ([gptr_models()]).
+#'
+#' `egress` (the providers you allow automatic context to go to) is accepted only at user scope.
+#' `mode = yolo` and turning off local-only Ollama inference
 #' (`providers = list(ollama = list(local_only = FALSE))`) are accepted only at user or session
 #' scope; a project can only keep local-only inference on. A change called from model code
 #' during a run needs an allowing permission decision (a person's, in every mode but `yolo`; see
@@ -1440,9 +1448,10 @@ settings_model_warn = function(patch, scope) {
 #'
 #' @section Choosing controls:
 #' Use settings for defaults such as `model`, `mode`, `context`, `budget`, `record`, `replay`, the
-#' `undo` limits ([gptr_rewind()]) and registered extension selections. Use [gptr_options] for
-#' transport timeouts, output caps, file checkpoint retention and concurrency. Arguments to
-#' [peter()] choose values for one call, within inherited safety restrictions.
+#' `undo` limits ([gptr_rewind()]), `compact_calls` (`TRUE`: one console row per tool call, the
+#' `/calls` command of [peter()] showing calls in full) and registered extension selections. Use
+#' [gptr_options] for transport timeouts, output caps, file checkpoint retention and concurrency.
+#' Arguments to [peter()] choose values for one call, within inherited safety restrictions.
 #' `vignette("configuration", package = "gptr")` groups all core settings and options and explains
 #' trust and scope.
 #'
@@ -1690,15 +1699,18 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' mode allowed.
 #'
 #' @section Permission modes:
-#' Every tool call passes a permission gate. The default mode is `manual`: actions that the
-#' static classifier labels read-only run without asking; every other action it recognizes,
-#' including a change to a file or an object, asks first with a one-line prompt. The classifier
-#' is advisory, not a security boundary (see below). `edits` also allows file edits inside the
-#' project and still asks before R code that is not known to be read-only; `auto`
-#' asks only for level-4 actions (for example deleting the project directory or a file outside the
-#' project, where a system temporary directory such as `/tmp` counts as outside, moving R's working
-#' directory out of the project, or changing gptr's own configuration) and for reads of registered
-#' secrets; `yolo`, which only you can select (a project setting or model code in another mode
+#' Every tool call passes a permission gate. The default mode is `auto`: the agent runs R code and
+#' changes files and objects without asking, and gptr asks only for level-4 actions (for example
+#' deleting the project directory or a file outside the project, where a system temporary
+#' directory such as `/tmp` counts as outside, moving R's working directory out of the project, or
+#' changing gptr's own configuration) and for reads of registered secrets. The static classifier
+#' that sets these levels is advisory, not a security boundary (see below). In `manual`, actions
+#' that the classifier labels read-only run without asking; every other action it recognizes,
+#' including a change to a file or an object, asks first with a one-line prompt. `edits` also
+#' allows file edits inside the project and still asks before R code that is not known to be
+#' read-only. Choose another default with `gptr_config(mode = "manual", .scope = "user")`, one
+#' call's mode with `peter(mode = )`, and switch in the console with `/mode`. `yolo`, which only
+#' you can select (a project setting or model code in another mode
 #' cannot), also runs gptr's own configuration functions, writes to R startup files such as
 #' `~/.Rprofile` (which can change gptr's options in the next R process) and secret reads without
 #' asking, and still asks before deleting protected files, files outside the project or the
@@ -1838,9 +1850,10 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' delete function handed to `lapply()`, `Map()` or `purrr::walk()` reads its paths as ones the
 #' code computes, level 3, so `auto` runs `lapply("~/notes", unlink)` without a question.
 #'
-#' In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them only in
-#' projects you can restore (version control, backups, [gptr_rewind()] for recent turns), and run
-#' untrusted prompts or untrusted projects in a disposable container or virtual machine.
+#' In `auto`, the default, and in `yolo` a model can delete or overwrite files and objects without
+#' asking. Use them in projects you can restore (version control, backups, [gptr_rewind()] for
+#' recent turns), choose `manual` elsewhere, and run untrusted prompts or untrusted projects in a
+#' disposable container or virtual machine.
 #'
 #' @section Sub-agents, workers and child processes:
 #' Inline sub-agents run in your session and see its objects. The worker backend runs a
@@ -1976,8 +1989,9 @@ NULL
 #'   [peter()] console); the R version, platform and available packages; and the project
 #'   instruction files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`).
 #' - Tool results: the printed output of R code the model ran, the parts of files it read, and
-#'   images of plots it made. In `manual` mode every action that is not known to be read-only
-#'   needs your approval before its result can be sent.
+#'   images of plots it made. In `auto`, the default, only the actions it asks about need your
+#'   approval before their results can be sent; in `manual` every action that is not known to be
+#'   read-only does.
 #' - With [gptr_coach()], each coach gets the task, the current coaching and, for each run, its
 #'   answer, a summary of its value and objects, the text of the files it wrote and its
 #'   transcript, up to 50,000 characters each; the judge gets the task and what each final run
@@ -2018,8 +2032,9 @@ NULL
 #' After the acknowledgment above, gptr asks a provider for its model list on
 #' `gptr_models(provider = , refresh = TRUE)`, and before the first request to a provider with a
 #' native model-list API (at most once per five minutes in an R process). The listing carries only
-#' that provider's credential, never a prompt or session context; for the `claude` and `codex`
-#' tools only the explicit refresh lists models, by starting the tool without a prompt. The
+#' that provider's credential, never a prompt or session context. gptr asks the `claude` and
+#' `codex` tools for their models without a prompt on that refresh, and once per R session and
+#' tool version when a run starts or at `/model`. The
 #' models.dev catalog is refreshed only by `gptr_models(refresh = TRUE)`, reachability checks run
 #' only with `gptr_providers(check = TRUE)`, and MCP servers, sub-agents and command-line tools
 #' are otherwise contacted only when a session uses them. The `claude` and `codex` command-line

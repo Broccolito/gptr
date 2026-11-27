@@ -1,7 +1,9 @@
 aarch
 aisdk
 Anthropic
+Anthropic's
 api
+BAAM
 Backgrounding
 bidi
 Biorouter
@@ -11,6 +13,7 @@ bytewise
 callr
 cancelling
 Cathcart
+Cerebras
 ChatGPT
 checkpointed
 checkpointer
@@ -21,9 +24,11 @@ cli
 CLI's
 CMD
 conda
+cpp
 CRAN's
 Ctrl
 deduplicates
+DeepSeek
 dev
 discoverable
 ellmer
@@ -53,12 +58,14 @@ integrations
 IRkernel
 Jev
 JSON
+json
 JSONL
 Jupyter
 keyring
 KiB
 knitr
 lifecycle
+LM
 loopback
 MCP
 mcptools
@@ -75,6 +82,7 @@ oldrelease
 Ollama
 Ollama's
 OpenAI
+OpenAI's
 OpenRouter
 openssl
 operand's
@@ -119,6 +127,7 @@ schemas
 scrollback
 SDK
 serializable
+SessionStart
 SigV
 srcrefs
 stderr
@@ -148,7 +157,9 @@ unsets
 unsetting
 untrusted
 unvisited
+uv
 validator
+vLLM
 Wanjun
 Wason
 Wason's

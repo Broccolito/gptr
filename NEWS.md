@@ -1,3 +1,121 @@
+# gptr 1.3.0
+
+gptr Agent now ships with gptr, as a Biorouter bundle and Claude Code and Codex plugins, and an
+outside agent's R calls are recorded, so a served session stays a runnable document. A tool call
+takes one console row, and the `claude-cli` and `codex` routes take their models and their
+default from the installed CLI; any model id can be written in, and the catalog is refreshed.
+The permission fix for a missing `HOME` is a security fix for every earlier 1.x release. Unlike
+1.2.0, this release changes what existing users see: the default permission mode is `auto`,
+`compact_calls` is on by default, `codex/default` runs the model your Codex starts with (no fixed
+fallback), an alias is the newest model of its family (`gpt` is `gpt-6.2-sol`, `gemini` is
+`gemini-4-neon`), and a `supports_reasoning_effort` setting is ignored. 1.2.0 was not released
+on CRAN, so its section is new there too.
+
+## Permissions
+
+* The default permission mode is `auto`: the agent runs R code and changes files and objects
+  without asking. gptr still asks before level-4 actions (deleting the project, protected files
+  such as `.git` and `.env` or files outside the project, `rm(list = ls())`, moving the working
+  directory out of the project, changing gptr's own configuration) and before reading a
+  registered secret; it still refuses code that would end or pause R and a `system()` call whose
+  command the code computes, and deny and ask rules apply as before. Where nobody can answer
+  (Rscript, knitr), such an action stops the run with status `blocked`. A session served with
+  `gptr_mcp_serve()` without `mode` also starts in `auto`, so its client can change objects, and
+  on the `codex` route Codex's own shell can change files in the project. To approve each change
+  as before, use `gptr_config(mode = "manual", .scope = "user")`; `/mode` switches a console,
+  and `yolo` asks less still. The console prompt is `peter> ` in `auto` and names any other mode
+  (`peter[manual]> `), and the banner names the mode only when it is not `auto`.
+* A path's class no longer drops when R warns while gptr reads it. With `HOME` naming a folder
+  that does not exist (a container, a service account, a CI runner), `tools::R_user_dir()` warns,
+  and gptr read every literal path as "unknown": deleting a file outside the project, `.git` or
+  `.env`, or writing gptr's settings, was level 3 instead of 4, so `"auto"` and `"yolo"` ran them
+  without asking (gptr 1.0.0 to 1.2.0). Found by an end-to-end test of gptr Agent.
+* Reading a discovery record through a path built from pieces, such as
+  `file.path(dir, "serve-4242.json")`, is a guarded secret read, as reading it by its literal path
+  is; gptr 1.2.0 read it at level 1, which `"auto"` runs.
+
+## Serving R to local agents
+
+* gptr Agent, the bridge that lets an agent outside R work in a served session, now lives in
+  gptr's repository (folder `gptragent/`, outside the R package) and is released with gptr: its
+  version is gptr's, and each gptr GitHub release carries `gptragent.brxt` for Biorouter.
+* The same folder is a Claude Code plugin and a Codex plugin named `gptr`:
+  `claude plugin marketplace add Broccolito/gptr` then `claude plugin install gptr@gptr`, or
+  `codex plugin marketplace add Broccolito/gptr` then `codex plugin add gptr@gptr`. With
+  `gptr_mcp_serve(advertise = TRUE)` the agent finds the session by itself and gets the tools
+  `sessions`, `inspect` and `r`, with a skill that tells it to look first and change objects in
+  place.
+* An outside agent's R calls are recorded. A served `r` or `inspect` call that ran outside a
+  Peter turn is recorded on the server's session, as Peter's are (of a call that stopped
+  part-way, the expressions that ran; nothing in plan mode or for a refused call), so it persists
+  with the session and `gptr_last() |> peter()` continues after it. While `gptr_doc()` binds a
+  document, the call is also written into it as a direct R line, so `gptr_export()` turns the
+  agent's work into a runnable R script; an `inspect` call is left out unless it changed objects.
+* When no session is advertised, gptr Agent asks R where gptr keeps its cache from a new empty
+  folder, so a project's `.Renviron` cannot load a package or add a search folder.
+
+## Console
+
+* A tool call takes one row in the console: the tool, the first non-blank line of its code and
+  `(+N more lines)` for its other non-blank lines, so a long script no longer fills the screen.
+  An edit's result is one row with the lines it added and removed, and what R code prints shows
+  at most 5 rows a call, then `(+N more lines)`; what the model receives is unchanged. An
+  approval still shows the whole code it asks about.
+* `/calls` prints this session's last tool call whole, all its code and what an edit or a write
+  changes, `/calls 3` the last three, including the calls a CLI route makes to gptr's tools; a
+  sub-agent's calls and the steps a CLI route runs itself, such as Codex's shell, are not among
+  them.
+* `gptr_config(compact_calls = FALSE)` shows every call's code as it runs and all its output, as
+  before; `.scope = "user"` keeps that for every session.
+
+## Models
+
+* The `claude-cli` and `codex` routes ask your installed CLI which models it offers and which one
+  it starts with: Claude Code through its stream-json control requests `initialize` and
+  `get_settings`, Codex through `codex app-server` (`model/list`, `config/read`), else
+  `codex debug models`. No prompt is sent and no tokens are spent; Claude Code's probe loads your
+  settings, so your SessionStart hooks run. gptr asks once per R session and CLI version, and on
+  `gptr_models(provider = "codex", refresh = TRUE)`, so a CLI update changes what gptr lists
+  without a gptr release. `/model` on a CLI route lists those models.
+* `claude-cli/default` and `codex/default` run the model your CLI starts with (Claude Code's
+  settings `model`, Codex's `config.toml` `model`), named in `/model`, `/status`, the status line,
+  the `peter()` banner and `gptr_models()`, as in `claude-cli/default (claude-opus-5-5)`. When the CLI cannot say,
+  gptr passes no model flag and the CLI chooses; `codex/default` no longer falls back to a fixed
+  model.
+* Any model id can be written in, on every route and provider: `peter(model = "codex/<id>")`,
+  `/model claude-cli/<id>`, `"openrouter/<id>"`, `"lmstudio/<id>"`. An id the catalog or the CLI
+  does not list is sent as written with one notice, with tool calls on a remote route (none on a
+  local server), text input, no thinking level and unknown limits and price. A name alone that is
+  neither a catalog id nor an alias is refused with suggestions, never swapped for a similar
+  model.
+* Codex runs keep your own model provider while gptr's isolation stays on: `model_provider` with
+  its `[model_providers.<id>]` table, `openai_base_url` and `model_catalog_json` go to each run as
+  `-c` overrides, so a Codex set up for Ollama, LM Studio or a router works in gptr. Only the
+  table's documented settings without credentials or commands go on the command line; tokens,
+  `http_headers`, `query_params` and `auth` commands stay off, as does a URL holding a user name
+  or password. Give a key through `env_key` or `env_http_headers`: gptr passes the environment
+  variables they name to Codex.
+* The offline catalog is models.dev (MIT) of 2026-11-26 with gptr's reviewed corrections; it
+  lists Gemini 4, Fable 5.2, Haiku 5.5, GPT-6.2 and Grok 4.x. gptr matches no model name: an alias
+  is the newest active model of its models.dev family (`gpt` is `gpt-6.2-sol`, `gemini` is
+  `gemini-4-neon`), and the default, small and System 1 models are reviewed catalog data
+  (`claude-sonnet-5-5`, `gpt-6.2-sol`, `gemini-4-hydrogen`; `claude-haiku-5-5`, `gpt-6-luna`,
+  `gemini-3.5-flash-lite`; `typesafe/jev-latest`). `model = "openai"` runs OpenAI's default.
+* Provider listings report more: reasoning efforts (OpenRouter, Anthropic, xAI), mandatory
+  reasoning and expiry (OpenRouter), lifecycle (Anthropic), limits (Cerebras, vLLM, llama.cpp)
+  and Ollama's thinking levels. LM Studio is listed from its own API, with tools, vision and
+  context.
+* Requests follow the model's data, not its name. Anthropic requests use API version 2026-10-21
+  and no longer send a temperature. Thinking `off` turns thinking off where a model allows it
+  (Claude Haiku 5.5, Opus 5, Sonnet 5 and 4.x). Gemini 4 gets `xhigh`; Grok 4.5 and later,
+  DeepSeek, Ollama and vLLM get their reasoning effort by name; OpenRouter respects mandatory
+  reasoning and budget models and sends `cache_control` only where cache writes are billed. A
+  token-budget thinking level stays within the model's `thinking_budget` range.
+* A `bedrock-converse` model gets Anthropic's thinking fields when its record says
+  `owner = "anthropic"`, not when its id contains `anthropic.claude`. The
+  `supports_reasoning_effort` compatibility switch is removed; a value in your settings is
+  ignored.
+
 # gptr 1.2.0
 
 Agents on the same computer can find a served R session by themselves and work in it with a

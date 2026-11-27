@@ -373,7 +373,7 @@ test_that("type_ahead = 'follow_up' sends the line as the next prompt, its own r
   sym = console_style()
   status = which(startsWith(res$out, paste0("done", sym$sep)))
   expect_length(status, 2L)
-  at = match(c(receipt_line("follow_up", "then plot it"), "peter[auto]> then plot it"), res$out)
+  at = match(c(receipt_line("follow_up", "then plot it"), "peter> then plot it"), res$out)
   expect_identical(sort(c(at, status)), c(at[[1L]], status[[1L]], at[[2L]], status[[2L]]))
   expect_false(paste0(sym$person, " then plot it") %in% res$out)
 })
@@ -397,7 +397,7 @@ test_that("follow-ups wait with the /commands and !code typed around them, in or
   expect_identical(c(e$x, e$y), c(1, 2))
   q = match(receipt_line("follow_up", c("!x = 1", "use x", "!y = 2")), res$out)
   expect_false(anyNA(q) || is.unsorted(q))
-  at = match(paste0("peter[auto]> ", c("!x = 1", "use x", "!y = 2")), res$out)
+  at = match(paste0("peter> ", c("!x = 1", "use x", "!y = 2")), res$out)
   expect_false(anyNA(at) || is.unsorted(at))
 })
 
@@ -435,7 +435,7 @@ test_that("the pause menu's [f] in the REPL is the next prompt; a /, ! draft nev
   # a note under it says so; the follow-up read at `next> ` is its own receipt
   expect_true(paste0(strrep(" ", 7L), "(runs after this answer)") %in% res$out)
   expect_false(any(receipt_line("follow_up", c("!zz = 5", "then plot it")) %in% res$out))
-  at = match(paste0("peter[auto]> ", c("!zz = 5", "then plot it")), res$out)
+  at = match(paste0("peter> ", c("!zz = 5", "then plot it")), res$out)
   expect_false(anyNA(at) || is.unsorted(at))
 })
 
@@ -456,7 +456,7 @@ test_that("a steer a run at max_turns did not take is the next prompt, run 2's u
   roles = vapply(reqs[[2L]]$messages, function(m) m$role, "")
   expect_identical(roles, c("user", "operator", "assistant", "tool_result", "user"))
   expect_identical(msg_text(last_message(reqs[[2L]])), "use base R")
-  expect_true("peter[auto]> use base R" %in% res$out)
+  expect_true("peter> use base R" %in% res$out)
   expect_length(session_data(res$s)$queue$steer, 0L)
 })
 
@@ -525,6 +525,7 @@ test_that("a line typed during a tool steers when the next call's question follo
                                  "after"))
   rs = repl_state(NULL, e)
   rs$model = fake
+  rs$mode = "manual"
   rs$tools = list(peek)
   out = utils::capture.output(repl_main(rs))
   reqs = fake_requests(fake)
@@ -553,7 +554,7 @@ test_that("/commands and !code typed during a run run after the answer; text sti
               receipt_line("steer", "and steer")), res$out)
   expect_false(anyNA(q) || is.unsorted(q))
   expect_false(any(grepl("after this answer", res$out, fixed = TRUE)))
-  expect_true(all(c("peter[auto]> /status", "peter[auto]> !x = 1") %in% res$out))
+  expect_true(all(c("peter> /status", "peter> !x = 1") %in% res$out))
   expect_true(any(startsWith(res$out, "session   ")))
 })
 
@@ -605,7 +606,7 @@ test_that("an abort sends nothing queued: it goes to the history, listed once (D
   expect_false(any(grepl("dropped", res$out, fixed = TRUE)))
   expect_length(fake_requests(fake), 1L)
   expect_null(e$x)
-  expect_false("peter[auto]> /status" %in% res$out)
+  expect_false("peter> /status" %in% res$out)
 })
 
 test_that("an abort's status line says aborted once; the kept list follows it, then a blank row", {
@@ -995,8 +996,8 @@ test_that("Tab sends a follow-up, the next prompt; Up takes it back and Ctrl-U d
   res = typing_console(fake, c("go", "/exit"))
   last_user = vapply(fake_requests(fake), function(r) r$last_user, "")
   expect_identical(last_user, c("go", "then plot"))
-  expect_true("peter[auto]> then plot" %in% res$out)
-  expect_false("peter[auto]> oops" %in% res$out)
+  expect_true("peter> then plot" %in% res$out)
+  expect_false("peter> oops" %in% res$out)
 })
 
 test_that("Ctrl-C is a key the composer reads: it pauses after the keys before it (review)", {
@@ -1042,7 +1043,7 @@ test_that("keys read with Ctrl-C that no question took wait at the prompt (steer
   expect_length(fake_requests(fake), 1L)
   expect_true(paste0("  ", console_style()$person, " a") %in% res$out)
   # the prompt's editor showed it, then handed it to readline, kept in the history
-  expect_true(any(endsWith(res$out, paste0("peter[auto]> next please\033[K\r\033[K",
+  expect_true(any(endsWith(res$out, paste0("peter> next please\033[K\r\033[K",
                                            kept_line("next please")))))
   expect_identical(res$kept, c("go", "next please", "/exit"))
 })
@@ -1479,7 +1480,7 @@ test_that("a draft a run left waits for the follow-ups, then continues at the pr
   expect_identical(last_user, c("go", "then plot", "and label it"))
   expect_identical(res$kept, c("go", "then plot", "and label it", "/exit"))
   rows = term_rows(paste(res$out, collapse = "\n"))
-  expect_identical(sum(rows == "peter[auto]> and label it"), 1L)
+  expect_identical(sum(rows == "peter> and label it"), 1L)
   expect_false(kept_line("and label it") %in% rows)
   # after an abort it joins the list of what was queued and not sent
   slow = gptr_fake_provider(list(list(text = "first", delay = 5)))
@@ -1601,7 +1602,7 @@ test_that("a terminal: the draft shows on the live row as text streams; Enter st
   ), term = "xterm")
   utf8 = l10n_info()[["UTF-8"]]
   person = if (utf8) "\u203a" else ">>"
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("steer me")
@@ -1615,10 +1616,10 @@ test_that("a terminal: the draft shows on the live row as text streams; Enter st
   expect_true(pty$wait("1 steer queued"))
   # delivered at the boundary after the tool's result, as the agent's next request reads it
   expect_true(pty$wait("REQ user,operator,assistant,tool_result,operator END"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("TWO\r")
   expect_true(pty$wait("END"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   # one receipt, no delivery row
@@ -1650,7 +1651,7 @@ test_that("a terminal: a paste during a run is one draft; Enter sends it as one 
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
   ), term = "xterm")
   person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   # the row shows from Enter, before the run starts to read keys (D-309): 2 s in, it reads them
   expect_true(pty$wait("thinking 2s"))
@@ -1664,7 +1665,7 @@ test_that("a terminal: a paste during a run is one draft; Enter sends it as one 
   pty$send("\r")
   expect_true(pty$wait("1 steer queued"))
   expect_true(pty$wait("REQ 1 [one/two/three]"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("REQ "), 1L)
@@ -1693,7 +1694,7 @@ test_that("a terminal: a paste during an r call is one draft; no marker shows (F
     "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
   ), term = "xterm")
   person = if (l10n_info()[["UTF-8"]]) "›" else ">>"
-  expect_true(pty$wait("peter> ", timeout = 120))
+  expect_true(pty$wait("peter[manual]> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("Allow r?"))
   expect_true(endsWith(pty$pending(), pty_asked()))
@@ -1708,7 +1709,7 @@ test_that("a terminal: a paste during an r call is one draft; no marker shows (F
   pty$send("\r")
   expect_true(pty$wait("1 steer queued"))
   expect_true(pty$wait("REQ 1 [one/two/three]"))
-  expect_true(pty$wait("peter> "))
+  expect_true(pty$wait("peter[manual]> "))
   pty$paste("/exit")
   pty$send("\r")
   expect_true(pty$wait("CHILD DONE"))
@@ -1743,7 +1744,7 @@ test_that("a terminal: after r code reads through readline a paste is one draft 
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
   ), term = "xterm")
   person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("name? "))
   pty$send("abc\r")
@@ -1757,7 +1758,7 @@ test_that("a terminal: after r code reads through readline a paste is one draft 
   pty$send("\r")
   expect_true(pty$wait("1 steer queued"))
   expect_true(pty$wait("REQ 1 [one/two/three]"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(c(pty$seen("200~"), pty$seen("201~"), pty$seen("REQ ")), c(0L, 0L, 1L))
@@ -1782,7 +1783,7 @@ test_that("a terminal: during a sub-agent the row ticks and steers; its r call w
   ), term = "xterm")
   utf8 = l10n_info()[["UTF-8"]]
   sep = if (utf8) " \u00b7 " else " - "
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("(kid/kid-1) started"))
   # the sub-agent's r call evaluates in this process: keys wait
@@ -1795,7 +1796,7 @@ test_that("a terminal: during a sub-agent the row ticks and steers; its r call w
   expect_true(pty$wait(receipt_line("steer", "s11")))
   expect_true(pty$wait("#1 done"))
   expect_true(pty$wait("REQ user,operator,assistant,tool_result,operator END"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   shown = gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$all)
@@ -1822,7 +1823,7 @@ test_that("a terminal: Tab queues a follow-up, a second run; Up takes back, Ctrl
   utf8 = l10n_info()[["UTF-8"]]
   person = if (utf8) "\u203a" else ">>"
   up = if (utf8) "\u2191" else "Up"
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   # each key as a batch of its own, once the row shows the one before; each sent message's
@@ -1843,9 +1844,9 @@ test_that("a terminal: Tab queues a follow-up, a second run; Up takes back, Ctrl
   pty$send("\025")
   expect_true(pty$wait(paste0("1 follow-up queued   ", up, " edit")))
   expect_true(pty$wait("END"))
-  expect_true(pty$wait("peter[auto]> next please"))
+  expect_true(pty$wait("peter> next please"))
   expect_true(pty$wait("REQ user: next please END"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("REQ user: "), 1L)
@@ -1869,7 +1870,7 @@ test_that("a terminal: a draft survives Ctrl-C and the pause menu (P28 G, D-243)
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
   ), term = "xterm")
   person = if (l10n_info()[["UTF-8"]]) "›" else ">>"
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
@@ -1887,7 +1888,7 @@ test_that("a terminal: a draft survives Ctrl-C and the pause menu (P28 G, D-243)
   # the relay, wrapped at 60 columns
   expect_true(pty$wait(paste("REQ operator:", substr(relay(""), 1L, 40L))))
   expect_true(pty$wait("use base R END"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("continuing"), 0L)
@@ -1911,7 +1912,7 @@ test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering rev
   ), term = "xterm")
   utf8 = l10n_info()[["UTF-8"]]
   person = if (utf8) "›" else ">>"
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   # Ctrl-C, s and Enter in one read, as under load: the s answers the menu, echoed at its chevron
@@ -1926,7 +1927,7 @@ test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering rev
   expect_true(pty$wait("use the median\r\n"))
   expect_true(pty$wait("END"))
   expect_true(pty$wait("use the median END"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("not a key"), 0L)
@@ -1944,7 +1945,7 @@ test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (vi
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
   ), term = "dumb")
   # a stream of about 25 s outlasts any reaction time; the abort ends it
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("and colour by gear")
@@ -1955,7 +1956,7 @@ test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (vi
   expect_true(pty$wait(kept_line("and colour by gear", utf8 = l10n_info()[["UTF-8"]])))
   pty$send("a\r")
   expect_true(pty$wait("aborted"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("\033[A")
   expect_true(pty$wait("and colour by gear"))
   pty$send("\025/exit\r")
@@ -1981,14 +1982,14 @@ test_that("TERM=dumb: a Ctrl-C right after a run's footer keeps the console and 
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))",
     "cat('ECHO', any(grepl('(^| )echo( |$)', system('stty -a', intern = TRUE))), '\\n')"
   ), term = "dumb")
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("1 request"))
   Sys.sleep(0.5)
   pty$ctrl_c()
   # held while the modes return, it is raised once they have, under the call's guard
   expect_true(pty$wait("interrupted"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("ECHO TRUE"))
 })
@@ -2114,7 +2115,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
   sep = if (l10n_info()[["UTF-8"]]) " \u00b7 " else " - "
   kept = paste0("draft kept, back after your answer", sep, "use base R")
-  expect_true(pty$wait("peter> ", timeout = 120))
+  expect_true(pty$wait("peter[manual]> ", timeout = 120))
   # B: typed without Enter while the answer streams, it is the composer's draft: the approval
   # says it is kept, its row ends with its prompt and the draft is on the live row again while the
   # call it gated runs
@@ -2128,7 +2129,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_match(pty$pending(), paste0(person, " use base R"), fixed = TRUE)
   expect_true(pty$wait("REQ tool_result: "))
   # each draft continues at the prompt after its run (P28 I); Ctrl-U clears it there
-  expect_true(pty$wait("peter> use base R"))
+  expect_true(pty$wait("peter[manual]> use base R"))
   # C: a partial line starting with "no" denies nothing
   pty$send("\025C\r")
   expect_true(pty$wait("BEGIN"))
@@ -2137,7 +2138,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
   expect_true(pty$wait("REQ tool_result: "))
-  expect_true(pty$wait("peter> no wait, plot it first"))
+  expect_true(pty$wait("peter[manual]> no wait, plot it first"))
   # H: a partial line at the agent's question is not its answer
   pty$send("\025H\r")
   expect_true(pty$wait("BEGIN"))
@@ -2147,7 +2148,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("1\r")
   expect_true(pty$wait("REQ tool_result: The user answered: - q1: ggplot2 END"))
-  expect_true(pty$wait("peter> use base R"))
+  expect_true(pty$wait("peter[manual]> use base R"))
   pty$send("\025/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(c(pty$seen("kept in history"), pty$seen(pty_reask()),
@@ -2169,33 +2170,33 @@ test_that("a terminal: a draft a run left continues at the prompt until sent (P2
   ), term = "xterm")
   utf8 = l10n_info()[["UTF-8"]]
   person = if (utf8) "›" else ">>"
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base")
   expect_true(pty$wait(paste0(person, " use base")))
   # the run ends and the draft is at the prompt, edited with the composer's keys; Enter sends it
-  expect_true(pty$wait("peter[auto]> use base"))
+  expect_true(pty$wait("peter> use base"))
   pty$send("x")
-  expect_true(pty$wait("peter[auto]> use basex"))
+  expect_true(pty$wait("peter> use basex"))
   pty$send("\177 R")
-  expect_true(pty$wait("peter[auto]> use base R"))
+  expect_true(pty$wait("peter> use base R"))
   pty$send("\r")
   expect_true(pty$wait("REQ use base R END"))
   # Ctrl-C there adds the draft to the history and readline takes over: Up recalls it
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("TWO\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("and plot")
-  expect_true(pty$wait("peter[auto]> and plot"))
+  expect_true(pty$wait("peter> and plot"))
   pty$send("\003")
   expect_true(pty$wait(kept_line("and plot", utf8 = utf8)))
   # a blank row between the kept line and the prompt, as after every run; readline's prompt
   # erases its row first (steering review)
-  expect_true(pty$wait("\r\n\r\n\r\033[Kpeter[auto]> "))
+  expect_true(pty$wait("\r\n\r\n\r\033[Kpeter> "))
   pty$send("\033[A\r")
   expect_true(pty$wait("REQ and plot END"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(c(pty$seen("REQ "), pty$seen("again leaves")), c(2L, 0L))
@@ -2217,22 +2218,22 @@ test_that("a terminal: keys typed as the idle editor hands over show after the p
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))",
     "cat('ECHO', any(grepl('(^| )echo( |$)', system('stty -a', intern = TRUE))), '\\n')"
   ), term = "xterm")
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("and colour")
-  expect_true(pty$wait("peter[auto]> and colour"))
+  expect_true(pty$wait("peter> and colour"))
   # Ctrl-U empties the draft; `/ex` comes once the modes are restored, before readline starts
   unlink(restored)
   pty$send("\025")
   deadline = Sys.time() + 30
   while (!file.exists(restored) && Sys.time() < deadline) Sys.sleep(0.01)
   pty$send("/ex")
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("it\r")
   expect_true(pty$wait("ECHO TRUE"))
   rows = term_rows(gsub("\033\\[\\?[0-9;]*[A-Za-z]", "", pty$all))
-  expect_identical(grep("> /exit", rows, fixed = TRUE, value = TRUE), "peter[auto]> /exit")
+  expect_identical(grep("> /exit", rows, fixed = TRUE, value = TRUE), "peter> /exit")
 })
 
 test_that("a terminal: a question waits a second after the last key; `yes` is no answer (D-243)", {
@@ -2254,7 +2255,7 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
     "})",
     "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
   ))
-  expect_true(pty$wait("peter> ", timeout = 120))
+  expect_true(pty$wait("peter[manual]> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   # typed key by key while the answer streams and the ask comes due, however slow the child:
@@ -2278,7 +2279,7 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
   # the relay, whole: the answer's rows (indented) joined, as the row may end before the typed
   # word or before END, with the live row drawn between them (over it, after a carriage return)
   expect_true(pty$wait(paste0("REQ operator: ", trimws(relay("")))))
-  expect_true(pty$wait("peter> "))
+  expect_true(pty$wait("peter[manual]> "))
   rows = strsplit(gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$all), "[\r\n]")[[1L]]
   expect_match(paste(trimws(rows[startsWith(rows, "  ")]), collapse = " "),
                paste0("REQ operator: ", relay(typed), " END"), fixed = TRUE)
@@ -2307,7 +2308,7 @@ test_that("a terminal: a line arriving just as a question is drawn steers the ru
     "})",
     "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
   ))
-  expect_true(pty$wait("peter> ", timeout = 120))
+  expect_true(pty$wait("peter[manual]> ", timeout = 120))
   pty$send("D\r")
   expect_true(pty$wait("DRAWN"))
   pty$send("steer me\r")
@@ -2317,7 +2318,7 @@ test_that("a terminal: a line arriving just as a question is drawn steers the ru
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
   expect_true(pty$wait(paste0("REQ operator: ", relay("steer me"))))
-  expect_true(pty$wait("peter> "))
+  expect_true(pty$wait("peter[manual]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen(pty_reask()), 0L)
@@ -2341,7 +2342,7 @@ test_that("a terminal: an answer typed as a question shows answers it, T and D (
   )
   for (term in c("xterm-256color", "dumb")) {
     pty = local_pty_r(child, term = term)
-    expect_true(pty$wait("peter> ", timeout = 120))
+    expect_true(pty$wait("peter[manual]> ", timeout = 120))
     pty$send("go\r")
     # `y` arrives before the drain, then before readline starts: each time it is the answer
     expect_true(pty$wait("Allow r?"))
@@ -2350,7 +2351,7 @@ test_that("a terminal: an answer typed as a question shows answers it, T and D (
     Sys.sleep(3)
     pty$send("y\r")
     expect_true(pty$wait("REQ tool_result END"))
-    expect_true(pty$wait("peter> "))
+    expect_true(pty$wait("peter[manual]> "))
     pty$send("/exit\r")
     expect_true(pty$wait("CHILD DONE"))
     # never queued (no receipt `steer> y`), so never delivered
@@ -2370,7 +2371,7 @@ test_that("TERM=dumb: the answer shows after its prompt under the question (P30 
     "})",
     "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
   ), term = "dumb")
-  expect_true(pty$wait("peter> ", timeout = 120))
+  expect_true(pty$wait("peter[manual]> ", timeout = 120))
   pty$send("go\r")
   expect_true(pty$wait("Allow r?"))
   # once readline reads: macOS libedit redraws its prompt for each key in TERM=dumb
@@ -2399,7 +2400,7 @@ test_that("a macOS terminal: a block pasted at a question comes back as one prom
     "})",
     "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
   ))
-  expect_true(pty$wait("peter> ", timeout = 120))
+  expect_true(pty$wait("peter[manual]> ", timeout = 120))
   pty$send("P\r")
   expect_true(pty$wait("Allow r?"))
   pty$pending()
@@ -2408,24 +2409,24 @@ test_that("a macOS terminal: a block pasted at a question comes back as one prom
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("n\r")
   expect_true(pty$wait("REQ tool_result: "))
-  expect_true(pty$wait("peter> "))
+  expect_true(pty$wait("peter[manual]> "))
   # Up then Enter sends the block as one message: one request, one answer
   pty$send("\033[A")
   pty$pending()
   pty$send("\r")
   expect_true(pty$wait("REQ user: y pasted two pasted three END", timeout = 10))
-  expect_true(pty$wait("peter> "))
+  expect_true(pty$wait("peter[manual]> "))
   # so does a block pasted at the prompt
   pty$send("a\rb\rc\r")
   expect_true(pty$wait("Enter sends it as one message"))
   pty$send("\r")
   expect_true(pty$wait("REQ user: a b c END"))
-  expect_true(pty$wait("peter> "))
+  expect_true(pty$wait("peter[manual]> "))
   pty$send("\033[A")
   pty$pending()
   pty$send("\r")
   expect_true(pty$wait("REQ user: a b c END", timeout = 10))
-  expect_true(pty$wait("peter> "))
+  expect_true(pty$wait("peter[manual]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(c(pty$seen("REQ user: y END"), pty$seen("REQ user: ")), c(0L, 3L))

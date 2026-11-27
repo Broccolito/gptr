@@ -28,3 +28,6 @@
 ^tmp$
 ^local-materials$
 ^man/figures$
+^gptragent$
+^\.claude-plugin$
+^\.agents$

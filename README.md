@@ -35,7 +35,7 @@ if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak")
 pak::pak("Broccolito/gptr")
 ```
 
-This README describes gptr 1.2.0; `packageVersion("gptr")` shows yours.
+This README describes gptr 1.3.0; `packageVersion("gptr")` shows yours.
 After installation, load the package:
 
 ``` r
@@ -69,8 +69,9 @@ With no default model set, the console offers the available CLI routes
 and saves your choice. Enter `/exit` to return to R. CLI sign-in is
 separate from API credentials.
 
-Use `gptr_models(provider = "codex", refresh = TRUE)` to refresh that
-CLI's advertised model choices; see `?gptr_models` for listing limits.
+gptr asks your CLI which models it offers and starts from the one it
+uses by default; `/model` lists them, and any other id is passed to the
+CLI as written (`/model codex/<id>`).
 
 **Local Ollama model.** Start Ollama separately and install a chat model
 that supports tool calls. Select an installed model, for example:
@@ -132,10 +133,13 @@ model](https://broccolito.github.io/gptr/articles/execution-model.html)
 and [Data sent to
 providers](https://broccolito.github.io/gptr/reference/gptr_egress.html).
 
-In the default `manual` mode, actions classified as read-only run
-directly and actions classified as changes ask for approval, unless a
-permission rule applies; an allow rule never approves a critical action.
-The check is advisory and provides no sandbox; see [Security
+In the default `auto` mode, agent code runs without asking, except
+critical actions (such as deleting files outside the project or changing
+gptr's own configuration) and reads of registered secrets, which ask for
+approval. `manual` asks before every change and `yolo` asks even less;
+choose one with `gptr_config(mode = "manual", .scope = "user")` or
+`/mode` in the console. The check is advisory and provides no sandbox;
+see [Security
 considerations](https://broccolito.github.io/gptr/reference/gptr_security.html)
 or `?gptr_security` in R.
 
@@ -233,6 +237,31 @@ to the coaching. See [Harnesses and
 coaching](https://broccolito.github.io/gptr/articles/tailor-and-coach.html)
 for what coaching may change and how gptr decides what to keep.
 
+## Work from Claude Code, Codex or Biorouter
+
+Serve your session, and an agent outside R works in it on the same
+objects:
+
+``` r
+gptr_mcp_serve(advertise = TRUE, mode = "auto")
+```
+
+Then install gptr's plugin in Claude Code or Codex, or gptr Agent from
+Biorouter's marketplace:
+
+``` bash
+claude plugin marketplace add Broccolito/gptr && claude plugin install gptr@gptr
+codex plugin marketplace add Broccolito/gptr && codex plugin add gptr@gptr
+```
+
+The agent finds the session by itself, looks before it changes anything,
+and works in place. Every call passes your permission settings, and gptr
+records the calls that run on the session; bind a document with
+`gptr_doc()` first and `gptr_export()` turns the agent's work into a
+script. Without `mode = "auto"` the agent can only read. See
+[MCP](https://broccolito.github.io/gptr/articles/mcp.html) for the
+details.
+
 ## Learn more
 
 Start with [Getting
@@ -249,6 +278,9 @@ CRAN install, open it in R with
   chat, commands and instructions sent while an agent works.
 - [Configuration](https://broccolito.github.io/gptr/articles/configuration.html):
   defaults, scopes and permissions.
+- [MCP](https://broccolito.github.io/gptr/articles/mcp.html): MCP
+  servers as R functions, and your session served to Claude Code, Codex
+  and Biorouter.
 - [Function
   reference](https://broccolito.github.io/gptr/reference/index.html) and
   [cheat sheet](https://broccolito.github.io/gptr/cheatsheet.html).

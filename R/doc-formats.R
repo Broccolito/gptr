@@ -457,7 +457,7 @@ doc_console_statement = function(text, site) {
     if (first || is.null(was)) {
       was = c(model = if (isTRUE(site[["default_model"]])) named[["model"]] else
                 setting_get("model") %||% "",
-              mode = setting_get("mode", default = "manual"))
+              mode = setting_get("mode"))
     }
     named = named[named != was]
   }

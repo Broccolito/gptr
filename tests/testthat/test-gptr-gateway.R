@@ -536,6 +536,15 @@ test_that("a top-level peter() applies the filters of the user settings file (04
   expect_length(box$calls, 1L)
 })
 
+test_that("a fresh session takes the auto default; the mode setting chooses another (D-396)", {
+  local_gw()
+  s = peter("a", model = gptr_fake_provider(list("one")), envir = new.env())
+  expect_identical(session_data(s)$mode, "auto")
+  local_gptr_options(mode = "manual")
+  s = peter("b", model = gptr_fake_provider(list("two")), envir = new.env())
+  expect_identical(session_data(s)$mode, "manual")
+})
+
 test_that("a continuation's newer spec replaces the session's older spec of the same name", {
   local_gw()
   old = gptr_fake_provider(list("old answer"))
@@ -1222,7 +1231,7 @@ test_that("System 1 arguments with an unknown model name the unknown model (D-32
   local_gw()
   fake = local_fake_provider(list("ok"))
   # the id a decision's meta reports, which the catalog may not list yet
-  cnd = expect_error(peter("Is it fine?", c("ok", "bad"), model = "jev-1.14.0",
+  cnd = expect_error(peter("Is it fine?", c("ok", "bad"), model = "jev-9.99.0",
                            choices = c("yes", "no")), class = "gptr_error_unknown_model")
   expect_false(grepl("conversational", conditionMessage(cnd), fixed = TRUE))
   s = peter("Start.", model = fake, envir = new.env())

@@ -56,7 +56,7 @@ test_that("every command of architecture 6.17 that P14 owns is a command spec", 
   nms = vapply(console_commands(), function(x) x$name, "")
   expect_true(all(c("help", "exit", "model", "mode", "plan", "tools", "env", "compact", "cost",
                     "context", "status", "clear", "resume", "fork", "doc", "skills", "skill",
-                    "mcp", "retry", "permissions") %in% nms))
+                    "mcp", "retry", "permissions", "calls") %in% nms))
   expect_true(all(vapply(console_commands(), function(x) inherits(x, "gptr_command"), NA)))
 })
 
@@ -247,7 +247,7 @@ test_that("in the console margin command output wraps inside it; listings fit it
   bold = withr::with_options(list(cli.num_colors = 256L), run_command(rs, "/help")$out)
   names = bold[grepl("^ {4}\\S", cli::ansi_strip(bold))]
   expect_true(length(names) > 20L && all(startsWith(names, "    \033[1m")))
-  expect_identical(run_command(rs, "/mode")$out, c("  Mode: manual", ""))
+  expect_identical(run_command(rs, "/mode")$out, c("  Mode: auto", ""))
   expect_match(run_command(rs, "/env")$out[[1L]], "^  alpha: <integer>")
   # a listing is printed at the content width (60 - 4), not wrapped again
   listing = withr::with_options(list(width = 56L, cli.width = 56L),
@@ -348,21 +348,45 @@ test_that("/model and /status name the model a CLI's default runs (#44)", {
   # the switch's answer names it too (FIX-34)
   expect_identical(run_command(rs, "/model fakeclaude/default")$out,
                    paste0("Model: ", shown, " (used from the first prompt)"))
-  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_identical(run_command(rs, "/model")$out[[1L]], paste0("Model: ", shown))
   expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
   rs$session = idle_session()
   expect_identical(run_command(rs, "/model fakeclaude/default")$out,
                    paste0("Model: ", shown, " (from the next request)"))
-  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_identical(run_command(rs, "/model")$out[[1L]], paste0("Model: ", shown))
   expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
   run_command(rs, "/model fakeclaude/claude-sonnet-5-5")
-  expect_identical(run_command(rs, "/model")$out, "Model: fakeclaude/claude-sonnet-5-5")
+  expect_identical(run_command(rs, "/model")$out[[1L]], "Model: fakeclaude/claude-sonnet-5-5")
   # another CLI adapter decides what its `default` runs
   off2 = gptr_register(gptr_provider("mycli", api = "mycli-api", type = "cli",
                                      models = list(list(id = "default"))))
   withr::defer(off2())
   run_command(rs, "/model mycli/default")
-  expect_identical(run_command(rs, "/model")$out, "Model: mycli/default")
+  expect_identical(run_command(rs, "/model")$out[[1L]], "Model: mycli/default")
+})
+
+test_that("/model on a CLI route lists the models its CLI reports and names the default", {
+  local_console_commands()
+  talks = local_talks(fixture_lines("claude-discover-text.ndjson"))
+  local_mocked_bindings(check_running = function() FALSE, egress_check = function(...) TRUE,
+                        replay_guard = function(...) TRUE)
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  rs = repl_state(NULL, new.env())
+  run_command(rs, "/model claude-cli")
+  out = run_command(rs, "/model")$out
+  expect_identical(out[[1L]], "Model: claude-cli (vendor-large-3)")
+  expect_identical(out[[2L]],
+                   "The claude-cli route lists (any other id: /model claude-cli/<id>):")
+  expect_true(any(grepl("^  claude-cli/vendor-mid-3 +Mid 3$", out)))
+  expect_true(any(grepl("^  claude-cli/default +default [(]vendor-large-3[)]$", out)))
+  # the CLI is asked once in this R session, and not for another route
+  run_command(rs, "/model")
+  expect_length(talks$all, 1L)
+  off = gptr_register(gptr_fake_provider(list("unused")))
+  withr::defer(off())
+  run_command(rs, "/model fake/fake-1")
+  expect_identical(run_command(rs, "/model")$out, "Model: fake/fake-1")
 })
 
 test_that("/mode on a session appends the mode change for the next turn", {
@@ -680,4 +704,38 @@ test_that("/permissions shows and changes the rules of this R session", {
   expect_match(run_command(rs, "/permissions maybe x")$out, "^Use /permissions")
   r = run_command(rs, "/permissions allow r(fn:")
   expect_identical(r$res, "error")
+})
+
+test_that("/calls shows the last calls whole, oldest first, as the live rows (D-383)", {
+  skip_on_cran()
+  local_console_commands()
+  local_project(list("a.txt" = "hi"))
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  expect_identical(run_command(repl_state(idle_session(), new.env()), "/calls")$out,
+                   "No tool call yet.")
+  code = c("library(stats)", sprintf("x%d = %d", 1:29, 1:29))
+  fake = gptr_fake_provider(list(fake_tool("r", code = paste(code, collapse = "\n")),
+                                 fake_tool("r", code = "y = 2"), fake_tool("read", path = "a.txt"),
+                                 fake_tool("edit", path = "a.txt",
+                                           edits = list(list(oldText = "hi", newText = "hello"))),
+                                 fake_tool("write", path = "b.R", content = "a = 1\nb = 2"),
+                                 "done"))
+  s = peter("go", model = fake, envir = new.env(), mode = "auto")
+  rs = repl_state(s, new.env())
+  write = c("  | write  b.R", "    +a = 1", "    +b = 2")
+  expect_identical(run_command(rs, "/calls")$out, write)
+  # every code row and an edit's or a write's change rows, whatever compact_calls says
+  edit = c("  | edit  a.txt", "    -hi", "    +hello")
+  expect_identical(run_command(rs, "/calls 2")$out, c(edit, write))
+  all = c("  | r", paste0("    ", code), "  | r  y = 2", "  | read  a.txt", edit, write)
+  expect_identical(run_command(rs, "/calls 5")$out, all)
+  expect_identical(run_command(rs, "/calls 9")$out, all)
+  for (bad in c("x", "2.5", "0", "-1", "3 junk")) {
+    expect_identical(run_command(rs, paste("/calls", bad))$out,
+                     "Use /calls [n], n a whole number above 0.")
+  }
+  expect_true(any(grepl("^  /calls ", help_text())))
+  # inside the console margin the rows line up with the live ones, written at column 0
+  local_mocked_bindings(console_pad = function() "  ")
+  expect_identical(run_command(rs, "/calls 2")$out, c(edit, write, ""))
 })

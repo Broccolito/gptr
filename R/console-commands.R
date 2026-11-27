@@ -18,6 +18,7 @@ console_commands = function() {
                  "Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]"),
     gptr_command("plan", cmd_plan, "Switch to plan mode (read-only exploration, then a plan)"),
     gptr_command("tools", cmd_tools, "List the direct tools and the peter$ members"),
+    gptr_command("calls", cmd_calls, "Show the last n tool calls in full (default 1): /calls [n]"),
     gptr_command("env", cmd_env,
                  "List the objects, or those whose names contain text: /env [text]"),
     gptr_command("compact", cmd_compact, "Compact the conversation now: /compact [focus]"),
@@ -238,8 +239,8 @@ cmd_exit = function(args, ctx) {
   }))
 }
 
-#' The full id a built-in CLI gets for the reference `ref` to its `default` (contract 11.10), else
-#' NULL: another CLI adapter decides what its `default` runs
+#' The model a built-in CLI starts with for the reference `ref` to its `default` (D-391), else
+#' NULL: unknown until the CLI is asked, and another CLI adapter decides what its `default` runs
 #' @noRd
 console_cli_default = function(ref) {
   m = model_canonical(ref)
@@ -249,22 +250,42 @@ console_cli_default = function(ref) {
 }
 
 #' A model reference as /model, its switch and /status show it: a built-in CLI's `default` with the
-#' full id the CLI gets (`claude-cli/default (claude-sonnet-5-5)`)
+#' model the CLI starts with (`claude-cli/default (claude-opus-5-5)`)
 #' @noRd
 cmd_model_label = function(ref) {
   id = console_cli_default(ref)
   if (is.null(id)) ref else paste0(ref, " (", id, ")")
 }
 
+#' The models a CLI route's CLI lists, for /model (D-390): its catalog rows, asked of the CLI when
+#' it has not been asked in this R session; nothing for another route or when the CLI cannot say
+#' @noRd
+cmd_model_list = function(ref) {
+  m = tryCatch(model_canonical(ref), error = function(e) NULL)
+  if (!identical(m$type, "cli")) return(character())
+  pid = sub("/.*$", "", m$ref)
+  rows = tryCatch({
+    rows = gptr::gptr_models(provider = pid)
+    if (all(is.na(rows$checked_at))) rows = gptr::gptr_models(provider = pid, refresh = TRUE)
+    rows
+  }, error = function(e) NULL)
+  if (!NROW(rows)) return(character())
+  c(paste0("The ", pid, " route lists (any other id: /model ", pid, "/<id>):"),
+    paste0("  ", format(rows$ref), "  ", console_escape(rows$name, newlines = FALSE)))
+}
+
 #' `/model [ref]`: on a session from the next request; before the first prompt for that prompt,
-#' checked now (IC-79) and kept as typed
+#' checked now (IC-79) and kept as typed. Without `ref`, the model and, on a CLI route, the models
+#' its CLI lists.
 #' @noRd
 cmd_model = function(args, ctx) {
   rs = console_repl_find()
   s = ctx$session
   if (!nzchar(args)) {
     model = if (!is.null(rs)) repl_model(rs) else s$model
-    return(paste0("Model: ", cmd_model_label(model %||% "the default model")))
+    # asked first, so the label names the default the CLI just reported
+    listed = if (!is.null(model)) cmd_model_list(model)
+    return(c(paste0("Model: ", cmd_model_label(model %||% "the default model")), listed))
   }
   if (!is.null(s)) {
     session_set_model(s, args, reason = "user")
@@ -284,7 +305,7 @@ cmd_mode = function(args, ctx) {
   rs = console_repl_find()
   s = ctx$session
   if (!nzchar(args)) {
-    return(paste0("Mode: ", if (!is.null(rs)) repl_mode(rs) else s$mode %||% "manual"))
+    return(paste0("Mode: ", if (!is.null(rs)) repl_mode(rs) else s$mode %||% setting_get("mode")))
   }
   if (!args %in% session_modes) {
     return(paste0("Unknown mode '", args, "': use plan, manual, edits, auto or yolo."))
@@ -355,6 +376,32 @@ cmd_env = function(args, ctx) {
   if (!is.environment(env)) return("No environment is attached to this console.")
   lines = console_env_lines(env, args)
   if (length(lines)) lines else "(no objects)"
+}
+
+#' `/calls [n]`: the last `n` tool calls (default 1) of the session's messages, then of the calls a
+#' CLI route made to gptr's tools in this R session (the live state's `served_calls`), oldest first,
+#' whole
+#' whatever compact_calls says: every code row, and the change rows of a path tool as its approval
+#' shows them (an edit's old and new text, a write's content), at the live rows' column (D-383)
+#' @noRd
+cmd_calls = function(args, ctx) {
+  n = if (nzchar(args)) args else "1"
+  if (!grepl("^[0-9]+$", n) || as.numeric(n) < 1) {
+    return("Use /calls [n], n a whole number above 0.")
+  }
+  s = ctx$session
+  calls = if (!is.null(s)) {
+    c(unlist(lapply(s$messages, msg_calls), recursive = FALSE), session_live(s)$served_calls)
+  }
+  if (!length(calls)) return("No tool call yet.")
+  rows = unlist(lapply(utils::tail(calls, as.numeric(n)), function(b) {
+    call = list(id = b$id, name = b$name, input = b$arguments %||% list())
+    c(console_tool_line(call, NULL, s, compact = FALSE, n = Inf),
+      console_diff_rows(ui_request_change(list(tool = b$name, input = call$input)), Inf,
+                        ui_width()))
+  }))
+  # console_command() prints in the margin, which the rows already hold
+  cli::ansi_substr(rows, nchar(console_pad()) + 1L, cli::ansi_nchar(rows))
 }
 
 #' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL); it reports
@@ -443,7 +490,7 @@ cmd_status = function(args, ctx) {
     return(c("session   (none yet: the first prompt starts one)",
              paste0("model     ",
                     cmd_model_label(if (!is.null(rs)) repl_model(rs) else "the default model")),
-             paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual"),
+             paste0("mode      ", repl_mode(rs)),
              paste0("document  ", cmd_doc_site(NULL)$path %||% "(none)")))
   }
   d = session_data(s)

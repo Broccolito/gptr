@@ -30,8 +30,7 @@ test_that("bedrock-converse: a text turn and a tool round trip through a SigV4 e
 })
 
 test_that("bedrock-converse: thinking = 'high' on an adaptive Claude model is signed (live)", {
-  ref = local_bedrock_live(reasoning = TRUE,
-                           capabilities = list(adaptive_thinking = TRUE, effort = TRUE))
+  ref = local_bedrock_live(reasoning = TRUE, owner = "anthropic", thinking_effort = TRUE)
   testthat::skip_if_not(grepl("anthropic\\.claude", ref), "GPTR_BEDROCK_MODEL is not Claude")
   ask = msg_user(paste("A bat and a ball cost 1.10 in total; the bat costs 1.00 more than the",
                        "ball. Work out the price of the ball step by step, then give it."))
@@ -42,7 +41,7 @@ test_that("bedrock-converse: thinking = 'high' on an adaptive Claude model is si
   expect_true(any(signed), info = msg$error_message %||% "")
 })
 
-test_that("bedrock-converse: a Claude record not declared adaptive answers at 'high' (live)", {
+test_that("bedrock-converse: a Claude record without an owner answers at 'high' (live)", {
   ref = local_bedrock_live(reasoning = TRUE)
   testthat::skip_if_not(grepl("anthropic\\.claude", ref), "GPTR_BEDROCK_MODEL is not Claude")
   msg = live_stream(model_resolve(ref),

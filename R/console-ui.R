@@ -236,16 +236,22 @@ ui_permission_question = function(request) {
   if (nzchar(who)) paste0(who, ": allow ", tool, "?") else paste0("Allow ", tool, "?")
 }
 
-#' Is the console's last printed call line this request's (its session and call ids, D-243)?
+#' How the console's last printed call line showed this request (its session and call ids, D-243):
+#' "full", "compact" for one compact row (D-382), else ""
 #' @noRd
 ui_call_shown = function(request) {
-  rlang::is_string(request$tool_call_id) &&
-    identical(console_state()$last_call, c(request$session, request$tool_call_id))
+  last = console_state()$last_call
+  if (!rlang::is_string(request$tool_call_id) ||
+      !identical(last[1:2], c(request$session, request$tool_call_id))) {
+    return("")
+  }
+  if (length(last) > 2L) "compact" else "full"
 }
 
 #' The lines of an approval (D-243): the call line (`  | r  x = 1`, the tool named, R code
 #' highlighted and an MCP call's arguments dim as the console's call line has them, fitted to the
-#' console before (+N more lines), D-187) unless the console printed it (ui_call_shown()), at most
+#' console before (+N more lines), D-187) unless the console printed it (ui_call_shown()), under a
+#' compact one its code rows as the full call line has them (at most 20, D-382), at most
 #' 12 rows of the change a path tool makes (ui_request_change()) as a diff, then dim at column 4
 #' the flagged calls one per line, fitted, at most 5 (D-222), and why an `ask_human` request asks
 #' even in auto mode (yolo runs secret reads), then the question, and under its text the keys (a
@@ -266,7 +272,10 @@ ui_permission_lines = function(request) {
   first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ",
                  if (startsWith(request$tool %||% "", "mcp__") && !code) sym$dim(arg) else
                    console_code(arg, console_lang(request$tool)))
-  call = if (!ui_call_shown(request)) {
+  shown = ui_call_shown(request)
+  call = if (shown == "compact") {
+    console_code_rows(ui_request_lines(request), console_lang(request$tool), 20L, width)
+  } else if (shown == "") {
     paste0(cli::ansi_strtrim(first, max(20L, width - nchar(more))), more)
   }
   fl = ui_flagged(request$risk)
@@ -296,11 +305,11 @@ ui_permission_lines = function(request) {
 #' (console_code_rows(), D-207), or of a path tool's change, its path then named in the first row;
 #' the keys as the question shows them, bold, padded to one width, and what they do, dim (D-243),
 #' the interrupt key as the banner names it (`ctrl-c`, `esc`). Under the console's ask (`asked`) it
-#' leaves out what shows whole above it: the code when the call block showed it (at most 20 rows
-#' that fit), the change rows the ask showed (its first 12 when none was cut), the rest under a dim
-#' `(continued)`; alone, as the RStudio dialog, it shows them all. Every row is wrapped to the
-#' console under its own text: prose at column 2, a change row after its sign, code under its code,
-#' a flagged call under its call, a key's words under its words
+#' leaves out what shows whole above it: the code when the call block, or the ask under a compact
+#' row, showed it (at most 20 rows that fit), the change rows the ask showed (its first 12 when
+#' none was cut), the rest under a dim `(continued)`; alone, as the RStudio dialog, it shows them
+#' all. Every row is wrapped to the console under its own text: prose at column 2, a change row
+#' after its sign, code under its code, a flagged call under its call, a key's words under its words
 #' @noRd
 ui_permission_detail = function(request, asked = FALSE) {
   risk = request$risk
@@ -309,7 +318,8 @@ ui_permission_detail = function(request, asked = FALSE) {
   lines = ui_request_lines(request)
   change = ui_request_change(request)
   fits = function(x, n) length(x) <= n && all(nchar(x, type = "width") + 4L <= width)
-  code = !(asked && ui_call_shown(request) && is.character(request$input$code) && fits(lines, 20L))
+  code = !(asked && nzchar(ui_call_shown(request)) && is.character(request$input$code) &&
+             fits(lines, 20L))
   shown = if (asked && fits(utils::head(change, 12L), 12L)) min(12L, length(change)) else 0L
   rest = change[seq_along(change) > shown]
   who = ui_who(request)

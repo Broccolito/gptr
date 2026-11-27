@@ -51,13 +51,18 @@ test_that("compat_flags() combines detection with the provider records of P05 (0
   expect_setequal(names(ds), names(compat_defaults()))
 })
 
-test_that("OpenRouter sends cache_control only for Anthropic and Google models (G4 3.7)", {
-  expect_identical(compat_flags("openrouter", list(id = "anthropic/claude-sonnet-5-5"))$
-                     cache_control_format, "anthropic")
-  expect_identical(compat_flags("openrouter", list(id = "google/gemini-3.8-flash"))$
-                     cache_control_format, "anthropic")
-  expect_identical(compat_flags("openrouter", list(id = "meta/llama-5"))$cache_control_format,
-                   "none")
+test_that("OpenRouter sends cache_control only to models whose prices bill cache writes", {
+  # D-393: price data, never an id prefix, marks the models OpenRouter caches by breakpoints
+  # (Anthropic, Gemini, OpenAI GPT-5.6+, Alibaba Qwen; G4 3.7)
+  format = function(id, prices = NULL) {
+    compat_flags("openrouter", list(id = id, prices = prices))$cache_control_format
+  }
+  writes = prices_df(list(catalog_price("default", 2, 10, 0.2, 2.5)))
+  reads = prices_df(list(catalog_price("default", 2, 10, 0.2)))
+  expect_identical(format("qwen/qwen3-max", writes), "anthropic")
+  expect_identical(format("anthropic/claude-sonnet-5-5", reads), "none")
+  expect_identical(format("anthropic/claude-sonnet-5-5"), "none")
+  expect_false(compat_flags("openrouter", list(id = "openai/gpt-6-sol"))$supports_developer_role)
   expect_identical(compat_flags("openrouter", list(id = "x/y"))$session_affinity, "openrouter")
 })
 
@@ -466,9 +471,10 @@ test_that("completions bodies: one system message, converted tools, the messages
   expect_identical(req$url, "https://api.groq.com/openai/v1/chat/completions")
 })
 
-test_that("OpenRouter Anthropic models get cache_control on the system and project blocks", {
+test_that("OpenRouter cache-write models get cache_control on the system and project blocks", {
   skip_on_cran()
-  model = test_model(api, provider = "openrouter", id = "anthropic/claude-sonnet-5-5")
+  model = test_model(api, provider = "openrouter", id = "anthropic/claude-sonnet-5-5",
+                     prices = prices_df(list(catalog_price("default", 2, 10, 0.2, 2.5))))
   req = completions_build(model, ctx_fixture(list(first_message())), list())
   body = json_decode(req$body)
   sys = body$messages[[1L]]$content
@@ -482,7 +488,7 @@ test_that("OpenRouter Anthropic models get cache_control on the system and proje
   expect_false(grepl("cache_control",
                      completions_build(model, ctx_fixture(list(first_message()), cache_plan = none),
                                        list())$body, fixed = TRUE))
-  model$id = "meta/llama-5"
+  model$prices = prices_df(list(catalog_price("default", 2, 10, 0.2)))
   expect_false(grepl("cache_control", completions_build(model, ctx_fixture(list(first_message())),
                                                         list())$body, fixed = TRUE))
 })
@@ -490,7 +496,8 @@ test_that("OpenRouter Anthropic models get cache_control on the system and proje
 test_that("the default cache policy anchors the OpenRouter system and project blocks", {
   plan = default_plan(api)
   expect_identical(plan$anchors, c("t0", "project"))
-  model = test_model(api, provider = "openrouter", id = "google/gemini-3.8-flash")
+  model = test_model(api, provider = "openrouter", id = "google/gemini-3.8-flash",
+                     prices = prices_df(list(catalog_price("default", 0.75, 3.75, 0.075, 1))))
   body = json_decode(completions_build(model, ctx_fixture(list(first_message()), cache_plan = plan),
                                        list())$body)
   sys = body$messages[[1L]]$content
@@ -571,6 +578,78 @@ test_that("thinking formats, tool_choice and auth headers follow the compat reco
                           list(credential = fake_handle("AZURE_OPENAI_API_KEY")))
   expect_identical(req$headers$`api-key`, fake_handle("AZURE_OPENAI_API_KEY"))
   expect_null(req$headers$authorization)
+})
+
+test_that("reasoning fields and temperature follow each model's data (D-393, D-395)", {
+  skip_on_cran()
+  body_of = function(model, thinking, temperature = NULL) {
+    params = list(thinking = thinking, temperature = temperature)
+    json_decode(completions_build(model, ctx_fixture(list(msg_user("x")), params = params),
+                                  list())$body)
+  }
+  # xAI Grok 4.5+: the effort by name, never "none" (reasoning cannot be disabled;
+  # https://docs.x.ai/docs/guides/reasoning)
+  grok = test_model(api, provider = "xai", id = "grok-4.7",
+                    thinking_levels = c("low", "medium", "high", "xhigh"))
+  expect_identical(body_of(grok, "xhigh")$reasoning_effort, "xhigh")
+  expect_false("reasoning_effort" %in% names(body_of(grok, "off")))
+  # a model whose data takes no effort names gets none (Grok 4.20 reasoning)
+  g420 = test_model(api, provider = "xai", id = "grok-4.20-0309-reasoning",
+                    thinking_effort = FALSE)
+  expect_false("reasoning_effort" %in% names(body_of(g420, "high")))
+  expect_false("reasoning_effort" %in% names(body_of(g420, "off")))
+  # DeepSeek V4: the thinking toggle and an effort of its levels; disabled carries no effort
+  ds = test_model(api, provider = "deepseek", id = "deepseek-v4-pro",
+                  thinking_levels = c("off", "low", "high", "max"))
+  body = body_of(ds, "max")
+  expect_equal(body[c("thinking", "reasoning_effort")],
+               list(thinking = list(type = "enabled"), reasoning_effort = "max"))
+  body = body_of(ds, "off")
+  expect_equal(body$thinking, list(type = "disabled"))
+  expect_null(body$reasoning_effort)
+  # OpenRouter: effort or max_tokens, never both, and no "none" where reasoning is mandatory
+  # (https://openrouter.ai/docs/guides/best-practices/reasoning-tokens)
+  router = function(...) test_model(api, provider = "openrouter", id = "vendor/model", ...)
+  expect_equal(body_of(router(thinking_levels = c("low", "high", "xhigh")), "xhigh")$reasoning,
+               list(effort = "xhigh"))
+  expect_equal(body_of(router(thinking_budget = list()), "medium")$reasoning,
+               list(max_tokens = 8192L))
+  expect_null(body_of(router(thinking_levels = c("low", "high")), "off")$reasoning)
+  expect_equal(body_of(router(), "off")$reasoning, list(effort = "none"))
+  # Ollama maps reasoning_effort to `think`: gpt-oss lists levels and cannot turn off
+  # (https://docs.ollama.com/api/openai-compatibility); vLLM turns enable_thinking on from it
+  oss = test_model(api, provider = "ollama", id = "gpt-oss:20b",
+                   thinking_levels = c("low", "medium", "high"))
+  expect_identical(body_of(oss, "high")$reasoning_effort, "high")
+  expect_null(body_of(oss, "off")$reasoning_effort)
+  vl = test_model(api, provider = "vllm", id = "Qwen/Qwen3-8B")
+  expect_identical(body_of(vl, "low")$reasoning_effort, "low")
+  expect_identical(body_of(vl, "off")$reasoning_effort, "none")
+  # temperature only where the data accepts sampling, to a thinking model only with thinking off
+  expect_null(body_of(grok, "high", 0.2)$temperature)
+  expect_null(body_of(test_model(api, temperature = TRUE), "high", 0.2)$temperature)
+  expect_identical(body_of(test_model(api, temperature = TRUE), "off", 0.2)$temperature, 0.2)
+  expect_null(body_of(test_model(api, reasoning = FALSE), NULL, 0.2)$temperature)
+  expect_identical(body_of(test_model(api, reasoning = FALSE, temperature = TRUE), NULL,
+                           0.2)$temperature, 0.2)
+})
+
+test_that("vLLM's `reasoning` and its older `reasoning_content` stream and replay as thinking", {
+  skip_on_cran()
+  # `reasoning` used to be called `reasoning_content`
+  # (https://docs.vllm.ai/en/latest/features/reasoning_outputs.html)
+  model = test_model(api, provider = "vllm", id = "Qwen/Qwen3-8B")
+  for (f in c("reasoning", "reasoning_content")) {
+    r = chat_run(c(chat_chunk(paste0('{"role":"assistant","', f, '":"Plan."}')),
+                   chat_chunk('{"content":"Done."}', '"stop"'), "[DONE]"),
+                 provider = model$provider, id = model$id)
+    b = r$message$content[[1L]]
+    expect_identical(c(b$type, b$thinking, b$signature), c("thinking", "Plan.", f))
+    ctx = ctx_fixture(list(msg_user("q", timestamp = 1), r$message,
+                           msg_user("again", timestamp = 3)))
+    asst = json_decode(completions_build(model, ctx, list())$body)$messages[[3L]]
+    expect_identical(asst[[f]], "Plan.")
+  }
 })
 
 test_that("returns = becomes an instruction with auto tool choice (IC-71)", {
@@ -817,7 +896,7 @@ test_that("a resolved model whose record omits tool_call gets no tools (P05, IC-
                                     models = list(list(id = "corp-large"),
                                                   list(id = "corp-tools", tool_call = TRUE))))
   withr::defer(off())
-  for (ref in c("p12-resolve/corp-large", "lmstudio/qwen3-coder")) {
+  for (ref in c("p12-resolve/corp-large", "lmstudio/my-local-coder")) {
     m = model_resolve(ref)
     expect_false(m$tool_call)
     body = json_decode(completions_build(m, ctx_fixture(completions_turn2(m)), list())$body)

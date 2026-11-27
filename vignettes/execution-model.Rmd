@@ -158,17 +158,17 @@ than assuming every object is a fully resident data frame.
 
 ``` r
 session$id
-#> [1] "sd50f1e5e3b"
+#> [1] "sda609d10d2"
 session$model
 #> [1] "fake/fake-1"
 session$turns
 #> [1] 1
 gptr_usage(session)
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 sd50f1e5e3b  2         3435   20      0           0            0
+#> 1 sda609d10d2  2         3477   20      0           0            0
 #>
 #> # 1 row
-#> 2 requests, 3.4k tokens in, $0.0000
+#> 2 requests, 3.5k tokens in, $0.0000
 ```
 
 | Interface | Use |
@@ -191,18 +191,18 @@ session$history
 #>   turn  role         preview                   tools  tokens
 #> 1 1     user         Fit fuel economy agai...         8
 #> 2 1     operator     <gptr_runtime> Curren...         94
-#> 3 1     assistant                              r      1729
+#> 3 1     assistant                              r      1750
 #> 4 1     tool_result  + fit <lm length 12>      r      5
-#> 5 1     assistant    The regression is ready.         1726
+#> 5 1     assistant    The regression is ready.         1747
 #> # 5 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.5k tokens . $0.0000 . sd50f1e5e3b
+#> idle . fake/fake-1 . 1 turn . 3.5k tokens . $0.0000 . sda609d10d2
 as.data.frame(session$history)[, c("turn", "role", "tools", "tokens")]
 #>   turn        role tools tokens
 #> 1    1        user            8
 #> 2    1    operator           94
-#> 3    1   assistant     r   1729
+#> 3    1   assistant     r   1750
 #> 4    1 tool_result     r      5
-#> 5    1   assistant         1726
+#> 5    1   assistant         1747
 ```
 
 Without an initialized project workspace, session files use a temporary directory.
@@ -219,17 +219,17 @@ directory finds; other changed files have no automatic backup. See
 
 ## Permissions and concurrency
 
-`manual` is the default: actions classified as read-only can run, while changes require approval.
-`plan` is for inspection and proposals; `edits` allows approved classes of project file edits;
-`auto` allows ordinary tool work without prompting. The plan a `plan` run proposes goes once,
-as a `<plan>` block, to the next top-level `peter()` call from the same environment, within an
-hour and in another mode, whatever that call asks: a script runs the plan with
-`peter("Go ahead.", mode = auto)`. Another `peter()` call first discards it, and
-`options(gptr.plan_handoff = FALSE)` turns the hand-off off. Critical, secret and control guards
-remain separate. `yolo`, which only you can select, also runs gptr's own configuration functions and
-secret reads; deleting protected files, files outside the project or the project itself,
-moving the working directory out of the project, `rm(list = ls())`, `options(gptr.*)` and
-sending a secret over the network still ask.
+`auto` is the default: ordinary tool work runs without prompting, while critical actions and
+reads of registered secrets ask. `manual` runs actions classified as read-only and asks before
+changes; `plan` is for inspection and proposals; `edits` allows approved classes of project file
+edits. The plan a `plan` run proposes goes once, as a `<plan>` block, to the next top-level
+`peter()` call from the same environment, within an hour and in another mode, whatever that call
+asks: a script runs the plan with `peter("Go ahead.", mode = auto)`. Another `peter()` call
+first discards it, and `options(gptr.plan_handoff = FALSE)` turns the hand-off off. Critical,
+secret and control guards remain separate. `yolo`, which only you can select, also runs gptr's own
+configuration functions and secret reads; deleting protected files, files outside the project or
+the project itself, moving the working directory out of the project, `rm(list = ls())`,
+`options(gptr.*)` and sending a secret over the network still ask.
 In `auto` and `yolo`, a `system()` or `system2()` call whose command the code computes is refused:
 the model is told to run the command with `peter$sh()`, whose command the permission rules check
 when it runs.

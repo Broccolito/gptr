@@ -167,13 +167,16 @@ test_that("the core setting specs cover contract 11.2 and validate their values 
     "version", "model", "small_model", "system1", "mode", "preset", "tools", "permissions",
     "context", "record", "replay", "transcript", "plugins", "filters", "skills", "mcp",
     "subagents", "output_tokens", "plot", "budget", "cache", "compactor", "compact_at",
-    "checkpoint", "undo", "doc", "cache_commit", "ui", "frontend", "type_ahead", "store",
-    "evaluator", "providers", "egress"))
+    "checkpoint", "undo", "doc", "cache_commit", "ui", "frontend", "type_ahead",
+    "compact_calls", "store", "evaluator", "providers", "egress"))
   expect_true(all(vapply(specs, inherits, NA, what = "gptr_setting")))
   by_name = stats::setNames(specs, names)
   expect_identical(by_name$type_ahead$default, "steer")
   expect_identical(by_name$type_ahead$validate("follow_up"), "follow_up")
   expect_error(by_name$type_ahead$validate("off"), class = "gptr_error_invalid_argument")
+  expect_true(by_name$compact_calls$default)
+  expect_false(by_name$compact_calls$validate(FALSE))
+  expect_error(by_name$compact_calls$validate("off"), class = "gptr_error_invalid_argument")
   expect_identical(by_name$mode$validate("plan"), "plan")
   expect_identical(by_name$mode$tighten, c("plan", "manual", "edits", "auto", "yolo"))
   expect_error(by_name$mode$validate("fast"), class = "gptr_error_invalid_argument")
@@ -548,7 +551,7 @@ test_that("gptr's own write does not carry trust over a foreign rewrite of its f
 test_that("settings_get() layers defaults, user file, options and the session", {
   skip_on_cran()
   local_gw()
-  expect_identical(settings_get("mode"), "manual")
+  expect_identical(settings_get("mode"), "auto")
   settings_write("user", list(preset = "readonly"))
   expect_identical(settings_get("preset"), "readonly")
   withr::local_options(gptr.preset = "minimal")
@@ -560,6 +563,7 @@ test_that("settings_get() layers defaults, user file, options and the session", 
 test_that("an untrusted project only tightens (IC-52)", {
   skip_on_cran()
   proj = local_gw()
+  settings_write("user", list(mode = "manual"))
   writeLines(paste0('{"mode": "auto", "preset": "extended", "context": "names", ',
                     '"permissions": {"allow": ["write(**)"], "deny": ["r(fn:unlink)"]}}'),
              file.path(proj, ".gptr", "settings.json"))
@@ -578,9 +582,9 @@ test_that("a trusted project applies every key, but never a project mode yolo", 
              file.path(proj, ".gptr", "settings.json"))
   gptr_trust(proj, TRUE)
   expect_identical(settings_get("preset"), "extended")
-  expect_identical(settings_get("mode"), "manual")
-  settings_write("user", list(mode = "auto"))
   expect_identical(settings_get("mode"), "auto")
+  settings_write("user", list(mode = "manual"))
+  expect_identical(settings_get("mode"), "manual")
   expect_identical(settings_get("permissions")$allow, "write(**)")
 })
 
@@ -609,16 +613,17 @@ test_that("gptr_config(mode = ) in a trusted project applies there; yolo is refu
   skip_on_cran()
   proj = local_gw()
   gptr_trust(proj, TRUE)
-  expect_no_warning(gptr_config(mode = auto))
-  expect_identical(gptr_config()$mode, "auto")
+  expect_no_warning(gptr_config(mode = manual))
+  expect_identical(gptr_config()$mode, "manual")
   expect_true(trust_get(proj))
   cnd = expect_error(gptr_config(mode = yolo), class = "gptr_error_invalid_argument")
   expect_match(conditionMessage(cnd), "gptr_config(mode = yolo, .scope = \"user\")", fixed = TRUE)
-  expect_identical(settings_read("project")$mode, "auto")
+  expect_identical(settings_read("project")$mode, "manual")
+  # untrusted, a project mode only tightens: every mode it may save is tighter than the auto
+  # default, so it applies without a warning (D-396)
   gptr_trust(proj, FALSE)
-  cnd = expect_warning(gptr_config(mode = edits), class = "gptr_warning_untrusted_setting")
-  expect_match(conditionMessage(cnd), "`mode`", fixed = TRUE)
-  expect_identical(gptr_config()$mode, "manual")
+  expect_no_warning(gptr_config(mode = edits))
+  expect_identical(gptr_config()$mode, "edits")
 })
 
 test_that("an invalid user mode does not let a project loosen past the default", {
@@ -674,6 +679,21 @@ test_that("the undo setting holds the object undo limits, its fields in every la
   cnd = expect_error(gptr_config(undo = list(memory = -1), .scope = "session"),
                      class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "undo.memory")
+})
+
+test_that("compact_calls is read in every layer and prints with its layer (D-380)", {
+  skip_on_cran()
+  local_gw()
+  expect_true(setting_get("compact_calls"))
+  withr::local_options(gptr.compact_calls = FALSE)
+  expect_false(setting_get("compact_calls"))
+  expect_identical(unname(attr(gptr_config(), "sources")["compact_calls"]), "option")
+  gptr_config(compact_calls = TRUE, .scope = "session")
+  expect_true(setting_get("compact_calls"))
+  expect_output(print(gptr_config()), "compact_calls +TRUE +\\[session\\]")
+  cnd = expect_error(gptr_config(compact_calls = "no", .scope = "session"),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "compact_calls")
 })
 
 test_that("settings_effective() reports each key with its layer and prints it", {
@@ -1301,7 +1321,9 @@ test_that("gptr_config() without arguments returns the effective settings", {
   local_gw()
   cfg = gptr_config()
   expect_s3_class(cfg, "gptr_config")
-  expect_identical(cfg$mode, "manual")
+  # the default permission mode is auto (D-396)
+  expect_identical(cfg$mode, "auto")
+  expect_identical(unname(attr(cfg, "sources")["mode"]), "default")
 })
 
 test_that("gptr_config() takes bare identifiers and returns the previous values", {
@@ -1312,7 +1334,7 @@ test_that("gptr_config() takes bare identifiers and returns the previous values"
   expect_identical(gptr_config()$mode, "plan")
   expect_identical(settings_read("session")$mode, "plan")
   gptr_config(mode = old$mode)
-  expect_identical(gptr_config()$mode, "manual")
+  expect_identical(gptr_config()$mode, "auto")
 })
 
 test_that("gptr_config() warns when a saved model setting names no known model (D-250)", {

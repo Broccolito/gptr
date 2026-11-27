@@ -19,7 +19,8 @@ test_that("a success subtype with an API error reports the failure and its resul
     expect_identical(ev$error$class, case$class)
     expect_identical(ev$error$status, case$status)
     expect_match(ev$message$error_message, case$label, fixed = TRUE)
-    expect_match(ev$message$error_message, detail, fixed = TRUE)
+    # a detail that ends a sentence gets no second period
+    expect_true(endsWith(ev$message$error_message, paste0(": ", detail)))
     expect_false(grepl("reported success", ev$message$error_message, fixed = TRUE))
     expect_identical(msg_text(ev$message), detail)
   }
@@ -43,7 +44,7 @@ test_that("a failed success subtype without detail stays an honest generic failu
   push_obj(n, list(type = "result", subtype = "success", is_error = TRUE))
   ev = utils::tail(opts$log$events, 1L)[[1L]]
   expect_identical(ev$error$class, "provider")
-  expect_match(ev$message$error_message, "it reported an error", fixed = TRUE)
+  expect_true(endsWith(ev$message$error_message, "it reported an error."))
   expect_false(grepl("reported success", ev$message$error_message, fixed = TRUE))
 })
 

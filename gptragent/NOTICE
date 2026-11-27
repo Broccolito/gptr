@@ -1,0 +1,7 @@
+gptr Agent
+Copyright 2026 Wanjun Gu
+
+Licensed under the Apache License, Version 2.0.
+
+gptr Agent is part of the gptr repository (https://github.com/Broccolito/gptr, Apache-2.0). It
+talks to the gptr R package, which the user installs in R; no part of the package is bundled here.
