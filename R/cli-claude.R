@@ -645,7 +645,8 @@ pcli_claude_result = function(obj, s) {
                 overloaded = "the service is overloaded",
                 paste0("it reported ", subtype %||% "an error"))
   if (length(detail)) what = paste0(what, ": ", paste(detail, collapse = "; "))
-  pcli_fail(s, cls, paste0("The claude CLI ended the turn: ", what, "."),
+  if (!grepl("[.!?]$", what)) what = paste0(what, ".")
+  pcli_fail(s, cls, paste0("The claude CLI ended the turn: ", what),
            reason = if (aborted) "aborted" else "error",
            status = obj[["api_error_status"]] %||% NA_integer_, usage = usage, resets_at = resets)
 }
