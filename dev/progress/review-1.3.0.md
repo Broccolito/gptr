@@ -4,39 +4,40 @@ One review of `main..claude/v1.3.0` at `219b4e22` (memory `gptr-review-cadence`)
 bridge-python, console, models, security, cran, simplicity, docs, tests-ci) on Sonnet, each finding
 checked by an adversarial verifier and every blocker/high by a second skeptic (workflow
 `wf_3c3af010-243`), plus the live checks of 2026-11-27 (R130-28, R130-29). No blocker or high finding
-survived. One fix pass follows; `Disposition` records what it did.
+survived. The fix pass (workflow `wf_a7de6e39-4ae`: six Opus implementers on disjoint files, each checked by
+Sonnet, no repair round needed) and the coordinator's integration recorded each disposition.
 
 | ID | Sev. | Area | Where | Finding | Disposition |
 |---|---|---|---|---|---|
-| R130-01 | medium | providers | `R/provider-openai-completions.R:579` | Generic completions branch sends reasoning_effort to models whose data says no effort (xAI grok-4.20-0309-reasoning) | open |
-| R130-02 | medium | cli | `R/cli-codex.R:614` | User's Codex provider env_key / env_http_headers variables never reach the codex child | open |
-| R130-03 | medium | docs | `NEWS.md:1` | NEWS 1.3.0 has no intro paragraph and does not say what is breaking | open |
-| R130-04 | medium | docs | `cran-comments.md:3` | cran-comments.md still describes the 1.1.0 resubmission | open |
-| R130-05 | low | bridge-r | `R/mcp-server.R:27` | Instructions of an inspect-only server tell the client to change objects and to use r | open |
-| R130-06 | low | gptragent | `gptragent/src/gptragent/server.py:371` | Retry after rediscovery reuses the full time budget, so a call can outlast the 300 s tool timeout | open |
-| R130-07 | low | gptragent | `gptragent/scripts/build_brxt.py:112` | Build does not check the bundled skill's metadata version | open |
-| R130-08 | low | gptragent | `gptragent/src/gptragent/discovery.py:439` | R probe runs a project .Renviron, so a repository can run code when `sessions` finds no session | open |
-| R130-09 | low | cli | `R/cli-codex.R:121` | Codex -c override puts raw newlines into a TOML basic string (env_key_instructions) | open |
-| R130-10 | low | cli | `R/cli-codex.R:152` | Codex provider table key is not quoted: an id with dot, equals, quote or newline mis-addresses or breaks the override | open |
-| R130-11 | low | bridge-r | `R/auth-secrets.R:466` | Discovery-record secret guard misses paths built from pieces, so serve-<pid>.json read via file.path is only level 1 | open |
-| R130-12 | low | providers | `R/provider-anthropic.R:1002` | thinking_budget min/max are stored but never used; fixed budget table sent to budget models | open |
-| R130-13 | low | docs | `pkgdown/assets/cheatsheet.html:351` | Cheat sheet footer still says 'gptr 1.1.0' (HTML and PDF) | open |
-| R130-14 | low | docs | `NEWS.md:53` | NEWS and the models vignette omit that Claude Code's model probe runs the user's SessionStart hooks | open |
-| R130-15 | low | docs | `dev/spec/04-interface-contract.md:1535` | Contract 04 gptr_mcp_serve section is stale and D-373's contract edits are missing | open |
-| R130-16 | low | console-ci | `tests/testthat/ci-shard.R:9` | test-mcp-advertise.R is missing from the CI shard table (about 21 s counted as 1 s) | open |
-| R130-17 | low (uncertain) | cli | `R/cli-codex.R:152` | Codex base_url / openai_base_url with embedded credentials goes onto the command line | open |
-| R130-18 | nit | gptragent | `.github/workflows/gptragent.yaml:4` | Workflow header comment is garbled | open |
-| R130-19 | nit | gptragent | `gptragent/src/gptragent/server.py:483` | tool_r resolves the session twice, so every r call scans discovery records twice | open |
-| R130-20 | nit | console-ci | `R/console-render.R:914` | Compact call row loses the tool name and cursor strip at very narrow widths | open |
-| R130-21 | nit | cli | `R/cli-common.R:567` | The CLI's own default model triggers the write-in notice 'does not list the model' | open |
-| R130-22 | nit | gptragent | `.github/workflows/gptragent.yaml:170` | Release job holds contents: write with mutable action tags and a job-wide write token | open |
-| R130-23 | nit | gptragent | `gptragent/src/gptragent/server.py:32` | DEFAULT_TIMEOUT and MAX_TIMEOUT are the same number | open |
-| R130-24 | nit | cli | `R/cli-common.R:696` | pcli_discovered() is a single-caller wrapper | open |
-| R130-25 | nit | providers | `R/catalog-models.R:1783` | ?gptr_models has a word the spell check flags: SessionStart not in code markup | open |
-| R130-26 | nit | docs | `dev/spec/03-architecture.md:524` | Spec 03 still lists the deleted dev/catalog/build_models.R | open |
-| R130-27 | nit | docs | `vignettes/interactive-console.Rmd.orig:220` | Vignette says a call's 'lines' are counted, but the contract counts non-blank lines | open |
-| R130-28 | low | console-ci | `R/console-repl.R:1075` | The console banner shows claude-cli/default without naming the model it runs | open |
-| R130-29 | low | cli | `R/cli-claude.R:648` | A Claude CLI error ends with '..' when the CLI's detail already ends in a period | open |
+| R130-01 | medium | providers | `R/provider-openai-completions.R:579` | Generic completions branch sends reasoning_effort to models whose data says no effort (xAI grok-4.20-0309-reasoning) | fixed (`01df722a`) |
+| R130-02 | medium | cli | `R/cli-codex.R:614` | User's Codex provider env_key / env_http_headers variables never reach the codex child | fixed: the named variables go to the exec's environment (`child_env(set=)`), never argv (`5d7106e0`, `b9b8039b`) |
+| R130-03 | medium | docs | `NEWS.md:1` | NEWS 1.3.0 has no intro paragraph and does not say what is breaking | fixed (`b7773440`) |
+| R130-04 | medium | docs | `cran-comments.md:3` | cran-comments.md still describes the 1.1.0 resubmission | fixed (`55744e50`) |
+| R130-05 | low | bridge-r | `R/mcp-server.R:27` | Instructions of an inspect-only server tell the client to change objects and to use r | fixed; the constant `inspect` description still says "use r for that" (left: a served-tools-dependent description adds more than it fixes) (`c80f3bc0`) |
+| R130-06 | low | gptragent | `gptragent/src/gptragent/server.py:371` | Retry after rediscovery reuses the full time budget, so a call can outlast the 300 s tool timeout | fixed (`777d4747`) |
+| R130-07 | low | gptragent | `gptragent/scripts/build_brxt.py:112` | Build does not check the bundled skill's metadata version | fixed: the bundled skill carries no version of its own (`b9890d63`) |
+| R130-08 | low | gptragent | `gptragent/src/gptragent/discovery.py:439` | R probe runs a project .Renviron, so a repository can run code when `sessions` finds no session | fixed: the probe runs in a new empty temporary folder (works with HOME missing) (`5fdf4d87`, `04f39e52`, `cbb93cb3`) |
+| R130-09 | low | cli | `R/cli-codex.R:121` | Codex -c override puts raw newlines into a TOML basic string (env_key_instructions) | fixed (`26ed86ce`) |
+| R130-10 | low | cli | `R/cli-codex.R:152` | Codex provider table key is not quoted: an id with dot, equals, quote or newline mis-addresses or breaks the override | fixed: the id is quoted inside `model_providers={"<id>"=...}`; codex 0.157.1 keeps quotes in a dotted `-c` key literally, so the suggested `model_providers."<id>"=` form would break every route (`26ed86ce`) |
+| R130-11 | low | bridge-r | `R/auth-secrets.R:466` | Discovery-record secret guard misses paths built from pieces, so serve-<pid>.json read via file.path is only level 1 | fixed (`6eeda432`, `67239d91`) |
+| R130-12 | low | providers | `R/provider-anthropic.R:1002` | thinking_budget min/max are stored but never used; fixed budget table sent to budget models | fixed: `adp_budget()` clamps to the record's min/max (`3de71db5`, `cbb93cb3`) |
+| R130-13 | low | docs | `pkgdown/assets/cheatsheet.html:351` | Cheat sheet footer still says 'gptr 1.1.0' (HTML and PDF) | fixed (`80e883e6`) |
+| R130-14 | low | docs | `NEWS.md:53` | NEWS and the models vignette omit that Claude Code's model probe runs the user's SessionStart hooks | fixed (`89dbb505`, `f471ea3b`) |
+| R130-15 | low | docs | `dev/spec/04-interface-contract.md:1535` | Contract 04 gptr_mcp_serve section is stale and D-373's contract edits are missing | fixed (`b46a7e08`) |
+| R130-16 | low | console-ci | `tests/testthat/ci-shard.R:9` | test-mcp-advertise.R is missing from the CI shard table (about 21 s counted as 1 s) | fixed (`54ab9781`) |
+| R130-17 | low (uncertain) | cli | `R/cli-codex.R:152` | Codex base_url / openai_base_url with embedded credentials goes onto the command line | fixed (`96218b7e`, `cbb93cb3`) |
+| R130-18 | nit | gptragent | `.github/workflows/gptragent.yaml:4` | Workflow header comment is garbled | fixed (`b5ce0b51`) |
+| R130-19 | nit | gptragent | `gptragent/src/gptragent/server.py:483` | tool_r resolves the session twice, so every r call scans discovery records twice | fixed (`48828091`) |
+| R130-20 | nit | console-ci | `R/console-render.R:914` | Compact call row loses the tool name and cursor strip at very narrow widths | fixed (`11d551a7`) |
+| R130-21 | nit | cli | `R/cli-common.R:567` | The CLI's own default model triggers the write-in notice 'does not list the model' | no change: intended, asserted by test-cli-discovery |
+| R130-22 | nit | gptragent | `.github/workflows/gptragent.yaml:170` | Release job holds contents: write with mutable action tags and a job-wide write token | fixed (`66018ce0`) |
+| R130-23 | nit | gptragent | `gptragent/src/gptragent/server.py:32` | DEFAULT_TIMEOUT and MAX_TIMEOUT are the same number | fixed (`2ad00827`) |
+| R130-24 | nit | cli | `R/cli-common.R:696` | pcli_discovered() is a single-caller wrapper | fixed (`a6413f70`) |
+| R130-25 | nit | providers | `R/catalog-models.R:1783` | ?gptr_models has a word the spell check flags: SessionStart not in code markup | fixed (`1765435b`) |
+| R130-26 | nit | docs | `dev/spec/03-architecture.md:524` | Spec 03 still lists the deleted dev/catalog/build_models.R | fixed (`07e3f11c`) |
+| R130-27 | nit | docs | `vignettes/interactive-console.Rmd.orig:220` | Vignette says a call's 'lines' are counted, but the contract counts non-blank lines | fixed (`b1215fbc`, `cbb93cb3`) |
+| R130-28 | low | console-ci | `R/console-repl.R:1075` | The console banner shows claude-cli/default without naming the model it runs | fixed (`0b6eb2c4`, `cbb93cb3`) |
+| R130-29 | low | cli | `R/cli-claude.R:648` | A Claude CLI error ends with '..' when the CLI's detail already ends in a period | fixed (`dc671a80`) |
 
 ## Details
 
