@@ -1,4 +1,47 @@
-## Current checkpoint — gptr 1.1.0 on CRAN, 2026-11-19
+## Current checkpoint — gptr 1.3.0 release candidate, 2026-11-27
+
+gptr 1.1.0 is on CRAN; 1.2.0 (`main` 0280d953) was not submitted, so 1.3.0 carries it. The release
+branch `claude/v1.3.0` (PR #125, draft, Auto-fix on) holds the three campaigns of 2026-11-26, their
+review and fix pass, and the maintainer's 2026-11-27 request that `auto` be the default permission
+mode. Nothing is merged into `main`, released on GitHub or submitted to CRAN: those wait for the
+maintainer's word.
+
+- P34 bridge ([plan](plan/P34-agent-plugins.md), [log](progress/P34.md), D-372..D-374), P35 compact
+  calls ([plan](plan/P35-compact-calls.md), [log](progress/P35.md), D-380..D-383), P36 models
+  ([plan](plan/P36-model-discovery.md), [log](progress/P36.md), D-390..D-395): see
+  [PAUSED_HANDOFF_2026-11-26.md](PAUSED_HANDOFF_2026-11-26.md) for what each built and checked.
+- CI flake (2026-11-27): the orphan-sweep test of test-artifact-registry.R assumed processx's
+  `$wait()` proves the owner dead; it now waits until `pid_alive()` reads the owner gone (37b6ac57).
+- One comprehensive review (nine lenses, adversarial verification, workflow `wf_3c3af010-243`) and
+  the live checks gave the ledger [progress/review-1.3.0.md](progress/review-1.3.0.md): 30 items,
+  none blocker or high; one fix pass (`wf_a7de6e39-4ae`, six Opus implementers on disjoint files,
+  each checked by Sonnet) fixed 29, R130-21 stays as intended. R130-30 (`/calls` empty on a CLI
+  route) was found in RStudio and fixed in 76e71903.
+- Live, 2026-11-27. Terminal pty: Claude Code and Codex discovery (refresh 3.1 s and 1.6 s, cached
+  0.03 s), named defaults, write-ins, a Claude Code default turn and a Codex `gpt-6-sol` turn; the
+  two live discovery tests pass. The maintainer's `~/.codex/config.toml` default `gpt-6.1-sol` is
+  rejected for their ChatGPT login ("not supported when using Codex with a ChatGPT account"),
+  which gptr reports verbatim. The Anthropic live adapter test is blocked by the key's credit
+  balance; no OpenAI or Gemini key is in `.secrets/llm-passwords.env`. RStudio (first live pass of
+  1.3.0, access granted): compact rows, the full-code approval, 5-row output, `/model`, `/calls`
+  after R130-30, the banner's named default and a write-in's error. S6 rerun at 219b4e22: the
+  no-model replay (HOME present, missing, created, removed) and the harness's S6 with HOME present
+  and missing all refuse the outside delete at level 4.
+- Checks on 5dfaca5b: CI green (all 35 R-CMD-check jobs, Windows-check, gptragent); CRAN-mode
+  `R CMD check --as-cran` Status OK with no NOTE in 215 s locally under load (tests 10 s, R code
+  63 s), tarball sha256 `6331534f…`; the affected test files (57, 13,789 tests) FAIL 0; lint clean;
+  `document()` no diff; check-docs and check-files 0 problems. win-builder R-devel: uploaded
+  2026-11-27 01:44 UTC, result by email to the maintainer. CI CRAN-mode lanes at 219b4e22: Ubuntu
+  devel 323 s of 480, Windows 290 s of 600; no job above 13 min of 20.
+- Open: L-72 (symlink classified by its target); the auto default's CRAN wording and the Biorouter
+  harness's S5, which serves without a mode to test manual asking; win-builder's check time.
+
+Next, on the maintainer's word only: merge PR #125, publish the GitHub release `v1.3.0` (it deploys
+gptr Agent to every Biorouter install; then send the Biorouter orchestration session the tag, the
+asset URL and the `SHA256SUMS` line), submit to CRAN. Decisions for the maintainer: a CRAN 1.1.x
+patch for the S6 missing-HOME fail-open, and their Codex config default.
+
+## Historical checkpoint — gptr 1.1.0 on CRAN, 2026-11-19
 
 gptr 1.0.0 is on CRAN (2026-11-01); 1.0.1 was not submitted, so 1.1.0 carries its fixes. `main` holds
 1.1.0 and is the only branch once this checkpoint lands: P32 was built as `claude/v1.1.0` and
