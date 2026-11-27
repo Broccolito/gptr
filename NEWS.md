@@ -18,6 +18,9 @@ new there too.
   and gptr read every literal path as "unknown": deleting a file outside the project, `.git` or
   `.env`, or writing gptr's settings, was level 3 instead of 4, so `"auto"` and `"yolo"` ran them
   without asking (gptr 1.0.0 to 1.2.0). Found by an end-to-end test of gptr Agent.
+* Reading a discovery record through a path built from pieces, such as
+  `file.path(dir, "serve-4242.json")`, is a guarded secret read, as reading it by its literal path
+  is; gptr 1.2.0 read it at level 1, which `"auto"` runs.
 
 ## Serving R to local agents
 
