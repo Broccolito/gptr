@@ -42,11 +42,11 @@ new there too.
 
 ## Console
 
-* A tool call takes one row in the console: the tool, the first line of its code and
-  `(+N more lines)`, so a long script no longer fills the screen. An edit's result is one row
-  with the lines it added and removed, and what R code prints shows at most 5 rows a call, then
-  `(+N more lines)`; what the model receives is unchanged. An approval still shows the whole code
-  it asks about.
+* A tool call takes one row in the console: the tool, the first non-blank line of its code and
+  `(+N more lines)` for its other non-blank lines, so a long script no longer fills the screen.
+  An edit's result is one row with the lines it added and removed, and what R code prints shows
+  at most 5 rows a call, then `(+N more lines)`; what the model receives is unchanged. An
+  approval still shows the whole code it asks about.
 * `/calls` prints this session's last tool call whole, all its code and what an edit or a write
   changes, `/calls 3` the last three; a sub-agent's calls and the steps a CLI route runs itself
   are not among them.
