@@ -135,31 +135,35 @@ pcli_codex_provider_keys = c("name", "base_url", "env_key", "env_key_instruction
 #' (D-392), from config/read: `model_provider` with its `model_providers` table (the id quoted in
 #' the value, as Codex splits an override's key at every dot), `openai_base_url` and
 #' `model_catalog_json`, so the models Codex lists, the user's default and any written-in id
-#' reach the server the user's Codex uses. Of the table only pcli_codex_provider_keys go: tokens,
-#' static headers, query parameters and auth commands never go on a command line, which other
-#' users of the computer can read, and gptr names what it left out once. `env` names the variables
-#' the table's env_key and env_http_headers read, which the exec gets from R's environment.
+#' reach the server the user's Codex uses. Of the table only pcli_codex_provider_keys go, and no
+#' value with a URL that holds a user name or password: tokens, static headers, query parameters
+#' and auth commands never go on a command line, which other users of the computer can read, and
+#' gptr names what it left out once. `env` names the variables the table's env_key and
+#' env_http_headers read, which the exec gets from R's environment.
 #' @return list(args = chr, env = chr)
 #' @noRd
 pcli_codex_route = function(cfg) {
   id = pcli_chr(cfg[["model_provider"]])
-  table = if (!is.null(id)) cfg[["model_providers"]][[id]]
-  held = setdiff(names(Filter(Negate(is.null), table)), pcli_codex_provider_keys)
-  if (length(held)) {
-    gptr_inform(paste0("gptr leaves the ", paste(held, collapse = ", "), " of your Codex model ",
-                       "provider ", id, " off the codex command line, where other users of this ",
-                       "computer could read them; give a key through env_key or ",
-                       "env_http_headers in your Codex config."), "notice",
-                .once = paste0("codex_route:", id))
-  }
+  table = Filter(Negate(is.null), if (!is.null(id)) cfg[["model_providers"]][[id]])
+  login = function(v) any(grepl("://[^/?#]*@", unlist(v)))
+  keep = names(table) %in% pcli_codex_provider_keys & !vapply(table, login, NA)
+  held = names(table)[!keep]
   out = character()
   for (k in c("model_provider", "openai_base_url", "model_catalog_json")) {
     v = pcli_chr(cfg[[k]])
-    if (!is.null(v)) out = c(out, "-c", paste0(k, "=", pcli_toml(v)))
+    if (is.null(v)) next
+    if (login(v)) held = c(held, k) else out = c(out, "-c", paste0(k, "=", pcli_toml(v)))
+  }
+  if (length(held)) {
+    gptr_inform(paste0("gptr leaves the ", paste(held, collapse = ", "), " of your Codex model ",
+                       "provider ", id %||% "openai", " off the codex command line, where other ",
+                       "users of this computer could read them; give a key through env_key or ",
+                       "env_http_headers in your Codex config."), "notice",
+                .once = paste0("codex_route:", id))
   }
   env = character()
   if (is.list(table) && !is.null(names(table))) {
-    table = table[intersect(names(table), pcli_codex_provider_keys)]
+    table = table[keep]
     out = c(out, "-c", paste0("model_providers=",
                               pcli_toml_value(stats::setNames(list(table), id))))
     env = as.character(unlist(table[c("env_key", "env_http_headers")]))

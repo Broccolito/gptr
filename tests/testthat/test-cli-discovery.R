@@ -248,6 +248,17 @@ test_that("Codex runs keep the user's model provider through -c, never its crede
   expect_identical(gw$env, "GW_KEY")
   expect_identical(pcli_codex_route(list(model_provider = NULL)),
                    list(args = character(), env = character()))
+  # a URL with a user name or password is held, at the top level and in the table
+  expect_message({
+    url = pcli_codex_route(list(openai_base_url = "https://u:pw@gw.example/v1",
+                                model_provider = "q", model_providers = list(q = list(
+                                  name = "Q", base_url = "http://me@127.0.0.1:1/v1",
+                                  model_catalog_url = "https://gw.example/m?by=a@b"))))
+  }, "base_url, openai_base_url of your Codex model provider q", fixed = TRUE)
+  expect_identical(url$args, c("-c", 'model_provider="q"', "-c", paste0(
+    'model_providers={"q"={"name"="Q","model_catalog_url"="https://gw.example/m?by=a@b"}}')))
+  expect_message(pcli_codex_route(list(openai_base_url = "https://u:pw@gw.example/v1")),
+                 "openai_base_url of your Codex model provider openai", fixed = TRUE)
   # each variable once, and only a name a shell can set
   heads = list(A = "P_KEY", B = "bad name", C = "X=1", D = "p_org", E = "p_ORG")
   expect_identical(pcli_codex_route(list(model_provider = "p", model_providers = list(
