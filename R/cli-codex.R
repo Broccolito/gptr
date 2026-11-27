@@ -15,7 +15,7 @@
 #' configured model, else the list's `isDefault` one, and the model provider settings every exec
 #' then carries (pcli_codex_route()). No thread is started. When the app-server gives no list,
 #' `codex debug models`' catalog, without a default. `listed` holds the ids.
-#' @return list(models, default = chr(1) or NULL, listed = chr, route = chr)
+#' @return list(models, default = chr(1) or NULL, listed = chr, route = list(args, env))
 #' @noRd
 pcli_codex_discover = function(path) {
   ask = function(id, method, params = json_obj()) list(id = id, method = method, params = params)
@@ -137,7 +137,9 @@ pcli_codex_provider_keys = c("name", "base_url", "env_key", "env_key_instruction
 #' `model_catalog_json`, so the models Codex lists, the user's default and any written-in id
 #' reach the server the user's Codex uses. Of the table only pcli_codex_provider_keys go: tokens,
 #' static headers, query parameters and auth commands never go on a command line, which other
-#' users of the computer can read, and gptr names what it left out once.
+#' users of the computer can read, and gptr names what it left out once. `env` names the variables
+#' the table's env_key and env_http_headers read, which the exec gets from R's environment.
+#' @return list(args = chr, env = chr)
 #' @noRd
 pcli_codex_route = function(cfg) {
   id = pcli_chr(cfg[["model_provider"]])
@@ -155,11 +157,14 @@ pcli_codex_route = function(cfg) {
     v = pcli_chr(cfg[[k]])
     if (!is.null(v)) out = c(out, "-c", paste0(k, "=", pcli_toml(v)))
   }
+  env = character()
   if (is.list(table) && !is.null(names(table))) {
-    table = list(table[intersect(names(table), pcli_codex_provider_keys)])
-    out = c(out, "-c", paste0("model_providers=", pcli_toml_value(stats::setNames(table, id))))
+    table = table[intersect(names(table), pcli_codex_provider_keys)]
+    out = c(out, "-c", paste0("model_providers=",
+                              pcli_toml_value(stats::setNames(list(table), id))))
+    env = as.character(unlist(table[c("env_key", "env_http_headers")]))
   }
-  out
+  list(args = out, env = env[grepl("^[A-Za-z_][A-Za-z0-9_]*$", env) & !duplicated(toupper(env))])
 }
 
 #' The `-c` overrides that make gptr's stdio relay Codex's `gptr` MCP server (IC-65, IC-79):
@@ -606,8 +611,10 @@ pcli_codex_build = function(model, context, opts) {
   }
   resume = if (isTRUE(probe$resume) && is.null(role)) state$codex_thread else NULL
   wd = path_norm(getwd())
+  route = pcli_discovery("codex")$route
   args = pcli_codex_args(state$pcli_model_arg, wd, sandbox, state$codex_relay, resume = resume,
-                         role = role, schema = schema, route = pcli_discovery("codex")$route)
+                         role = role, schema = schema, route = route$args)
+  key = vapply(as.character(route$env), Sys.getenv, "", unset = NA)
   state$cli_api = "cli-codex"
   state$codex_sandbox = sandbox
   state$codex_cap = pcli_codex_cap(par)
@@ -619,7 +626,7 @@ pcli_codex_build = function(model, context, opts) {
     state$codex_root = root
   }
   list(start = list(command = path[[1L]], args = c(as.character(path[-1L]), args),
-                    env_profile = "cli-codex", env = character(), wd = wd),
+                    env_profile = "cli-codex", env = key[!is.na(key)], wd = wd),
        send = list(json_verbatim(pcli_codex_prompt(context, fresh = is.null(resume),
                                                   provider = model$provider))),
        close_stdin = TRUE)

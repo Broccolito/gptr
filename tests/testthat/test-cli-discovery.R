@@ -205,6 +205,7 @@ test_that("a model id the CLI does not list is passed as written, with one notic
 
 test_that("Codex runs keep the user's model provider through -c, never its credentials", {
   withr::local_options(gptr.quiet = FALSE)
+  withr::local_envvar(LM_API_KEY = "test-lm-key-value")
   rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
   local_talks(fixture_lines("codex-discover-custom.jsonl"))
   local_mocked_bindings(pcli_probe = function(path) list(resume = TRUE),
@@ -217,7 +218,7 @@ test_that("Codex runs keep the user's model provider through -c, never its crede
                          '"base_url"="http://127.0.0.1:1234/v1",',
                          '"wire_api"="responses","env_key"="LM_API_KEY",',
                          '"requires_openai_auth"=false,"stream_max_retries"=3}}'))
-  expect_identical(pcli_discovery("codex")$route, route)
+  expect_identical(pcli_discovery("codex")$route, list(args = route, env = "LM_API_KEY"))
   # the configured model the list lacks is the default, passed as written with the provider
   ctx = list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Hello")))
   opts = stub_opts()
@@ -229,6 +230,9 @@ test_that("Codex runs keep the user's model provider through -c, never its crede
   i = match("-m", args)
   expect_identical(args[i + 0:(1L + length(route))], c("-m", "my-local-model", route))
   expect_false(any(grepl("not-a-secret-test-value", args, fixed = TRUE)))
+  # the variable env_key names reaches the exec's environment, never its command line
+  expect_identical(spec$start$env, c(LM_API_KEY = "test-lm-key-value"))
+  expect_false(any(grepl("test-lm-key-value", args, fixed = TRUE)))
   # only Codex's documented keys without a credential or command go; the rest is named once
   table = list(name = "GW", base_url = "https://gw.example/v1", query_params = list(k = "q"),
                env_http_headers = list(`X-Key` = "GW_KEY"), auth = list(command = "token"),
@@ -238,16 +242,22 @@ test_that("Codex runs keep the user's model provider through -c, never its crede
     gw = pcli_codex_route(list(model_provider = "gw", model_providers = list(gw = table)))
   }, "query_params, auth, http_headers, gateway_oauth, later of your Codex model provider gw",
   fixed = TRUE)
-  expect_identical(gw, c("-c", 'model_provider="gw"', "-c", paste0(
+  expect_identical(gw$args, c("-c", 'model_provider="gw"', "-c", paste0(
     'model_providers={"gw"={"name"="GW","base_url"="https://gw.example/v1",',
     '"env_http_headers"={"X-Key"="GW_KEY"},"capabilities"={"remote_compaction"="v2"}}}')))
-  expect_identical(pcli_codex_route(list(model_provider = NULL)), character())
+  expect_identical(gw$env, "GW_KEY")
+  expect_identical(pcli_codex_route(list(model_provider = NULL)),
+                   list(args = character(), env = character()))
+  # each variable once, and only a name a shell can set
+  heads = list(A = "P_KEY", B = "bad name", C = "X=1", D = "p_org", E = "p_ORG")
+  expect_identical(pcli_codex_route(list(model_provider = "p", model_providers = list(
+    p = list(env_key = "P_KEY", env_http_headers = heads))))$env, c("P_KEY", "p_org"))
   expect_identical(pcli_toml_value(list(a = list(), b = list(1L, "x\""), c = NULL)),
                    '{"a"=[],"b"=[1,"x\\""]}')
   # an id Codex's key path would split, and text with control characters, stay valid TOML
   odd = pcli_codex_route(list(model_provider = "my.prov=1", model_providers = list(
     `my.prov=1` = list(name = "P", env_key_instructions = "Line one\n\tline two\r\001"))))
-  expect_identical(odd, c("-c", 'model_provider="my.prov=1"', "-c", paste0(
+  expect_identical(odd$args, c("-c", 'model_provider="my.prov=1"', "-c", paste0(
     'model_providers={"my.prov=1"={"name"="P",',
     '"env_key_instructions"="Line one\\u000A\\u0009line two\\u000D\\u0001"}}')))
   pcli_untrack("s0123456789")

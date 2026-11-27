@@ -90,7 +90,7 @@ test_that("build() starts one exec per turn with a fresh private relay mailbox",
   tail = c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m", "gpt-6-sol",
            "-C", path_norm(getwd()), codex_relay_args(dir), "--sandbox", "read-only", "-")
   expect_identical(args[(length(args) - length(tail) + 1L):length(args)], tail)
-  expect_identical(spec$start$env, character())
+  expect_length(spec$start$env, 0L)
   expect_identical(spec$start$env_profile, "cli-codex")
   expect_true(spec$close_stdin)
   expect_s3_class(spec$send[[1]], "json")
