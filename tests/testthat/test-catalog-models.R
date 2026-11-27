@@ -1253,7 +1253,9 @@ test_that("a System 2 call prepares its selected Ollama model as System 1 does",
   withr::local_options(gptr.replay = "replay")
   run = run_new(session_new("router:r", "auto", home = new.env()), list(), NULL)
   expect_error(run_target(run), class = "gptr_error_not_recorded")
-  local_settings(providers = list(ollama = list(base_url = "http://192.0.2.10:11434/v1")))
+  # the mocked reader returns no setting it is not given: the session takes its mode from here
+  local_settings(mode = "auto",
+                 providers = list(ollama = list(base_url = "http://192.0.2.10:11434/v1")))
   expect_error(ask(), class = "gptr_error_untrusted")
   expect_identical(srv$calls, rep(found, 2L))
 })
