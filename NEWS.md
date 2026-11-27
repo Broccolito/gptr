@@ -1,10 +1,10 @@
 # gptr 1.3.1
 
-A gptr Agent release; the R package is unchanged from 1.3.0.
+A gptr Agent release; the R package's code is unchanged from 1.3.0.
 
-* gptr Agent's setup text and `r/attach.R` no longer say that a session served without a mode
-  is read-only: from gptr 1.3.0 such a session follows your gptr setting, `auto` by default.
-  Serve with `mode = "manual"` to let the agent only read.
+* gptr Agent's setup text, `r/attach.R` and the README no longer say that a session served
+  without a mode is read-only: from gptr 1.3.0 such a session follows your gptr setting, `auto`
+  by default. Serve with `mode = "manual"` to let the agent only read.
 * gptr Agent's NOTICE and LICENSE credit the Baranzini Lab: made by the Baranzini Lab (Wanjun Gu,
   UCSF), copyright Baranzini Lab, University of California, San Francisco.
 

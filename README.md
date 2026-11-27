@@ -258,7 +258,7 @@ The agent finds the session by itself, looks before it changes anything,
 and works in place. Every call passes your permission settings, and gptr
 records the calls that run on the session; bind a document with
 `gptr_doc()` first and `gptr_export()` turns the agent's work into a
-script. Without `mode = "auto"` the agent can only read. See
+script. With `mode = "manual"` the agent can only read. See
 [MCP](https://broccolito.github.io/gptr/articles/mcp.html) for the
 details.
 
