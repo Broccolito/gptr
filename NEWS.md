@@ -5,14 +5,26 @@ outside agent's R calls are recorded, so a served session stays a runnable docum
 takes one console row, and the `claude-cli` and `codex` routes take their models and their
 default from the installed CLI; any model id can be written in, and the catalog is refreshed.
 The permission fix for a missing `HOME` is a security fix for every earlier 1.x release. Unlike
-1.2.0, this release changes what existing users see: `compact_calls` is on by default,
-`codex/default` runs the model your Codex starts with (no fixed fallback), an alias is the newest
-model of its family (`gpt` is `gpt-6.2-sol`, `gemini` is `gemini-4-neon`), and a
-`supports_reasoning_effort` setting is ignored. 1.2.0 was not released on CRAN, so its section is
-new there too.
+1.2.0, this release changes what existing users see: the default permission mode is `auto`,
+`compact_calls` is on by default, `codex/default` runs the model your Codex starts with (no fixed
+fallback), an alias is the newest model of its family (`gpt` is `gpt-6.2-sol`, `gemini` is
+`gemini-4-neon`), and a `supports_reasoning_effort` setting is ignored. 1.2.0 was not released
+on CRAN, so its section is new there too.
 
 ## Permissions
 
+* The default permission mode is `auto`: the agent runs R code and changes files and objects
+  without asking. gptr still asks before level-4 actions (deleting the project, protected files
+  such as `.git` and `.env` or files outside the project, `rm(list = ls())`, moving the working
+  directory out of the project, changing gptr's own configuration) and before reading a
+  registered secret; it still refuses code that would end or pause R and a `system()` call whose
+  command the code computes, and deny and ask rules apply as before. Where nobody can answer
+  (Rscript, knitr), such an action stops the run with status `blocked`. A session served with
+  `gptr_mcp_serve()` without `mode` also starts in `auto`, so its client can change objects, and
+  on the `codex` route Codex's own shell can change files in the project. To approve each change
+  as before, use `gptr_config(mode = "manual", .scope = "user")`; `/mode` switches a console,
+  and `yolo` asks less still. The console prompt is `peter> ` in `auto` and names any other mode
+  (`peter[manual]> `), and the banner names the mode only when it is not `auto`.
 * A path's class no longer drops when R warns while gptr reads it. With `HOME` naming a folder
   that does not exist (a container, a service account, a CI runner), `tools::R_user_dir()` warns,
   and gptr read every literal path as "unknown": deleting a file outside the project, `.git` or

@@ -1492,7 +1492,7 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 
 #### 6.8.1 Modes and levels
 
-| Level | Meaning (classifier) | plan | manual (default) | edits | auto | yolo [IC-78] |
+| Level | Meaning (classifier) | plan | manual | edits | auto (default) [D-396] | yolo [IC-78] |
 |---|---|---|---|---|---|---|
 | 0 | **known** read-only R (level 0 means "known read-only", not "nothing flagged"), reads inside the project, namespace reads | allow | allow | allow | allow | allow |
 | 1 | new objects, reads outside the project (a command run in a directory outside it reads that directory [D-262]), calls of unlisted functions from packages outside base/stats/utils/methods/graphics/grDevices/tools [IC-54] | only allowlisted read-only calls run, in a scratch child env (discarded); anything else and other tools deny | ask | ask | allow | allow |
@@ -2184,7 +2184,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   [D-244]); a warning
   near the readline line limit (4,095 bytes on
   R < 4.5, 8,190 on R >= 4.5 [18 fact-check]); optional history through `utils::timestamp()`
-  (`gptr.history`). Banner [D-245]: dim lines at column 2, `gptr 1.0.0 · <model> · <mode> · .gptr/ found`,
+  (`gptr.history`). Banner [D-245]: dim lines at column 2, `gptr 1.0.0 · <model> · <mode> · .gptr/ found`
+  (the mode only when it is not `auto`, as the prompt `peter[<mode>]> ` names it [D-396]),
   `objects: ` and up to six names, then the keys in bold, `/help lists commands · tab completes after @ ! / ·
   ctrl-c twice leaves` (the tab only where the REPL completes, after `! /` in RStudio's console; the console's
   own key, `esc` in RStudio, R.app and Rgui, which does not pause at the prompt), in Positron a line `text typed
@@ -3483,7 +3484,7 @@ reload the 5 GB object for every fix.
 | Risk | Likelihood / impact | Mitigation |
 |---|---|---|
 | A CRAN reviewer objects to evaluating model code in the caller's environment or to document writes | medium / high | every evaluation and write is user-initiated and consented; examples use the fake provider and `envir = new.env()`; a "Security considerations" help page; precedents (btw, aisdk) cited in cran-comments [13 §1] |
-| In-process evaluation cannot be sandboxed; `auto` can damage the session or files | high / high | `manual` default; modes, rules, critical and secret guards, protect-size escalation; checkpoints and rewind; documented "not a security boundary" [18, G6, G7] |
+| In-process evaluation cannot be sandboxed; `auto` can damage the session or files | high / high | modes (`auto` the default [D-396], `manual` one setting away), rules, critical and secret guards, protect-size escalation; checkpoints and rewind; documented "not a security boundary" [18, G6, G7] |
 | Copy-safety regressions from future code or R versions (one stray quosure, `match.arg()`, list or closure brings back multi-GB copies) | medium / high | rules R1-R10 (§6.4); fresh-process tracemem suite over every entry point incl. function-frame homes on R-release and R-devel; review checklist in every plan touching user objects [G3 fact-check] |
 | Values that capture environments (lm terms, closures) keep a function-frame home alive | medium / low | inherent to R; documented; by-name designation for kept homes |
 | Interrupt menu, background pumping and readline behaviour unverified in RStudio, Positron, Jupyter, Rgui and Windows consoles | medium / medium | abort-only fallback; UI abstraction; background is experimental with a support matrix; manual test checklist in P14 and P21 [02 §7, 18 §7, G3] |

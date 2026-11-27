@@ -220,7 +220,7 @@ s = peter("Fit mpg on wt.", mtcars,
         <p>Live calls follow Set up. <code>mtcars</code> is built in; quoted model names are strings. In functions use <code>envir = new.env()</code> to keep objects.</p>
         <dl>
           <dt>fit_s = peter("Fit mpg ~ wt as fit.",
-  mtcars, mode = "auto")</dt><dd>Prompt, then data. <code>auto</code> permits ordinary changes in scripts; critical actions still ask.</dd>
+  mtcars, mode = "auto")</dt><dd>Prompt, then data. <code>auto</code>, the default, permits ordinary changes; critical actions still ask.</dd>
           <dt>fit_s$text; fit_s$value; fit_s$turns</dt><dd>Answer, newest <code>gptr_return()</code> value (else NULL), prompt count.</dd>
           <dt>peter("Summarize.", mtcars,
   budget = list(tokens = 5e4, turns = 5))</dt><dd>Per-call limits; <code>turns</code> counts model requests.</dd>
@@ -399,7 +399,7 @@ abstracts[rct]; sum(rct)</dt><dd>P(yes); subset and count these typed answers.</
           <tr><td><code>plan</code></td><td>Read only; next top-level call gets the plan</td></tr>
           <tr><td><code>manual</code></td><td>Reads run; classified changes ask</td></tr>
           <tr><td><code>edits</code></td><td>Also allows file edits in the project</td></tr>
-          <tr><td><code>auto</code></td><td>Critical actions and secret reads ask</td></tr>
+          <tr><td><code>auto</code></td><td>Default; critical acts, secret reads ask</td></tr>
           <tr><td><code>yolo</code></td><td>Broad; critical and secret-flow guards remain</td></tr>
         </table>
         <dl>

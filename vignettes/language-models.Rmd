@@ -335,7 +335,7 @@ other = gptr_fake_provider(list("An association does not establish causation."),
 session = peter("Describe how mpg relates to wt.", mtcars, model = fake)
 session |> peter("Add a caveat.", model = other)
 #> An association does not establish causation.
-#> idle . other/other-1 . 2 turns . 3.5k tokens . $0.0000 . s374bf5f65e
+#> idle . other/other-1 . 2 turns . 3.5k tokens . $0.0000 . s93b5f7657c
 ```
 
 ## Put calls in functions and scripts
@@ -376,9 +376,10 @@ numeric_means(mtcars[c("mpg", "wt")])
 
 </details>
 
-In a real script, replace the fake provider with an explicit model reference. Use `manual` when
-a person can answer permissions; for an unattended job, choose appropriate permission rules
-or an explicit mode before running it. `auto` still retains critical and secret guards.
+In a real script, replace the fake provider with an explicit model reference. The default mode,
+`auto`, runs ordinary actions without asking and retains the critical and secret guards; use
+`manual` when a person can answer each change, and for an unattended job name the mode or the
+permission rules it needs.
 A permission question with nobody present raises `gptr_error_permission` and carries the blocked
 session as `e$session`.
 

@@ -59,8 +59,9 @@ session = peter()
 # Then enter: /exit
 ```
 
-The default prompt is `peter> `; other permission modes appear as `peter[plan]> `,
-`peter[edits]> ` or `peter[auto]> `. Enter `/exit` to return the session invisibly to `session`.
+The prompt is `peter> ` in `auto`, the default permission mode; other modes appear as
+`peter[manual]> `, `peter[plan]> `, `peter[edits]> ` or `peter[yolo]> `. Enter `/exit` to
+return the session invisibly to `session`.
 Objects created by the agent remain in the environment where the console runs.
 R tools compute on those in-memory objects across turns; you can inspect or reuse them at the
 R prompt without exporting and reloading a dataset. Model context is a separate, bounded
@@ -251,20 +252,20 @@ gptr_config(compact_calls = FALSE, .scope = "user")
 
 ## Approve changes
 
-In `manual`, known read-only actions run directly and changes ask for approval under the call
-they gate, unless a permission rule applies (an allow rule never approves a critical action); you
-type the answer on the row below. The question lists the flagged calls, riskiest first (at most
-five; `?` shows all), and
-offers `y` for this action, `a` for a session rule covering them when one can be written (`p` for
-the same rule in this project), `n` to deny, and `?` for details. `n <text>` (or `no, <text>`)
-denies the action and gives the agent your text as its instruction. A sub-agent's question names
-it (`? sub-agent A: allow r?`); an answer that is none of these is explained, and five such
-answers refuse the action. `edits` allows project file edits
-while still asking about R changes unless an allow rule applies; `auto` allows ordinary actions
-while retaining critical and secret guards. `plan` offers read-only tools and R calls known to
-be read-only in a scratch environment, where intermediate bindings can change while the user
-workspace is preserved. Settings and policies are described in
-[Configuration](configuration.html) and `?gptr_security`.
+In `auto`, the default, ordinary actions run without asking; critical actions and reads of
+registered secrets ask. In `manual`, known read-only actions run directly and changes ask for
+approval under the call they gate, unless a permission rule applies (an allow rule never
+approves a critical action); you type the answer on the row below. The question lists the
+flagged calls, riskiest first (at most five; `?` shows all), and offers `y` for this action, `a`
+for a session rule covering them when one can be written (`p` for the same rule in this
+project), `n` to deny, and `?` for details. `n <text>` (or `no, <text>`) denies the action and
+gives the agent your text as its instruction. A sub-agent's question names it
+(`? sub-agent A: allow r?`); an answer that is none of these is explained, and five such answers
+refuse the action. `edits` allows project file edits while still asking about R changes unless
+an allow rule applies. `plan` offers read-only tools and R calls known to be read-only in a
+scratch environment, where intermediate bindings can change while the user workspace is
+preserved. Settings and policies are described in [Configuration](configuration.html) and
+`?gptr_security`.
 
 Peter can also ask you up to four questions of its own when a decision changes the result. A
 choice also takes your own words; at a text question `/skip` skips it and `/cancel` dismisses

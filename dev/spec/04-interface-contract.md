@@ -4052,7 +4052,7 @@ level 4. A legacy `.gptr/settings.local.json` contributes only deny/ask addition
 | `model` | chr\|null | `null` (first available route, §8.4 of `03`) | | P08 |
 | `small_model` | chr\|null | `null` (the catalog's small sibling of `model`) | | P08 |
 | `system1` | chr\|null | `null` (= `typesafe/jev-latest` when a key is found); `"emulate:<ref>"` opts into emulation | | P13 |
-| `mode` | chr | `"manual"` | `plan`, `manual`, `edits`, `auto`, `yolo` (an untrusted project file only tightens; no project file sets `yolo`, D-250) | P08/P11 |
+| `mode` | chr | `"auto"` (D-396) | `plan`, `manual`, `edits`, `auto`, `yolo` (an untrusted project file only tightens; no project file sets `yolo`, D-250) | P08/P11 |
 | `preset` | chr | `"standard"` | | P07 |
 | `tools` | `{enable: [chr], disable: [chr], presets: {<model glob>: <preset>}}` | `{}` | | P07 |
 | `permissions` | `{allow: [rule], ask: [rule], deny: [rule]}` | `{}` | deny/ask additions tighten | P11 |

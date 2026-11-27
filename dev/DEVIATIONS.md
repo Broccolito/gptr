@@ -11319,3 +11319,33 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-provider-anthropic "off is `disabled` where the levels list it, else no thinking
   field (D-395)"; test-provider-openai-responses, test-provider-openai-completions,
   test-provider-google, test-provider-bedrock. Evidence: progress/P36.md Task 4.
+
+## D-396 - 1.3.0 The default permission mode is auto (2026-11-26)
+- Rule: the `mode` setting's default is `"auto"` (the maintainer's request); the permission gate is
+  unchanged, so auto keeps every question and refusal it had: level-4 and control actions, reads
+  of registered secrets and secret-to-network flows ask; a computed `system()` command and the
+  evaluator guard's calls (`q()`, `readline()`) are refused; deny and ask rules apply. Readers
+  take the setting's own default: `setting_get("mode")` loses its `default = "manual"` (the
+  settings service is builtin:gateway's, which no filter removes), and `context_provide_mode()`,
+  `/mode` and `/status` without a session read the setting. A served session without `mode`, a
+  non-interactive run, sub-agents, rebuilt and replayed sessions and the codex route's sandbox
+  (workspace-write in auto, IC-65) follow the setting as before. An untrusted project's mode still
+  only tightens (IC-52), now from auto: without a stricter user setting every mode a project may
+  save applies there, and `gptr_config(mode = )` in it no longer warns (`settings_untrusted_warn()`
+  compares with the default). Kept: `agent_mode()` reads Claude Code's `permissionMode: default`
+  as `manual` (that name asks on first use; it is no gptr default), and `pcli_params()` gives a
+  direct adapter call without a mode `manual` (the strictest mapping).
+- Rule: the console prompt is `peter> ` in auto and `peter[<mode>]> ` in every other mode (it was
+  `peter> ` in manual), and the banner names the mode only when it is not auto. `/mode`, `/status`
+  and `/mcp serve` name it in every mode; the yolo notice stays.
+- Contract-visible: 04 section 11.2 (`mode` row), 03 sections 6.8.1, 6.17 and the risk table;
+  `?gptr_security`, `?peter`, `?gptr_mcp_serve`, the README, the vignettes, the cheat sheet, gptr
+  Agent's README, NEWS 1.3.0, cran-comments.
+- Tests: gptr-config "gptr_config() without arguments returns the effective settings" (auto, from
+  the default layer); its layer tests set a user `manual` where they test tightening and save a
+  tighter untrusted project mode without a warning. gptr-gateway "a fresh session takes the auto
+  default; the mode setting chooses another (D-396)"; console-repl "the prompt and the banner
+  name the mode only when it is not auto, the default (D-396)". mcp-server serves in `manual`
+  where it tests refusals, and a restart without a mode setting serves in auto; NS-1 and the
+  console tests that answer approvals open in `manual` (their pty waits read `peter[manual]> `),
+  the others read `peter> ` in auto.

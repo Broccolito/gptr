@@ -40,20 +40,26 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   no default path), into a project `.gptr/` directory once it exists, into documents the user
   named with `gptr_doc()` or confirmed interactively, into `tools::R_user_dir("gptr")`
   (settings, trust decisions and credentials the user stores, and small caches), into
-  `tempdir()`, or as allowed by the permission mode the user selected. Without that consent gptr
-  itself writes nothing else outside `tempdir()` in a non-interactive session; model code is held
-  back only as far as the classifier recognizes its writes (next point).
+  `tempdir()`, or by model code that a prompt of the user starts, as its permission mode allows
+  (next point). Without that consent gptr itself writes nothing else outside `tempdir()` in a
+  non-interactive session.
 * Model-generated R code is evaluated in the environment the user passes to `peter()` or
   `gptr_mcp_serve()` (by default the caller's frame), or in a separate R process for worker
-  sub-agents. In the default `manual` permission mode, code that the package's static classifier
-  labels read-only runs without asking; code it labels as creating or changing objects or files,
-  starting processes or reading outside the project runs only after the user approves it. The
-  classifier is advisory, not a security boundary, as `?gptr_security` says. A non-interactive run
-  that would need an approval stops with a classed error. gptr itself never assigns objects in the
-  global environment. Model code in a top-level run, and in a plain `peter()` sub-agent it starts,
-  draws from the user's random-number stream, as the user's own code would; members of a team, a
-  fan-out or `gptr_parallel()` draw from their own stream, and the user's `.Random.seed` is
-  restored after them.
+  sub-agents. Model code runs only after the user gives `peter()` a prompt or serves the session
+  with `gptr_mcp_serve()`. In the default `auto` permission mode it then runs without a question
+  per action, as the user's own code would: it can create and change objects and files and start
+  processes. gptr asks the user first (a served session refuses) before actions its static
+  classifier labels critical (deleting the project, files outside it or protected files such as
+  `.git` and `.env`, `rm(list = ls())`, moving the working directory out of the project, changing
+  gptr's own configuration or R startup files) and before reading a registered secret, and it
+  refuses code that would end or pause R. The user can choose `manual` with
+  `gptr_config(mode = "manual", .scope = "user")`, which asks before every action the classifier
+  does not label read-only. The classifier is advisory, not a security boundary, as
+  `?gptr_security` says. A non-interactive run that would need an approval stops with a classed
+  error. gptr itself never assigns objects in the global environment. Model code in a top-level
+  run, and in a plain `peter()` sub-agent it starts, draws from the user's random-number stream,
+  as the user's own code would; members of a team, a fan-out or `gptr_parallel()` draw from their
+  own stream, and the user's `.Random.seed` is restored after them.
 * Data is sent to a model provider only when the user runs a prompt with that provider's model,
   or when model code that the permission mode allowed starts a sub-agent with that model.
   Before automatic session context first goes to a provider, gptr shows what it contains

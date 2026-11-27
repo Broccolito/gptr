@@ -36,9 +36,10 @@ your computer):
 source("<gptr Agent's folder>/r/attach.R"); biorouter_gptr_attach(mode = "auto")
 ```
 
-Leave out `mode = "auto"` to let the agent only read the session. With it, the agent may change
-objects, and gptr still refuses critical code (deleting the project or files outside it,
-`rm(list = ls())`, its own configuration, reads of registered secrets). Stop serving with
+With `mode = "auto"`, the default from gptr 1.3.0, the agent may change objects, and gptr still
+refuses critical code (deleting the project or files outside it, `rm(list = ls())`, its own
+configuration, reads of registered secrets). Serve with `mode = "manual"` to let the agent only
+read the session. Stop serving with
 `gptr::gptr_mcp_serve(stop = TRUE)` (or `biorouter_gptr_detach()`).
 
 To keep a runnable record of the agent's work, bind a document first:

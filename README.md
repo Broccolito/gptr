@@ -133,10 +133,13 @@ model](https://broccolito.github.io/gptr/articles/execution-model.html)
 and [Data sent to
 providers](https://broccolito.github.io/gptr/reference/gptr_egress.html).
 
-In the default `manual` mode, actions classified as read-only run
-directly and actions classified as changes ask for approval, unless a
-permission rule applies; an allow rule never approves a critical action.
-The check is advisory and provides no sandbox; see [Security
+In the default `auto` mode, agent code runs without asking, except
+critical actions (such as deleting files outside the project or changing
+gptr's own configuration) and reads of registered secrets, which ask for
+approval. `manual` asks before every change and `yolo` asks even less;
+choose one with `gptr_config(mode = "manual", .scope = "user")` or
+`/mode` in the console. The check is advisory and provides no sandbox;
+see [Security
 considerations](https://broccolito.github.io/gptr/reference/gptr_security.html)
 or `?gptr_security` in R.
 

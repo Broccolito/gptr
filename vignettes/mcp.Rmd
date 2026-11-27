@@ -235,7 +235,8 @@ the configured default mode, independently of a chat's explicit mode. Calls use 
 session, and an action that needs a new approval is refused in a background callback. Approve a
 specific needed action interactively through your permission settings before retrying. In
 `"manual"` mode a client can only read, because everything else needs your approval; in `"auto"`
-mode it can also create and change objects, while critical actions are still refused.
+mode, the default, it can also create and change objects, while critical actions are still
+refused.
 
 ### Let local agents find the session
 
