@@ -883,7 +883,8 @@ console_code_rows = function(lines, lang, n, width = NULL) {
 #' `server/tool` with its arguments dim; the whole line dim for a read; the agent's blue block for
 #' a sub-agent call. Code that does not fit `width` follows under the name, at most `n` rows, each
 #' cut to `width` (console_code_rows()); `compact` (D-381) keeps such code to one row instead, its
-#' first non-blank line cut before a dim `(+N more lines)`, the row's attribute `compact` TRUE
+#' first non-blank line cut before a dim `(+N more lines)` (left out where it leaves no room after
+#' the name), the row's attribute `compact` TRUE
 #' @noRd
 console_call_line = function(call, width, kind = "act", compact = FALSE, n = 20L) {
   lines = console_escape(console_preview(call$input), FALSE)
@@ -911,6 +912,7 @@ console_call_line = function(call, width, kind = "act", compact = FALSE, n = 20L
   }
   if (compact) {
     more = console_more_lines(shown)
+    if (cli::ansi_nchar(paste0("  ", head, "  ", more), type = "width") >= width) more = ""
     row = paste0(cli::ansi_strtrim(one, width - nchar(more)), if (nzchar(more)) sym$dim(more))
     return(structure(row, compact = TRUE))
   }

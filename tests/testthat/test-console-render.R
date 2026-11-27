@@ -862,6 +862,9 @@ test_that("a call that would expand is one row with compact_calls, other rows as
                            width = 40L)
   expect_identical(wide, one(paste0("  \u258e r  ", strrep("a", 15L), "\u2026  (+1 more lines)")))
   expect_identical(cli::ansi_nchar(wide, type = "width"), 40L)
+  # too narrow for the count after the name, the row keeps the name and drops the count
+  expect_identical(console_tool_line(r, width = 20L), one("  \u258e r  library(stat\u2026"))
+  expect_identical(console_tool_line(r, width = 26L), one("  \u258e r  \u2026  (+29 more lines)"))
   # a call that fits one row, a path, a command and JSON arguments are as before
   expect_identical(console_tool_line(list(name = "r", input = list(code = "x = 1"))),
                    "  \u258e r  x = 1")
