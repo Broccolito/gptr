@@ -110,8 +110,8 @@ was killed. gptr Agent looks for records in, in order:
 1. `GPTR_MCP_DISCOVERY_DIR`, if you set it;
 2. the folder R would use with the agent's environment (`R_USER_CACHE_DIR`, `XDG_CACHE_HOME` or
    the platform default);
-3. the folder R reports for itself, asked once with `Rscript` (which reads `.Renviron` but runs no
-   `.Rprofile`) when no session is found;
+3. the folder R reports for itself, asked once with `Rscript` in your home folder (which reads your
+   own `.Renviron`, never a project's, and runs no `.Rprofile`) when no session is found;
 4. the platform default, because a desktop app started from the Finder or the Start menu does not
    see a shell's variables.
 

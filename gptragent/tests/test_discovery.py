@@ -383,6 +383,21 @@ class ProbeTests(unittest.TestCase):
         self.assertIsNone(probe.error)
 
     @unittest.skipUnless(POSIX, "a shell script stands in for Rscript")
+    def test_a_probe_runs_in_the_home_folder_not_the_project(self):
+        # R reads .Renviron from its working folder, and a project's can load a package
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = os.path.join(tmp, "Rscript")
+            Path(fake).write_text("#!/bin/sh\nprintf 'gptragent-probe\\n1.2.0\\n%s\\n' \"$(pwd -P)\"\n")
+            os.chmod(fake, 0o700)
+            here = os.getcwd()
+            os.chdir(tmp)
+            try:
+                probe = discovery.probe_r({"GPTRAGENT_RSCRIPT": fake, "PATH": "/usr/bin:/bin"})
+            finally:
+                os.chdir(here)
+        self.assertEqual(probe.cache_dir, os.path.realpath(os.path.expanduser("~")))
+
+    @unittest.skipUnless(POSIX, "a shell script stands in for Rscript")
     def test_a_slow_rscript_is_bounded(self):
         with tempfile.TemporaryDirectory() as tmp:
             fake = os.path.join(tmp, "Rscript")

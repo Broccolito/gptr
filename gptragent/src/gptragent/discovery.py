@@ -428,8 +428,8 @@ def probe_r(env: Optional[Mapping[str, str]] = None, timeout: float = 20.0,
             os_name: Optional[str] = None) -> Probe:
     """One bounded Rscript call: is gptr installed, and where does R keep gptr's cache?
 
-    It reads ``.Renviron`` (so a library or cache folder set there counts) but runs no
-    ``.Rprofile`` or site file, so no code of the user's runs.
+    It runs in the home folder, so R reads the user's own ``.Renviron`` (a library or cache
+    folder set there counts) and never a project's, and it runs no ``.Rprofile`` or site file.
     """
     env = dict(os.environ if env is None else env)
     os_name = os.name if os_name is None else os_name
@@ -441,8 +441,9 @@ def probe_r(env: Optional[Mapping[str, str]] = None, timeout: float = 20.0,
     if os_name == "nt":
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        done = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True,
-                              timeout=timeout, text=True, encoding="utf-8", errors="replace", **kwargs)
+        done = subprocess.run(args, env=env, cwd=os.path.expanduser("~"), stdin=subprocess.DEVNULL,
+                              capture_output=True, timeout=timeout, text=True, encoding="utf-8",
+                              errors="replace", **kwargs)
     except subprocess.TimeoutExpired:
         return Probe(rscript=rscript, error=f"Rscript did not answer within {int(timeout)} s")
     except OSError as error:
