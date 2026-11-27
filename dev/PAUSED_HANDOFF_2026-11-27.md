@@ -9,9 +9,10 @@ acting. Nothing here authorizes merging into `main`, a GitHub release or a CRAN 
 | Item | State |
 |---|---|
 | `claude/v1.3.0` | the release candidate: P34, P35, P36, the review ledger `dev/progress/review-1.3.0.md` (R130-01..R130-30) and its fixes, the CI flake fix, and (if section 2 says it landed) the default `auto` mode. CI was all green at 5dfaca5b. |
-| PR #125 | MERGED into `main` (a78ca77e, 2026-11-27 04:13 UTC) on the maintainer's "merge when green", after every check passed on 11214460. |
+| PR #125 | MERGED into `main` (a78ca77e, 2026-11-27 04:13 UTC) on the maintainer's "merge when green", after every check passed on 11214460. `main`'s CI is green on a78ca77e (35 R-CMD-check jobs, Windows-check, gptragent, pkgdown). |
+| PR #128 | cran-comments results, the early-update sentence, auto's writes outside the project, the macOS check's `--no-manual`, and this checkpoint; merging waits for the maintainer's word. |
 | win-builder | R-devel uploads: the 5dfaca5b tarball (sha256 `6331534f…`) at 01:44 UTC and the final adc9a2b0 tarball (sha256 `ce7159ed…`, CRAN-mode check Status OK, 123 s locally) at 03:29 UTC; results go by email to the maintainer. Results: the first 515 s, the final (`O9eY6F7FZVG4`) Status OK, check 516 s, installation 90 s, no NOTE. |
-| Biorouter | the orchestration session `local_784f49b2-8d15-45ee-b259-95798f22449b` waits for the tag, the release URL and the `SHA256SUMS` line of `gptragent.brxt` after a published v1.3.0. |
+| Biorouter | the orchestration session `local_784f49b2-8d15-45ee-b259-95798f22449b` (no longer listed on 2026-11-27; the running "Biorouter campaign orchestration takeover", `local_c020cda1-baf3-4f13-a92e-54a740c29fe4`, is likely its successor: confirm with the maintainer) waits for the tag, the release URL and the `SHA256SUMS` line of `gptragent.brxt` after a published v1.3.0. |
 
 ## 2. The default `auto` mode (maintainer's request of 2026-11-27)
 
@@ -26,13 +27,17 @@ it), and the Biorouter WP-14 harness's S5 serves without a mode to test manual a
 ## 3. Remaining, in order
 
 1. PR #128 (docs: cran-comments results, this checkpoint): merge on the maintainer's word once CI
-   is green; check main's CI on a78ca77e and after #128.
+   is green; `main`'s CI is green on a78ca77e, check it again after #128.
 2. On the maintainer's word only: publish the GitHub release `v1.3.0` from main (not a prerelease;
    the `gptragent` release job attaches `gptragent.brxt`, `gptragent-1.3.0.brxt` and `SHA256SUMS`,
    and Biorouter installs pick it up at their next launch). Then send the Biorouter orchestration
    session (`local_784f49b2-8d15-45ee-b259-95798f22449b`) the tag, the asset URL
    `https://github.com/Broccolito/gptr/releases/download/v1.3.0/gptragent.brxt` and the
-   `SHA256SUMS` line.
+   `SHA256SUMS` line. It is the `gptragent` release job's first run (v1.2.0 has no bundle): watch
+   `gh run list -R Broccolito/gptr --workflow gptragent.yaml --event release` and rerun it if it
+   fails. Draft command and notes (the NEWS 1.3.0 section plus a Source package section for the
+   archive): `gh release create v1.3.0 -R Broccolito/gptr --target <main head sha> --title "gptr
+   1.3.0" --notes-file <notes> --latest`, optionally attaching `gptr_1.3.0.tar.gz`.
 3. On the maintainer's word only: the CRAN submission of the archive recorded in `cran-comments.md`
    (rebuild from main's head if any package file changed since a78ca77e, and rerun win-builder).
 4. Decisions to put to the maintainer: a CRAN 1.1.x patch for S6; their Codex default

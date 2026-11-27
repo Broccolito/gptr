@@ -154,8 +154,8 @@ of `main` at a78ca77e):
   0 warnings, 0 notes, in 123 s; a second run with CRAN's remote incoming checks: OK.
 * win-builder, Windows R-devel (2026-11-17 r90926 ucrt): Status OK, installation 90 s, check
   516 s (R code 284 s, tests 42 s, examples 30 s, PDF manual 24 s).
-* GitHub Actions: every check above passes on the merged head (11214460), including both
-  CRAN-mode jobs within their 480 s and 600 s budgets.
+* GitHub Actions: every check above passes on the release branch's head (11214460) and on `main`
+  after the merge (a78ca77e), including both CRAN-mode jobs within their 480 s and 600 s budgets.
 
 ## Installed size
 

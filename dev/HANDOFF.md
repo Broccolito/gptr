@@ -43,13 +43,20 @@ CRAN submission wait for the maintainer's word.
   in): CRAN-mode check Status OK with no NOTE in 123 s (R code 45 s, installed size 8.3 Mb),
   tarball sha256 `ce7159ed…`, uploaded to win-builder R-devel at 03:29 UTC. CI CRAN-mode lanes at 219b4e22: Ubuntu
   devel 323 s of 480, Windows 290 s of 600; no job above 13 min of 20.
-- Open: L-72 (symlink classified by its target); the auto default's CRAN wording (for the
-  maintainer to approve) and the Biorouter harness's S5, which serves without a mode to test manual
-  asking and now needs `mode = "manual"`; win-builder's check time of the final tarball;
+- Resume (2026-11-27): `main`'s CI is green on a78ca77e (all 35 R-CMD-check jobs, Windows-check,
+  gptragent, pkgdown). A read-only audit (`wf_714613ef-91f`, Sonnet, a skeptic per issue) found no
+  blocker: the archive `ce7159ed…` holds `main`'s package files, PR #128 touches only
+  build-ignored files, and the v1.3.0 publish is the `gptragent` release job's first run, so watch
+  it. `cran-comments.md` now says why 1.3.0 follows 1.1.0 this soon and that auto writes files
+  outside the project without asking (level 3), and names the macOS check's `--no-manual` and its
+  separate incoming-checks run.
+- Open: L-72 (symlink classified by its target); the auto default's CRAN wording (drafted in PR
+  #128, for the maintainer to approve) and the Biorouter harness's S5, which serves without a mode
+  to test manual asking and now needs `mode = "manual"`;
   dev/release/tests/test-interactive-examples.R's two failures, which predate 1.3.0's last changes
   (its `gptr_mcp_serve()` stub lacks `mode` and `advertise`).
 
-Next, on the maintainer's word only: merge PR #125, publish the GitHub release `v1.3.0` (it deploys
+Next, on the maintainer's word only: merge PR #128, publish the GitHub release `v1.3.0` (it deploys
 gptr Agent to every Biorouter install; then send the Biorouter orchestration session the tag, the
 asset URL and the `SHA256SUMS` line), submit to CRAN. Decisions for the maintainer: a CRAN 1.1.x
 patch for the S6 missing-HOME fail-open, and their Codex config default.
