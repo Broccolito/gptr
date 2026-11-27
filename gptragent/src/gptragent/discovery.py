@@ -23,6 +23,7 @@ import shutil
 import socket
 import stat
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Mapping, Optional
 
@@ -428,7 +429,7 @@ def probe_r(env: Optional[Mapping[str, str]] = None, timeout: float = 20.0,
             os_name: Optional[str] = None) -> Probe:
     """One bounded Rscript call: is gptr installed, and where does R keep gptr's cache?
 
-    It runs in the home folder, so R reads the user's own ``.Renviron`` (a library or cache
+    It runs in a new empty folder, so R reads the user's own ``.Renviron`` (a library or cache
     folder set there counts) and never a project's, and it runs no ``.Rprofile`` or site file.
     """
     env = dict(os.environ if env is None else env)
@@ -441,9 +442,10 @@ def probe_r(env: Optional[Mapping[str, str]] = None, timeout: float = 20.0,
     if os_name == "nt":
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        done = subprocess.run(args, env=env, cwd=os.path.expanduser("~"), stdin=subprocess.DEVNULL,
-                              capture_output=True, timeout=timeout, text=True, encoding="utf-8",
-                              errors="replace", **kwargs)
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as empty:
+            done = subprocess.run(args, env=env, cwd=empty, stdin=subprocess.DEVNULL,
+                                  capture_output=True, timeout=timeout, text=True, encoding="utf-8",
+                                  errors="replace", **kwargs)
     except subprocess.TimeoutExpired:
         return Probe(rscript=rscript, error=f"Rscript did not answer within {int(timeout)} s")
     except OSError as error:
