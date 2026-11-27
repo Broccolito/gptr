@@ -1,7 +1,7 @@
 # gptr Agent, the bridge in gptragent/ (D-372, D-374): unit tests on three systems, live tests
 # against this checkout's gptr and CRAN's, the Claude Code and Codex plugins, and on a published
 # gptr release the bundle that Biorouter's updater installs from releases/latest with no prompt.
-# No job is a required check. Every job has a 20-minute limit, and its test and build steps
+# No job is a required check. Every job has a 20-minute limit and its test and build steps have
 # shorter ones.
 on:
   push:
