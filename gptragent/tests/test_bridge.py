@@ -177,8 +177,8 @@ class OneSessionTests(BridgeCase):
         fake = self.fake()
         self.advertise(fake, 105)
         self.bridge().call("r", {"code": "1", "timeout": 5000})
-        self.assertEqual(fake.tool_calls()[0][1]["timeout"], server.MAX_TIMEOUT)
-        self.assertLess(server.MAX_TIMEOUT + server.ANSWER_MARGIN, 300)
+        self.assertEqual(fake.tool_calls()[0][1]["timeout"], server.TIMEOUT)
+        self.assertLess(server.TIMEOUT + server.ANSWER_MARGIN, 300)
 
     def test_bad_arguments_are_refused_before_r(self):
         fake = self.fake()

@@ -38,7 +38,7 @@ class PluginTests(unittest.TestCase):
         for source in (claude["source"], codex["source"]["path"]):
             self.assertEqual((ROOT.parent / source).resolve(), ROOT)
         # Codex ends a tool call after 60 s unless told otherwise; Claude Code waits far longer
-        self.assertGreater(CODEX["mcpServers"]["gptr"]["tool_timeout_sec"], server.MAX_TIMEOUT + server.ANSWER_MARGIN)
+        self.assertGreater(CODEX["mcpServers"]["gptr"]["tool_timeout_sec"], server.TIMEOUT + server.ANSWER_MARGIN)
 
     @unittest.skipIf(shutil.which("uv") is None, "uv is not installed")
     def test_the_server_answers_as_each_host_starts_it(self):

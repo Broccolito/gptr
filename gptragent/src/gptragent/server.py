@@ -29,8 +29,7 @@ from gptragent.client import RETRY_AFTER_REDISCOVERY, CallError, GptrSession
 
 SUPPORTED_PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 DEFAULT_PROTOCOL = "2025-06-18"
-DEFAULT_TIMEOUT = 280.0
-MAX_TIMEOUT = 280.0
+TIMEOUT = 280.0
 # Seconds added to an r call's own timeout while waiting for its answer: gptr's timeout is best
 # effort, and the answer still has to travel. Biorouter and the Codex plugin end a tool call at 300 s.
 ANSWER_MARGIN = 12.0
@@ -71,8 +70,8 @@ SESSION_PROP = {
 }
 CODE_PROPS = {
     "code": {"type": "string", "description": "R code; it may hold several expressions."},
-    "timeout": {"type": "number", "minimum": 1, "maximum": MAX_TIMEOUT,
-                "description": f"Seconds to wait for R, 1 to {int(MAX_TIMEOUT)} (default {int(DEFAULT_TIMEOUT)}). "
+    "timeout": {"type": "number", "minimum": 1, "maximum": TIMEOUT,
+                "description": f"Seconds to wait for R, 1 to {int(TIMEOUT)} (default {int(TIMEOUT)}). "
                                "R may keep running after a timeout."},
     "session": SESSION_PROP,
 }
@@ -426,12 +425,11 @@ class Bridge:
 
     @staticmethod
     def _wait(arguments: dict) -> float:
-        value = arguments.get("timeout")
         try:
-            timeout = float(value) if value is not None else DEFAULT_TIMEOUT
+            timeout = float(arguments.get("timeout", TIMEOUT))
         except (TypeError, ValueError):
-            timeout = DEFAULT_TIMEOUT
-        return min(max(timeout, 1.0), MAX_TIMEOUT)
+            timeout = TIMEOUT
+        return min(max(timeout, 1.0), TIMEOUT)
 
     @staticmethod
     def _pid(value: Any) -> Optional[int]:
@@ -479,7 +477,7 @@ class Bridge:
                 f"inspect runs only code gptr classifies as read-only (level 0); this code is level "
                 f"{level}. Use r for it. Nothing in this call ran.", True)
         # the two calls together stay inside the 300 s tool timeout of Biorouter and the Codex plugin
-        wait = max(1.0, min(wait, MAX_TIMEOUT - (self._clock() - started)))
+        wait = max(1.0, min(wait, TIMEOUT - (self._clock() - started)))
         return self._forward("r", {"code": code, "timeout": wait}, rec.pid, wait + ANSWER_MARGIN)
 
     # ---- the tools ----------------------------------------------------------------------
