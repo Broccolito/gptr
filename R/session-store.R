@@ -490,7 +490,7 @@ rebuild_mode = function(entries) {
     if (identical(e$custom_type, "gptr.mode_change")) m = e$data[["to"]]
     if (rlang::is_string(m) && m %in% session_modes) mode = m
   }
-  mode %||% setting_get("mode", default = "manual")
+  mode %||% setting_get("mode")
 }
 
 #' `idle` when the last message or team settlement (`gptr.container_end`, written after a team's

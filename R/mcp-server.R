@@ -856,8 +856,9 @@ mcp_handle_new = function(st, tok, stop) {
 #' @param port A port, or `NULL` for a free one.
 #' @param stop `TRUE` to stop the server.
 #' @param mode The permission mode of the server's session: `"plan"`, `"manual"`, `"edits"` or
-#'   `"auto"`; `NULL` for the configured default. A running server keeps its mode: another one is
-#'   an error until the server is stopped.
+#'   `"auto"`; `NULL` for the configured default, `"auto"` unless you set another, in which a
+#'   client can create and change objects (`"manual"` lets it only read). A running server keeps
+#'   its mode: another one is an error until the server is stopped.
 #' @param advertise `TRUE` to write the discovery record for local clients, or a label (a string)
 #'   to show them; `FALSE` writes none. Advertising a running server writes its record.
 #' @return A `gptr_mcp_handle` with `$url`, `$port`, `$token_env`, `$config` and `$stop()`;
@@ -897,8 +898,7 @@ gptr_mcp_serve = function(tools = c("inspect", "r", "read", "edit", "write"),
     arg_abort(mode, "mode", paste0("NULL or \"", session_data(running)$mode,
                                    "\", the mode of the running MCP server"))
   }
-  mcp_serve_open(envir, mode %||% setting_get("mode", default = "manual"), unique(tools), port,
-                 advertise)
+  mcp_serve_open(envir, mode %||% setting_get("mode"), unique(tools), port, advertise)
 }
 
 #' Start the server with a dedicated session in `mode` (the configured default, or the chat's

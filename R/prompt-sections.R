@@ -666,7 +666,7 @@ prompt_compose = function(s, opts = list()) {
   d = if (is.null(s)) NULL else session_data(s)
   ctx = prompt_ctx(s)
   model = d$model %||% setting_get("model", session = s) %||% model_default("chat")
-  mode = d$mode %||% setting_get("mode", session = s, default = "manual")
+  mode = d$mode %||% setting_get("mode", session = s)
   human = opts$interactive %||% gptr_can_prompt()
   doc = opts$doc %||% prompt_doc(s)
   root = project_root()

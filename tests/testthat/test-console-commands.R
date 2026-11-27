@@ -247,7 +247,7 @@ test_that("in the console margin command output wraps inside it; listings fit it
   bold = withr::with_options(list(cli.num_colors = 256L), run_command(rs, "/help")$out)
   names = bold[grepl("^ {4}\\S", cli::ansi_strip(bold))]
   expect_true(length(names) > 20L && all(startsWith(names, "    \033[1m")))
-  expect_identical(run_command(rs, "/mode")$out, c("  Mode: manual", ""))
+  expect_identical(run_command(rs, "/mode")$out, c("  Mode: auto", ""))
   expect_match(run_command(rs, "/env")$out[[1L]], "^  alpha: <integer>")
   # a listing is printed at the content width (60 - 4), not wrapped again
   listing = withr::with_options(list(width = 56L, cli.width = 56L),

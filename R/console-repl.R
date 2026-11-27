@@ -60,7 +60,7 @@ repl_eval_env = function(rs) {
 #' @noRd
 repl_mode = function(rs) {
   if (!is.null(rs$session)) return(rs$session$mode)
-  rs$mode %||% setting_get("mode", default = "manual")
+  rs$mode %||% setting_get("mode")
 }
 
 #' The model as a label; a resolved model may be a provider or router spec
@@ -72,11 +72,11 @@ repl_model = function(rs) {
   as.character(m %||% setting_get("model") %||% "the default model")[1L]
 }
 
-#' The prompt: `"peter> "` in manual mode, `"peter[<mode>]> "` otherwise
+#' The prompt: `"peter> "` in auto mode, the default, `"peter[<mode>]> "` otherwise (D-396)
 #' @noRd
 repl_prompt = function(rs) {
   mode = repl_mode(rs)
-  if (identical(mode, "manual")) "peter> " else paste0("peter[", mode, "]> ")
+  if (identical(mode, "auto")) "peter> " else paste0("peter[", mode, "]> ")
 }
 
 #' The persistent stdin connection of `peter(.stdin = TRUE)` (tests mock this function): a fresh

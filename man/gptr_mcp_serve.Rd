@@ -23,8 +23,9 @@ gptr_mcp_serve(
 \item{stop}{\code{TRUE} to stop the server.}
 
 \item{mode}{The permission mode of the server's session: \code{"plan"}, \code{"manual"}, \code{"edits"} or
-\code{"auto"}; \code{NULL} for the configured default. A running server keeps its mode: another one is
-an error until the server is stopped.}
+\code{"auto"}; \code{NULL} for the configured default, \code{"auto"} unless you set another, in which a
+client can create and change objects (\code{"manual"} lets it only read). A running server keeps
+its mode: another one is an error until the server is stopped.}
 
 \item{advertise}{\code{TRUE} to write the discovery record for local clients, or a label (a string)
 to show them; \code{FALSE} writes none. Advertising a running server writes its record.}

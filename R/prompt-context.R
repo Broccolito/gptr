@@ -13,7 +13,7 @@ context_input = function(s, input, placement) {
   opts = input$opts %||% (if (!is.null(call)) call$args$opts) %||% list()
   list(call = call, turn = input$turn %||% 1L, prompt = input$prompt, placement = placement,
        last_hash = NULL, opts = opts,
-       mode = d$mode %||% setting_get("mode", session = s, default = "manual"),
+       mode = d$mode %||% setting_get("mode", session = s),
        human = input$human %||% d$frozen$human %||% gptr_can_prompt(),
        document = prompt_doc(s),
        preview = isTRUE(input$preview))
@@ -462,7 +462,7 @@ context_mode_body = function(mode, human, deny = FALSE) {
 context_provide_mode = function(ctx, budget) {
   inp = ctx$input
   d = if (is.null(ctx$session)) NULL else session_data(ctx$session)
-  mode = inp$mode %||% d$mode %||% "manual"
+  mode = inp$mode %||% d$mode %||% setting_get("mode")
   human = inp$human %||% d$frozen$human %||% gptr_can_prompt()
   deny = identical(gptr_opt("noninteractive_ask"), "deny")
   list(text = context_mode_body(mode, human, deny), attrs = list(name = mode))

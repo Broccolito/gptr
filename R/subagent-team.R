@@ -131,7 +131,7 @@ parallel_check = function(members) {
 #' @noRd
 parallel_team = function(members, caller, cur) {
   first = session_data(members[[1L]])
-  mode = subagent_mode_tighten(cur$mode, setting_get("mode", default = "manual"))
+  mode = subagent_mode_tighten(cur$mode, setting_get("mode"))
   team = session_new(first$model, mode, home = caller, kind = "team", parent = cur$shell)
   td = session_data(team)
   spec = registry_model_spec(first$model, first$id)
@@ -306,7 +306,7 @@ subagent_container = function(call, kind, cur, fallback = NULL) {
   running = if (!is.null(cur)) session_data(cur$shell)$model
   info = subagent_model_info(call$ids$model %||% running %||% setting_get("model") %||% fallback,
                              cur$session)
-  mode = subagent_mode_tighten(cur$mode, call$ids$mode %||% setting_get("mode", default = "manual"))
+  mode = subagent_mode_tighten(cur$mode, call$ids$mode %||% setting_get("mode"))
   s = session_new(info$ref, mode, home = call$envir, kind = kind, parent = cur$shell)
   if (!is.null(info$spec)) {
     registry_add(info$spec, source = "session", rank = 0L, session = session_data(s)$id)

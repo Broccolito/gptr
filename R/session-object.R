@@ -1513,7 +1513,7 @@ replay_seek = function(s, turn, block) {
 replay_session_new = function(header, envir) {
   fork = header$fork
   home = if (!is.null(fork) && home_keep(envir)) overlay_new(envir, fork) else envir
-  session_new(header$model %||% "unknown/unknown", setting_get("mode", default = "manual"),
+  session_new(header$model %||% "unknown/unknown", setting_get("mode"),
               home = home, kind = "replayed",
               opts = list(id = header$session %||% id_new("s", 10L)))
 }

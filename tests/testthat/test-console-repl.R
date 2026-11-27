@@ -313,11 +313,11 @@ test_that("repl_state() takes the console call's identifiers, options and object
   expect_identical(rs$attach, "mtcars")
   expect_identical(rs$budget, list(cost = 1))
   expect_identical(repl_eval_env(rs), e)
-  expect_identical(repl_prompt(rs), "peter[auto]> ")
+  expect_identical(repl_prompt(rs), "peter> ")
   expect_identical(repl_model(rs), "fake/fake-1")
   rs$mode = NULL
   local_gptr_options(mode = "manual")
-  expect_identical(repl_prompt(rs), "peter> ")
+  expect_identical(repl_prompt(rs), "peter[manual]> ")
   expect_error(repl_state(NULL, "not an env"), class = "gptr_error_invalid_argument")
 })
 
@@ -389,7 +389,7 @@ test_that("the banner: dim lines at column 2 with the keys bold, then a blank li
   ws = if (is.null(workspace_dir())) "no .gptr/" else ".gptr/ found"
   expect_identical(rows, c(
     paste0("  ", d(paste0("gptr ", utils::packageVersion("gptr"), " · fake/fake-1 · ",
-                          "manual · ", ws))),
+                          "auto · ", ws))),
     paste0("  ", d("objects: alpha, fuel")),
     paste0("  ", b("/help"), d(" lists commands · "), b("tab"),
            d(" completes after @ ! / · "), b("ctrl-c"), d(" twice leaves")),
@@ -406,9 +406,9 @@ test_that("the banner names the model a CLI's default runs as /model does, askin
   rs = repl_state(NULL, new.env())
   rs$model = "claude-cli/default"
   first = function() utils::capture.output(repl_banner(rs))[[1L]]
-  expect_match(first(), " - claude-cli/default - manual - ", fixed = TRUE)
+  expect_match(first(), " - claude-cli/default - auto - ", fixed = TRUE)
   pcli_cache$models = list(claude = list(default = "claude-opus-5-5"))
-  expect_match(first(), " - claude-cli/default (claude-opus-5-5) - manual - ", fixed = TRUE)
+  expect_match(first(), " - claude-cli/default (claude-opus-5-5) - auto - ", fixed = TRUE)
   expect_null(asked$cli)
 })
 
@@ -1153,7 +1153,7 @@ test_that("a scripted .stdin console session (acceptance 2)", {
   fake = gptr_fake_provider(list("first answer", "second answer"))
   e = new.env(parent = globalenv())
   e$x = matrix(1:6, 2)
-  local_console_stdin(c("hello there", "!dim(x)", "!!x", "/mode auto", '"""', "line one",
+  local_console_stdin(c("hello there", "!dim(x)", "!!x", "/mode edits", '"""', "line one",
                         "line two", '"""', "/exit"))
   n0 = nrow(showConnections())
   res = NULL
@@ -1164,7 +1164,7 @@ test_that("a scripted .stdin console session (acceptance 2)", {
   s = res$value
   expect_s3_class(s, "gptr_session")
   expect_identical(s$turns, 2L)
-  expect_identical(s$mode, "auto")
+  expect_identical(s$mode, "edits")
   expect_identical(nrow(showConnections()), n0)
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
@@ -1457,7 +1457,7 @@ test_that("a failed run says why once, whole, in its status line; the prompt kee
   expect_identical(lengths(gregexpr("max_turns", text, fixed = TRUE)), 1L)
   expect_match(text, "max_turns: the run stopped after 1 turn ", fixed = TRUE)
   expect_true(all(cli::ansi_nchar(out, type = "width") <= 50L))
-  at = match(c("peter[auto]> again", "peter[auto]> after"), out)
+  at = match(c("peter> again", "peter> after"), out)
   expect_identical(out[at - 1L], c("", ""))
 })
 
@@ -1787,7 +1787,7 @@ test_that("a terminal: a run sent to the background shows again while the consol
   ))
   utf8 = l10n_info()[["UTF-8"]]
   person = if (utf8) "\u203a" else ">>"
-  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("\003")
@@ -1795,7 +1795,7 @@ test_that("a terminal: a run sent to the background shows again while the consol
   pty$send("b\r")
   # the row says what holds at the chat prompt, where nothing runs the session
   expect_true(pty$wait("continues it here"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   # in the console's terms, the service's notice one of them: no row ends in the separator, no
   # row is a sentence (visual round 3)
   rows = trimws(term_rows(pty$all), "right")
@@ -1814,7 +1814,7 @@ test_that("a terminal: a run sent to the background shows again while the consol
   expect_true(pty$wait(paste0("\033[48;5;237m", receipt_line("steer", "use base R"))))
   expect_true(pty$wait("use base R END"))
   expect_true(pty$wait("\033[38;5;244mdone"))
-  expect_true(pty$wait("peter[auto]> "))
+  expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   # the steer was never echoed by the terminal, at column 0

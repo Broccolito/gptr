@@ -93,11 +93,12 @@
 #'   [gptr_fake_provider()], or `NULL` for the configured default ([gptr_config()]). A call made by
 #'   the agent's own R code, and a team or fan-out it starts, uses the running session's model
 #'   instead.
-#' @param mode One of `plan`, `manual`, `edits`, `auto`, `yolo`; `NULL` for the configured default.
-#'   The plan a `plan` run proposes goes once, as a `<plan>` block, to the next top-level
-#'   `peter()` call from the same environment, within an hour and in another mode, whatever that
-#'   call asks: a script runs the plan with `peter("Go ahead.", mode = auto)`. Another `peter()`
-#'   call first, or a next call inside a loop or a run, discards it;
+#' @param mode One of `plan`, `manual`, `edits`, `auto`, `yolo`; `NULL` for the configured default,
+#'   `auto` unless [gptr_config()] sets another (see [gptr_security]). The plan a `plan` run
+#'   proposes goes once, as a `<plan>` block, to the next top-level `peter()` call from the same
+#'   environment, within an hour and in another mode, whatever that call asks: a script runs the
+#'   plan with `peter("Go ahead.", mode = auto)`. Another `peter()` call first, or a next call
+#'   inside a loop or a run, discards it;
 #'   `options(gptr.plan_handoff = FALSE)` turns the hand-off off. Interactively a `plan` run then
 #'   asks whether to execute the plan: a mode chosen there is the session's, and its next prompt,
 #'   such as `Go ahead.`, runs the plan.
@@ -726,7 +727,7 @@ gateway_new_session = function(call, cur) {
   nested = !is.null(cur)
   model = call$ids$model %||% (if (nested) session_data(cur$shell)$model)
   ref = gateway_model_ref(model, call$args$opts$thinking, session = cur$session)
-  mode = call$ids$mode %||% setting_get("mode", default = "manual")
+  mode = call$ids$mode %||% setting_get("mode")
   if (nested) mode = run_mode_tighter(mode, cur$mode)
   if (nested) gateway_child_depth(cur)
   parent = if (nested) session_by_id(cur$session) else NULL

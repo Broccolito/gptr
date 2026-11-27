@@ -863,6 +863,7 @@ test_that("an r call through the server is gated: read-only runs, writes wait fo
   skip_without_server()
   e = new.env()
   e$d = mtcars
+  local_gptr_options(mode = "manual")
   h = gptr_mcp_serve(envir = e)
   withr::defer(gptr_mcp_serve(stop = TRUE))
   call = function(code) mcp_test_post(h$url, r_call(code), token = h$token)$json$result
@@ -874,8 +875,8 @@ test_that("an r call through the server is gated: read-only runs, writes wait fo
   expect_match(res$content[[1L]]$text, "Permission denied", fixed = TRUE)
   expect_false(exists("x", envir = e, inherits = FALSE))
   # the dedicated session keeps the mode it started with, like any session (IC-58): a new mode
-  # setting applies once the server is started again
-  local_gptr_options(mode = "auto")
+  # setting, here the default auto (D-396), applies once the server is started again
+  local_gptr_options(mode = NULL)
   expect_true(call("x = 1")$isError)
   gptr_mcp_serve(stop = TRUE)
   h = gptr_mcp_serve(envir = e)
@@ -889,7 +890,7 @@ test_that("the user's token has a dedicated chat session; its usage stays its ow
   x = local_served_session("auto")
   own = gptr_usage(x$session)
   e = new.env()
-  h = gptr_mcp_serve(envir = e)
+  h = gptr_mcp_serve(envir = e, mode = "manual")
   withr::defer(gptr_mcp_serve(stop = TRUE))
   st = the$mcp_server
   s = st$user$session

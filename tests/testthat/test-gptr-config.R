@@ -551,7 +551,7 @@ test_that("gptr's own write does not carry trust over a foreign rewrite of its f
 test_that("settings_get() layers defaults, user file, options and the session", {
   skip_on_cran()
   local_gw()
-  expect_identical(settings_get("mode"), "manual")
+  expect_identical(settings_get("mode"), "auto")
   settings_write("user", list(preset = "readonly"))
   expect_identical(settings_get("preset"), "readonly")
   withr::local_options(gptr.preset = "minimal")
@@ -563,6 +563,7 @@ test_that("settings_get() layers defaults, user file, options and the session", 
 test_that("an untrusted project only tightens (IC-52)", {
   skip_on_cran()
   proj = local_gw()
+  settings_write("user", list(mode = "manual"))
   writeLines(paste0('{"mode": "auto", "preset": "extended", "context": "names", ',
                     '"permissions": {"allow": ["write(**)"], "deny": ["r(fn:unlink)"]}}'),
              file.path(proj, ".gptr", "settings.json"))
@@ -581,9 +582,9 @@ test_that("a trusted project applies every key, but never a project mode yolo", 
              file.path(proj, ".gptr", "settings.json"))
   gptr_trust(proj, TRUE)
   expect_identical(settings_get("preset"), "extended")
-  expect_identical(settings_get("mode"), "manual")
-  settings_write("user", list(mode = "auto"))
   expect_identical(settings_get("mode"), "auto")
+  settings_write("user", list(mode = "manual"))
+  expect_identical(settings_get("mode"), "manual")
   expect_identical(settings_get("permissions")$allow, "write(**)")
 })
 
@@ -612,16 +613,17 @@ test_that("gptr_config(mode = ) in a trusted project applies there; yolo is refu
   skip_on_cran()
   proj = local_gw()
   gptr_trust(proj, TRUE)
-  expect_no_warning(gptr_config(mode = auto))
-  expect_identical(gptr_config()$mode, "auto")
+  expect_no_warning(gptr_config(mode = manual))
+  expect_identical(gptr_config()$mode, "manual")
   expect_true(trust_get(proj))
   cnd = expect_error(gptr_config(mode = yolo), class = "gptr_error_invalid_argument")
   expect_match(conditionMessage(cnd), "gptr_config(mode = yolo, .scope = \"user\")", fixed = TRUE)
-  expect_identical(settings_read("project")$mode, "auto")
+  expect_identical(settings_read("project")$mode, "manual")
+  # untrusted, a project mode only tightens: every mode it may save is tighter than the auto
+  # default, so it applies without a warning (D-396)
   gptr_trust(proj, FALSE)
-  cnd = expect_warning(gptr_config(mode = edits), class = "gptr_warning_untrusted_setting")
-  expect_match(conditionMessage(cnd), "`mode`", fixed = TRUE)
-  expect_identical(gptr_config()$mode, "manual")
+  expect_no_warning(gptr_config(mode = edits))
+  expect_identical(gptr_config()$mode, "edits")
 })
 
 test_that("an invalid user mode does not let a project loosen past the default", {
@@ -1319,7 +1321,9 @@ test_that("gptr_config() without arguments returns the effective settings", {
   local_gw()
   cfg = gptr_config()
   expect_s3_class(cfg, "gptr_config")
-  expect_identical(cfg$mode, "manual")
+  # the default permission mode is auto (D-396)
+  expect_identical(cfg$mode, "auto")
+  expect_identical(unname(attr(cfg, "sources")["mode"]), "default")
 })
 
 test_that("gptr_config() takes bare identifiers and returns the previous values", {
@@ -1330,7 +1334,7 @@ test_that("gptr_config() takes bare identifiers and returns the previous values"
   expect_identical(gptr_config()$mode, "plan")
   expect_identical(settings_read("session")$mode, "plan")
   gptr_config(mode = old$mode)
-  expect_identical(gptr_config()$mode, "manual")
+  expect_identical(gptr_config()$mode, "auto")
 })
 
 test_that("gptr_config() warns when a saved model setting names no known model (D-250)", {

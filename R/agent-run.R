@@ -1880,7 +1880,7 @@ ctx_kernel = function() {
       run = ctx_run(ctx)
       if (!is.null(run)) return(run$mode)
       s = ctx_session(ctx)
-      if (is.null(s)) setting_get("mode", default = "manual") else session_data(s)$mode
+      if (is.null(s)) setting_get("mode") else session_data(s)$mode
     },
     model = function(ctx) {
       s = ctx_session(ctx)

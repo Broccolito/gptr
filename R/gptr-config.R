@@ -41,7 +41,7 @@ settings_core = function() {
     rec("model", NULL, "ident", "Default model reference (null: the first available route)."),
     rec("small_model", NULL, "ident", "Small model (null: the small sibling of model)."),
     rec("system1", NULL, "ident", "System 1 model (null: typesafe/jev-latest when a key exists)."),
-    rec("mode", "manual", "choice", "Permission mode.", choices = session_modes,
+    rec("mode", "auto", "choice", "Permission mode.", choices = session_modes,
         tighten = session_modes),
     rec("preset", "standard", "chr", "Tool and prompt preset."),
     rec("tools", json_obj(), "object", "Tool enable and disable lists and per-model presets."),
@@ -1699,15 +1699,18 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' mode allowed.
 #'
 #' @section Permission modes:
-#' Every tool call passes a permission gate. The default mode is `manual`: actions that the
-#' static classifier labels read-only run without asking; every other action it recognizes,
-#' including a change to a file or an object, asks first with a one-line prompt. The classifier
-#' is advisory, not a security boundary (see below). `edits` also allows file edits inside the
-#' project and still asks before R code that is not known to be read-only; `auto`
-#' asks only for level-4 actions (for example deleting the project directory or a file outside the
-#' project, where a system temporary directory such as `/tmp` counts as outside, moving R's working
-#' directory out of the project, or changing gptr's own configuration) and for reads of registered
-#' secrets; `yolo`, which only you can select (a project setting or model code in another mode
+#' Every tool call passes a permission gate. The default mode is `auto`: the agent runs R code and
+#' changes files and objects without asking, and gptr asks only for level-4 actions (for example
+#' deleting the project directory or a file outside the project, where a system temporary
+#' directory such as `/tmp` counts as outside, moving R's working directory out of the project, or
+#' changing gptr's own configuration) and for reads of registered secrets. The static classifier
+#' that sets these levels is advisory, not a security boundary (see below). In `manual`, actions
+#' that the classifier labels read-only run without asking; every other action it recognizes,
+#' including a change to a file or an object, asks first with a one-line prompt. `edits` also
+#' allows file edits inside the project and still asks before R code that is not known to be
+#' read-only. Choose another default with `gptr_config(mode = "manual", .scope = "user")`, one
+#' call's mode with `peter(mode = )`, and switch in the console with `/mode`. `yolo`, which only
+#' you can select (a project setting or model code in another mode
 #' cannot), also runs gptr's own configuration functions, writes to R startup files such as
 #' `~/.Rprofile` (which can change gptr's options in the next R process) and secret reads without
 #' asking, and still asks before deleting protected files, files outside the project or the
@@ -1847,9 +1850,10 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' delete function handed to `lapply()`, `Map()` or `purrr::walk()` reads its paths as ones the
 #' code computes, level 3, so `auto` runs `lapply("~/notes", unlink)` without a question.
 #'
-#' In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them only in
-#' projects you can restore (version control, backups, [gptr_rewind()] for recent turns), and run
-#' untrusted prompts or untrusted projects in a disposable container or virtual machine.
+#' In `auto`, the default, and in `yolo` a model can delete or overwrite files and objects without
+#' asking. Use them in projects you can restore (version control, backups, [gptr_rewind()] for
+#' recent turns), choose `manual` elsewhere, and run untrusted prompts or untrusted projects in a
+#' disposable container or virtual machine.
 #'
 #' @section Sub-agents, workers and child processes:
 #' Inline sub-agents run in your session and see its objects. The worker backend runs a
@@ -1985,8 +1989,9 @@ NULL
 #'   [peter()] console); the R version, platform and available packages; and the project
 #'   instruction files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`).
 #' - Tool results: the printed output of R code the model ran, the parts of files it read, and
-#'   images of plots it made. In `manual` mode every action that is not known to be read-only
-#'   needs your approval before its result can be sent.
+#'   images of plots it made. In `auto`, the default, only the actions it asks about need your
+#'   approval before their results can be sent; in `manual` every action that is not known to be
+#'   read-only does.
 #' - With [gptr_coach()], each coach gets the task, the current coaching and, for each run, its
 #'   answer, a summary of its value and objects, the text of the files it wrote and its
 #'   transcript, up to 50,000 characters each; the judge gets the task and what each final run

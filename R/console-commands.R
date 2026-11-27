@@ -305,7 +305,7 @@ cmd_mode = function(args, ctx) {
   rs = console_repl_find()
   s = ctx$session
   if (!nzchar(args)) {
-    return(paste0("Mode: ", if (!is.null(rs)) repl_mode(rs) else s$mode %||% "manual"))
+    return(paste0("Mode: ", if (!is.null(rs)) repl_mode(rs) else s$mode %||% setting_get("mode")))
   }
   if (!args %in% session_modes) {
     return(paste0("Unknown mode '", args, "': use plan, manual, edits, auto or yolo."))
@@ -490,7 +490,7 @@ cmd_status = function(args, ctx) {
     return(c("session   (none yet: the first prompt starts one)",
              paste0("model     ",
                     cmd_model_label(if (!is.null(rs)) repl_model(rs) else "the default model")),
-             paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual"),
+             paste0("mode      ", repl_mode(rs)),
              paste0("document  ", cmd_doc_site(NULL)$path %||% "(none)")))
   }
   d = session_data(s)

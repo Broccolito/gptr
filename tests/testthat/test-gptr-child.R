@@ -484,10 +484,10 @@ test_that("a run's result holds its first user message on its own", {
   skip_on_cran()
   local_project()
   prompt = "Clean the survey.\n\n## Rules\n- keep the column names"
-  fake = gptr_fake_provider(list("## assistant\ndone"), name = "taskfake")
+  fake = gptr_fake_provider(list("## assistant\nall rows cleaned"), name = "taskfake")
   res = child_local(list(id = "t", role = "run", prompt = prompt, model = fake))$res
   expect_match(res$first_user, prompt, fixed = TRUE)
-  expect_false(grepl("done", res$first_user, fixed = TRUE))
+  expect_false(grepl("all rows cleaned", res$first_user, fixed = TRUE))
   expect_false(startsWith(res$first_user, "## user"))
 })
 

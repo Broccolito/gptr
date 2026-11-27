@@ -23,11 +23,12 @@ the catalog lacks is written in, see \code{\link[=gptr_models]{gptr_models()}}),
 the agent's own R code, and a team or fan-out it starts, uses the running session's model
 instead.}
 
-\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.
-The plan a \code{plan} run proposes goes once, as a \verb{<plan>} block, to the next top-level
-\code{peter()} call from the same environment, within an hour and in another mode, whatever that
-call asks: a script runs the plan with \code{peter("Go ahead.", mode = auto)}. Another \code{peter()}
-call first, or a next call inside a loop or a run, discards it;
+\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default,
+\code{auto} unless \code{\link[=gptr_config]{gptr_config()}} sets another (see \link{gptr_security}). The plan a \code{plan} run
+proposes goes once, as a \verb{<plan>} block, to the next top-level \code{peter()} call from the same
+environment, within an hour and in another mode, whatever that call asks: a script runs the
+plan with \code{peter("Go ahead.", mode = auto)}. Another \code{peter()} call first, or a next call
+inside a loop or a run, discards it;
 \code{options(gptr.plan_handoff = FALSE)} turns the hand-off off. Interactively a \code{plan} run then
 asks whether to execute the plan: a mode chosen there is the session's, and its next prompt,
 such as \verb{Go ahead.}, runs the plan.}

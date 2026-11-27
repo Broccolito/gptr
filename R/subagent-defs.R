@@ -189,7 +189,7 @@ agent_collect = function(mode = NULL, roots = agent_roots()) {
     reg = character(), trusted = logical(), stringsAsFactors = FALSE
   )
   if (length(rows)) df = do.call(rbind, rows)
-  mode = as.character(mode %||% setting_get("mode", default = "manual"))[1L]
+  mode = as.character(mode %||% setting_get("mode"))[1L]
   omit = !gptr_can_prompt() && mode %in% c("auto", "edits", "yolo")
   other = df$name[df$trusted]
   if (any(!df$trusted)) other = c(other, res_foreign_names("agent"))

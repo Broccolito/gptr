@@ -26,15 +26,18 @@ mode allowed.
 
 \section{Permission modes}{
 
-Every tool call passes a permission gate. The default mode is \code{manual}: actions that the
-static classifier labels read-only run without asking; every other action it recognizes,
-including a change to a file or an object, asks first with a one-line prompt. The classifier
-is advisory, not a security boundary (see below). \code{edits} also allows file edits inside the
-project and still asks before R code that is not known to be read-only; \code{auto}
-asks only for level-4 actions (for example deleting the project directory or a file outside the
-project, where a system temporary directory such as \verb{/tmp} counts as outside, moving R's working
-directory out of the project, or changing gptr's own configuration) and for reads of registered
-secrets; \code{yolo}, which only you can select (a project setting or model code in another mode
+Every tool call passes a permission gate. The default mode is \code{auto}: the agent runs R code and
+changes files and objects without asking, and gptr asks only for level-4 actions (for example
+deleting the project directory or a file outside the project, where a system temporary
+directory such as \verb{/tmp} counts as outside, moving R's working directory out of the project, or
+changing gptr's own configuration) and for reads of registered secrets. The static classifier
+that sets these levels is advisory, not a security boundary (see below). In \code{manual}, actions
+that the classifier labels read-only run without asking; every other action it recognizes,
+including a change to a file or an object, asks first with a one-line prompt. \code{edits} also
+allows file edits inside the project and still asks before R code that is not known to be
+read-only. Choose another default with \code{gptr_config(mode = "manual", .scope = "user")}, one
+call's mode with \code{peter(mode = )}, and switch in the console with \verb{/mode}. \code{yolo}, which only
+you can select (a project setting or model code in another mode
 cannot), also runs gptr's own configuration functions, writes to R startup files such as
 \verb{~/.Rprofile} (which can change gptr's options in the next R process) and secret reads without
 asking, and still asks before deleting protected files, files outside the project or the
@@ -176,9 +179,10 @@ assigns, holds it as a string; a \code{wd} the code computes is read as the proj
 delete function handed to \code{lapply()}, \code{Map()} or \code{purrr::walk()} reads its paths as ones the
 code computes, level 3, so \code{auto} runs \code{lapply("~/notes", unlink)} without a question.
 
-In \code{auto} and \code{yolo} mode a model can delete or overwrite files and objects. Use them only in
-projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run
-untrusted prompts or untrusted projects in a disposable container or virtual machine.
+In \code{auto}, the default, and in \code{yolo} a model can delete or overwrite files and objects without
+asking. Use them in projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for
+recent turns), choose \code{manual} elsewhere, and run untrusted prompts or untrusted projects in a
+disposable container or virtual machine.
 }
 
 \section{Sub-agents, workers and child processes}{

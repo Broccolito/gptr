@@ -27,8 +27,9 @@ expressions you ran since the previous prompt (with the output of \code{!code} l
 \code{\link[=peter]{peter()}} console); the R version, platform and available packages; and the project
 instruction files (\code{AGENTS.md}, \code{CLAUDE.md}, \code{.gptr/vignette.Rmd}).
 \item Tool results: the printed output of R code the model ran, the parts of files it read, and
-images of plots it made. In \code{manual} mode every action that is not known to be read-only
-needs your approval before its result can be sent.
+images of plots it made. In \code{auto}, the default, only the actions it asks about need your
+approval before their results can be sent; in \code{manual} every action that is not known to be
+read-only does.
 \item With \code{\link[=gptr_coach]{gptr_coach()}}, each coach gets the task, the current coaching and, for each run, its
 answer, a summary of its value and objects, the text of the files it wrote and its
 transcript, up to 50,000 characters each; the judge gets the task and what each final run
