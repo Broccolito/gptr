@@ -180,6 +180,18 @@ class OneSessionTests(BridgeCase):
         self.assertEqual(fake.tool_calls()[0][1]["timeout"], server.TIMEOUT)
         self.assertLess(server.TIMEOUT + server.ANSWER_MARGIN, 300)
 
+    def test_an_r_call_reads_the_records_once(self):
+        fake = self.fake()
+        self.advertise(fake, 107)
+        scans = []
+
+        def scan(dirs):
+            scans.append(dirs)
+            return alive_scan(dirs)
+
+        self.assertFalse(self.bridge(scan=scan).call("r", {"code": "1"})["isError"])
+        self.assertEqual(len(scans), 1)
+
     def test_bad_arguments_are_refused_before_r(self):
         fake = self.fake()
         self.advertise(fake, 106)
@@ -421,7 +433,7 @@ class RetryTests(BridgeCase):
         def scan(dirs):
             scans.append(1)
             live = alive_scan(dirs)
-            if len(scans) <= 2:
+            if len(scans) == 1:
                 return discovery.Scan(records=[stale], notes=[], dirs=live.dirs)
             return live
 

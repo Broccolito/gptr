@@ -357,6 +357,8 @@ class Bridge:
 
     def _forward(self, tool: str, arguments: dict, pid: Optional[int], wait: float) -> tuple:
         rec, live = self.resolve(pid)
+        if not rec.serves(tool):
+            return rec, live, text_result(f"The R session (pid {rec.pid}) does not serve {tool}.", True)
         lock = self._call_lock(rec.pid)
         started = self._clock()
         if not lock.acquire(timeout=wait):
@@ -566,10 +568,7 @@ class Bridge:
             return text_result(f"{error}.", True)
         wait = self._wait(arguments)
         try:
-            rec, _ = self.resolve(pid)
-            if not rec.serves("r"):
-                return text_result(f"The R session (pid {rec.pid}) does not serve r.", True)
-            rec, live, answer = self._forward("r", {"code": code, "timeout": wait}, rec.pid, wait + ANSWER_MARGIN)
+            rec, live, answer = self._forward("r", {"code": code, "timeout": wait}, pid, wait + ANSWER_MARGIN)
         except Unavailable as why:
             return text_result(str(why), True)
         return self._labelled(answer, rec, live)
