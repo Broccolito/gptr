@@ -39,6 +39,8 @@ new there too.
   with the session and `gptr_last() |> peter()` continues after it. While `gptr_doc()` binds a
   document, the call is also written into it as a direct R line, so `gptr_export()` turns the
   agent's work into a runnable R script; an `inspect` call is left out unless it changed objects.
+* When no session is advertised, gptr Agent asks R where gptr keeps its cache from a new empty
+  folder, so a project's `.Renviron` cannot load a package or add a search folder.
 
 ## Console
 
@@ -63,8 +65,8 @@ new there too.
   `gptr_models(provider = "codex", refresh = TRUE)`, so a CLI update changes what gptr lists
   without a gptr release. `/model` on a CLI route lists those models.
 * `claude-cli/default` and `codex/default` run the model your CLI starts with (Claude Code's
-  settings `model`, Codex's `config.toml` `model`), named in `/model`, `/status`, the status line
-  and `gptr_models()`, as in `claude-cli/default (claude-opus-5-5)`. When the CLI cannot say,
+  settings `model`, Codex's `config.toml` `model`), named in `/model`, `/status`, the status line,
+  the `peter()` banner and `gptr_models()`, as in `claude-cli/default (claude-opus-5-5)`. When the CLI cannot say,
   gptr passes no model flag and the CLI chooses; `codex/default` no longer falls back to a fixed
   model.
 * Any model id can be written in, on every route and provider: `peter(model = "codex/<id>")`,
@@ -77,8 +79,9 @@ new there too.
   its `[model_providers.<id>]` table, `openai_base_url` and `model_catalog_json` go to each run as
   `-c` overrides, so a Codex set up for Ollama, LM Studio or a router works in gptr. Only the
   table's documented settings without credentials or commands go on the command line; tokens,
-  `http_headers`, `query_params` and `auth` commands stay off. Give a key through `env_key` or
-  `env_http_headers`: gptr passes the environment variables they name to Codex.
+  `http_headers`, `query_params` and `auth` commands stay off, as does a URL holding a user name
+  or password. Give a key through `env_key` or `env_http_headers`: gptr passes the environment
+  variables they name to Codex.
 * The offline catalog is models.dev (MIT) of 2026-11-26 with gptr's reviewed corrections; it
   lists Gemini 4, Fable 5.2, Haiku 5.5, GPT-6.2 and Grok 4.x. gptr matches no model name: an alias
   is the newest active model of its models.dev family (`gpt` is `gpt-6.2-sol`, `gemini` is
@@ -93,7 +96,8 @@ new there too.
   and no longer send a temperature. Thinking `off` turns thinking off where a model allows it
   (Claude Haiku 5.5, Opus 5, Sonnet 5 and 4.x). Gemini 4 gets `xhigh`; Grok 4.5 and later,
   DeepSeek, Ollama and vLLM get their reasoning effort by name; OpenRouter respects mandatory
-  reasoning and budget models and sends `cache_control` only where cache writes are billed.
+  reasoning and budget models and sends `cache_control` only where cache writes are billed. A
+  token-budget thinking level stays within the model's `thinking_budget` range.
 * A `bedrock-converse` model gets Anthropic's thinking fields when its record says
   `owner = "anthropic"`, not when its id contains `anthropic.claude`. The
   `supports_reasoning_effort` compatibility switch is removed; a value in your settings is
