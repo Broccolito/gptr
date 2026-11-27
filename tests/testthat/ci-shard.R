@@ -44,6 +44,7 @@ cli-claude,40,48,74
 cli-claude-result,8,4,7
 cli-codex,51,63,92
 cli-common,10,9,10
+cli-discovery,2,2,2
 compaction-acceptance,15,21,38
 compaction-wait,9,5,12
 console-abort-stream,3,3,4
@@ -109,6 +110,7 @@ http-sse,4,4,5
 injection-e2e,66,42,65
 json-partial,1,2,4
 lint-rules,11,10,14
+mcp-advertise,5,4,4
 mcp-client,38,37,53
 mcp-config,6,4,10
 mcp-namespace,9,10,23
@@ -179,6 +181,7 @@ tool-walk,1,1,3
 utils-encoding,3,2,5
 utils-hash,18,6,8
 utils-paths,2,3,8
+utils-size,24,17,27
 utils-text,2,1,3
 windows-security,1,1,13
 zzz,1,1,2
