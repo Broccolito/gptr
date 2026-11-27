@@ -4,7 +4,9 @@
 #
 #   source("<gptr Agent's folder>/r/attach.R")
 #   biorouter_gptr_attach(mode = "auto")     # the agent may change objects (gptr still refuses critical code)
-#   biorouter_gptr_attach()                  # the agent can only read
+#   biorouter_gptr_attach(mode = "manual")   # the agent can only read
+#   biorouter_gptr_attach()                  # the mode your gptr setting names: by default auto
+#                                            # from gptr 1.3.0, manual before
 #   biorouter_gptr_detach()                  # stop serving
 #
 # With gptr 1.2.0 or later this is the same as gptr::gptr_mcp_serve(advertise = TRUE, mode = ...),

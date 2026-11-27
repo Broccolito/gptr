@@ -342,8 +342,8 @@ class Bridge:
             lines += [f"  {helper}",
                       f"gptr {probe.gptr} is installed; gptr 1.2.0 and later need only "
                       f"{native}."]
-        lines.append('Without mode = "auto" you can only read the session; with it, you may change '
-                     "objects, and gptr still refuses critical code.")
+        lines.append('With mode = "auto" you may change objects, and gptr still refuses critical code; '
+                     'with mode = "manual" you can only read the session.')
         lines.append("Relay that line to the user once and wait; do not start R yourself, because a "
                      "new R process does not have the user's objects.")
         lines.append("Folders searched for gptr's discovery records: " + "; ".join(found.dirs))
