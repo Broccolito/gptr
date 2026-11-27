@@ -25,13 +25,19 @@ it), and the Biorouter WP-14 harness's S5 serves without a mode to test manual a
 
 ## 3. Remaining, in order
 
-1. Land section 2, CI green on the pushed head.
-2. Release gates: fill `cran-comments.md`'s "R CMD check results" placeholder (tarball sha256,
-   macOS and win-builder results and times, installed size 8.3 Mb, every CI check green) and its
-   reverse-dependency date; rebuild the tarball from the final head and rerun the CRAN-mode check;
-   re-upload to win-builder if the package changed after 5dfaca5b.
-3. Ask the maintainer: merge #125; publish release v1.3.0 (deploys gptr Agent to Biorouter); CRAN
-   submission; a CRAN 1.1.x patch for S6; their Codex default `gpt-6.1-sol`.
+1. PR #128 (docs: cran-comments results, this checkpoint): merge on the maintainer's word once CI
+   is green; check main's CI on a78ca77e and after #128.
+2. On the maintainer's word only: publish the GitHub release `v1.3.0` from main (not a prerelease;
+   the `gptragent` release job attaches `gptragent.brxt`, `gptragent-1.3.0.brxt` and `SHA256SUMS`,
+   and Biorouter installs pick it up at their next launch). Then send the Biorouter orchestration
+   session (`local_784f49b2-8d15-45ee-b259-95798f22449b`) the tag, the asset URL
+   `https://github.com/Broccolito/gptr/releases/download/v1.3.0/gptragent.brxt` and the
+   `SHA256SUMS` line.
+3. On the maintainer's word only: the CRAN submission of the archive recorded in `cran-comments.md`
+   (rebuild from main's head if any package file changed since a78ca77e, and rerun win-builder).
+4. Decisions to put to the maintainer: a CRAN 1.1.x patch for S6; their Codex default
+   `gpt-6.1-sol`; the auto default's consent wording for CRAN; the Biorouter harness's S5 needs
+   `mode = "manual"`.
 
 ## 4. Environment
 
@@ -44,12 +50,13 @@ creating `chk` first). Another session's vitest suite kept the load near 250 on 
 ## 5. Resume prompt
 
 ```text
-Resume gptr's 1.3.0 release. Work in a git worktree on branch claude/v1.3.0 (git fetch origin).
-Read dev/PAUSED_HANDOFF_2026-11-27.md first, then dev/PROGRESS.md's current checkpoint, CLAUDE.md
-and dev/plan/00-conventions.md. Refresh: git log --oneline -5 origin/claude/v1.3.0, gh pr checks
-125 -R Broccolito/gptr, mcp__ccd_session_mgmt__get_usage. Bind PR #125 (mcp__ccd_pr__bind_pr) and
-turn Auto-fix on (mcp__ccd_pr__set_monitor). Then follow the handoff's section 3. Stop and ask the
-maintainer before merging into main, publishing the v1.3.0 release or submitting to CRAN. Hold the
-token cap: from about 93% of the weekly window start no new workflow; from about 95% wind down,
-push and write the next handoff.
+Resume gptr's 1.3.0 release. gptr 1.3.0 is merged into main (PR #125, a78ca77e). Work in a git
+worktree off origin/main. Read dev/PAUSED_HANDOFF_2026-11-27.md first (on main once PR #128
+merges, else on branch claude/v1.3.0-cran-results), then dev/PROGRESS.md's current checkpoint,
+CLAUDE.md and dev/plan/00-conventions.md. Refresh: git log --oneline -3 origin/main, gh pr list -R
+Broccolito/gptr, gh pr checks 128 -R Broccolito/gptr, mcp__ccd_session_mgmt__get_usage. Then
+follow the handoff's section 3. Stop and ask the maintainer before merging PR #128, publishing
+the v1.3.0 GitHub release (it deploys gptr Agent to every Biorouter install) or submitting to
+CRAN. Hold the token cap: from about 93% of the weekly window start no new workflow; from about
+95% wind down, push and write the next handoff.
 ```
