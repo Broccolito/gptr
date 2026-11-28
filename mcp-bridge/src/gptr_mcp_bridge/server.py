@@ -1,7 +1,7 @@
 """gptr's MCP bridge, an MCP server (stdio, newline-delimited JSON-RPC, standard library only).
 
 Biorouter starts it as ``uv run --directory <install dir> gptragent``, the Claude Code and Codex
-plugins as ``python -m gptragent`` in src/ through ``uv run --no-project``. It finds the R sessions
+plugins as ``python -m gptr_mcp_bridge`` in src/ through ``uv run --no-project``. It finds the R sessions
 gptr advertises on this computer and forwards three tools to the one the chat works in:
 
 * ``sessions``: list the advertised sessions, attach to one and see what is in it;
@@ -23,9 +23,9 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from gptragent import __version__
-from gptragent import discovery
-from gptragent.client import RETRY_AFTER_REDISCOVERY, CallError, GptrSession
+from gptr_mcp_bridge import __version__
+from gptr_mcp_bridge import discovery
+from gptr_mcp_bridge.client import RETRY_AFTER_REDISCOVERY, CallError, GptrSession
 
 SUPPORTED_PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 DEFAULT_PROTOCOL = "2025-06-18"
@@ -159,7 +159,7 @@ OVERVIEW_PLAN_CODE = OVERVIEW_CODE.replace(
 OVERVIEW_ERROR_LINE = ('if (exists(".Traceback")) cat("Last error message:", geterrmessage(), "\\n(The traceback '
                        'shows the failing calls, not the name the result was being assigned to.)\\n")')
 
-RISK_MARK = "GPTRAGENT-RISK"
+RISK_MARK = "GPTR-MCP-BRIDGE-RISK"
 SEVERAL_ASK = ("Stop and ask the user which session to work in, naming each by its label and folder, "
                "unless the user already named one. Do not choose by folder, label or what the objects "
                "look like, and do not look for data files instead. Then call sessions with attach and "
@@ -640,7 +640,7 @@ class Server:
                 with self._track:
                     if request in self._pending:
                         self._cancelled.add(request)
-                sys.stderr.write("gptragent: a call was cancelled; R keeps running it until it "
+                sys.stderr.write("gptr-mcp-bridge: a call was cancelled; R keeps running it until it "
                                  "finishes (Esc or Ctrl-C in R stops it).\n")
             return
         if method == "initialize":
@@ -648,7 +648,7 @@ class Server:
             version = asked if asked in SUPPORTED_PROTOCOLS else DEFAULT_PROTOCOL
             self._reply(mid, {"protocolVersion": version,
                               "capabilities": {"tools": {"listChanged": False}},
-                              "serverInfo": {"name": "gptragent", "title": "gptr Agent", "version": __version__},
+                              "serverInfo": {"name": "gptragent", "title": "gptr's MCP bridge", "version": __version__},
                               "instructions": INSTRUCTIONS})
         elif method == "ping":
             self._reply(mid, {})
@@ -688,7 +688,7 @@ class Server:
 
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):
-        print(f"gptragent {__version__}")
+        print(f"gptr-mcp-bridge {__version__}")
         return 0
     return Server().serve()
 

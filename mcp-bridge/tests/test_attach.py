@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from gptragent.server import GPTR_FLOOR, GPTR_PLAN_FLOOR, r_string  # noqa: E402
+from gptr_mcp_bridge.server import GPTR_FLOOR, GPTR_PLAN_FLOOR, r_string  # noqa: E402
 
 R = shutil.which("R")
 

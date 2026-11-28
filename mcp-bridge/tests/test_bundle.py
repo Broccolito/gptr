@@ -54,8 +54,8 @@ class BundleTests(unittest.TestCase):
                 self.assertEqual((info.create_system, info.external_attr >> 16, info.date_time),
                                  (3, 0o100644, build_brxt.ZIP_TIME), info.filename)
         expected = {"manifest.json", "README.md", "LICENSE", "NOTICE", "pyproject.toml", "uv.lock", "r/attach.R",
-                    "skills/gptr-live-r/SKILL.md", "src/gptragent/__init__.py", "src/gptragent/__main__.py",
-                    "src/gptragent/server.py", "src/gptragent/discovery.py", "src/gptragent/client.py"}
+                    "skills/gptr-live-r/SKILL.md", "src/gptr_mcp_bridge/__init__.py", "src/gptr_mcp_bridge/__main__.py",
+                    "src/gptr_mcp_bridge/server.py", "src/gptr_mcp_bridge/discovery.py", "src/gptr_mcp_bridge/client.py"}
         self.assertEqual(names, expected)
         self.assertIn(f"{digest}  gptragent.brxt", (out / "SHA256SUMS").read_text())
 
@@ -75,6 +75,24 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(shipped["tools_count"], 3)
         self.assertEqual(shipped["env_vars"], [])
 
+    def test_a_bundle_under_biorouters_new_name_renames_only_the_extension(self):
+        with tempfile.TemporaryDirectory() as work:
+            root = build_brxt.renamed(ROOT, "gptr", Path(work))
+            manifest, files = build_brxt.check(root)
+            bundle, _, _ = build_brxt.build(root, Path(self.tmp.name) / "dist", files, manifest)
+        with zipfile.ZipFile(bundle) as archive:
+            shipped = json.loads(archive.read("manifest.json"))
+            project = tomllib.loads(archive.read("pyproject.toml").decode())["project"]
+            skill = archive.read("skills/gptr-live-r/SKILL.md").decode()
+            server = archive.read("src/gptr_mcp_bridge/server.py").decode()
+        self.assertEqual(bundle.name, "gptr.brxt")
+        self.assertIn('"serverInfo": {"name": "gptr", ', server)
+        self.assertEqual((shipped["name"], shipped["entry_point"], shipped["display_name"]), ("gptr", "gptr", "gptr Agent"))
+        self.assertEqual((project["name"], project["scripts"]), ("gptr", {"gptr": "gptr_mcp_bridge.server:main"}))
+        self.assertIn("extension: gptr\n", skill)
+        self.assertIn("`gptr__r`", skill)
+        self.assertNotIn("gptragent", skill)
+
     def test_versions_agree(self):
         manifest = json.loads((ROOT / "manifest.json").read_text())
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
@@ -91,7 +109,7 @@ class BundleTests(unittest.TestCase):
     def test_one_gptr_floor_everywhere_it_is_stated(self):
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from gptragent import server
+            from gptr_mcp_bridge import server
         finally:
             sys.path.remove(str(ROOT / "src"))
         floor, plan_floor = server.GPTR_FLOOR, server.GPTR_PLAN_FLOOR
@@ -125,7 +143,7 @@ class BundleTests(unittest.TestCase):
 
     def test_disagreeing_versions_are_refused(self):
         work = self.copy()
-        init = work / "src/gptragent/__init__.py"
+        init = work / "src/gptr_mcp_bridge/__init__.py"
         init.write_text(init.read_text().replace('__version__ = "', '__version__ = "9'))
         with self.assertRaises(build_brxt.Refused) as caught:
             build_brxt.check(work)

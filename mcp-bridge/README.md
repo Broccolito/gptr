@@ -117,7 +117,8 @@ was killed. The bridge looks for records in, in order:
    see a shell's variables.
 
 Codex passes a plugin only a few environment variables; the plugin forwards
-`GPTR_MCP_DISCOVERY_DIR`, `GPTRAGENT_RSCRIPT`, `R_USER_CACHE_DIR` and `XDG_CACHE_HOME`.
+`GPTR_MCP_DISCOVERY_DIR`, `GPTR_RSCRIPT` (or its earlier name `GPTRAGENT_RSCRIPT`), `R_USER_CACHE_DIR`
+and `XDG_CACHE_HOME`.
 
 It uses a record only when it is your own regular file with no group or other permissions (on
 macOS and Linux) and names a loopback address. It talks to gptr with Python's `http.client`, never
@@ -150,14 +151,17 @@ The folder is part of the gptr repository and outside the R package. From `mcp-b
 uv sync --locked
 uv run python -m unittest discover -s tests -v
 uv run python scripts/build_brxt.py          # dist/gptragent.brxt and SHA256SUMS
-GPTRAGENT_LIVE=1 uv run python -m unittest tests.test_live -v   # needs R with gptr (macOS, Linux)
+uv run python scripts/build_brxt.py --name gptr --out dist-gptr   # the bundle under Biorouter's coming id
+GPTR_MCP_BRIDGE_LIVE=1 uv run python -m unittest tests.test_live -v   # needs R with gptr (macOS, Linux)
 ```
 
 `scripts/version.py X.Y.Z` moves the version everywhere it is written, and the build refuses a
 version other than gptr's `DESCRIPTION`. Publishing gptr's GitHub release `vX.Y.Z` runs the
 `mcp-bridge` workflow, which attaches `gptragent.brxt`, `gptragent-X.Y.Z.brxt` and `SHA256SUMS`. A
 gptr release is a deploy: Biorouter installs the bundle of gptr's newest release at its next
-launch.
+launch. Biorouter's extension id moves from `gptragent` to `gptr` (tools `gptr__r`): once a
+Biorouter release migrates its installs and the repository variable `GPTR_NAMED_BUNDLE` is true,
+the workflow also puts `gptr.brxt` on its own prerelease `bridge-vX.Y.Z`, never latest.
 
 ## Licence
 

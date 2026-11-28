@@ -379,7 +379,7 @@ def scan(dirs: Iterable[str], os_name: Optional[str] = None, kill: Callable = os
 
 # ---- asking R about itself -------------------------------------------------------------------
 
-PROBE_MARK = "gptragent-probe"
+PROBE_MARK = "gptr-mcp-bridge-probe"
 PROBE_CODE = (
     'cat("' + PROBE_MARK + '", '
     'tryCatch(format(utils::packageVersion("gptr")), error = function(e) ""), '
@@ -390,7 +390,8 @@ PROBE_CODE = (
 def find_rscript(env: Optional[Mapping[str, str]] = None, os_name: Optional[str] = None) -> Optional[str]:
     env = os.environ if env is None else env
     os_name = os.name if os_name is None else os_name
-    override = env.get("GPTRAGENT_RSCRIPT", "").strip()
+    # GPTRAGENT_RSCRIPT is the earlier name
+    override = (env.get("GPTR_RSCRIPT") or env.get("GPTRAGENT_RSCRIPT") or "").strip()
     if override:
         return override if os.path.isfile(override) else None
     exe = "Rscript.exe" if os_name == "nt" else "Rscript"

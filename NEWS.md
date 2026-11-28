@@ -11,6 +11,10 @@ Biorouter); the R package's code is unchanged from 1.3.0.
 * The bridge moved from the repository folder `gptragent/` to `mcp-bridge/`, and its texts no
   longer call it gptr Agent outside Biorouter. Biorouter's extension keeps its name, gptr Agent,
   and its id `gptragent`; Claude Code and Codex keep the plugin `gptr`.
+* The bridge's Python package is `gptr_mcp_bridge`, and `GPTR_RSCRIPT` names the Rscript it asks
+  when no session is found (`GPTRAGENT_RSCRIPT` still works). Its build can make the bundle under
+  Biorouter's coming id `gptr` (tools `gptr__r`), which gptr's releases carry only once Biorouter
+  migrates its installs.
 
 # gptr 1.3.0
 
