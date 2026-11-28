@@ -55,7 +55,11 @@ before acting. Nothing here authorizes a release, a CRAN resubmission or a gptr-
      clientInfo and User-Agent names; `GPTRAGENT_RSCRIPT` renamed with the old name still read;
      the test variables; `build_brxt.py`, `version.py`, the tests, and the release job's assets
      and `--previous` identity check per the agreed design; a decision D-398. The Claude Code and
-     Codex plugin stays `gptr`.
+     Codex plugin stays `gptr`. Note that `build_brxt.py` ties the names together: it takes the
+     package from the manifest name (`src/<name>`) and requires pyproject `project.name` and
+     uv.lock's own package to equal it, so building both bundles from one tree during G2 needs
+     that rule changed (for example the package from pyproject's hatch `packages`) or the legacy
+     bundle built from a rewritten copy. Design it with the Biorouter session's B3 in hand.
 5. Open, not blocking: L-72 (symlink classified by its target); `dev/release/tests/
    test-interactive-examples.R`'s two failures (its `gptr_mcp_serve()` stub lacks `mode` and
    `advertise`); the maintainer's Codex default `gpt-6.1-sol`, which their ChatGPT login rejects.
