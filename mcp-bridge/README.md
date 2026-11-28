@@ -33,7 +33,7 @@ With gptr 1.0 or 1.1, use the helper in this folder (the `sessions` tool prints 
 your computer):
 
 ```r
-source("<gptr Agent's folder>/r/attach.R"); biorouter_gptr_attach(mode = "auto")
+source("<the bridge's folder>/r/attach.R"); biorouter_gptr_attach(mode = "auto")
 ```
 
 With `mode = "auto"`, the default from gptr 1.3.0, the agent may change objects, and gptr still

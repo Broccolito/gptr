@@ -179,7 +179,7 @@ class RecordTests(unittest.TestCase):
         path = self.record()
         self.rewrite(path, lambda d: d.update(format=2))
         self.assertRejected(path, "record format 2, newer than the format 1")
-        self.assertRejected(path, "gptr Agent is behind, so update gptr Agent")
+        self.assertRejected(path, "the bridge is behind, so update the gptr plugin or gptr Agent")
 
     def test_an_older_format_says_gptr_is_behind(self):
         path = self.record()
@@ -188,7 +188,7 @@ class RecordTests(unittest.TestCase):
         self.assertRejected(path, 'gptr is behind, so update gptr in R (install.packages("gptr"))')
         with self.assertRaises(discovery.RecordRejected) as caught:
             discovery.read_record(path)
-        self.assertNotIn("update gptr Agent", str(caught.exception))
+        self.assertNotIn("update the gptr plugin", str(caught.exception))
 
     def test_a_format_that_is_no_number_names_neither_side(self):
         for value in ("1", True, None, [1, 2], 1.5):
@@ -342,7 +342,7 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(found.records, [])
         self.assertEqual(len(found.notes), 1)
         self.assertIn("serve-11.json was skipped", found.notes[0])
-        self.assertIn("update gptr Agent", found.notes[0])
+        self.assertIn("update the gptr plugin or gptr Agent", found.notes[0])
 
     def test_a_missing_folder_is_not_an_error(self):
         found = discovery.scan([os.path.join(self.tmp.name, "none")])

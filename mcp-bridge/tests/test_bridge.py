@@ -85,7 +85,7 @@ class NoSessionTests(BridgeCase):
         probe = discovery.Probe(rscript="/usr/bin/Rscript", gptr="0.7.0")
         text = text_of(self.bridge(probe=probe).call("sessions", {}))
         self.assertIn('install.packages("gptr")', text)
-        self.assertIn(f"gptr 0.7.0 is installed; gptr Agent needs gptr {server.GPTR_FLOOR} or later", text)
+        self.assertIn(f"gptr 0.7.0 is installed; gptr's MCP bridge needs gptr {server.GPTR_FLOOR} or later", text)
         self.assertNotIn("biorouter_gptr_attach", text)
 
     def test_a_record_in_a_newer_format_says_to_update_gptr_agent(self):
@@ -93,7 +93,7 @@ class NoSessionTests(BridgeCase):
         self.advertise(fake, 90, format=2)
         text = text_of(self.bridge().call("sessions", {}))
         self.assertIn("serve-90.json was skipped: it is in record format 2", text)
-        self.assertIn("update gptr Agent", text)
+        self.assertIn("update the gptr plugin or gptr Agent", text)
         self.assertEqual(fake.tool_calls(), [])
 
     def test_the_agent_is_told_the_same_on_every_host(self):

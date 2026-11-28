@@ -132,7 +132,7 @@ def check(root: Path, previous: Optional[Path] = None) -> tuple:
     if manifest["entry_point"] not in (project.get("scripts") or {}):
         raise Refused("the manifest entry_point is not a pyproject script.")
     if project.get("dependencies"):
-        raise Refused("gptr Agent uses Python's standard library only; pyproject lists dependencies.")
+        raise Refused("The bridge uses Python's standard library only; pyproject lists dependencies.")
     lock = tomllib.loads((root / "uv.lock").read_text(encoding="utf-8"))
     packages = lock.get("package") or []
     own = [p for p in packages if p.get("name") == name]

@@ -191,13 +191,13 @@ def format_refusal(value) -> Optional[str]:
     if number == RECORD_FORMAT:
         return None
     if number is None:
-        return (f"its format {value!r} is not a record format number (this gptr Agent reads "
+        return (f"its format {value!r} is not a record format number (this bridge reads "
                 f"format {RECORD_FORMAT})")
     if number > RECORD_FORMAT:
         return (f"it is in record format {number}, newer than the format {RECORD_FORMAT} this "
-                "gptr Agent reads: gptr Agent is behind, so update gptr Agent")
-    return (f"it is in record format {number}, older than the format {RECORD_FORMAT} this gptr "
-            "Agent reads: gptr is behind, so update gptr in R (install.packages(\"gptr\")), "
+                "bridge reads: the bridge is behind, so update the gptr plugin or gptr Agent")
+    return (f"it is in record format {number}, older than the format {RECORD_FORMAT} this "
+            "bridge reads: gptr is behind, so update gptr in R (install.packages(\"gptr\")), "
             "restart R and serve the session again")
 
 
