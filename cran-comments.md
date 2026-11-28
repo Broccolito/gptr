@@ -88,8 +88,8 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   address and bearer token, R's process id, the working folder and versions, readable only by the
   user on Unix (mode 0600 in a folder of mode 0700). gptr removes it when the server stops, when
   gptr is unloaded and when R exits; model code that reads it meets the secret guard.
-* The repository's `gptragent/` folder (gptr Agent, a Python bridge for Biorouter, which is also
-  the 'Claude Code' and 'Codex' plugin) and the plugin marketplaces `.claude-plugin/` and
+* The repository's `mcp-bridge/` folder (gptr's MCP bridge, in Python: the 'Claude Code' and
+  'Codex' plugin gptr, and gptr Agent in Biorouter) and the plugin marketplaces `.claude-plugin/` and
   `.agents/` are outside the package: `.Rbuildignore` excludes them, so the tarball holds no
   Python code and installing gptr installs no plugin.
 * The help page `?gptr_security` documents what the package does on the user's behalf and where

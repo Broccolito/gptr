@@ -1,14 +1,14 @@
-# gptr Agent
+# gptr's MCP bridge
 
 Work inside an R session you already have open, from Biorouter, Claude Code or Codex. The agent
 inspects, analyses, plots and fixes the objects in memory through
 [gptr](https://github.com/Broccolito/gptr), without reloading data. Every call passes gptr's
 permission settings, and gptr records each call that runs, so the work can be replayed as a
-script.
+script. In Claude Code and Codex it is the plugin `gptr`; in Biorouter, the extension gptr Agent.
 
 Current version: **1.3.1**
 
-gptr Agent is released with gptr: its version is gptr's, and its bundle is attached to gptr's
+The bridge is released with gptr: its version is gptr's, and its bundle is attached to gptr's
 GitHub releases.
 
 ## What you need
@@ -33,7 +33,7 @@ With gptr 1.0 or 1.1, use the helper in this folder (the `sessions` tool prints 
 your computer):
 
 ```r
-source("<gptr Agent's folder>/r/attach.R"); biorouter_gptr_attach(mode = "auto")
+source("<the bridge's folder>/r/attach.R"); biorouter_gptr_attach(mode = "auto")
 ```
 
 With `mode = "auto"`, the default from gptr 1.3.0, the agent may change objects, and gptr still
@@ -106,7 +106,7 @@ tools::R_user_dir("gptr", "cache")/mcp-serve/serve-<pid>.json
 
 The folder is private to you (0700), the file is 0600, and gptr removes the record when the server
 stops, when gptr is unloaded and when R exits; the next gptr load removes the record of an R that
-was killed. gptr Agent looks for records in, in order:
+was killed. The bridge looks for records in, in order:
 
 1. `GPTR_MCP_DISCOVERY_DIR`, if you set it;
 2. the folder R would use with the agent's environment (`R_USER_CACHE_DIR`, `XDG_CACHE_HOME` or
@@ -144,7 +144,7 @@ and Codex send what the tools return to the model you chose.
 
 ## Develop
 
-The folder is part of the gptr repository and outside the R package. From `gptragent/`:
+The folder is part of the gptr repository and outside the R package. From `mcp-bridge/`:
 
 ```bash
 uv sync --locked
@@ -155,7 +155,7 @@ GPTRAGENT_LIVE=1 uv run python -m unittest tests.test_live -v   # needs R with g
 
 `scripts/version.py X.Y.Z` moves the version everywhere it is written, and the build refuses a
 version other than gptr's `DESCRIPTION`. Publishing gptr's GitHub release `vX.Y.Z` runs the
-`gptragent` workflow, which attaches `gptragent.brxt`, `gptragent-X.Y.Z.brxt` and `SHA256SUMS`. A
+`mcp-bridge` workflow, which attaches `gptragent.brxt`, `gptragent-X.Y.Z.brxt` and `SHA256SUMS`. A
 gptr release is a deploy: Biorouter installs the bundle of gptr's newest release at its next
 launch.
 

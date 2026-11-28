@@ -11349,3 +11349,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   where it tests refusals, and a restart without a mode setting serves in auto; NS-1 and the
   console tests that answer approvals open in `manual` (their pty waits read `peter[manual]> `),
   the others read `peter> ` in auto.
+
+## D-397 - 1.3.1 gptr's MCP bridge lives in mcp-bridge/ (2026-11-27)
+- Rule: the folder that D-372 and D-374 called `gptragent/` is `mcp-bridge/` (the maintainer's
+  request): it is the gptr plugin for Claude Code and Codex as well as Biorouter's extension, so
+  it is not named after Biorouter's id. `plugin/`, `extension/` and `bridge/` were not used: gptr
+  already has plugins (P17), extensions (`ext-*`) and language bridges (P22). Texts that mean every
+  host say "gptr's MCP bridge"; "gptr Agent" names the Biorouter extension only.
+- Rule: the Biorouter contract keeps `gptragent` until Biorouter ships its rename (manifest name
+  and entry point, console script, assets `gptragent.brxt` and `gptragent-X.Y.Z.brxt`, tools
+  `gptragent__*`, skill `extension: gptragent`), as do the Python package `src/gptragent`,
+  `GPTRAGENT_RSCRIPT`, `biorouter_gptr_attach()` and the CI artifact names. The planned rename to
+  `gptr` (tools `gptr__r`, display name still "gptr Agent") waits for a Biorouter release that
+  lists `gptr` as private and migrates installs: Biorouter's updater installs the first `.brxt`
+  of releases/latest, so a gptr-named bundle on an older Biorouter would classify as public.
+- Contract-visible: none in the R package; the vignette and cran-comments name the folder.
+- Tests: the bundle built after the move is byte-identical to the one from dac45704 (aef1a872).

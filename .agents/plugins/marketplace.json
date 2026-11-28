@@ -3,7 +3,7 @@
   "plugins": [
     {
       "name": "gptr",
-      "source": {"source": "local", "path": "./gptragent"},
+      "source": {"source": "local", "path": "./mcp-bridge"},
       "policy": {"installation": "AVAILABLE", "authentication": "ON_USE"},
       "category": "Coding"
     }

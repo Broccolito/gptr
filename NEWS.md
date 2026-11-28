@@ -1,12 +1,16 @@
 # gptr 1.3.1
 
-A gptr Agent release; the R package's code is unchanged from 1.3.0.
+A release of gptr's MCP bridge (the gptr plugin in Claude Code and Codex, gptr Agent in
+Biorouter); the R package's code is unchanged from 1.3.0.
 
-* gptr Agent's setup text, `r/attach.R` and the README no longer say that a session served
+* The bridge's setup text, `r/attach.R` and the README no longer say that a session served
   without a mode is read-only: from gptr 1.3.0 such a session follows your gptr setting, `auto`
   by default. Serve with `mode = "manual"` to let the agent only read.
-* gptr Agent's NOTICE and LICENSE credit the Baranzini Lab: made by the Baranzini Lab (Wanjun Gu,
+* The bridge's NOTICE and LICENSE credit the Baranzini Lab: made by the Baranzini Lab (Wanjun Gu,
   UCSF), copyright Baranzini Lab, University of California, San Francisco.
+* The bridge moved from the repository folder `gptragent/` to `mcp-bridge/`, and its texts no
+  longer call it gptr Agent outside Biorouter. Biorouter's extension keeps its name, gptr Agent,
+  and its id `gptragent`; Claude Code and Codex keep the plugin `gptr`.
 
 # gptr 1.3.0
 

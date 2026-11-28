@@ -1,6 +1,6 @@
 ---
 name: gptr-live-r
-description: Work inside the user's live R session through gptr Agent. Use when the user refers to objects, data, models or errors in an R session they have open (RStudio, Positron, R.app or R in a terminal), or asks to analyse, plot, debug or fix something there without reloading.
+description: Work inside the user's live R session through gptr's MCP bridge. Use when the user refers to objects, data, models or errors in an R session they have open (RStudio, Positron, R.app or R in a terminal), or asks to analyse, plot, debug or fix something there without reloading.
 license: Apache-2.0
 metadata:
   extension: gptragent
@@ -8,7 +8,7 @@ metadata:
 
 # Working in a live R session
 
-The user's data is already loaded in an R session they have open. The gptr Agent tools reach
+The user's data is already loaded in an R session they have open. The gptr tools reach
 that session through gptr: `sessions`, `inspect` and `r` (hosts prefix these names, as in
 `gptragent__r`). Objects persist between calls and belong to the user.
 

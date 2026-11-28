@@ -130,7 +130,7 @@ class AttachTests(unittest.TestCase):
 
     def test_gptr_below_the_floor_is_refused_before_anything_starts(self):
         result, running, record, out = self.run_attach('biorouter_gptr_attach(mode = "auto")', version="0.9.0")
-        self.assertEqual(result, f"REFUSED: gptr Agent needs gptr {GPTR_FLOOR} or later, and this R has gptr "
+        self.assertEqual(result, f"REFUSED: gptr's MCP bridge needs gptr {GPTR_FLOOR} or later, and this R has gptr "
                                  "0.9.0. Update it with install.packages(\"gptr\"), restart R, then run this again.")
         self.assertFalse(running)
         self.assertIsNone(record)
@@ -159,7 +159,7 @@ class AttachTests(unittest.TestCase):
         result, running, record, out = self.run_attach(
             'biorouter_gptr_attach(mode = "auto")',
             setup="invisible(gptr::gptr_mcp_serve()); rm(list = ls(gptr:::the$mcp_tokens), envir = gptr:::the$mcp_tokens)")
-        self.assertTrue(result.startswith("REFUSED: gptr Agent cannot read which mode and tools"), result)
+        self.assertTrue(result.startswith("REFUSED: gptr's MCP bridge cannot read which mode and tools"), result)
         self.assertTrue(running)
         self.assertIsNone(record)
 

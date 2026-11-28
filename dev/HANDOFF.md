@@ -1,4 +1,4 @@
-## Current checkpoint — gptr 1.3.0 released, CRAN submission pending, 2026-11-27
+## Current checkpoint — gptr 1.3.1 prepared (unpublished), 1.3.0 at CRAN, 2026-11-27
 
 gptr 1.1.0 is on CRAN; 1.2.0 (0280d953) was not submitted, so 1.3.0 carries it. On the
 maintainer's word ("merge when green"), PR #125 merged `claude/v1.3.0` into `main` (a78ca77e,
@@ -11,6 +11,14 @@ merged (f35c2cab), the GitHub release `v1.3.0` was published at f35c2cab (05:01 
 Biorouter session got the tag, the asset URL and the `SHA256SUMS` line, and the archive was
 uploaded to CRAN (about 05:18 UTC), waiting for the maintainer's email confirmation. No separate
 1.1.x patch: 1.3.0 carries the S6 fix.
+
+gptr 1.3.1, a release of gptr's MCP bridge (the R code is 1.3.0's), merged into `main` as dac45704
+(PR #130: the mode wording and the Baranzini Lab credit). On the maintainer's go-ahead, PR #131
+moves the bridge from `gptragent/` to `mcp-bridge/` and names it gptr's MCP bridge, keeping
+"gptr Agent" for the Biorouter extension (D-397). The v1.3.1 release waits for the maintainer's
+word. The rename of Biorouter's id `gptragent` to `gptr` is agreed with the Biorouter session:
+gptr builds no gptr-named bundle for release until a Biorouter release carries the migration
+([paused handoff](PAUSED_HANDOFF_2026-11-27.md), section 2).
 
 - P34 bridge ([plan](plan/P34-agent-plugins.md), [log](progress/P34.md), D-372..D-374), P35 compact
   calls ([plan](plan/P35-compact-calls.md), [log](progress/P35.md), D-380..D-383), P36 models

@@ -104,7 +104,7 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(re.findall(r"gptr package \((\d+\.\d+) or later\)", manifest["description"]), [short])
         self.assertEqual(re.findall(r'gptr_floor = "([^"]+)"', attach), [floor])
         self.assertEqual(re.findall(r'plan_floor = "([^"]+)"', attach), [plan_floor])
-        self.assertIn(f"gptr Agent needs gptr {short} or later; plan mode needs gptr {plan_floor} or later.",
+        self.assertIn(f"gptr's MCP bridge needs gptr {short} or later; plan mode needs gptr {plan_floor} or later.",
                       " ".join(line.lstrip("# ") for line in attach.splitlines()))
 
     def test_a_wrong_tool_count_is_refused(self):

@@ -1,4 +1,4 @@
-"""The gptr Agent MCP server (stdio, newline-delimited JSON-RPC, standard library only).
+"""gptr's MCP bridge, an MCP server (stdio, newline-delimited JSON-RPC, standard library only).
 
 Biorouter starts it as ``uv run --directory <install dir> gptragent``, the Claude Code and Codex
 plugins as ``python -m gptragent`` in src/ through ``uv run --no-project``. It finds the R sessions
@@ -321,7 +321,7 @@ class Bridge:
         if script is not None:
             helper = f'source({r_string(script.as_posix())}); biorouter_gptr_attach(mode = "auto")'
         else:
-            helper = 'source("<gptr Agent\'s folder>/r/attach.R"); biorouter_gptr_attach(mode = "auto")'
+            helper = 'source("<the bridge\'s folder>/r/attach.R"); biorouter_gptr_attach(mode = "auto")'
         lines = ["No R session is serving gptr on this computer, so nothing can run in R yet.",
                  "Ask the user to run this at the R prompt of the session they want to work in "
                  "(an interactive R: RStudio, Positron, R.app or R in a terminal), then call "
@@ -335,7 +335,7 @@ class Bridge:
                       "gptr is not installed in the R library this computer's Rscript uses."]
         elif installed < discovery.version_tuple(GPTR_FLOOR):
             lines += ['  install.packages("gptr")  # then restart R', f"  {native}",
-                      f"gptr {probe.gptr} is installed; gptr Agent needs gptr {GPTR_FLOOR} or later."]
+                      f"gptr {probe.gptr} is installed; gptr's MCP bridge needs gptr {GPTR_FLOOR} or later."]
         elif installed >= (1, 2, 0):
             lines += [f"  {native}", f"gptr {probe.gptr} is installed."]
         else:
@@ -350,7 +350,7 @@ class Bridge:
         for note in found.notes[:8]:
             lines.append("Note: " + note)
         lines.append("If the user keeps R's cache elsewhere, they can set GPTR_MCP_DISCOVERY_DIR "
-                     "for gptr Agent to that cache's R/gptr/mcp-serve folder.")
+                     "for the bridge to that cache's R/gptr/mcp-serve folder.")
         return "\n".join(lines)
 
     # ---- calls into R -------------------------------------------------------------------
@@ -619,7 +619,7 @@ class Server:
             else:
                 self._reply(mid, result)
         except Exception as error:  # a tool never takes the server down
-            self._reply(mid, text_result(f"gptr Agent failed: {type(error).__name__}: {error}", True))
+            self._reply(mid, text_result(f"gptr's MCP bridge failed: {type(error).__name__}: {error}", True))
 
     def handle(self, message: Any) -> None:
         if isinstance(message, list):

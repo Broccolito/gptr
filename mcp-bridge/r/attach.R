@@ -1,8 +1,8 @@
-# gptr Agent: let an agent (Biorouter, Claude Code, Codex) reach this R session through gptr.
+# gptr's MCP bridge: let an agent (Biorouter, Claude Code, Codex) reach this R session through gptr.
 #
 # Run it at the R prompt of the session you want the agent to work in:
 #
-#   source("<gptr Agent's folder>/r/attach.R")
+#   source("<the bridge's folder>/r/attach.R")
 #   biorouter_gptr_attach(mode = "auto")     # the agent may change objects (gptr still refuses critical code)
 #   biorouter_gptr_attach(mode = "manual")   # the agent can only read
 #   biorouter_gptr_attach()                  # the mode your gptr setting names: by default auto
@@ -14,9 +14,9 @@
 # starts gptr_mcp_serve() and writes the discovery record itself: a private file (0600) in
 # tools::R_user_dir("gptr", "cache")/mcp-serve/, removed when you detach or R exits. A server
 # that already runs keeps its mode, tools and workspace, and the record says what it really
-# serves. gptr Agent needs gptr 1.0 or later; plan mode needs gptr 1.2.0 or later.
+# serves. gptr's MCP bridge needs gptr 1.0 or later; plan mode needs gptr 1.2.0 or later.
 #
-# Part of gptr Agent (https://github.com/Broccolito/gptr, folder gptragent/), Apache-2.0.
+# Part of gptr's MCP bridge (https://github.com/Broccolito/gptr, folder mcp-bridge/), Apache-2.0.
 
 local({
   # where source() evaluates this file (the global environment, unless sourced locally)
@@ -34,7 +34,7 @@ local({
   `%||%` = function(a, b) if (is.null(a)) b else a
 
   modes = c("plan", "manual", "edits", "auto")
-  # the oldest gptr gptr Agent works with, and the oldest whose plan mode it can use: before
+  # the oldest gptr the bridge works with, and the oldest whose plan mode it can use: before
   # 1.2.0 inspect checks each call with gptr_risk() through r, which plan mode refuses
   gptr_floor = "1.0.0"
   plan_floor = "1.2.0"
@@ -92,7 +92,7 @@ local({
 
   plan_refusal = function(version) {
     paste0("Plan mode needs gptr ", plan_floor, " or later, and this R has gptr ", version,
-           ": before ", plan_floor, ", plan mode refuses the read-only check gptr Agent runs ",
+           ": before ", plan_floor, ", plan mode refuses the read-only check the bridge runs ",
            "first. Serve in another mode (mode = \"manual\" lets the agent only read), or update ",
            "gptr with install.packages(\"gptr\") and restart R.")
   }
@@ -110,7 +110,7 @@ local({
     }
     version = utils::packageVersion("gptr")
     if (version < gptr_floor) {
-      stop("gptr Agent needs gptr ", gptr_floor, " or later, and this R has gptr ", version,
+      stop("gptr's MCP bridge needs gptr ", gptr_floor, " or later, and this R has gptr ", version,
            ". Update it with install.packages(\"gptr\"), restart R, then run this again.",
            call. = FALSE)
     }
@@ -123,7 +123,7 @@ local({
     }
     if (serves_advertise()) {
       h = gptr::gptr_mcp_serve(envir = envir, mode = mode, advertise = label %||% TRUE)
-      message("gptr Agent can now reach this R session through gptr ", version,
+      message("An agent can now reach this R session through gptr ", version,
               ". It answers while R waits at its prompt. Stop with biorouter_gptr_detach().")
       return(invisible(h))
     }
@@ -144,7 +144,7 @@ local({
       stop(why, call. = FALSE)
     }
     if (is.null(served$mode)) {
-      refuse(paste0("gptr Agent cannot read which mode and tools the server of gptr ", version,
+      refuse(paste0("gptr's MCP bridge cannot read which mode and tools the server of gptr ", version,
                     " serves, so it wrote no discovery record. Update gptr with ",
                     "install.packages(\"gptr\"), restart R, then run this again."))
     }
@@ -158,7 +158,7 @@ local({
       refuse("This version of gptr does not expose its server's token; update gptr.")
     }
     kept = if (!started) {
-      paste0(" A gptr server was already running in this R session, so gptr Agent reaches it as it ",
+      paste0(" A gptr server was already running in this R session, so the agent reaches it as it ",
              "is: its mode, its tools (", paste(served$tools, collapse = ", "), ") and the ",
              "workspace it started with.",
              if (!is.null(mode) && !identical(mode, served$mode)) {
@@ -192,7 +192,7 @@ local({
       stop("The server runs, but its discovery record could not be written in ", dir, ".", call. = FALSE)
     }
     state$path = path
-    message("gptr Agent can now reach this R session through gptr ", rec$gptr_version, " (mode ",
+    message("An agent can now reach this R session through gptr ", rec$gptr_version, " (mode ",
             rec$mode, "). It answers while R waits at its prompt. Stop with biorouter_gptr_detach().",
             kept %||% "")
     invisible(h)
@@ -201,7 +201,7 @@ local({
   detach_fn = function() {
     if (requireNamespace("gptr", quietly = TRUE)) gptr::gptr_mcp_serve(stop = TRUE)
     withdraw()
-    message("This R session is no longer served to gptr Agent.")
+    message("This R session is no longer served to agents.")
     invisible(NULL)
   }
 
