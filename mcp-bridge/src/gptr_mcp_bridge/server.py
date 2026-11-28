@@ -648,7 +648,7 @@ class Server:
             version = asked if asked in SUPPORTED_PROTOCOLS else DEFAULT_PROTOCOL
             self._reply(mid, {"protocolVersion": version,
                               "capabilities": {"tools": {"listChanged": False}},
-                              "serverInfo": {"name": "gptr", "title": "gptr's MCP bridge", "version": __version__},
+                              "serverInfo": {"name": "gptragent", "title": "gptr's MCP bridge", "version": __version__},
                               "instructions": INSTRUCTIONS})
         elif method == "ping":
             self._reply(mid, {})

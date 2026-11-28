@@ -84,7 +84,9 @@ class BundleTests(unittest.TestCase):
             shipped = json.loads(archive.read("manifest.json"))
             project = tomllib.loads(archive.read("pyproject.toml").decode())["project"]
             skill = archive.read("skills/gptr-live-r/SKILL.md").decode()
+            server = archive.read("src/gptr_mcp_bridge/server.py").decode()
         self.assertEqual(bundle.name, "gptr.brxt")
+        self.assertIn('"serverInfo": {"name": "gptr", ', server)
         self.assertEqual((shipped["name"], shipped["entry_point"], shipped["display_name"]), ("gptr", "gptr", "gptr Agent"))
         self.assertEqual((project["name"], project["scripts"]), ("gptr", {"gptr": "gptr_mcp_bridge.server:main"}))
         self.assertIn("extension: gptr\n", skill)

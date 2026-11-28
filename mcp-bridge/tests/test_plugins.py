@@ -69,7 +69,7 @@ class PluginTests(unittest.TestCase):
                                       input="".join(json.dumps(r) + "\n" for r in requests).encode(), capture_output=True)
                 self.assertEqual(done.returncode, 0, done.stderr.decode(errors="replace"))
                 answers = {m["id"]: m["result"] for m in map(json.loads, done.stdout.decode().splitlines())}
-                self.assertEqual(answers[1]["serverInfo"]["name"], "gptr")
+                self.assertEqual(answers[1]["serverInfo"]["name"], "gptragent")
                 self.assertEqual(sorted(t["name"] for t in answers[2]["tools"]), ["inspect", "r", "sessions"])
 
 

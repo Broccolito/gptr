@@ -11379,11 +11379,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `gptragent`.
 - Rule: the names that were not Biorouter's move now: the Python package is `gptr_mcp_bridge`
   (`build_brxt.py` and `version.py` read it from pyproject's hatch target, no longer from the
-  manifest name), serverInfo `gptr` / "gptr's MCP bridge", clientInfo and User-Agent
+  manifest name), serverInfo title "gptr's MCP bridge" (its name is the bundle's extension name,
+  which Biorouter uses for an extension its config leaves unnamed), clientInfo and User-Agent
   `gptr-mcp-bridge`, the probe and risk marks, `GPTR_RSCRIPT` (reading `GPTRAGENT_RSCRIPT` too) and
   the test variables `GPTR_MCP_BRIDGE_LIVE*`. Kept: `biorouter_gptr_attach()` (user-called, the
   gptr 1.0/1.1 path) and the CI artifact names.
 - Contract-visible: none in the R package.
-- Tests: test_bundle (the renamed bundle), test_plugins (serverInfo `gptr`), test_discovery
+- Tests: test_bundle (the renamed bundle and its serverInfo name), test_discovery
   (`GPTR_RSCRIPT`); both bundles install with `uv sync` and answer `initialize` through their entry
   points.

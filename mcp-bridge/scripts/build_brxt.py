@@ -224,6 +224,9 @@ def renamed(root: Path, name: str, work: Path) -> Path:
     shutil.copytree(root, copy, ignore=shutil.ignore_patterns(".git", ".venv", "dist*", "previous", "__pycache__"))
     swaps = {"manifest.json": [f'"name": "{old}"', f'"entry_point": "{old}"'],
              "pyproject.toml": [f'name = "{old}"', f"\n{old} = "], "uv.lock": [f'name = "{old}"']}
+    # Biorouter names an extension that its config leaves unnamed after serverInfo.name
+    for server in (copy / "src").glob("*/server.py"):
+        swaps[server.relative_to(copy).as_posix()] = [f'"serverInfo": {{"name": "{old}"']
     for skill in (copy / "skills").glob("*/SKILL.md"):
         swaps[skill.relative_to(copy).as_posix()] = [f"extension: {old}"]
     for relative, texts in swaps.items():
