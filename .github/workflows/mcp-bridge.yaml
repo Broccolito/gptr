@@ -1,4 +1,4 @@
-# gptr Agent, the bridge in gptragent/ (D-372, D-374): unit tests on three systems, live tests
+# gptr's MCP bridge in mcp-bridge/ (D-372, D-374, D-397): unit tests on three systems, live tests
 # against this checkout's gptr and CRAN's, the Claude Code and Codex plugins, and on a published
 # gptr release the bundle that Biorouter's updater installs from releases/latest with no prompt.
 # No job is a required check. Every job has a 20-minute limit and its test and build steps have
@@ -7,19 +7,19 @@ on:
   push:
     branches: [main]
     paths: &paths
-      - 'gptragent/**'
+      - 'mcp-bridge/**'
       - '.claude-plugin/**'
       - '.agents/**'
       - 'DESCRIPTION'
       - 'R/mcp-server.R'
-      - '.github/workflows/gptragent.yaml'
+      - '.github/workflows/mcp-bridge.yaml'
   pull_request:
     paths: *paths
   workflow_dispatch:
   release:
     types: [published]
 
-name: gptragent
+name: mcp-bridge
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,7 +30,7 @@ permissions: read-all
 jobs:
   unit:
     runs-on: ${{ matrix.os }}
-    name: gptragent unit (${{ matrix.os }})
+    name: mcp-bridge unit (${{ matrix.os }})
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -38,7 +38,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     defaults:
       run:
-        working-directory: gptragent
+        working-directory: mcp-bridge
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
@@ -57,12 +57,12 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: gptragent-bundle-${{ matrix.os }}
-          path: gptragent/dist/
+          path: mcp-bridge/dist/
           if-no-files-found: error
 
   live:
     runs-on: ${{ matrix.os }}
-    name: gptragent live (${{ matrix.os }})
+    name: mcp-bridge live (${{ matrix.os }})
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -70,7 +70,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     defaults:
       run:
-        working-directory: gptragent
+        working-directory: mcp-bridge
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/system-libraries
@@ -101,11 +101,11 @@ jobs:
 
   live-cran:
     runs-on: ubuntu-latest
-    name: gptragent live (ubuntu-latest, CRAN gptr)
+    name: mcp-bridge live (ubuntu-latest, CRAN gptr)
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: gptragent
+        working-directory: mcp-bridge
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/system-libraries
@@ -132,7 +132,7 @@ jobs:
   # Neither CLI needs an account for these commands
   plugins:
     runs-on: ubuntu-latest
-    name: gptragent plugins
+    name: mcp-bridge plugins
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -143,7 +143,7 @@ jobs:
         timeout-minutes: 5
         run: |
           npx -y @anthropic-ai/claude-code@2.1.323 plugin validate .
-          npx -y @anthropic-ai/claude-code@2.1.323 plugin validate gptragent
+          npx -y @anthropic-ai/claude-code@2.1.323 plugin validate mcp-bridge
       - name: Install the Codex plugin from this checkout's marketplace
         timeout-minutes: 5
         env:
@@ -159,13 +159,13 @@ jobs:
   release:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
-    name: gptragent release
+    name: mcp-bridge release
     timeout-minutes: 20
     permissions:
       contents: write
     defaults:
       run:
-        working-directory: gptragent
+        working-directory: mcp-bridge
     env:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ github.event.release.tag_name }}
