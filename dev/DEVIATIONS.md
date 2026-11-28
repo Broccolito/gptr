@@ -11365,3 +11365,25 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   of releases/latest, so a gptr-named bundle on an older Biorouter would classify as public.
 - Contract-visible: none in the R package; the vignette and cran-comments name the folder.
 - Tests: the bundle built after the move is byte-identical to the one from dac45704 (aef1a872).
+
+## D-398 - 1.3.1 Biorouter's id moves from gptragent to gptr (2026-11-27)
+- Rule: on the maintainer's request Biorouter's extension becomes `gptr` (manifest name and entry
+  point, tools `gptr__sessions`, `gptr__inspect`, `gptr__r`, skill `extension: gptr`; display name
+  still "gptr Agent"), agreed with the Biorouter session. The source keeps `gptragent` until
+  Biorouter's migration is in use; `build_brxt.py --name gptr` builds the same bundle under the
+  new name from a renamed copy. An older Biorouter installs the first `.brxt` of releases/latest
+  whatever its name (GitHub lists assets by name), so releases/latest carries only the
+  gptragent-named bundle, and with the repository variable `GPTR_NAMED_BUNDLE` true the release
+  job puts the gptr-named bundle on its own prerelease `bridge-vX.Y.Z`, which Biorouter's registry
+  names. Later, when old clients are rare, the source moves to `gptr` and releases stop carrying
+  `gptragent`.
+- Rule: the names that were not Biorouter's move now: the Python package is `gptr_mcp_bridge`
+  (`build_brxt.py` and `version.py` read it from pyproject's hatch target, no longer from the
+  manifest name), serverInfo `gptr` / "gptr's MCP bridge", clientInfo and User-Agent
+  `gptr-mcp-bridge`, the probe and risk marks, `GPTR_RSCRIPT` (reading `GPTRAGENT_RSCRIPT` too) and
+  the test variables `GPTR_MCP_BRIDGE_LIVE*`. Kept: `biorouter_gptr_attach()` (user-called, the
+  gptr 1.0/1.1 path) and the CI artifact names.
+- Contract-visible: none in the R package.
+- Tests: test_bundle (the renamed bundle), test_plugins (serverInfo `gptr`), test_discovery
+  (`GPTR_RSCRIPT`); both bundles install with `uv sync` and answer `initialize` through their entry
+  points.

@@ -15,7 +15,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-gptragent = "gptragent.server:main"
+gptragent = "gptr_mcp_bridge.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/gptragent"]
+packages = ["src/gptr_mcp_bridge"]

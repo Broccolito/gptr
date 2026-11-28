@@ -8,7 +8,7 @@ Writes dist/gptragent.brxt, dist/gptragent-X.Y.Z.brxt (the same bytes) and dist/
 
 It refuses unless:
 
-* manifest.json, pyproject.toml, src/gptragent/__init__.py, the README's "Current version"
+* manifest.json, pyproject.toml, src/gptr_mcp_bridge/__init__.py, the README's "Current version"
   line, the Claude Code and Codex plugin manifests and the plugin's entry in the Claude Code
   marketplace (../.claude-plugin/marketplace.json) carry the same X.Y.Z;
 * the project depends on nothing outside Python's standard library, and uv.lock was made for this
@@ -21,6 +21,9 @@ It refuses unless:
   annotations Biorouter's approval reads;
 * with --previous, the name and repository are unchanged and the version moved forward.
 
+With --name it builds the same bundle under another extension name: the manifest name and entry
+point, the project and its script, and the skills' extension key and tool prefix (D-398).
+
 The bundle is built from an explicit allowlist with fixed timestamps, so the same tree always
 gives the same bytes.
 """
@@ -32,7 +35,9 @@ import hashlib
 import importlib
 import json
 import re
+import shutil
 import sys
+import tempfile
 import tomllib
 import zipfile
 from pathlib import Path
@@ -99,7 +104,8 @@ def check(root: Path, previous: Optional[Path] = None) -> tuple:
         if not (root / filename).is_file():
             raise Refused(f"{filename} is missing.")
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8")).get("project", {})
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    project = pyproject.get("project", {})
     for key in ("name", "display_name", "description", "version", "entry_point", "repository"):
         if not isinstance(manifest.get(key), str) or not manifest[key].strip():
             raise Refused(f"manifest.json needs {key}.")
@@ -108,7 +114,10 @@ def check(root: Path, previous: Optional[Path] = None) -> tuple:
         raise Refused(f"manifest name {name!r} is not a valid extension name.")
     if not VERSION.fullmatch(version):
         raise Refused(f"manifest version {version!r} is not X.Y.Z.")
-    package = name.replace("-", "_")
+    wheel = pyproject.get("tool", {}).get("hatch", {}).get("build", {}).get("targets", {}).get("wheel", {})
+    if len(wheel.get("packages") or []) != 1 or not str(wheel["packages"][0]).startswith("src/"):
+        raise Refused("pyproject's hatch wheel target must name one package under src/.")
+    package = Path(wheel["packages"][0]).name
     source = root / "src" / package
     if not source.is_dir():
         raise Refused(f"src/{package}/ is missing.")
@@ -207,6 +216,29 @@ def check(root: Path, previous: Optional[Path] = None) -> tuple:
     return manifest, files
 
 
+def renamed(root: Path, name: str, work: Path) -> Path:
+    """A copy of this folder in `work`, with the marketplace beside it, under extension name `name`."""
+    old = json.loads((root / "manifest.json").read_text(encoding="utf-8"))["name"]
+    copy = work / root.name
+    shutil.copytree(root.parent / ".claude-plugin", work / ".claude-plugin")
+    shutil.copytree(root, copy, ignore=shutil.ignore_patterns(".git", ".venv", "dist*", "previous", "__pycache__"))
+    swaps = {"manifest.json": [f'"name": "{old}"', f'"entry_point": "{old}"'],
+             "pyproject.toml": [f'name = "{old}"', f"\n{old} = "], "uv.lock": [f'name = "{old}"']}
+    for skill in (copy / "skills").glob("*/SKILL.md"):
+        swaps[skill.relative_to(copy).as_posix()] = [f"extension: {old}"]
+    for relative, texts in swaps.items():
+        path = copy / relative
+        content = path.read_text(encoding="utf-8")
+        for text in texts:
+            if content.count(text) != 1:
+                raise Refused(f"{relative} does not hold {text.strip()!r} once.")
+            content = content.replace(text, text.replace(old, name))
+        if relative.startswith("skills/"):
+            content = content.replace(f"{old}__", f"{name}__")
+        path.write_text(content, encoding="utf-8")
+    return copy
+
+
 def build(root: Path, out: Path, files: list, manifest: dict) -> tuple:
     name, version = manifest["name"], manifest["version"]
     out.mkdir(parents=True, exist_ok=True)
@@ -234,12 +266,15 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--previous", type=Path, help="the previous release's gptragent.brxt, for the skill path and identity checks")
     parser.add_argument("--out", type=Path, default=ROOT / "dist")
     parser.add_argument("--check", action="store_true", help="run the checks and write nothing")
+    parser.add_argument("--name", help="build under this extension name instead of the manifest's")
     args = parser.parse_args(argv)
-    manifest, files = check(ROOT, args.previous)
-    if args.check:
-        print(f"{manifest['name']} {manifest['version']}: every release check passed ({len(files)} files).")
-        return 0
-    stable, versioned, digest = build(ROOT, args.out, files, manifest)
+    with tempfile.TemporaryDirectory() as work:
+        root = renamed(ROOT, args.name, Path(work)) if args.name else ROOT
+        manifest, files = check(root, args.previous)
+        if args.check:
+            print(f"{manifest['name']} {manifest['version']}: every release check passed ({len(files)} files).")
+            return 0
+        stable, versioned, digest = build(root, args.out, files, manifest)
     print(f"{stable.name} and {versioned.name}: {len(files)} files, {stable.stat().st_size} bytes, SHA-256 {digest}")
     return 0
 

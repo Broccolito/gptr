@@ -10,8 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from gptragent import __version__  # noqa: E402
-from gptragent.server import Server  # noqa: E402
+from gptr_mcp_bridge import __version__  # noqa: E402
+from gptr_mcp_bridge.server import Server  # noqa: E402
 
 
 class StdioTests(unittest.TestCase):
@@ -24,8 +24,8 @@ class StdioTests(unittest.TestCase):
         env.update({"HOME": home, "USERPROFILE": home, "LOCALAPPDATA": os.path.join(home, "local"),
                     "R_USER_CACHE_DIR": os.path.join(home, "cache"),
                     "GPTR_MCP_DISCOVERY_DIR": os.path.join(home, "records"),
-                    "GPTRAGENT_RSCRIPT": os.path.join(home, "no-Rscript"), "PYTHONPATH": str(ROOT / "src")})
-        self.proc = subprocess.Popen([sys.executable, "-m", "gptragent"], cwd=home, env=env,
+                    "GPTR_RSCRIPT": os.path.join(home, "no-Rscript"), "PYTHONPATH": str(ROOT / "src")})
+        self.proc = subprocess.Popen([sys.executable, "-m", "gptr_mcp_bridge"], cwd=home, env=env,
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.next = 0
 

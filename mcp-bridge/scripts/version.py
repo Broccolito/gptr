@@ -2,7 +2,7 @@
 
     uv run python scripts/version.py 1.4.0
 
-It rewrites manifest.json, pyproject.toml, src/gptragent/__init__.py, the README's
+It rewrites manifest.json, pyproject.toml, src/gptr_mcp_bridge/__init__.py, the README's
 "Current version" line, the Claude Code and Codex plugin manifests and the plugin's entry in the
 Claude Code marketplace (../.claude-plugin). The
 User-Agent the bridge sends to gptr is built from __version__, so it moves with them. It refuses
@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +32,8 @@ def bump(root: Path, version: str) -> str:
     old = manifest["version"]
     if tuple(map(int, version.split("."))) <= tuple(map(int, old.split("."))):
         raise SystemExit(f"{version} does not move forward from {old}.")
-    package = manifest["name"].replace("-", "_")
+    wheel = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["hatch"]["build"]["targets"]["wheel"]
+    package = Path(wheel["packages"][0]).name
     edits = [
         (root / "pyproject.toml", r'(?m)^version = "[^"]+"', f'version = "{version}"'),
         (root / "src" / package / "__init__.py", r'(?m)^__version__ = "[^"]+"', f'__version__ = "{version}"'),

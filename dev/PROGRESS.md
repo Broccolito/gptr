@@ -15,9 +15,10 @@ uploaded to CRAN (about 05:18 UTC), waiting for the maintainer's email confirmat
 gptr 1.3.1, a release of gptr's MCP bridge (the R code is 1.3.0's), merged into `main` as dac45704
 (PR #130: the mode wording and the Baranzini Lab credit). On the maintainer's go-ahead, PR #131
 moves the bridge from `gptragent/` to `mcp-bridge/` and names it gptr's MCP bridge, keeping
-"gptr Agent" for the Biorouter extension (D-397). The v1.3.1 release waits for the maintainer's
-word. The rename of Biorouter's id `gptragent` to `gptr` is agreed with the Biorouter session:
-gptr builds no gptr-named bundle for release until a Biorouter release carries the migration
+"gptr Agent" for the Biorouter extension (D-397). PR #131 merged (main 8189db27, CI green). The v1.3.1
+release waits for the maintainer's word. The rename of Biorouter's id `gptragent` to `gptr` is
+agreed with the Biorouter session (D-398, a draft PR on `claude/gptr-extension-id`): gptr
+releases carry no gptr-named bundle until a Biorouter release carries the migration
 ([paused handoff](PAUSED_HANDOFF_2026-11-27.md), section 2).
 
 - P34 bridge ([plan](plan/P34-agent-plugins.md), [log](progress/P34.md), D-372..D-374), P35 compact

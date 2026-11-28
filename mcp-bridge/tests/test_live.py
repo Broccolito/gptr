@@ -1,12 +1,12 @@
 """Live test against a real interactive R with gptr installed (no model).
 
-    GPTRAGENT_LIVE=1 uv run python -m unittest tests.test_live -v
+    GPTR_MCP_BRIDGE_LIVE=1 uv run python -m unittest tests.test_live -v
 
 It starts ``R --interactive --no-readline --vanilla`` fed through a pipe (so R has an idle prompt
 where gptr's server answers), with private R user folders, loads an in-memory fixture, and serves
 it: with gptr 1.2.0 or later through ``gptr_mcp_serve(advertise = ...)``, with older gptr (or
-GPTRAGENT_LIVE_ATTACH=1) through the bundled ``r/attach.R``. Then it drives the bridge and checks
-every change inside R itself. GPTRAGENT_LIVE_R names the R binary (default: R on PATH).
+GPTR_MCP_BRIDGE_LIVE_ATTACH=1) through the bundled ``r/attach.R``. Then it drives the bridge and checks
+every change inside R itself. GPTR_MCP_BRIDGE_LIVE_R names the R binary (default: R on PATH).
 """
 
 import base64
@@ -23,10 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from gptragent import discovery  # noqa: E402
-from gptragent.server import GPTR_PLAN_FLOOR, MODE_NOTES, Bridge, attach_script, r_string  # noqa: E402
+from gptr_mcp_bridge import discovery  # noqa: E402
+from gptr_mcp_bridge.server import GPTR_PLAN_FLOOR, MODE_NOTES, Bridge, attach_script, r_string  # noqa: E402
 
-LIVE = os.environ.get("GPTRAGENT_LIVE") == "1"
+LIVE = os.environ.get("GPTR_MCP_BRIDGE_LIVE") == "1"
 
 FIXTURE = """
 set.seed(7)
@@ -40,14 +40,14 @@ def text_of(result):
     return "\n".join(b.get("text", "") for b in result.get("content", []) if b.get("type") == "text")
 
 
-@unittest.skipUnless(LIVE, "set GPTRAGENT_LIVE=1 to run against a real R with gptr")
+@unittest.skipUnless(LIVE, "set GPTR_MCP_BRIDGE_LIVE=1 to run against a real R with gptr")
 @unittest.skipIf(os.name == "nt", "the live test feeds an interactive R through a pipe (macOS and Linux)")
 class LiveR(unittest.TestCase):
     """An interactive R with private R user folders, fed through a pipe."""
 
     @classmethod
     def start_r(cls):
-        r_bin = os.environ.get("GPTRAGENT_LIVE_R") or shutil.which("R")
+        r_bin = os.environ.get("GPTR_MCP_BRIDGE_LIVE_R") or shutil.which("R")
         if not r_bin:
             raise unittest.SkipTest("R is not on PATH")
         cls.tmp = tempfile.TemporaryDirectory()
@@ -115,7 +115,7 @@ class LiveTests(LiveR):
     def setUpClass(cls):
         cls.start_r()
         script = attach_script()
-        force_attach = os.environ.get("GPTRAGENT_LIVE_ATTACH") == "1"
+        force_attach = os.environ.get("GPTR_MCP_BRIDGE_LIVE_ATTACH") == "1"
         serve = (
             f'if (!{"TRUE" if force_attach else "FALSE"} && "advertise" %in% names(formals(gptr::gptr_mcp_serve))) '
             'invisible(gptr::gptr_mcp_serve(envir = globalenv(), advertise = "live", mode = "auto")) else '

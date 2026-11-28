@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from gptragent import server  # noqa: E402
+from gptr_mcp_bridge import server  # noqa: E402
 
 
 def load(path: Path) -> dict:
@@ -69,7 +69,7 @@ class PluginTests(unittest.TestCase):
                                       input="".join(json.dumps(r) + "\n" for r in requests).encode(), capture_output=True)
                 self.assertEqual(done.returncode, 0, done.stderr.decode(errors="replace"))
                 answers = {m["id"]: m["result"] for m in map(json.loads, done.stdout.decode().splitlines())}
-                self.assertEqual(answers[1]["serverInfo"]["name"], "gptragent")
+                self.assertEqual(answers[1]["serverInfo"]["name"], "gptr")
                 self.assertEqual(sorted(t["name"] for t in answers[2]["tools"]), ["inspect", "r", "sessions"])
 
 

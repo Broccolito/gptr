@@ -10,7 +10,7 @@
   "mcpServers": {
     "gptr": {
       "command": "uv",
-      "args": ["run", "--no-project", "--python", ">=3.11", "--directory", "${CLAUDE_PLUGIN_ROOT}/src", "python", "-m", "gptragent"]
+      "args": ["run", "--no-project", "--python", ">=3.11", "--directory", "${CLAUDE_PLUGIN_ROOT}/src", "python", "-m", "gptr_mcp_bridge"]
     }
   }
 }

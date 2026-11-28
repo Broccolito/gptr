@@ -14,8 +14,8 @@ import socket
 import time
 from typing import Any, Optional
 
-from gptragent import __version__
-from gptragent.discovery import Record
+from gptr_mcp_bridge import __version__
+from gptr_mcp_bridge.discovery import Record
 
 PROTOCOL = "2025-11-25"
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
@@ -85,7 +85,7 @@ class GptrSession:
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
             "Authorization": "Bearer " + rec.token,
-            "User-Agent": f"gptragent/{__version__}",
+            "User-Agent": f"gptr-mcp-bridge/{__version__}",
         }
         if self.session_id:
             headers["Mcp-Session-Id"] = self.session_id
@@ -134,7 +134,7 @@ class GptrSession:
         self.session_id = None
         message = {"jsonrpc": "2.0", "id": 0, "method": "initialize",
                    "params": {"protocolVersion": PROTOCOL, "capabilities": {},
-                              "clientInfo": {"name": "gptragent", "version": __version__}}}
+                              "clientInfo": {"name": "gptr-mcp-bridge", "version": __version__}}}
         answer = self._post(message, deadline, may_run=False)
         if not isinstance(answer, dict) or "result" not in answer:
             raise CallError("protocol", "The R session did not complete the MCP handshake.", ran=False)

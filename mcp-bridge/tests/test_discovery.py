@@ -13,7 +13,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from gptragent import discovery  # noqa: E402
+from gptr_mcp_bridge import discovery  # noqa: E402
 from fake_gptr import dead_port, write_record  # noqa: E402
 
 POSIX = os.name != "nt"
@@ -358,17 +358,20 @@ class ScanTests(unittest.TestCase):
 
 class ProbeTests(unittest.TestCase):
     def test_no_rscript_is_reported(self):
-        probe = discovery.probe_r({"GPTRAGENT_RSCRIPT": "/no/such/Rscript", "PATH": ""})
+        probe = discovery.probe_r({"GPTR_RSCRIPT": "/no/such/Rscript", "PATH": ""})
         self.assertIsNone(probe.gptr)
         self.assertIn("not found", probe.error)
+
+    def test_the_earlier_name_of_the_rscript_variable_still_works(self):
+        self.assertEqual(discovery.find_rscript({"GPTRAGENT_RSCRIPT": sys.executable, "PATH": ""}), sys.executable)
 
     @unittest.skipUnless(POSIX, "a shell script stands in for Rscript")
     def test_a_probe_reads_the_version_and_the_cache_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             fake = os.path.join(tmp, "Rscript")
-            Path(fake).write_text("#!/bin/sh\nprintf 'noise\\ngptragent-probe\\n1.1.0\\n/c/R/gptr\\n'\n")
+            Path(fake).write_text("#!/bin/sh\nprintf 'noise\\ngptr-mcp-bridge-probe\\n1.1.0\\n/c/R/gptr\\n'\n")
             os.chmod(fake, os.stat(fake).st_mode | stat.S_IXUSR)
-            probe = discovery.probe_r({"GPTRAGENT_RSCRIPT": fake, "PATH": "/usr/bin:/bin"})
+            probe = discovery.probe_r({"GPTR_RSCRIPT": fake, "PATH": "/usr/bin:/bin"})
         self.assertEqual((probe.gptr, probe.cache_dir, probe.error), ("1.1.0", "/c/R/gptr", None))
         self.assertEqual(probe.records_dir, os.path.join("/c/R/gptr", "mcp-serve"))
 
@@ -376,9 +379,9 @@ class ProbeTests(unittest.TestCase):
     def test_a_missing_gptr_reads_as_none(self):
         with tempfile.TemporaryDirectory() as tmp:
             fake = os.path.join(tmp, "Rscript")
-            Path(fake).write_text("#!/bin/sh\nprintf 'gptragent-probe\\n\\n/c/R/gptr\\n'\n")
+            Path(fake).write_text("#!/bin/sh\nprintf 'gptr-mcp-bridge-probe\\n\\n/c/R/gptr\\n'\n")
             os.chmod(fake, 0o700)
-            probe = discovery.probe_r({"GPTRAGENT_RSCRIPT": fake, "PATH": "/usr/bin:/bin"})
+            probe = discovery.probe_r({"GPTR_RSCRIPT": fake, "PATH": "/usr/bin:/bin"})
         self.assertIsNone(probe.gptr)
         self.assertIsNone(probe.error)
 
@@ -387,12 +390,12 @@ class ProbeTests(unittest.TestCase):
         # R reads .Renviron from its working folder, and a project's can load a package
         with tempfile.TemporaryDirectory() as tmp:
             fake = os.path.join(tmp, "Rscript")
-            Path(fake).write_text("#!/bin/sh\nprintf 'gptragent-probe\\n1.2.0\\n%s\\n' \"$(pwd -P)\"\n")
+            Path(fake).write_text("#!/bin/sh\nprintf 'gptr-mcp-bridge-probe\\n1.2.0\\n%s\\n' \"$(pwd -P)\"\n")
             os.chmod(fake, 0o700)
             here = os.getcwd()
             os.chdir(tmp)
             try:
-                probe = discovery.probe_r({"GPTRAGENT_RSCRIPT": fake, "PATH": "/usr/bin:/bin"})
+                probe = discovery.probe_r({"GPTR_RSCRIPT": fake, "PATH": "/usr/bin:/bin"})
             finally:
                 os.chdir(here)
         self.assertNotEqual(probe.cache_dir, os.path.realpath(tmp))
@@ -405,7 +408,7 @@ class ProbeTests(unittest.TestCase):
             fake = os.path.join(tmp, "Rscript")
             Path(fake).write_text("#!/bin/sh\nexec sleep 30\n")
             os.chmod(fake, 0o700)
-            probe = discovery.probe_r({"GPTRAGENT_RSCRIPT": fake, "PATH": "/usr/bin:/bin"}, timeout=1)
+            probe = discovery.probe_r({"GPTR_RSCRIPT": fake, "PATH": "/usr/bin:/bin"}, timeout=1)
         self.assertIn("did not answer", probe.error)
 
 

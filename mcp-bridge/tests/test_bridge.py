@@ -10,8 +10,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from gptragent import discovery, server  # noqa: E402
-from gptragent.server import Bridge, r_string  # noqa: E402
+from gptr_mcp_bridge import discovery, server  # noqa: E402
+from gptr_mcp_bridge.server import Bridge, r_string  # noqa: E402
 from fake_gptr import PNG, FakeGptr, dead_port, text_of, write_record  # noqa: E402
 
 

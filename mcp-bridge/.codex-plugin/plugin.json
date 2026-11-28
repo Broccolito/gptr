@@ -10,9 +10,9 @@
   "mcpServers": {
     "gptr": {
       "command": "uv",
-      "args": ["run", "--no-project", "--python", ">=3.11", "python", "-m", "gptragent"],
+      "args": ["run", "--no-project", "--python", ">=3.11", "python", "-m", "gptr_mcp_bridge"],
       "cwd": "./src",
-      "env_vars": ["GPTR_MCP_DISCOVERY_DIR", "GPTRAGENT_RSCRIPT", "R_USER_CACHE_DIR", "XDG_CACHE_HOME"],
+      "env_vars": ["GPTR_MCP_DISCOVERY_DIR", "GPTR_RSCRIPT", "GPTRAGENT_RSCRIPT", "R_USER_CACHE_DIR", "XDG_CACHE_HOME"],
       "startup_timeout_sec": 60,
       "tool_timeout_sec": 300
     }
