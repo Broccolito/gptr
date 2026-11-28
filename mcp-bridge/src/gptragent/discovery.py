@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable, Mapping, Optional
 
 RECORD_NAME = re.compile(r"serve-([0-9]{1,10})\.json")
-# The record format this gptr Agent reads; gptr 1.2.0 and the bundled r/attach.R write format 1.
+# The record format this bridge reads; gptr 1.2.0 and the bundled r/attach.R write format 1.
 RECORD_FORMAT = 1
 RECORD_PARTS = ("R", "gptr", "mcp-serve")
 MAX_RECORD_BYTES = 64 * 1024
@@ -186,7 +186,7 @@ def _format_number(value) -> Optional[int]:
 
 def format_refusal(value) -> Optional[str]:
     """Why a record of format `value` is not read, naming the side that is behind; None when
-    it is the format this gptr Agent reads."""
+    it is the format this bridge reads."""
     number = _format_number(value)
     if number == RECORD_FORMAT:
         return None

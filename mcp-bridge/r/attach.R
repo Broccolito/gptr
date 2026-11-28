@@ -1,4 +1,4 @@
-# gptr Agent: let an agent (Biorouter, Claude Code, Codex) reach this R session through gptr.
+# gptr's MCP bridge: let an agent (Biorouter, Claude Code, Codex) reach this R session through gptr.
 #
 # Run it at the R prompt of the session you want the agent to work in:
 #
@@ -16,7 +16,7 @@
 # that already runs keeps its mode, tools and workspace, and the record says what it really
 # serves. gptr Agent needs gptr 1.0 or later; plan mode needs gptr 1.2.0 or later.
 #
-# Part of gptr Agent (https://github.com/Broccolito/gptr, folder gptragent/), Apache-2.0.
+# Part of gptr's MCP bridge (https://github.com/Broccolito/gptr, folder mcp-bridge/), Apache-2.0.
 
 local({
   # where source() evaluates this file (the global environment, unless sourced locally)
@@ -34,7 +34,7 @@ local({
   `%||%` = function(a, b) if (is.null(a)) b else a
 
   modes = c("plan", "manual", "edits", "auto")
-  # the oldest gptr gptr Agent works with, and the oldest whose plan mode it can use: before
+  # the oldest gptr the bridge works with, and the oldest whose plan mode it can use: before
   # 1.2.0 inspect checks each call with gptr_risk() through r, which plan mode refuses
   gptr_floor = "1.0.0"
   plan_floor = "1.2.0"

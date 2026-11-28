@@ -241,7 +241,7 @@ refused.
 ### Let local agents find the session
 
 A client on the same computer can find a served session without your copying its address and
-token, for example gptr Agent in Claude Code, Codex or Biorouter (next section):
+token, for example gptr's MCP bridge in Claude Code, Codex or Biorouter (next section):
 
 
 ``` r
@@ -261,8 +261,8 @@ match it.
 
 ### Work from Claude Code, Codex or Biorouter
 
-gptr Agent connects an agent outside R to an advertised session. It lives in the `gptragent/`
-folder of gptr's repository, ships with each gptr release and runs with
+gptr's MCP bridge connects an agent outside R to an advertised session. It lives in the
+`mcp-bridge/` folder of gptr's repository, ships with each gptr release and runs with
 [uv](https://docs.astral.sh/uv/), which supplies Python when your computer has none. Install it
 once in the agent you use:
 
@@ -284,7 +284,7 @@ Then serve the session as above and ask the agent about your objects. It gets th
 several), `inspect` runs code gptr classifies as read-only, and `r` runs other code through your
 permission settings in the server's mode, returning plots as images. A bundled skill tells the
 model to look first, never reload data and change objects in place. With gptr 1.0 or 1.1, which
-cannot advertise, the `sessions` tool prints the line that loads gptr Agent's `attach.R` helper.
+cannot advertise, the `sessions` tool prints the line that loads the bridge's `attach.R` helper.
 
 The agent's calls are recorded as Peter's are. Each `r` call that ran (of one that stopped
 part-way, the expressions that ran) is kept on the server's session, `gptr_last()`, so

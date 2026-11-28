@@ -1,4 +1,4 @@
-"""The gptr Agent MCP server (stdio, newline-delimited JSON-RPC, standard library only).
+"""gptr's MCP bridge, an MCP server (stdio, newline-delimited JSON-RPC, standard library only).
 
 Biorouter starts it as ``uv run --directory <install dir> gptragent``, the Claude Code and Codex
 plugins as ``python -m gptragent`` in src/ through ``uv run --no-project``. It finds the R sessions
